@@ -1,0 +1,93 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         BLUESTAR DESIGN SYSTEM — COLOR TOKENS
+         Modrinth-inspired dark theme with refined BlueStar electric blue accent
+         ══════════════════════════════════════════════════════════════════════ -->
+
+    <!-- ── Brand Accent Palette ── -->
+    <Color x:Key="AccentColor">#1B90FF</Color>
+    <Color x:Key="AccentHoverColor">#3B82F6</Color>
+    <Color x:Key="AccentPressedColor">#1D4ED8</Color>
+    <Color x:Key="AccentTranslucentColor">#221B90FF</Color>
+    <Color x:Key="AccentGlowColor">#401B90FF</Color>
+
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}"/>
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHoverColor}"/>
+    <SolidColorBrush x:Key="AccentPressedBrush" Color="{StaticResource AccentPressedColor}"/>
+    <SolidColorBrush x:Key="AccentTranslucentBrush" Color="{StaticResource AccentTranslucentColor}"/>
+    <SolidColorBrush x:Key="AccentBgBrush" Color="{StaticResource AccentTranslucentColor}"/>
+    <SolidColorBrush x:Key="AccentGlowBrush" Color="{StaticResource AccentGlowColor}"/>
+
+    <!-- Backwards compatibility aliases -->
+    <SolidColorBrush x:Key="AccentGreenBrush" Color="{StaticResource AccentColor}"/>
+    <SolidColorBrush x:Key="AccentBlueBrush" Color="{StaticResource AccentColor}"/>
+    <SolidColorBrush x:Key="AccentGreenHoverBrush" Color="{StaticResource AccentHoverColor}"/>
+    <SolidColorBrush x:Key="AccentGreenPressedBrush" Color="{StaticResource AccentPressedColor}"/>
+    <SolidColorBrush x:Key="AccentGreenTranslucentBrush" Color="{StaticResource AccentTranslucentColor}"/>
+
+    <!-- ── Surface & Background Tokens ── -->
+    <SolidColorBrush x:Key="BaseBackgroundBrush" Color="#0B0B0E"/>
+    <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="#101014"/>
+    <SolidColorBrush x:Key="TopBarBackgroundBrush" Color="#0E0E12"/>
+    <SolidColorBrush x:Key="SurfaceCardBrush" Color="#16161B"/>
+    <SolidColorBrush x:Key="SurfaceCardHoverBrush" Color="#202028"/>
+    <SolidColorBrush x:Key="SurfaceCardElevatedBrush" Color="#24242E"/>
+    <SolidColorBrush x:Key="SurfaceInputBrush" Color="#1B1B22"/>
+    <SolidColorBrush x:Key="SurfaceInputFocusedBrush" Color="#1F1F2A"/>
+
+    <!-- ── Borders & Dividers ── -->
+    <SolidColorBrush x:Key="SubtleBorderBrush" Color="#262630"/>
+    <SolidColorBrush x:Key="StrongBorderBrush" Color="#383848"/>
+    <SolidColorBrush x:Key="ActiveBorderBrush" Color="{StaticResource AccentColor}"/>
+    <SolidColorBrush x:Key="ModalOverlayBrush" Color="#B3000000"/>
+
+    <!-- ── Typography Brushes ── -->
+    <SolidColorBrush x:Key="PrimaryTextBrush" Color="#FAFAFA"/>
+    <SolidColorBrush x:Key="SecondaryTextBrush" Color="#A1A1AA"/>
+    <SolidColorBrush x:Key="MutedTextBrush" Color="#5E5E6C"/>
+    <SolidColorBrush x:Key="InverseTextBrush" Color="#09090B"/>
+    <SolidColorBrush x:Key="WhiteBrush" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="TitleBarCloseHoverBrush" Color="#C42B1C"/>
+    <SolidColorBrush x:Key="DangerBorderBrush" Color="#40EF4444"/>
+    <SolidColorBrush x:Key="SuccessBorderBrush" Color="#4010B981"/>
+    <SolidColorBrush x:Key="WarningBorderBrush" Color="#40F59E0B"/>
+    <SolidColorBrush x:Key="InfoBorderBrush" Color="#403B82F6"/>
+
+    <!-- ── Semantic Colors ── -->
+    <SolidColorBrush x:Key="SuccessBrush" Color="#10B981"/>
+    <SolidColorBrush x:Key="SuccessBgBrush" Color="#1810B981"/>
+    <SolidColorBrush x:Key="WarningBrush" Color="#F59E0B"/>
+    <SolidColorBrush x:Key="WarningBgBrush" Color="#18F59E0B"/>
+    <SolidColorBrush x:Key="DangerBrush" Color="#EF4444"/>
+    <SolidColorBrush x:Key="DangerHoverBrush" Color="#DC2626"/>
+    <SolidColorBrush x:Key="DangerBgBrush" Color="#18EF4444"/>
+    <SolidColorBrush x:Key="InfoBrush" Color="#3B82F6"/>
+    <SolidColorBrush x:Key="InfoBgBrush" Color="#183B82F6"/>
+    <SolidColorBrush x:Key="PurpleBrush" Color="#A855F7"/>
+    <SolidColorBrush x:Key="PurpleBgBrush" Color="#18A855F7"/>
+    <SolidColorBrush x:Key="CyanBrush" Color="#06B6D4"/>
+    <SolidColorBrush x:Key="CyanBgBrush" Color="#1806B6D4"/>
+
+    <!-- ── Download Status Semantic Brushes ── -->
+    <SolidColorBrush x:Key="StatusCompletedBrush" Color="#10B981"/>
+    <SolidColorBrush x:Key="StatusCompletedBgBrush" Color="#1A0D2A18"/>
+    <SolidColorBrush x:Key="StatusFailedBrush" Color="#EF4444"/>
+    <SolidColorBrush x:Key="StatusFailedBgBrush" Color="#1A2A0E0E"/>
+    <SolidColorBrush x:Key="StatusCanceledBrush" Color="#F59E0B"/>
+    <SolidColorBrush x:Key="StatusCanceledBgBrush" Color="#1A2A1F06"/>
+    <SolidColorBrush x:Key="StatusDownloadingBrush" Color="#1B90FF"/>
+    <SolidColorBrush x:Key="StatusDownloadingBgBrush" Color="#1A0A1A2E"/>
+    <SolidColorBrush x:Key="StatusPausedBrush" Color="#A855F7"/>
+    <SolidColorBrush x:Key="StatusPausedBgBrush" Color="#1A1A1030"/>
+
+    <!-- ── Corner Radii ── -->
+    <CornerRadius x:Key="RadiusXs">4</CornerRadius>
+    <CornerRadius x:Key="RadiusSm">6</CornerRadius>
+    <CornerRadius x:Key="RadiusMd">8</CornerRadius>
+    <CornerRadius x:Key="RadiusLg">12</CornerRadius>
+    <CornerRadius x:Key="RadiusXl">16</CornerRadius>
+    <CornerRadius x:Key="RadiusPill">999</CornerRadius>
+
+</ResourceDictionary>

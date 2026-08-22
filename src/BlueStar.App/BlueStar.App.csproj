@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>BlueStar.App</RootNamespace>
+    <AssemblyName>BlueStar</AssemblyName>
+    <ApplicationIcon>Assets\bluestar.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
+    <Authors>Corøna &amp; BlueStar Developers</Authors>
+    <Description>BlueStar — Universal Steam Game Instance Manager, Depot Staging, Manifest Resolver, and Multi-Engine Launcher</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\bluestar.ico" />
+    <Resource Include="Assets\bluestar.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.1" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="8.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BlueStar.Core\BlueStar.Core.csproj" />
+    <ProjectReference Include="..\BlueStar.Infrastructure\BlueStar.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="tools\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+</Project>

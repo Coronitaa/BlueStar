@@ -1,0 +1,162 @@
+<UserControl x:Class="BlueStar.App.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:BlueStar.App.ViewModels"
+             d:DataContext="{d:DesignInstance vm:SettingsViewModel}"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             Background="{StaticResource BaseBackgroundBrush}"
+             Foreground="{StaticResource PrimaryTextBrush}"
+             FontFamily="{StaticResource MainFontFamily}">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="32,24" MaxWidth="800" HorizontalAlignment="Left">
+
+            <TextBlock Text="Settings" Style="{StaticResource H1}" Margin="0,0,0,6"/>
+            <TextBlock Text="Configure DepotBox API, download behaviors, game engines, and local storage."
+                       Style="{StaticResource Subtitle}" Margin="0,0,0,24"/>
+
+            <!-- ═══ DEPOTBOX API SECTION ═══ -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,20">
+                <StackPanel>
+                    <TextBlock Text="DepotBox API Configuration" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                    <TextBlock Text="BlueStar connects to the DepotBox catalog to fetch game metadata, availability, and depot manifests."
+                               Style="{StaticResource Caption}" Margin="0,0,0,14"/>
+
+                    <!-- Active status info banner -->
+                    <Border Background="{StaticResource SurfaceInputBrush}"
+                            BorderBrush="{StaticResource SubtleBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusSm}"
+                            Padding="12,8" Margin="0,0,0,16">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="ℹ" FontSize="13" Foreground="{StaticResource AccentBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding AuthStatusMessage}" Style="{StaticResource BodySmall}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Personal Override API Key -->
+                    <StackPanel Margin="0,4,0,0">
+                        <TextBlock Text="Personal API Key (Optional Override):" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                        <TextBlock Text="Leave this field empty to use the built-in default API configuration. Enter your personal key only if you wish to override settings with your own DepotBox account."
+                                   Style="{StaticResource Muted}" Margin="0,0,0,8"/>
+                        <TextBox Style="{StaticResource DarkTextBox}"
+                                 Text="{Binding ApiKey, UpdateSourceTrigger=PropertyChanged}"
+                                 Margin="0,0,0,14"/>
+
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Save Personal Key"
+                                    Style="{StaticResource PrimaryButton}"
+                                    Command="{Binding SaveApiKeyCommand}"
+                                    Margin="0,0,10,0"/>
+
+                            <Button Content="Test Connection"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Command="{Binding TestConnectionCommand}"
+                                    IsEnabled="{Binding IsTestingConnection, Converter={StaticResource InverseBoolConverter}}"
+                                    Margin="0,0,10,0"/>
+
+                            <Button Content="Clear Personal Override"
+                                    Style="{StaticResource GhostButton}"
+                                    Command="{Binding ClearApiKeyCommand}"
+                                    Visibility="{Binding HasCustomKey, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                        </StackPanel>
+
+                        <Border Background="{StaticResource SurfaceInputBrush}"
+                                CornerRadius="{StaticResource RadiusMd}"
+                                Padding="12,8" Margin="0,14,0,0"
+                                Visibility="{Binding ConnectionTestResult, Converter={StaticResource NullToVisibilityConverter}}">
+                            <TextBlock Text="{Binding ConnectionTestResult}" Style="{StaticResource Body}"/>
+                        </Border>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- ═══ PATHS & STORAGE SECTION ═══ -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,20">
+                <StackPanel>
+                    <TextBlock Text="Storage &amp; Directories" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                    <TextBlock Text="Persistent directories used for instance configurations, manifests, and cache."
+                               Style="{StaticResource Caption}" Margin="0,0,0,16"/>
+
+                    <TextBlock Text="Instances Metadata Root:" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                    <TextBox Style="{StaticResource DarkTextBox}" Text="{Binding InstanceRoot}" IsReadOnly="True"/>
+                </StackPanel>
+            </Border>
+
+            <!-- ═══ DOWNLOADS & CLEANUP SECTION ═══ -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,20">
+                <StackPanel>
+                    <TextBlock Text="Downloads &amp; Staging Cleanup" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                    <TextBlock Text="Manage automatic disk space recovery after successful downloads."
+                               Style="{StaticResource Caption}" Margin="0,0,0,16"/>
+
+                    <CheckBox Content="Automatically delete raw depot files and ZIP archives after staging"
+                              IsChecked="{Binding DeleteDepotsAfterInstall, Mode=TwoWay}"
+                              Style="{StaticResource DarkCheckBox}"
+                              Margin="0,0,0,8"/>
+                    <TextBlock Text="When enabled, .DepotDownloader temp folders and source ZIP archives are cleaned up to free disk space."
+                               Style="{StaticResource Muted}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- ═══ ENGINES & ECOSYSTEM REGISTRY SECTION ═══ -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,20">
+                <StackPanel>
+                    <TextBlock Text="Engine &amp; Modding Ecosystem" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                    <TextBlock Text="Registered engine scanners and mod managers."
+                               Style="{StaticResource Caption}" Margin="0,0,0,16"/>
+
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="8"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="8"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="8"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Unreal Engine (4.x / 5.x):" Style="{StaticResource CaptionBold}"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="~mods/Pak Manager, Shipping Executable Discovery, ReFix" Style="{StaticResource Caption}"/>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Unity Engine:" Style="{StaticResource CaptionBold}"/>
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="UnityPlayer.dll Discovery, mods/ Folder Management" Style="{StaticResource Caption}"/>
+
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Godot Engine:" Style="{StaticResource CaptionBold}"/>
+                        <TextBlock Grid.Row="4" Grid.Column="1" Text=".pck Package Signature Discovery" Style="{StaticResource Caption}"/>
+
+                        <TextBlock Grid.Row="6" Grid.Column="0" Text="Emulators:" Style="{StaticResource CaptionBold}"/>
+                        <TextBlock Grid.Row="6" Grid.Column="1" Text="SmokeAPI v4.x + cream_api.ini, ReFix Protocol Emulation" Style="{StaticResource Caption}"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- ═══ ABOUT SECTION BANNER ═══ -->
+            <Border Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="★" FontSize="18" Foreground="{StaticResource AccentBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="BlueStar Launcher &amp; Open-Source Credits" Style="{StaticResource H2}"/>
+                        </StackPanel>
+                        <TextBlock Text="BlueStar is built using open-source community software: ReFix, DepotDownloader, SmokeAPI, CreamInstaller, BepInEx, Goldberg, and more."
+                                   Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,11 @@
+name = "bluestar-emulator-ratings"
+main = "src/index.js"
+compatibility_date = "2024-04-01"
+
+# KV namespace for persistent emulator ratings storage
+# Create KV namespace with: wrangler kv:namespace create RATINGS_KV
+# Then replace the id below with your generated namespace id
+[[kv_namespaces]]
+binding = "RATINGS_KV"
+id = "b344b86a3dd041d69a9068279cf8b172"
+preview_id = "RATINGS_KV_PREVIEW_ID_PLACEHOLDER"

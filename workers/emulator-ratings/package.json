@@ -1,0 +1,18 @@
+{
+  "name": "bluestar-emulator-ratings",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker for BlueStar emulator community voting & ratings",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "create-kv": "wrangler kv namespace create RATINGS_KV"
+  },
+  "keywords": ["bluestar", "cloudflare", "worker", "ratings", "voting", "emulator"],
+  "author": "BlueStar Contributors",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^3.50.0"
+  }
+}

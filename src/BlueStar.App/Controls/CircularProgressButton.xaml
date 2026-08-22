@@ -1,0 +1,47 @@
+<UserControl x:Class="BlueStar.App.Controls.CircularProgressButton"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Width="96" Height="96">
+
+    <Grid>
+        <!-- Track circle -->
+        <Ellipse Stroke="{StaticResource SubtleBorderBrush}" StrokeThickness="6" Fill="Transparent"/>
+
+        <!-- Progress arc drawn in code-behind -->
+        <Path x:Name="ArcPath"
+              Stroke="{StaticResource AccentBrush}" StrokeThickness="6"
+              StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+              Fill="Transparent"/>
+
+        <!-- Glow ring when active -->
+        <Ellipse x:Name="GlowRing"
+                 Stroke="{StaticResource AccentBrush}" StrokeThickness="1"
+                 Opacity="0.25" Fill="Transparent"
+                 Visibility="Collapsed"/>
+
+        <!-- Content: icon + label -->
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="4">
+            <!-- Download icon when idle -->
+            <TextBlock x:Name="IdleIcon"
+                       Text="📥"
+                       FontSize="22"
+                       HorizontalAlignment="Center"
+                       Visibility="Visible"/>
+
+            <!-- Percentage when active -->
+            <TextBlock x:Name="PercentLabel"
+                       FontSize="14" FontWeight="Bold"
+                       Foreground="{StaticResource AccentBrush}"
+                       HorizontalAlignment="Center"
+                       Visibility="Collapsed"/>
+
+            <TextBlock x:Name="StatusLabel"
+                       FontSize="9" FontWeight="Medium"
+                       Foreground="{StaticResource SecondaryTextBrush}"
+                       HorizontalAlignment="Center"
+                       Margin="0,1,0,0"
+                       TextWrapping="Wrap"
+                       TextAlignment="Center"/>
+        </StackPanel>
+    </Grid>
+</UserControl>
