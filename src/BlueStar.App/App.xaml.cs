@@ -1,4 +1,6 @@
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows;
 using BlueStar.Core.Interfaces;
 using BlueStar.Infrastructure.Cache;
@@ -14,10 +16,25 @@ using Serilog;
 namespace BlueStar.App;
 
 /// <summary>
-/// Application entry point with DI configuration.
+/// Application entry point with DI configuration and single-instance mutex enforcement.
 /// </summary>
 public partial class App : Application
 {
+    private static Mutex? _singleInstanceMutex;
+    private const string MutexId = "Global\\BlueStar_SingleInstance_Mutex_9F4F";
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    private static extern IntPtr FindWindow(string? lpClassName, string? lpWindowName);
+
+    private const int SW_RESTORE = 9;
+
     /// <summary>
     /// Gets the application service provider.
     /// </summary>
@@ -26,6 +43,27 @@ public partial class App : Application
     /// <inheritdoc />
     protected override void OnStartup(StartupEventArgs e)
     {
+        _singleInstanceMutex = new Mutex(true, MutexId, out bool isFirstInstance);
+        if (!isFirstInstance)
+        {
+            try
+            {
+                IntPtr hWnd = FindWindow(null, "BlueStar");
+                if (hWnd != IntPtr.Zero)
+                {
+                    ShowWindowAsync(hWnd, SW_RESTORE);
+                    SetForegroundWindow(hWnd);
+                }
+            }
+            catch
+            {
+                // Ignore Win32 errors
+            }
+
+            Shutdown();
+            return;
+        }
+
         base.OnStartup(e);
 
         // Configure Serilog
@@ -149,6 +187,19 @@ public partial class App : Application
     /// <inheritdoc />
     protected override void OnExit(ExitEventArgs e)
     {
+        if (_singleInstanceMutex != null)
+        {
+            try
+            {
+                _singleInstanceMutex.ReleaseMutex();
+                _singleInstanceMutex.Dispose();
+            }
+            catch
+            {
+                // Ignore disposal errors
+            }
+        }
+
         Log.CloseAndFlush();
         base.OnExit(e);
     }

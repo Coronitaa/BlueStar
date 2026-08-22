@@ -4,7 +4,7 @@
         xmlns:vm="clr-namespace:BlueStar.App.ViewModels"
         xmlns:local="clr-namespace:BlueStar.App.Views"
         xmlns:conv="clr-namespace:BlueStar.App.Converters"
-        Title="BlueStar - Universal Game Instance Manager"
+        Title="BlueStar"
         Icon="pack://application:,,,/BlueStar;component/Assets/bluestar.ico"
         Width="1320" Height="840"
         MinWidth="1000" MinHeight="640"
@@ -353,87 +353,51 @@
             </Grid.Style>
 
             <Grid.Resources>
-                <!-- Continuous Jumping (TranslateY) Storyboard -->
-                <Storyboard x:Key="StarJumpStoryboard" RepeatBehavior="Forever">
-                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="StarTranslate"
-                                                   Storyboard.TargetProperty="Y">
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.0" Value="0"/>
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.4" Value="-32" KeySpline="0.2, 0.8, 0.4, 1.0"/>
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.8" Value="0" KeySpline="0.6, 0.0, 0.8, 0.2"/>
-                        <SplineDoubleKeyFrame KeyTime="0:0:1.0" Value="0"/>
-                    </DoubleAnimationUsingKeyFrames>
-                    <!-- Scale squash & stretch -->
-                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="StarScale"
-                                                   Storyboard.TargetProperty="ScaleY">
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.0" Value="1.0"/>
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.1" Value="0.85"/>
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.4" Value="1.15"/>
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.75" Value="1.0"/>
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.8" Value="0.82"/>
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.95" Value="1.0"/>
-                    </DoubleAnimationUsingKeyFrames>
-                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="StarScale"
-                                                   Storyboard.TargetProperty="ScaleX">
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.0" Value="1.0"/>
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.1" Value="1.18"/>
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.4" Value="0.9"/>
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.75" Value="1.0"/>
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.8" Value="1.2"/>
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.95" Value="1.0"/>
-                    </DoubleAnimationUsingKeyFrames>
-                    <!-- Shadow Opacity pulse with jump -->
-                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="StarGlow"
-                                                   Storyboard.TargetProperty="Opacity">
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.0" Value="0.9"/>
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.4" Value="0.3"/>
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.8" Value="0.9"/>
-                    </DoubleAnimationUsingKeyFrames>
-                </Storyboard>
-
-                <!-- Continuous Spin (RotateTransform) Storyboard -->
+                <!-- Continuous Smooth Spin in place -->
                 <Storyboard x:Key="StarSpinStoryboard" RepeatBehavior="Forever">
                     <DoubleAnimation Storyboard.TargetName="StarRotate"
                                      Storyboard.TargetProperty="Angle"
                                      From="0" To="360"
-                                     Duration="0:0:1.6"/>
+                                     Duration="0:0:1.8"/>
+                    <!-- Subtle Glow Breathing Pulse -->
+                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="StarGlow"
+                                                   Storyboard.TargetProperty="Opacity">
+                        <SplineDoubleKeyFrame KeyTime="0:0:0.0" Value="0.6"/>
+                        <SplineDoubleKeyFrame KeyTime="0:0:0.9" Value="1.0" KeySpline="0.4, 0.0, 0.6, 1.0"/>
+                        <SplineDoubleKeyFrame KeyTime="0:0:1.8" Value="0.6" KeySpline="0.4, 0.0, 0.6, 1.0"/>
+                    </DoubleAnimationUsingKeyFrames>
                 </Storyboard>
             </Grid.Resources>
 
             <Grid.Triggers>
                 <EventTrigger RoutedEvent="FrameworkElement.Loaded">
-                    <BeginStoryboard Storyboard="{StaticResource StarJumpStoryboard}"/>
                     <BeginStoryboard Storyboard="{StaticResource StarSpinStoryboard}"/>
                 </EventTrigger>
             </Grid.Triggers>
 
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                <!-- Jump, Spin, & Shadow Container -->
-                <Grid Width="110" Height="110" HorizontalAlignment="Center" Margin="0,0,0,20">
-                    <!-- Dynamic Floor Shadow / Glow below Star -->
-                    <Ellipse x:Name="StarGlow" Width="64" Height="14"
-                             VerticalAlignment="Bottom" HorizontalAlignment="Center"
-                             Fill="{StaticResource AccentBrush}"
-                             Margin="0,0,0,8" Opacity="0.8">
+                <!-- Spin & Glow Container (In-Place) -->
+                <Grid Width="96" Height="96" HorizontalAlignment="Center" Margin="0,0,0,20">
+                    <!-- Subtle Radial Glow behind Star -->
+                    <Ellipse x:Name="StarGlow" Width="70" Height="70"
+                             VerticalAlignment="Center" HorizontalAlignment="Center"
+                             Fill="{StaticResource AccentTranslucentBrush}">
                         <Ellipse.Effect>
-                            <BlurEffect Radius="14"/>
+                            <BlurEffect Radius="24"/>
                         </Ellipse.Effect>
                     </Ellipse>
 
-                    <!-- Animated Star Vector Graphic -->
+                    <!-- Animated Star Vector Graphic (Rotating around center) -->
                     <Viewbox Width="54" Height="54"
                              HorizontalAlignment="Center" VerticalAlignment="Center"
                              RenderTransformOrigin="0.5,0.5">
                         <Viewbox.RenderTransform>
-                            <TransformGroup>
-                                <ScaleTransform x:Name="StarScale"/>
-                                <TranslateTransform x:Name="StarTranslate"/>
-                                <RotateTransform x:Name="StarRotate"/>
-                            </TransformGroup>
+                            <RotateTransform x:Name="StarRotate"/>
                         </Viewbox.RenderTransform>
                         <Path Data="M12,17.27L18.18,21L16.54,13.97L22,9.24L14.81,8.62L12,2L9.19,8.62L2,9.24L7.45,13.97L5.82,21L12,17.27Z"
                               Fill="{StaticResource AccentBrush}">
                             <Path.Effect>
-                                <DropShadowEffect Color="#00e5ff" BlurRadius="20" ShadowDepth="0" Opacity="0.9"/>
+                                <DropShadowEffect Color="#00e5ff" BlurRadius="16" ShadowDepth="0" Opacity="0.85"/>
                             </Path.Effect>
                         </Path>
                     </Viewbox>
