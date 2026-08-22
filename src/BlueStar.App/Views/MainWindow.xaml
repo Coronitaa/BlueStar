@@ -51,7 +51,7 @@
                             Padding="5,1"
                             Margin="8,0,0,0"
                             VerticalAlignment="Center">
-                        <TextBlock Text="v0.2.0" FontSize="10" FontWeight="SemiBold"
+                        <TextBlock Text="v1.0.0" FontSize="10" FontWeight="SemiBold"
                                    Foreground="{StaticResource AccentBrush}"/>
                     </Border>
                 </StackPanel>
@@ -322,5 +322,137 @@
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
+
+        <!-- ═══ STARTUP LOADING OVERLAY SCREEN ═══ -->
+        <Grid x:Name="StartupLoadingOverlay"
+              Grid.RowSpan="2"
+              Background="{StaticResource BaseBackgroundBrush}"
+              Panel.ZIndex="1000"
+              IsHitTestVisible="{Binding IsLoading}">
+            <Grid.Style>
+                <Style TargetType="Grid">
+                    <Setter Property="Opacity" Value="1"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsLoading}" Value="False">
+                            <DataTrigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                         To="0" Duration="0:0:0.45"
+                                                         DecelerationRatio="0.8"/>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetProperty="Visibility"
+                                                                      BeginTime="0:0:0.46">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{x:Static Visibility.Collapsed}"/>
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </DataTrigger.EnterActions>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Grid.Style>
+
+            <Grid.Resources>
+                <!-- Continuous Jumping (TranslateY) Storyboard -->
+                <Storyboard x:Key="StarJumpStoryboard" RepeatBehavior="Forever">
+                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="StarTranslate"
+                                                   Storyboard.TargetProperty="Y">
+                        <SplineDoubleKeyFrame KeyTime="0:0:0.0" Value="0"/>
+                        <SplineDoubleKeyFrame KeyTime="0:0:0.4" Value="-32" KeySpline="0.2, 0.8, 0.4, 1.0"/>
+                        <SplineDoubleKeyFrame KeyTime="0:0:0.8" Value="0" KeySpline="0.6, 0.0, 0.8, 0.2"/>
+                        <SplineDoubleKeyFrame KeyTime="0:0:1.0" Value="0"/>
+                    </DoubleAnimationUsingKeyFrames>
+                    <!-- Scale squash & stretch -->
+                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="StarScale"
+                                                   Storyboard.TargetProperty="ScaleY">
+                        <SplineDoubleKeyFrame KeyTime="0:0:0.0" Value="1.0"/>
+                        <SplineDoubleKeyFrame KeyTime="0:0:0.1" Value="0.85"/>
+                        <SplineDoubleKeyFrame KeyTime="0:0:0.4" Value="1.15"/>
+                        <SplineDoubleKeyFrame KeyTime="0:0:0.75" Value="1.0"/>
+                        <SplineDoubleKeyFrame KeyTime="0:0:0.8" Value="0.82"/>
+                        <SplineDoubleKeyFrame KeyTime="0:0:0.95" Value="1.0"/>
+                    </DoubleAnimationUsingKeyFrames>
+                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="StarScale"
+                                                   Storyboard.TargetProperty="ScaleX">
+                        <SplineDoubleKeyFrame KeyTime="0:0:0.0" Value="1.0"/>
+                        <SplineDoubleKeyFrame KeyTime="0:0:0.1" Value="1.18"/>
+                        <SplineDoubleKeyFrame KeyTime="0:0:0.4" Value="0.9"/>
+                        <SplineDoubleKeyFrame KeyTime="0:0:0.75" Value="1.0"/>
+                        <SplineDoubleKeyFrame KeyTime="0:0:0.8" Value="1.2"/>
+                        <SplineDoubleKeyFrame KeyTime="0:0:0.95" Value="1.0"/>
+                    </DoubleAnimationUsingKeyFrames>
+                    <!-- Shadow Opacity pulse with jump -->
+                    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="StarGlow"
+                                                   Storyboard.TargetProperty="Opacity">
+                        <SplineDoubleKeyFrame KeyTime="0:0:0.0" Value="0.9"/>
+                        <SplineDoubleKeyFrame KeyTime="0:0:0.4" Value="0.3"/>
+                        <SplineDoubleKeyFrame KeyTime="0:0:0.8" Value="0.9"/>
+                    </DoubleAnimationUsingKeyFrames>
+                </Storyboard>
+
+                <!-- Continuous Spin (RotateTransform) Storyboard -->
+                <Storyboard x:Key="StarSpinStoryboard" RepeatBehavior="Forever">
+                    <DoubleAnimation Storyboard.TargetName="StarRotate"
+                                     Storyboard.TargetProperty="Angle"
+                                     From="0" To="360"
+                                     Duration="0:0:1.6"/>
+                </Storyboard>
+            </Grid.Resources>
+
+            <Grid.Triggers>
+                <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                    <BeginStoryboard Storyboard="{StaticResource StarJumpStoryboard}"/>
+                    <BeginStoryboard Storyboard="{StaticResource StarSpinStoryboard}"/>
+                </EventTrigger>
+            </Grid.Triggers>
+
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <!-- Jump, Spin, & Shadow Container -->
+                <Grid Width="110" Height="110" HorizontalAlignment="Center" Margin="0,0,0,20">
+                    <!-- Dynamic Floor Shadow / Glow below Star -->
+                    <Ellipse x:Name="StarGlow" Width="64" Height="14"
+                             VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                             Fill="{StaticResource AccentBrush}"
+                             Margin="0,0,0,8" Opacity="0.8">
+                        <Ellipse.Effect>
+                            <BlurEffect Radius="14"/>
+                        </Ellipse.Effect>
+                    </Ellipse>
+
+                    <!-- Animated Star Vector Graphic -->
+                    <Viewbox Width="54" Height="54"
+                             HorizontalAlignment="Center" VerticalAlignment="Center"
+                             RenderTransformOrigin="0.5,0.5">
+                        <Viewbox.RenderTransform>
+                            <TransformGroup>
+                                <ScaleTransform x:Name="StarScale"/>
+                                <TranslateTransform x:Name="StarTranslate"/>
+                                <RotateTransform x:Name="StarRotate"/>
+                            </TransformGroup>
+                        </Viewbox.RenderTransform>
+                        <Path Data="M12,17.27L18.18,21L16.54,13.97L22,9.24L14.81,8.62L12,2L9.19,8.62L2,9.24L7.45,13.97L5.82,21L12,17.27Z"
+                              Fill="{StaticResource AccentBrush}">
+                            <Path.Effect>
+                                <DropShadowEffect Color="#00e5ff" BlurRadius="20" ShadowDepth="0" Opacity="0.9"/>
+                            </Path.Effect>
+                        </Path>
+                    </Viewbox>
+                </Grid>
+
+                <!-- Brand Name & Animated Status Text -->
+                <TextBlock Text="BlueStar"
+                           FontSize="24" FontWeight="Bold"
+                           Foreground="{StaticResource PrimaryTextBrush}"
+                           FontFamily="{StaticResource MainFontFamily}"
+                           HorizontalAlignment="Center"
+                           Margin="0,0,0,6"/>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <TextBlock Text="Starting launcher &amp; loading catalog..."
+                               Style="{StaticResource Caption}"
+                               Foreground="{StaticResource SecondaryTextBrush}"/>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>

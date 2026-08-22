@@ -11,36 +11,40 @@
              FontFamily="{StaticResource MainFontFamily}">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="32,24" MaxWidth="800" HorizontalAlignment="Left">
+        <StackPanel Margin="32,24" MaxWidth="950" HorizontalAlignment="Stretch">
 
             <TextBlock Text="Settings" Style="{StaticResource H1}" Margin="0,0,0,6"/>
             <TextBlock Text="Configure DepotBox API, download behaviors, game engines, and local storage."
-                       Style="{StaticResource Subtitle}" Margin="0,0,0,24"/>
+                       Style="{StaticResource Subtitle}" TextWrapping="Wrap" Margin="0,0,0,24"/>
 
             <!-- ═══ DEPOTBOX API SECTION ═══ -->
             <Border Style="{StaticResource Card}" Margin="0,0,0,20">
                 <StackPanel>
                     <TextBlock Text="DepotBox API Configuration" Style="{StaticResource H2}" Margin="0,0,0,4"/>
                     <TextBlock Text="BlueStar connects to the DepotBox catalog to fetch game metadata, availability, and depot manifests."
-                               Style="{StaticResource Caption}" Margin="0,0,0,14"/>
+                               Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,14"/>
 
                     <!-- Active status info banner -->
                     <Border Background="{StaticResource SurfaceInputBrush}"
                             BorderBrush="{StaticResource SubtleBorderBrush}"
                             BorderThickness="1"
                             CornerRadius="{StaticResource RadiusSm}"
-                            Padding="12,8" Margin="0,0,0,16">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="ℹ" FontSize="13" Foreground="{StaticResource AccentBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="{Binding AuthStatusMessage}" Style="{StaticResource BodySmall}" TextWrapping="Wrap"/>
-                        </StackPanel>
+                            Padding="12,10" Margin="0,0,0,16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="ℹ" FontSize="13" Foreground="{StaticResource AccentBrush}" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="1" Text="{Binding AuthStatusMessage}" Style="{StaticResource BodySmall}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                        </Grid>
                     </Border>
 
                     <!-- Personal Override API Key -->
                     <StackPanel Margin="0,4,0,0">
                         <TextBlock Text="Personal API Key (Optional Override):" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
                         <TextBlock Text="Leave this field empty to use the built-in default API configuration. Enter your personal key only if you wish to override settings with your own DepotBox account."
-                                   Style="{StaticResource Muted}" Margin="0,0,0,8"/>
+                                   Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,8"/>
                         <TextBox Style="{StaticResource DarkTextBox}"
                                  Text="{Binding ApiKey, UpdateSourceTrigger=PropertyChanged}"
                                  Margin="0,0,0,14"/>
@@ -67,7 +71,7 @@
                                 CornerRadius="{StaticResource RadiusMd}"
                                 Padding="12,8" Margin="0,14,0,0"
                                 Visibility="{Binding ConnectionTestResult, Converter={StaticResource NullToVisibilityConverter}}">
-                            <TextBlock Text="{Binding ConnectionTestResult}" Style="{StaticResource Body}"/>
+                            <TextBlock Text="{Binding ConnectionTestResult}" Style="{StaticResource Body}" TextWrapping="Wrap"/>
                         </Border>
                     </StackPanel>
                 </StackPanel>
@@ -78,7 +82,7 @@
                 <StackPanel>
                     <TextBlock Text="Storage &amp; Directories" Style="{StaticResource H2}" Margin="0,0,0,4"/>
                     <TextBlock Text="Persistent directories used for instance configurations, manifests, and cache."
-                               Style="{StaticResource Caption}" Margin="0,0,0,16"/>
+                               Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,16"/>
 
                     <TextBlock Text="Instances Metadata Root:" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
                     <TextBox Style="{StaticResource DarkTextBox}" Text="{Binding InstanceRoot}" IsReadOnly="True"/>
@@ -90,14 +94,14 @@
                 <StackPanel>
                     <TextBlock Text="Downloads &amp; Staging Cleanup" Style="{StaticResource H2}" Margin="0,0,0,4"/>
                     <TextBlock Text="Manage automatic disk space recovery after successful downloads."
-                               Style="{StaticResource Caption}" Margin="0,0,0,16"/>
+                               Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,16"/>
 
                     <CheckBox Content="Automatically delete raw depot files and ZIP archives after staging"
                               IsChecked="{Binding DeleteDepotsAfterInstall, Mode=TwoWay}"
                               Style="{StaticResource DarkCheckBox}"
                               Margin="0,0,0,8"/>
                     <TextBlock Text="When enabled, .DepotDownloader temp folders and source ZIP archives are cleaned up to free disk space."
-                               Style="{StaticResource Muted}"/>
+                               Style="{StaticResource Muted}" TextWrapping="Wrap"/>
                 </StackPanel>
             </Border>
 

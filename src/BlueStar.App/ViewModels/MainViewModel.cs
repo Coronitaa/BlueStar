@@ -40,6 +40,10 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool _hasActiveDownloads;
 
+    // ── App Startup Loading State ──
+    [ObservableProperty]
+    private bool _isLoading = true;
+
     // ── Steam Live Status ──
     [ObservableProperty]
     private bool _isSteamRunning;
@@ -76,8 +80,24 @@ public partial class MainViewModel : ObservableObject
         // Default navigation landing page is Home Dashboard
         Navigate("Home");
 
-        // Check for application updates on startup
-        _ = CheckAppUpdatesOnStartupAsync();
+        // Handle initial startup loading & update check
+        _ = InitializeStartupAsync();
+    }
+
+    private async Task InitializeStartupAsync()
+    {
+        try
+        {
+            // Give time for initial UI rendering and display the star jumping/spinning loading screen
+            await Task.Delay(1300).ConfigureAwait(true);
+            IsLoading = false;
+        }
+        catch
+        {
+            IsLoading = false;
+        }
+
+        await CheckAppUpdatesOnStartupAsync().ConfigureAwait(true);
     }
 
     private async Task CheckAppUpdatesOnStartupAsync()

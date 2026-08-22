@@ -1,4 +1,4 @@
-# ⭐ BlueStar Launcher
+# BlueStar Launcher
 
 > **Universal Steam Game Instance Manager, Depot Staging, Manifest Resolver, and Multi-Engine Launcher**
 
@@ -11,7 +11,7 @@ BlueStar is an all-in-one desktop game management and launcher ecosystem designe
 
 ---
 
-## 🚀 Quick Download & Installation
+## Downloads and Installation
 
 You can download the latest version from the [Releases](https://github.com/Coronitaa/BlueStar/releases) page:
 
@@ -21,33 +21,33 @@ You can download the latest version from the [Releases](https://github.com/Coron
 | **Portable Edition** | `BlueStar-v1.0.0-Portable-win-x64.zip` | Standalone zero-install archive. Extract anywhere and launch `BlueStar.exe`. |
 
 > [!NOTE]
-> All release binaries are digitally signed with an Authenticode virtual certificate issued to **Corøna (BlueStar Developers)**.
+> All release binaries are digitally signed with an Authenticode certificate issued to **Corøna (BlueStar Developers)**.
 
 ---
 
-## ✨ Key Features
+## Key Features
 
-### 🎮 Explore & DepotBox Integration
+### Explore and DepotBox Integration
 - Browse hundreds of games with metadata, banner art, system compatibility tags, and DLC counts.
-- Real-time **SteamDB** integration for accurate depot release dates and version resolution.
+- Real-time SteamDB integration for accurate depot release dates and version resolution.
 - One-click instance creation and background downloading.
 
-### 📦 Instance Lifecycle & Depot Updates
+### Instance Lifecycle and Depot Updates
 - Manage multiple independent game installations without file conflicts.
 - **Smart Update Resolver**: Detect newer manifests on DepotBox and apply updates non-destructively while preserving save games, mods, and emulator configurations.
 - Direct quick actions: launch game, open folder, generate desktop/Steam shortcuts, create mobile companion QR codes, or safely delete files.
 
-### 🌐 Multi-Engine Multiplayer & Emulation
+### Multi-Engine Multiplayer and Emulation
 - **ReFix Online (Steam Spacewar)**: Full Steamworks Spacewar (AppID 480) multiplayer proxy support with Steam friends list, invites, and online lobbies.
 - **Re:Goldberg LAN**: Pure standalone, offline, and LAN multiplayer emulation requiring zero internet connection or Steam client.
 - **Community Ratings**: Real-time crowd-sourced voting on emulation compatibility and best-working modes for each title.
 
-### 🔓 Automated DLC Entitlement
-- Integrated **SmokeAPI** and **CreamInstaller** pipelines.
+### Automated DLC Entitlement
+- Integrated SmokeAPI and CreamInstaller pipelines.
 - Automatically generates and writes `cream_api.ini` and `SmokeAPI.config.json` with support for all known game DLCs.
 - Clean one-click installation and restoration.
 
-### 🛠️ 1-Click Windows Game Prerequisites
+### 1-Click Windows Game Prerequisites
 - Automatically scans the host OS and game directory for missing runtimes:
   - Visual C++ 2015–2022 Redistributable (x86 & x64)
   - DirectX End-User Runtimes (Legacy D3DX9 / XAudio2)
@@ -55,18 +55,18 @@ You can download the latest version from the [Releases](https://github.com/Coron
   - Unreal Engine Prerequisites
 - Supports silent batch installation and interactive setup wizards.
 
-### 🧩 Modding & BepInEx Framework
+### Modding and BepInEx Framework
 - Native engine detection for Unity (Mono / IL2CPP), Unreal Engine, Godot, and Native executables.
 - One-click BepInEx installation with auto-configured `doorstop_config.ini` and folder structures.
 - Steam Workshop preview browser and mod management.
 
-### 🔄 Built-in Auto-Updates
+### Built-in Auto-Updates
 - Integrated update checker notifying users of new BlueStar releases published to GitHub.
 - Background downloading with seamless one-click restart and upgrade.
 
 ---
 
-## 💻 System Requirements
+## System Requirements
 
 - **Operating System**: Windows 10 (Build 19041+) or Windows 11 (64-bit)
 - **Architecture**: x64 (64-bit)
@@ -75,7 +75,7 @@ You can download the latest version from the [Releases](https://github.com/Coron
 
 ---
 
-## 🏗️ Solution Architecture
+## Solution Architecture
 
 ```
 BlueStar/
@@ -104,7 +104,7 @@ BlueStar/
 
 ---
 
-## ⚙️ Configuration & Settings
+## Configuration and Settings
 
 BlueStar is designed to work right out of the box with zero required configuration:
 - **Default Backend API**: Pre-configured with the default DepotBox backend service.
@@ -113,13 +113,13 @@ BlueStar is designed to work right out of the box with zero required configurati
 
 ---
 
-## 🛠️ Building from Source
+## Building from Source
 
 ### Prerequisites
 - [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 - [Inno Setup 6](https://jrsoftware.org/isinfo.php) (optional, for compiling the installer)
 
-### Build & Run
+### Build and Run
 
 ```bash
 # 1. Clone the repository
@@ -145,7 +145,7 @@ dotnet publish src/BlueStar.App/BlueStar.App.csproj -c Release -r win-x64 --self
 
 ---
 
-## 📜 Credits & Third-Party Attributions
+## Credits and Attributions
 
 BlueStar proudly relies on and thanks the following open-source projects:
 
@@ -160,8 +160,9 @@ BlueStar proudly relies on and thanks the following open-source projects:
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the [GNU General Public License v3.0](LICENSE).  
 Copyright (C) 2026 **Corøna** & BlueStar Developers.
+
 
