@@ -497,6 +497,59 @@ public sealed class SteamStoreApiClient : IMetadataProvider
         return null;
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<SteamStoreSearchItem>> SearchStoreAsync(string query, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return [];
+
+        // If direct numeric AppId provided, attempt direct fetch first
+        if (uint.TryParse(query.Trim(), out var directAppId) && directAppId > 0)
+        {
+            var meta = await GetMetadataAsync(directAppId, ct).ConfigureAwait(false);
+            if (meta != null)
+            {
+                return [new SteamStoreSearchItem(
+                    directAppId,
+                    meta.Name,
+                    meta.CapsuleImageUrl,
+                    meta.HeaderImageUrl ?? $"https://cdn.cloudflare.steamstatic.com/steam/apps/{directAppId}/header.jpg")];
+            }
+        }
+
+        try
+        {
+            await ThrottleAsync(ct).ConfigureAwait(false);
+            var url = $"https://store.steampowered.com/api/storesearch/?term={Uri.EscapeDataString(query.Trim())}&l=english&cc=US";
+            var response = await _http.GetAsync(url, ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                return [];
+
+            var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+                return [];
+
+            var results = new List<SteamStoreSearchItem>();
+            foreach (var item in items.EnumerateArray())
+            {
+                if (item.TryGetProperty("id", out var idProp) && idProp.TryGetUInt32(out var id) && id > 0)
+                {
+                    var name = item.TryGetProperty("name", out var nameProp) ? nameProp.GetString() ?? $"App {id}" : $"App {id}";
+                    var tiny = item.TryGetProperty("tiny_image", out var tinyProp) ? tinyProp.GetString() : null;
+                    var header = $"https://cdn.cloudflare.steamstatic.com/steam/apps/{id}/header.jpg";
+                    results.Add(new SteamStoreSearchItem(id, name, tiny, header));
+                }
+            }
+            return results;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error searching Steam Store for query: {Query}", query);
+            return [];
+        }
+    }
+
     /// <summary>
     /// Model holding Steam App depot branches and public manifest GIDs.
     /// </summary>

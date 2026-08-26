@@ -32,4 +32,12 @@ public interface IMetadataProvider
     /// <param name="result">The search result to enrich in-place.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     Task EnrichSearchResultAsync(SearchResult result, CancellationToken ct = default);
+
+    /// <summary>
+    /// Searches the Steam Store for games matching the specified query.
+    /// </summary>
+    /// <param name="query">Search term or AppId.</param>
+    /// <param name="ct">A token to monitor for cancellation requests.</param>
+    /// <returns>A list of search result items with AppId, name and thumbnails.</returns>
+    Task<IReadOnlyList<SteamStoreSearchItem>> SearchStoreAsync(string query, CancellationToken ct = default);
 }

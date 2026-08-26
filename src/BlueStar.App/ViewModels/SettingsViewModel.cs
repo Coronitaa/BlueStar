@@ -221,4 +221,25 @@ public partial class SettingsViewModel : ObservableObject
             IsTestingConnection = false;
         }
     }
+
+    /// <summary>
+    /// Opens an external URL in the default browser.
+    /// </summary>
+    [RelayCommand]
+    private void OpenUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return;
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to open URL: {Url}", url);
+        }
+    }
 }

@@ -10,6 +10,31 @@
              Foreground="{StaticResource PrimaryTextBrush}"
              FontFamily="{StaticResource MainFontFamily}">
 
+    <UserControl.RenderTransform>
+        <TranslateTransform Y="0"/>
+    </UserControl.RenderTransform>
+
+    <UserControl.Triggers>
+        <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+            <BeginStoryboard>
+                <Storyboard>
+                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                     From="0.0" To="1.0" Duration="0:0:0.22">
+                        <DoubleAnimation.EasingFunction>
+                            <CubicEase EasingMode="EaseOut"/>
+                        </DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                     From="12" To="0" Duration="0:0:0.22">
+                        <DoubleAnimation.EasingFunction>
+                            <CubicEase EasingMode="EaseOut"/>
+                        </DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                </Storyboard>
+            </BeginStoryboard>
+        </EventTrigger>
+    </UserControl.Triggers>
+
     <Grid>
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Margin="32,24" MaxWidth="1180" HorizontalAlignment="Stretch">
@@ -557,8 +582,39 @@
                                 <ComboBox Grid.Column="0"
                                           Style="{StaticResource DarkComboBox}"
                                           ItemsSource="{Binding AvailableBepInExVersions}"
-                                          SelectedItem="{Binding SelectedBepInExVersion}"
-                                          DisplayMemberPath="Version"/>
+                                          SelectedItem="{Binding SelectedBepInExVersion}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding TagName}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,8,0"/>
+                                                    <TextBlock Text="{Binding Version}" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center"/>
+                                                </StackPanel>
+
+                                                <!-- Architecture Badge: (x64) / (x86) -->
+                                                <Border Grid.Column="1"
+                                                        Background="{StaticResource SurfaceInputBrush}"
+                                                        BorderBrush="{StaticResource SubtleBorderBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="{StaticResource RadiusXs}"
+                                                        Padding="6,1"
+                                                        VerticalAlignment="Center"
+                                                        Margin="8,0,0,0">
+                                                    <TextBlock Text="{Binding Architecture}"
+                                                               FontSize="10"
+                                                               FontWeight="Bold"
+                                                               FontFamily="Consolas, Segoe UI"
+                                                               Foreground="{StaticResource AccentBrush}"/>
+                                                </Border>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
 
                                 <Button Grid.Column="2"
                                         Content="📥 Install / Update Version"

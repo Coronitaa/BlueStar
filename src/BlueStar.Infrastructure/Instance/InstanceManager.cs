@@ -10,6 +10,9 @@ namespace BlueStar.Infrastructure.Instance;
 /// </summary>
 public sealed class InstanceManager : IInstanceManager
 {
+    /// <inheritdoc />
+    public event EventHandler? InstancesChanged;
+
     private readonly string _rootPath;
     private readonly ILogger<InstanceManager> _logger;
     private readonly SemaphoreSlim _lock = new(1, 1);
@@ -120,11 +123,14 @@ public sealed class InstanceManager : IInstanceManager
             _logger.LogInformation("Created instance {Id}: {Name} (AppId={AppId})",
                 newInstance.Id, newInstance.Name, newInstance.AppId);
 
+            _lock.Release();
+            InstancesChanged?.Invoke(this, EventArgs.Empty);
             return newInstance;
         }
-        finally
+        catch
         {
             _lock.Release();
+            throw;
         }
     }
 
@@ -146,11 +152,15 @@ public sealed class InstanceManager : IInstanceManager
                 Path.Combine(instanceDir, "instance.json"), json, ct).ConfigureAwait(false);
 
             _logger.LogInformation("Updated instance {Id}: {Name}", instance.Id, instance.Name);
+
+            _lock.Release();
+            InstancesChanged?.Invoke(this, EventArgs.Empty);
             return updatedInstance;
         }
-        finally
+        catch
         {
             _lock.Release();
+            throw;
         }
     }
 
@@ -162,15 +172,22 @@ public sealed class InstanceManager : IInstanceManager
         {
             var instanceDir = Path.Combine(_rootPath, id.ToString());
             if (!Directory.Exists(instanceDir))
+            {
+                _lock.Release();
                 return false;
+            }
 
             Directory.Delete(instanceDir, recursive: true);
             _logger.LogInformation("Deleted instance {Id}", id);
+
+            _lock.Release();
+            InstancesChanged?.Invoke(this, EventArgs.Empty);
             return true;
         }
-        finally
+        catch
         {
             _lock.Release();
+            throw;
         }
     }
 }

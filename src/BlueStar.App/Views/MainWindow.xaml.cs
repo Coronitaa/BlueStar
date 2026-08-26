@@ -79,7 +79,7 @@ public partial class MainWindow : Window
         return IntPtr.Zero;
     }
 
-    private static void WmGetMinMaxInfo(IntPtr hwnd, IntPtr lParam)
+    private void WmGetMinMaxInfo(IntPtr hwnd, IntPtr lParam)
     {
         var mmi = (MINMAXINFO)Marshal.PtrToStructure(lParam, typeof(MINMAXINFO))!;
         var monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
@@ -95,6 +95,17 @@ public partial class MainWindow : Window
             mmi.ptMaxSize.X = Math.Abs(rcWork.Right - rcWork.Left);
             mmi.ptMaxSize.Y = Math.Abs(rcWork.Bottom - rcWork.Top);
         }
+
+        var source = HwndSource.FromHwnd(hwnd);
+        double dpiX = source?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+        double dpiY = source?.CompositionTarget?.TransformToDevice.M22 ?? 1.0;
+
+        int minWidthPx = (int)(MinWidth * dpiX);
+        int minHeightPx = (int)(MinHeight * dpiY);
+
+        if (minWidthPx > 0) mmi.ptMinTrackSize.X = minWidthPx;
+        if (minHeightPx > 0) mmi.ptMinTrackSize.Y = minHeightPx;
+
         Marshal.StructureToPtr(mmi, lParam, true);
     }
 

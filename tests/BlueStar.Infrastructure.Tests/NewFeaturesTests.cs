@@ -233,14 +233,14 @@ public class NewFeaturesTests
         // Arrange
         var jsonResponse = """
         {
-          "tag_name": "v1.2",
-          "name": "ReFix Release v1.2",
+          "tag_name": "v2.5",
+          "name": "ReFix Release v2.5",
           "body": "Fixes and performance improvements",
           "published_at": "2026-08-19T20:00:00Z",
           "assets": [
             {
-              "name": "ReFix_Release_v1.2.zip",
-              "browser_download_url": "https://github.com/Coronitaa/ReFix/releases/download/v1.2/ReFix_Release_v1.2.zip",
+              "name": "ReFix_Release_v2.5.zip",
+              "browser_download_url": "https://github.com/Coronitaa/ReFix/releases/download/v2.5/ReFix_Release_v2.5.zip",
               "size": 1048576
             }
           ]
@@ -268,9 +268,9 @@ public class NewFeaturesTests
 
         // Assert
         release.Should().NotBeNull();
-        release!.TagName.Should().Be("v1.2");
-        release.DownloadUrl.Should().Be("https://github.com/Coronitaa/ReFix/releases/download/v1.2/ReFix_Release_v1.2.zip");
-        release.Version.Should().Be("1.2");
+        release!.TagName.Should().Be("v2.5");
+        release.DownloadUrl.Should().Be("https://github.com/Coronitaa/ReFix/releases/download/v2.5/ReFix_Release_v2.5.zip");
+        release.Version.Should().Be("2.5");
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -846,5 +846,107 @@ public class NewFeaturesTests
         result.Version.Should().NotBeNullOrWhiteSpace();
         result.Version.Should().NotStartWith("Manifest");
     }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // 16. HOME DASHBOARD IMPORT & INSTANCE UPDATE NOTIFICATION TESTS
+    // ═════════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void GameInstance_HasUpdateAvailable_DefaultsToFalse_AndCanBeToggled()
+    {
+        var instance = new GameInstance
+        {
+            Name = "Hollow Knight",
+            AppId = 367520,
+            InstallPath = "C:\\Games\\HollowKnight"
+        };
+
+        instance.HasUpdateAvailable.Should().BeFalse();
+
+        var updated = instance with
+        {
+            HasUpdateAvailable = true,
+            UpdateDescription = "New build v1.5.78 available"
+        };
+
+        updated.HasUpdateAvailable.Should().BeTrue();
+        updated.UpdateDescription.Should().Be("New build v1.5.78 available");
+    }
+
+    [Fact]
+    public async Task SteamLibraryScanner_ScanInstalledGamesAsync_ReturnsReadOnlyListWithoutExceptions()
+    {
+        // Act
+        var games = await BlueStar.Infrastructure.Steam.SteamLibraryScanner.ScanInstalledGamesAsync(CancellationToken.None);
+
+        // Assert
+        games.Should().NotBeNull();
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // 17. INSTANCES SORTING & FILTERING TESTS
+    // ═════════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void GameInstance_Sorting_Alphabetical_And_Chronological_OrdersCorrectly()
+    {
+        var gameA = new GameInstance
+        {
+            Name = "Apex Legends",
+            AppId = 1172470,
+            InstallPath = "C:\\Games\\Apex",
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-10),
+            TotalPlayTime = TimeSpan.FromHours(5)
+        };
+
+        var gameB = new GameInstance
+        {
+            Name = "Cyberpunk 2077",
+            AppId = 1091500,
+            InstallPath = "C:\\Games\\Cyberpunk",
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-2),
+            LastPlayedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+            TotalPlayTime = TimeSpan.FromHours(45)
+        };
+
+        var gameC = new GameInstance
+        {
+            Name = "Baldur's Gate 3",
+            AppId = 1086940,
+            InstallPath = "C:\\Games\\BG3",
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-30),
+            LastPlayedAt = DateTimeOffset.UtcNow.AddHours(-2),
+            TotalPlayTime = TimeSpan.FromHours(120)
+        };
+
+        var list = new List<GameInstance> { gameA, gameB, gameC };
+
+        // Test Alphabetical Ascending
+        var az = list.OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        az[0].Name.Should().Be("Apex Legends");
+        az[1].Name.Should().Be("Baldur's Gate 3");
+        az[2].Name.Should().Be("Cyberpunk 2077");
+
+        // Test Alphabetical Descending
+        var za = list.OrderByDescending(i => i.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        za[0].Name.Should().Be("Cyberpunk 2077");
+        za[1].Name.Should().Be("Baldur's Gate 3");
+        za[2].Name.Should().Be("Apex Legends");
+
+        // Test PlayTime Descending
+        var playTimeSort = list.OrderByDescending(i => i.TotalPlayTime).ToList();
+        playTimeSort[0].Name.Should().Be("Baldur's Gate 3");
+        playTimeSort[1].Name.Should().Be("Cyberpunk 2077");
+        playTimeSort[2].Name.Should().Be("Apex Legends");
+
+        // Test Recent (LastPlayedAt descending)
+        var recentSort = list.OrderByDescending(i => i.LastPlayedAt.HasValue)
+                             .ThenByDescending(i => i.LastPlayedAt ?? i.CreatedAt)
+                             .ToList();
+        recentSort[0].Name.Should().Be("Cyberpunk 2077");
+        recentSort[1].Name.Should().Be("Baldur's Gate 3");
+        recentSort[2].Name.Should().Be("Apex Legends");
+    }
 }
+
 

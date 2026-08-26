@@ -1,6 +1,6 @@
-# ReFix v1.1.0 — Universal OnlineFix Alternative, Steam Emulator & LAN Multiplayer Fix
+# ReFix v1.2.3 — Universal OnlineFix Alternative, Steam Emulator & LAN Multiplayer Fix
 
-[![Release](https://img.shields.io/badge/version-v1.1.0-blue.svg)](https://github.com/Coronitaa/ReFix/releases/tag/v1.1)
+[![Release](https://img.shields.io/badge/version-v1.2.3-blue.svg)](https://github.com/Coronitaa/ReFix/releases/tag/v1.23)
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64%20%7C%20x86-lightgrey.svg)](https://github.com/Coronitaa/ReFix)
 [![Engines](https://img.shields.io/badge/engines-Unity%20%7C%20Unreal%20%7C%20Godot%20%7C%20Native-green.svg)](https://github.com/Coronitaa/ReFix)
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
@@ -12,7 +12,7 @@
 
 ## 🔍 Steam Emulators & Multiplayer Fixes Comparison Matrix
 
-| Feature | ReFix v1.1.0 | OnlineFix (online-fix.me) | Goldberg Emulator (gbe_fork) | CODEX Steam Emu | SmartSteamEmu (SSE) |
+| Feature | ReFix v1.2.3 | OnlineFix (online-fix.me) | Goldberg Emulator (gbe_fork) | CODEX Steam Emu | SmartSteamEmu (SSE) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Open Source (Full C++ Source)** | ✅ **Yes (MIT)** | ❌ Closed / Obfuscated | ✅ Yes (GPL/MIT) | ❌ Closed Source | ❌ Closed / Discontinued |
 | **Steam Online Matchmaking (Spacewar 480)** | ✅ **Yes** | ✅ Yes | ❌ No (LAN only) | ❌ No (Offline only) | ❌ No (LAN only) |
@@ -74,8 +74,8 @@
 
 ```
 ReFix/
-├── AutoDeploy.bat                      # Main Universal AutoDeploy batch tool (v1.1.0)
-├── DLC_Unlocker.bat                    # Universal DLC Unlocker tool (v1.1.0)
+├── AutoDeploy.bat                      # Main Universal AutoDeploy batch tool (v1.2.0)
+├── DLC_Unlocker.bat                    # Universal DLC Unlocker tool (v1.2.0)
 ├── Uninstall_ReFix.bat                 # Zero-trace uninstaller & game restorer
 ├── build.bat                           # MSVC build script for C++ proxies
 ├── deploy.bat                          # Automated packaging & deployment script
@@ -117,7 +117,7 @@ ReFix/
 
 ### For Players (Deployment Package)
 
-1. Download the latest **`ReFix_Release_v1.1.zip`** from [Releases](https://github.com/Coronitaa/ReFix/releases/tag/v1.1).
+1. Download the latest **`ReFix_Release_v1.23.zip`** from [Releases](https://github.com/Coronitaa/ReFix/releases/tag/v1.23).
 2. Extract the archive to any folder (or directly to a USB flash drive).
 3. Run **`AutoDeploy.bat`**:
    - Choose your target game directory using the GUI dialog or enter the path.

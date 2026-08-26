@@ -110,6 +110,16 @@ public record GameInstance
     public string? InstalledEmulatorVersion { get; init; }
 
     /// <summary>
+    /// Gets or sets whether a game update / newer build is available for this instance.
+    /// </summary>
+    public bool HasUpdateAvailable { get; init; }
+
+    /// <summary>
+    /// Gets or sets details about the available update.
+    /// </summary>
+    public string? UpdateDescription { get; init; }
+
+    /// <summary>
     /// Gets the Steam header image URL for this game instance.
     /// </summary>
     public string HeaderImageUrl => !string.IsNullOrWhiteSpace(Metadata?.HeaderImageUrl)

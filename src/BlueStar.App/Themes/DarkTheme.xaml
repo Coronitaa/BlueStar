@@ -7,6 +7,8 @@
     <conv:InverseBoolConverter x:Key="InverseBoolConverter"/>
     <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
     <conv:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
+    <conv:InverseNullToVisibilityConverter x:Key="InverseNullToVisibilityConverter"/>
+    <conv:NullToBoolConverter x:Key="NullToBoolConverter"/>
     <conv:ZeroToVisibilityConverter x:Key="ZeroToVisibilityConverter"/>
     <conv:StringMatchConverter x:Key="StringMatchConverter"/>
     <conv:StringMatchToVisibilityConverter x:Key="StringMatchToVisibilityConverter"/>

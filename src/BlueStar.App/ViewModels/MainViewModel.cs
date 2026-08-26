@@ -44,6 +44,23 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool _isLoading = true;
 
+    [ObservableProperty]
+    private string _startupStatusText = "Starting BlueStar...";
+
+    // ── Sidebar State & Recent Shortcuts ──
+    [ObservableProperty]
+    private System.Collections.ObjectModel.ObservableCollection<GameInstance> _recentShortcuts = new();
+
+    [ObservableProperty]
+    private bool _isSidebarImportMenuOpen;
+
+    // ── Live Downloads Tracker ──
+    [ObservableProperty]
+    private string _downloadsButtonText = "Downloads";
+
+    [ObservableProperty]
+    private bool _hasMultipleActiveDownloads;
+
     // ── Steam Live Status ──
     [ObservableProperty]
     private bool _isSteamRunning;
@@ -61,17 +78,30 @@ public partial class MainViewModel : ObservableObject
         DownloadQueueManager downloadQueueManager,
         ISteamStatusService steamStatusService,
         INotificationService notificationService,
-        IUpdateService updateService)
+        IUpdateService updateService,
+        IInstanceManager instanceManager,
+        IGameLauncher? gameLauncher = null,
+        IDepotBoxApiClient? apiClient = null)
     {
         _downloadQueueManager = downloadQueueManager;
         _steamStatusService = steamStatusService;
         _notificationService = notificationService;
         _updateService = updateService;
+        _instanceManager = instanceManager;
+        _gameLauncher = gameLauncher;
+        _apiClient = apiClient;
         _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
         _downloadQueueManager.Queue.CollectionChanged += (_, _) => _uiContext.Post(_ => UpdateDownloadStats(), null);
         _downloadQueueManager.QueueChanged += (_, _) => _uiContext.Post(_ => UpdateDownloadStats(), null);
         _steamStatusService.StatusChanged += OnSteamStatusChanged;
+
+        // Auto-refresh sidebar shortcuts on any instance create, update, delete or game launch
+        _instanceManager.InstancesChanged += (_, _) => _ = RefreshRecentShortcutsAsync();
+        if (_gameLauncher != null)
+        {
+            _gameLauncher.RunningStateChanged += (_, _) => _ = RefreshRecentShortcutsAsync();
+        }
 
         // Initialize state
         UpdateDownloadStats();
@@ -84,13 +114,68 @@ public partial class MainViewModel : ObservableObject
         _ = InitializeStartupAsync();
     }
 
+    private readonly IInstanceManager _instanceManager;
+    private readonly IGameLauncher? _gameLauncher;
+    private readonly IDepotBoxApiClient? _apiClient;
+
     private async Task InitializeStartupAsync()
     {
         try
         {
-            // Give time for initial UI rendering and display the star jumping/spinning loading screen
-            await Task.Delay(1300).ConfigureAwait(true);
+            StartupStatusText = "Starting ecosystem services...";
+            await Task.Delay(150).ConfigureAwait(true);
+
+            StartupStatusText = "Loading local instances and manifests...";
+            IReadOnlyList<GameInstance> instances = [];
+            try
+            {
+                // Ensure instance manager and stored instances are fully resolved
+                instances = await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
+            }
+            catch { }
+
+            StartupStatusText = "Checking for game updates and catalog status...";
+            try
+            {
+                if (_apiClient != null && instances.Count > 0)
+                {
+                    foreach (var inst in instances.Where(i => i.AppId > 0))
+                    {
+                        try
+                        {
+                            var latest = await _apiClient.SearchGamesAsync(inst.Name, CancellationToken.None).ConfigureAwait(false);
+                            var match = latest.FirstOrDefault(g => g.AppId == inst.AppId);
+                            if (match != null)
+                            {
+                                var hasNewDlcs = match.DlcCount.HasValue && match.DlcCount.Value > inst.Dlcs.Count;
+                                var isNewVersion = !string.IsNullOrWhiteSpace(match.Version) && !string.Equals(match.Version, inst.Metadata?.ReleaseDate, StringComparison.OrdinalIgnoreCase);
+
+                                if (hasNewDlcs || isNewVersion)
+                                {
+                                    var updated = inst with
+                                    {
+                                        HasUpdateAvailable = true,
+                                        UpdateDescription = $"New update available ({match.Version ?? "New build"})"
+                                    };
+                                    await _instanceManager.UpdateAsync(updated, CancellationToken.None).ConfigureAwait(false);
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch { }
+
+            StartupStatusText = "Syncing Steam status...";
+            await Task.Delay(150).ConfigureAwait(true);
+
+            StartupStatusText = "Ready!";
+            await Task.Delay(100).ConfigureAwait(true);
+
+            // Trigger smooth exit transition
             IsLoading = false;
+            await RefreshRecentShortcutsAsync().ConfigureAwait(false);
         }
         catch
         {
@@ -183,12 +268,67 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    private readonly HashSet<DownloadJobItem> _subscribedJobs = new();
+
     private void UpdateDownloadStats()
     {
-        var count = _downloadQueueManager.Queue.Count(j => j.IsActive);
+        // Subscribe to any new jobs for live progress and speed
+        foreach (var job in _downloadQueueManager.Queue)
+        {
+            if (_subscribedJobs.Add(job))
+            {
+                job.PropertyChanged += (s, e) =>
+                {
+                    if (e.PropertyName is nameof(DownloadJobItem.Percentage) or nameof(DownloadJobItem.SpeedBytesPerSec) or nameof(DownloadJobItem.JobStatus))
+                    {
+                        _uiContext.Post(_ => UpdateDownloadStats(), null);
+                    }
+                };
+            }
+        }
+
+        var activeJobs = _downloadQueueManager.Queue.Where(j => j.IsActive).ToList();
+        var totalJobs = _downloadQueueManager.Queue.Count;
+        var completedJobs = _downloadQueueManager.Queue.Count(j => j.IsCompleted);
+        var count = activeJobs.Count;
+
         ActiveDownloadsCount = count;
         HasActiveDownloads = count > 0;
-        StatusText = HasActiveDownloads ? $"{count} download(s) active" : "Ready";
+        HasMultipleActiveDownloads = count > 1;
+
+        if (count == 0)
+        {
+            DownloadsButtonText = "Downloads";
+            StatusText = totalJobs > 0 && completedJobs == totalJobs ? "All downloads completed" : "Ready";
+        }
+        else if (count == 1)
+        {
+            var singleJob = activeJobs[0];
+            var gameName = singleJob.Instance?.Name ?? "Game";
+            var pct = singleJob.Percentage;
+            var speed = singleJob.FormattedSpeed;
+            DownloadsButtonText = $"Downloads: {gameName} ({pct:F0}%) • {speed}";
+            StatusText = $"Downloading {gameName} ({pct:F0}%) • {speed}";
+        }
+        else
+        {
+            var totalSpeed = activeJobs.Sum(j => j.SpeedBytesPerSec);
+            var formattedSpeed = FormatSpeed(totalSpeed);
+            DownloadsButtonText = $"Downloads ({completedJobs}/{totalJobs}) • {formattedSpeed}";
+            StatusText = $"{count} downloads active ({completedJobs}/{totalJobs} completed) • {formattedSpeed}";
+        }
+    }
+
+    private static string FormatSpeed(double bytesPerSec)
+    {
+        return bytesPerSec switch
+        {
+            > 1024 * 1024 * 1024 => $"{bytesPerSec / (1024.0 * 1024.0 * 1024.0):F1} GB/s",
+            > 1024 * 1024 => $"{bytesPerSec / (1024.0 * 1024.0):F1} MB/s",
+            > 1024 => $"{bytesPerSec / 1024.0:F1} KB/s",
+            > 0 => $"{bytesPerSec:F0} B/s",
+            _ => "0 KB/s"
+        };
     }
 
     /// <summary>
@@ -260,6 +400,78 @@ public partial class MainViewModel : ObservableObject
         view.DataContext = vm;
         _ = vm.LoadInstanceAsync(instance);
         CurrentView = view;
+    }
+
+    [RelayCommand]
+    public void ToggleSidebarImportMenu() => IsSidebarImportMenuOpen = !IsSidebarImportMenuOpen;
+
+    [RelayCommand]
+    public void CloseSidebarImportMenu() => IsSidebarImportMenuOpen = false;
+
+    [RelayCommand]
+    public void OpenDownloads() => Navigate("Downloads");
+
+    [RelayCommand]
+    public void OpenRecentShortcut(GameInstance instance)
+    {
+        if (instance == null) return;
+        OpenInstanceDetail(instance);
+    }
+
+    [RelayCommand]
+    public async Task SidebarImportSteamAsync()
+    {
+        IsSidebarImportMenuOpen = false;
+        Navigate("Home");
+        if (CurrentView?.DataContext is HomeViewModel vm)
+        {
+            await vm.OpenSteamImportModalAsync();
+        }
+    }
+
+    [RelayCommand]
+    public void SidebarImportZip()
+    {
+        IsSidebarImportMenuOpen = false;
+        Navigate("Home");
+        if (CurrentView?.DataContext is HomeViewModel vm)
+        {
+            vm.OpenZipImportModal();
+        }
+    }
+
+    [RelayCommand]
+    public void SidebarImportFolder()
+    {
+        IsSidebarImportMenuOpen = false;
+        Navigate("Home");
+        if (CurrentView?.DataContext is HomeViewModel vm)
+        {
+            vm.OpenFolderImportModal();
+        }
+    }
+
+    public async Task RefreshRecentShortcutsAsync()
+    {
+        try
+        {
+            var instances = await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(false);
+            var top5 = instances
+                .OrderByDescending(i => i.LastPlayedAt.HasValue)
+                .ThenByDescending(i => i.LastPlayedAt ?? i.CreatedAt)
+                .Take(5)
+                .ToList();
+
+            _uiContext.Post(_ =>
+            {
+                RecentShortcuts.Clear();
+                foreach (var inst in top5)
+                {
+                    RecentShortcuts.Add(inst);
+                }
+            }, null);
+        }
+        catch { }
     }
 
     private static TView CreateView<TView, TViewModel>()

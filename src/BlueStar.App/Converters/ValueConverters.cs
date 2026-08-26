@@ -50,6 +50,39 @@ public sealed class NullToVisibilityConverter : IValueConverter
 }
 
 /// <summary>
+/// Returns Collapsed when the value is not null and not empty, Visible when null or empty.
+/// </summary>
+public sealed class InverseNullToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is null) return Visibility.Visible;
+        if (value is string s) return string.IsNullOrWhiteSpace(s) ? Visibility.Visible : Visibility.Collapsed;
+        if (value is int count) return count > 0 ? Visibility.Collapsed : Visibility.Visible;
+        return Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Converts a non-null/non-empty value to true, and null/empty to false.
+/// </summary>
+public sealed class NullToBoolConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is null) return false;
+        if (value is string s) return !string.IsNullOrWhiteSpace(s);
+        return true;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
 /// Returns Visible when the int value is 0, Collapsed otherwise.
 /// </summary>
 public sealed class ZeroToVisibilityConverter : IValueConverter

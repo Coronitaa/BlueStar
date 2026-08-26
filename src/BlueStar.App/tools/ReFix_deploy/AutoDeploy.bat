@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-title ReFix - Universal AutoDeploy Tool v1.1.0
+title ReFix - Universal AutoDeploy Tool v1.2
 
 set "SCRIPT_DIR=%~dp0"
 if "!SCRIPT_DIR:~-1!"=="\" set "SCRIPT_DIR=!SCRIPT_DIR:~0,-1!"

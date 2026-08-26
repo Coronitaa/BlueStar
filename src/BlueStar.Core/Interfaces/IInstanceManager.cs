@@ -12,6 +12,10 @@ namespace BlueStar.Core.Interfaces;
 public interface IInstanceManager
 {
     /// <summary>
+    /// Event raised whenever instances are created, updated, or deleted.
+    /// </summary>
+    event EventHandler? InstancesChanged;
+    /// <summary>
     /// Retrieves all managed game instances.
     /// </summary>
     /// <param name="ct">A token to monitor for cancellation requests.</param>

@@ -6,8 +6,8 @@
         xmlns:conv="clr-namespace:BlueStar.App.Converters"
         Title="BlueStar"
         Icon="pack://application:,,,/BlueStar;component/Assets/bluestar.ico"
-        Width="1320" Height="840"
-        MinWidth="1000" MinHeight="640"
+        Width="1280" Height="840"
+        MinWidth="860" MinHeight="580"
         Background="{StaticResource BaseBackgroundBrush}"
         Foreground="{StaticResource PrimaryTextBrush}"
         FontFamily="{StaticResource MainFontFamily}"
@@ -26,38 +26,29 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="42"/>  <!-- Top Custom Title bar -->
             <RowDefinition Height="*"/>   <!-- Main Shell Content -->
+            <RowDefinition Height="30"/>  <!-- Bottom Status Bar -->
         </Grid.RowDefinitions>
 
         <!-- ═══ TOP APP BAR / TITLE BAR ═══ -->
         <Border Grid.Row="0" Background="{StaticResource TopBarBackgroundBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="0,0,0,1">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="220"/>  <!-- Left Sidebar Header width -->
+                    <ColumnDefinition Width="68"/>   <!-- Compact Sidebar Header width -->
                     <ColumnDefinition Width="*"/>    <!-- Center Title / Drag Area -->
                     <ColumnDefinition Width="Auto"/> <!-- Right Window Controls -->
                 </Grid.ColumnDefinitions>
 
-                <!-- App Brand Logo & Name -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="18,0" VerticalAlignment="Center">
+                <!-- App Brand Logo (Centered in 68px column) -->
+                <StackPanel Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <Image Source="pack://application:,,,/BlueStar;component/Assets/bluestar.png"
-                           Width="22" Height="22" Margin="0,0,8,0"
+                           Width="24" Height="24"
                            RenderOptions.BitmapScalingMode="HighQuality"/>
-                    <TextBlock Text="BlueStar" FontSize="15" FontWeight="Bold"
-                               Foreground="{StaticResource PrimaryTextBrush}"
-                               FontFamily="{StaticResource MainFontFamily}"
-                               VerticalAlignment="Center"/>
-                    <Border Background="{StaticResource AccentTranslucentBrush}"
-                            CornerRadius="{StaticResource RadiusXs}"
-                            Padding="5,1"
-                            Margin="8,0,0,0"
-                            VerticalAlignment="Center">
-                        <TextBlock Text="v1.0.0" FontSize="10" FontWeight="SemiBold"
-                                   Foreground="{StaticResource AccentBrush}"/>
-                    </Border>
                 </StackPanel>
 
                 <!-- Center Title / Breadcrumb -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0">
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0">
+                    <TextBlock Text="BlueStar" FontSize="13" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,8,0"/>
+                    <TextBlock Text="•" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,8,0"/>
                     <TextBlock Text="Dashboard" Style="{StaticResource Caption}"
                                Visibility="{Binding SelectedNavigation, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Home}"/>
                     <TextBlock Text="Explore Catalog" Style="{StaticResource Caption}"
@@ -130,7 +121,7 @@
         <!-- ═══ MAIN SHELL LAYOUT ═══ -->
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="220"/>  <!-- Left Sidebar -->
+                <ColumnDefinition Width="68"/>   <!-- Left Compact Sidebar (68px) -->
                 <ColumnDefinition Width="1"/>    <!-- Border Separator -->
                 <ColumnDefinition Width="*"/>    <!-- Dynamic View Content -->
             </Grid.ColumnDefinitions>
@@ -138,103 +129,210 @@
             <!-- ── LEFT NAVIGATION SIDEBAR ── -->
             <Border Grid.Column="0" Background="{StaticResource SidebarBackgroundBrush}">
                 <DockPanel>
-                    <!-- Bottom: System Status -->
-                    <Border DockPanel.Dock="Bottom"
-                            Background="{StaticResource SurfaceInputBrush}"
-                            BorderBrush="{StaticResource SubtleBorderBrush}"
-                            BorderThickness="0,1,0,0"
-                            Padding="14,10">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Ellipse Width="8" Height="8" Margin="0,0,8,0">
-                                <Ellipse.Style>
-                                    <Style TargetType="Ellipse">
-                                        <Setter Property="Fill" Value="{StaticResource SuccessBrush}"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding HasActiveDownloads}" Value="True">
-                                                <Setter Property="Fill" Value="{StaticResource AccentBrush}"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Ellipse.Style>
-                            </Ellipse>
-                            <TextBlock Grid.Column="1" Text="{Binding StatusText}"
-                                       Style="{StaticResource Caption}"
-                                       TextTrimming="CharacterEllipsis"/>
-                        </Grid>
-                    </Border>
-
-                    <!-- Navigation Items List -->
-                    <StackPanel Margin="0,12,0,0">
-                        <!-- Home Dashboard -->
-                        <RadioButton Style="{StaticResource SidebarNavButton}"
-                                     Tag="{StaticResource IconHome}" Content="Home"
-                                     IsChecked="{Binding SelectedNavigation, Converter={StaticResource StringMatchConverter}, ConverterParameter=Home}"
-                                     Command="{Binding NavigateCommand}"
-                                     CommandParameter="Home"/>
-
-                        <!-- Explore DepotBox -->
-                        <RadioButton Style="{StaticResource SidebarNavButton}"
-                                     Tag="{StaticResource IconExplore}" Content="Explore"
-                                     IsChecked="{Binding SelectedNavigation, Converter={StaticResource StringMatchConverter}, ConverterParameter=Explore}"
-                                     Command="{Binding NavigateCommand}"
-                                     CommandParameter="Explore"/>
-
-                        <!-- Instances Library -->
-                        <RadioButton Style="{StaticResource SidebarNavButton}"
-                                     Tag="{StaticResource IconGamepad}" Content="Instances"
-                                     IsChecked="{Binding SelectedNavigation, Converter={StaticResource StringMatchConverter}, ConverterParameter=Library}"
-                                     Command="{Binding NavigateCommand}"
-                                     CommandParameter="Library"/>
-
-                        <!-- Downloads Queue with Live Count Badge -->
-                        <RadioButton Style="{StaticResource SidebarNavButton}"
-                                     Tag="{StaticResource IconDownload}"
-                                     IsChecked="{Binding SelectedNavigation, Converter={StaticResource StringMatchConverter}, ConverterParameter=Downloads}"
-                                     Command="{Binding NavigateCommand}"
-                                     CommandParameter="Downloads">
-                            <RadioButton.Content>
-                                <Grid VerticalAlignment="Center">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="Downloads" VerticalAlignment="Center"/>
-                                    <Border Grid.Column="1"
-                                            Background="{StaticResource AccentBrush}"
-                                            CornerRadius="10"
-                                            Padding="6,1"
-                                            Margin="8,0,0,0"
-                                            Visibility="{Binding HasActiveDownloads, Converter={StaticResource BoolToVisibilityConverter}}">
-                                        <TextBlock Text="{Binding ActiveDownloadsCount}"
-                                                   FontSize="11" FontWeight="Bold"
-                                                   Foreground="{StaticResource InverseTextBrush}"/>
-                                    </Border>
-                                </Grid>
-                            </RadioButton.Content>
-                        </RadioButton>
-
-                        <!-- Divider -->
-                        <Border Height="1" Background="{StaticResource SubtleBorderBrush}"
-                                Margin="16,14"/>
-
-                        <!-- Settings -->
-                        <RadioButton Style="{StaticResource SidebarNavButton}"
-                                     Tag="{StaticResource IconSettings}" Content="Settings"
+                    <!-- Bottom: Settings Nav Button (Directly above bottom status bar) -->
+                    <Border DockPanel.Dock="Bottom" Padding="0,8" Margin="0,0,0,4">
+                        <RadioButton Style="{StaticResource CompactSidebarNavButton}"
+                                     Tag="{StaticResource IconSettings}" ToolTip="Settings &amp; About"
                                      IsChecked="{Binding SelectedNavigation, Converter={StaticResource StringMatchConverter}, ConverterParameter=Settings}"
                                      Command="{Binding NavigateCommand}"
                                      CommandParameter="Settings"/>
+                    </Border>
 
-                        <!-- About / Credits -->
-                        <RadioButton Style="{StaticResource SidebarNavButton}"
-                                     Tag="{StaticResource IconInfo}" Content="About"
-                                     IsChecked="{Binding SelectedNavigation, Converter={StaticResource StringMatchConverter}, ConverterParameter=About}"
-                                     Command="{Binding NavigateCommand}"
-                                     CommandParameter="About"/>
-                    </StackPanel>
+                    <!-- Dynamic Navigation Items & Shortcuts Stack -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Margin="0,8,0,0" HorizontalAlignment="Center">
+                            <!-- 1. Home Dashboard -->
+                            <RadioButton Style="{StaticResource CompactSidebarNavButton}"
+                                         Tag="{StaticResource IconHome}" ToolTip="Home Dashboard"
+                                         IsChecked="{Binding SelectedNavigation, Converter={StaticResource StringMatchConverter}, ConverterParameter=Home}"
+                                         Command="{Binding NavigateCommand}"
+                                         CommandParameter="Home"/>
+
+                            <!-- 2. Explore Catalog -->
+                            <RadioButton Style="{StaticResource CompactSidebarNavButton}"
+                                         Tag="{StaticResource IconExplore}" ToolTip="Explore DepotBox"
+                                         IsChecked="{Binding SelectedNavigation, Converter={StaticResource StringMatchConverter}, ConverterParameter=Explore}"
+                                         Command="{Binding NavigateCommand}"
+                                         CommandParameter="Explore"/>
+
+                            <!-- 3. Instances Library -->
+                            <RadioButton Style="{StaticResource CompactSidebarNavButton}"
+                                         Tag="{StaticResource IconGamepad}" ToolTip="Instance Library"
+                                         IsChecked="{Binding SelectedNavigation, Converter={StaticResource StringMatchConverter}, ConverterParameter=Library}"
+                                         Command="{Binding NavigateCommand}"
+                                         CommandParameter="Library"/>
+
+                            <!-- Divider Line -->
+                            <Border Height="1" Background="{StaticResource SubtleBorderBrush}" Width="36" Margin="0,6"/>
+
+                            <!-- 4. Recent Instances Shortcuts (up to 5) -->
+                            <ItemsControl ItemsSource="{Binding RecentShortcuts}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource SidebarShortcutButton}"
+                                                ToolTip="{Binding Name}"
+                                                Command="{Binding DataContext.OpenRecentShortcutCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}">
+                                            <Border Width="40" Height="36" CornerRadius="8" Background="#161822" ClipToBounds="True">
+                                                <Grid>
+                                                    <!-- Centered Fallback Initial Letter (behind image) -->
+                                                    <TextBlock Text="{Binding Name[0]}"
+                                                               FontWeight="Bold" FontSize="14"
+                                                               Foreground="{StaticResource AccentBrush}"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
+                                                    <!-- Centered Image (strictly clipped to rounded border) -->
+                                                    <Border CornerRadius="8">
+                                                        <Border.Background>
+                                                            <ImageBrush ImageSource="{Binding HeaderImageUrl}" Stretch="UniformToFill"/>
+                                                        </Border.Background>
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Divider Line -->
+                            <Border Height="1" Background="{StaticResource SubtleBorderBrush}" Width="36" Margin="0,6"/>
+
+                            <!-- 5. "+" Add Instance Button with Right Flyout Popup -->
+                            <Grid Margin="0,2">
+                                <Button Width="40" Height="40"
+                                        Style="{StaticResource GhostButton}"
+                                        Command="{Binding ToggleSidebarImportMenuCommand}"
+                                        ToolTip="Import / Add Instance"
+                                        Padding="0"
+                                        HorizontalAlignment="Center">
+                                    <Border Background="{StaticResource SurfaceCardBrush}"
+                                            BorderBrush="{StaticResource SubtleBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="20"
+                                            Width="40" Height="40">
+                                        <Path Data="{StaticResource IconPlus}"
+                                              Fill="{StaticResource PrimaryTextBrush}"
+                                              Stretch="Uniform" Width="14" Height="14"
+                                              RenderTransformOrigin="0.5,0.5"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <Path.RenderTransform>
+                                                <RotateTransform Angle="0"/>
+                                            </Path.RenderTransform>
+                                            <Path.Style>
+                                                <Style TargetType="Path">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding DataContext.IsSidebarImportMenuOpen, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                                            <DataTrigger.EnterActions>
+                                                                <BeginStoryboard>
+                                                                    <Storyboard>
+                                                                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                                                         To="45" Duration="0:0:0.2"/>
+                                                                    </Storyboard>
+                                                                </BeginStoryboard>
+                                                            </DataTrigger.EnterActions>
+                                                            <DataTrigger.ExitActions>
+                                                                <BeginStoryboard>
+                                                                    <Storyboard>
+                                                                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                                                         To="0" Duration="0:0:0.2"/>
+                                                                    </Storyboard>
+                                                                </BeginStoryboard>
+                                                            </DataTrigger.ExitActions>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Path.Style>
+                                        </Path>
+                                    </Border>
+                                </Button>
+                                <!-- Right-Opening Popup Flyout -->
+                                <Popup IsOpen="{Binding IsSidebarImportMenuOpen}"
+                                       StaysOpen="False"
+                                       Placement="Right"
+                                       HorizontalOffset="12"
+                                       AllowsTransparency="True"
+                                       PopupAnimation="Fade">
+                                    <Border Background="{StaticResource SurfaceCardElevatedBrush}"
+                                            BorderBrush="{StaticResource SubtleBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="{StaticResource RadiusMd}"
+                                            Padding="6"
+                                            Width="220"
+                                            SnapsToDevicePixels="True"
+                                            UseLayoutRounding="True">
+                                        <Border.Effect>
+                                            <DropShadowEffect Color="#000000" BlurRadius="16" ShadowDepth="4" Opacity="0.6"/>
+                                        </Border.Effect>
+                                        <StackPanel>
+                                            <TextBlock Text="Import instance from"
+                                                       Style="{StaticResource CaptionBold}"
+                                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                                       Margin="8,4,8,8"/>
+
+                                            <!-- Option 1: Steam -->
+                                            <Button Style="{StaticResource GhostButton}"
+                                                    HorizontalContentAlignment="Left"
+                                                    Padding="8,8"
+                                                    Margin="0,0,0,2"
+                                                    Command="{Binding SidebarImportSteamCommand}">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="22"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Path Grid.Column="0" Data="{StaticResource IconGamepad}" Fill="{StaticResource AccentBrush}"
+                                                          Stretch="Uniform" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                                        <TextBlock Text="Steam" FontWeight="SemiBold" FontSize="13"/>
+                                                        <TextBlock Text="Import installed Steam game" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Button>
+
+                                            <!-- Option 2: Depot ZIP -->
+                                            <Button Style="{StaticResource GhostButton}"
+                                                    HorizontalContentAlignment="Left"
+                                                    Padding="8,8"
+                                                    Margin="0,0,0,2"
+                                                    Command="{Binding SidebarImportZipCommand}">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="22"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Path Grid.Column="0" Data="{StaticResource IconDownload}" Fill="{StaticResource WarningBrush}"
+                                                          Stretch="Uniform" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                                        <TextBlock Text="Depot ZIP" FontWeight="SemiBold" FontSize="13"/>
+                                                        <TextBlock Text="Import DepotBox archive" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Button>
+
+                                            <!-- Option 3: Folder -->
+                                            <Button Style="{StaticResource GhostButton}"
+                                                    HorizontalContentAlignment="Left"
+                                                    Padding="8,8"
+                                                    Command="{Binding SidebarImportFolderCommand}">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="22"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Path Grid.Column="0" Data="{StaticResource IconFolder}" Fill="{StaticResource SuccessBrush}"
+                                                          Stretch="Uniform" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                                        <TextBlock Text="Folder" FontWeight="SemiBold" FontSize="13"/>
+                                                        <TextBlock Text="Import existing game folder" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Button>
+                                        </StackPanel>
+                                    </Border>
+                                </Popup>
+                            </Grid>
+                        </StackPanel>
+                    </ScrollViewer>
                 </DockPanel>
             </Border>
 
@@ -245,12 +343,90 @@
             <ContentControl Grid.Column="2" Content="{Binding CurrentView}" Margin="0"/>
         </Grid>
 
+        <!-- ═══ BOTTOM STATUS BAR (With Left Downloads Button) ═══ -->
+        <Border Grid.Row="2"
+                Background="{StaticResource TopBarBackgroundBrush}"
+                BorderBrush="{StaticResource SubtleBorderBrush}"
+                BorderThickness="0,1,0,0"
+                Padding="12,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Left Corner Downloads Button with Active Animations & Realtime Status -->
+                <Button Grid.Column="0"
+                        ToolTip="Downloads Queue &amp; Speed"
+                        Command="{Binding OpenDownloadsCommand}"
+                        VerticalAlignment="Center"
+                        Cursor="Hand"
+                        Margin="0,0,0,0">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                            <Setter Property="Padding" Value="10,4"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="1"/>
+                            <Setter Property="BorderBrush" Value="Transparent"/>
+                            <Setter Property="Foreground" Value="{StaticResource SecondaryTextBrush}"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasActiveDownloads}" Value="True">
+                                    <Setter Property="Background" Value="#1a10B981"/>
+                                    <Setter Property="BorderBrush" Value="#10B981"/>
+                                    <Setter Property="Foreground" Value="#10B981"/>
+                                </DataTrigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="{StaticResource SurfaceCardHoverBrush}"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- Download Vector Icon -->
+                        <Border Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center">
+                            <Path x:Name="downloadIcon"
+                                  Data="{StaticResource IconDownload}"
+                                  Stretch="Uniform" Width="12" Height="12"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Path.Style>
+                                    <Style TargetType="Path">
+                                        <Setter Property="Fill" Value="{StaticResource SecondaryTextBrush}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasActiveDownloads}" Value="True">
+                                                <Setter Property="Fill" Value="#10B981"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Path.Style>
+                            </Path>
+                        </Border>
+
+                        <!-- Dynamic Downloads Text -->
+                        <TextBlock Text="{Binding DownloadsButtonText, FallbackValue='Downloads'}"
+                                   FontSize="11" FontWeight="SemiBold"
+                                   VerticalAlignment="Center"/>
+
+                        <!-- Active count badge when active -->
+                        <Border Background="#10B981"
+                                CornerRadius="8"
+                                Padding="6,1"
+                                Margin="8,0,0,0"
+                                Visibility="{Binding HasActiveDownloads, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <TextBlock Text="{Binding ActiveDownloadsCount}"
+                                       FontSize="10" FontWeight="Bold"
+                                       Foreground="#042F2E"/>
+                        </Border>
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </Border>
+
         <!-- ═══ TOAST NOTIFICATIONS POPUP CONTAINER (Bottom-Right Corner) ═══ -->
-        <ItemsControl Grid.Row="0" Grid.RowSpan="2"
+        <ItemsControl Grid.Row="0" Grid.RowSpan="3"
                       ItemsSource="{Binding Notifications}"
                       HorizontalAlignment="Right"
                       VerticalAlignment="Bottom"
-                      Margin="0,0,24,24"
+                      Margin="0,0,24,36"
                       Panel.ZIndex="999"
                       IsHitTestVisible="True">
             <ItemsControl.ItemTemplate>
@@ -325,7 +501,8 @@
 
         <!-- ═══ STARTUP LOADING OVERLAY SCREEN ═══ -->
         <Grid x:Name="StartupLoadingOverlay"
-              Grid.RowSpan="2"
+              Grid.Row="0"
+              Grid.RowSpan="3"
               Background="{StaticResource BaseBackgroundBrush}"
               Panel.ZIndex="1000"
               IsHitTestVisible="{Binding IsLoading}">
@@ -338,10 +515,13 @@
                                 <BeginStoryboard>
                                     <Storyboard>
                                         <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                                         To="0" Duration="0:0:0.45"
-                                                         DecelerationRatio="0.8"/>
+                                                         To="0" Duration="0:0:0.35">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetProperty="Visibility"
-                                                                      BeginTime="0:0:0.46">
+                                                                      BeginTime="0:0:0.36">
                                             <DiscreteObjectKeyFrame KeyTime="0" Value="{x:Static Visibility.Collapsed}"/>
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
@@ -358,13 +538,13 @@
                     <DoubleAnimation Storyboard.TargetName="StarRotate"
                                      Storyboard.TargetProperty="Angle"
                                      From="0" To="360"
-                                     Duration="0:0:1.8"/>
+                                     Duration="0:0:2.0"/>
                     <!-- Subtle Glow Breathing Pulse -->
                     <DoubleAnimationUsingKeyFrames Storyboard.TargetName="StarGlow"
                                                    Storyboard.TargetProperty="Opacity">
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.0" Value="0.6"/>
-                        <SplineDoubleKeyFrame KeyTime="0:0:0.9" Value="1.0" KeySpline="0.4, 0.0, 0.6, 1.0"/>
-                        <SplineDoubleKeyFrame KeyTime="0:0:1.8" Value="0.6" KeySpline="0.4, 0.0, 0.6, 1.0"/>
+                        <SplineDoubleKeyFrame KeyTime="0:0:0.0" Value="0.5"/>
+                        <SplineDoubleKeyFrame KeyTime="0:0:1.0" Value="0.95" KeySpline="0.4, 0.0, 0.6, 1.0"/>
+                        <SplineDoubleKeyFrame KeyTime="0:0:2.0" Value="0.5" KeySpline="0.4, 0.0, 0.6, 1.0"/>
                     </DoubleAnimationUsingKeyFrames>
                 </Storyboard>
             </Grid.Resources>
@@ -377,45 +557,53 @@
 
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                 <!-- Spin & Glow Container (In-Place) -->
-                <Grid Width="96" Height="96" HorizontalAlignment="Center" Margin="0,0,0,20">
+                <Grid Width="100" Height="100" HorizontalAlignment="Center" Margin="0,0,0,24">
                     <!-- Subtle Radial Glow behind Star -->
-                    <Ellipse x:Name="StarGlow" Width="70" Height="70"
+                    <Ellipse x:Name="StarGlow" Width="76" Height="76"
                              VerticalAlignment="Center" HorizontalAlignment="Center"
                              Fill="{StaticResource AccentTranslucentBrush}">
                         <Ellipse.Effect>
-                            <BlurEffect Radius="24"/>
+                            <BlurEffect Radius="28"/>
                         </Ellipse.Effect>
                     </Ellipse>
 
                     <!-- Animated Star Vector Graphic (Rotating around center) -->
-                    <Viewbox Width="54" Height="54"
+                    <Viewbox Width="56" Height="56"
                              HorizontalAlignment="Center" VerticalAlignment="Center"
                              RenderTransformOrigin="0.5,0.5">
                         <Viewbox.RenderTransform>
                             <RotateTransform x:Name="StarRotate"/>
                         </Viewbox.RenderTransform>
-                        <Path Data="M12,17.27L18.18,21L16.54,13.97L22,9.24L14.81,8.62L12,2L9.19,8.62L2,9.24L7.45,13.97L5.82,21L12,17.27Z"
+                        <Path Data="{StaticResource IconStar}"
                               Fill="{StaticResource AccentBrush}">
                             <Path.Effect>
-                                <DropShadowEffect Color="#00e5ff" BlurRadius="16" ShadowDepth="0" Opacity="0.85"/>
+                                <DropShadowEffect Color="#1B90FF" BlurRadius="18" ShadowDepth="0" Opacity="0.9"/>
                             </Path.Effect>
                         </Path>
                     </Viewbox>
                 </Grid>
 
                 <!-- Brand Name & Animated Status Text -->
-                <TextBlock Text="BlueStar"
-                           FontSize="24" FontWeight="Bold"
-                           Foreground="{StaticResource PrimaryTextBrush}"
-                           FontFamily="{StaticResource MainFontFamily}"
-                           HorizontalAlignment="Center"
-                           Margin="0,0,0,6"/>
-
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                    <TextBlock Text="Starting launcher &amp; loading catalog..."
-                               Style="{StaticResource Caption}"
-                               Foreground="{StaticResource SecondaryTextBrush}"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,8">
+                    <TextBlock Text="BlueStar"
+                               FontSize="26" FontWeight="Bold"
+                               Foreground="{StaticResource PrimaryTextBrush}"
+                               FontFamily="{StaticResource MainFontFamily}"
+                               VerticalAlignment="Center"/>
+                    <Border Background="{StaticResource AccentTranslucentBrush}"
+                            CornerRadius="{StaticResource RadiusXs}"
+                            Padding="6,2" Margin="10,0,0,0"
+                            VerticalAlignment="Center">
+                        <TextBlock Text="LAUNCHER" FontSize="10" FontWeight="Bold"
+                                   Foreground="{StaticResource AccentBrush}"/>
+                    </Border>
                 </StackPanel>
+
+                <!-- Dynamic Status Text -->
+                <TextBlock Text="{Binding StartupStatusText}"
+                           FontSize="13"
+                           Foreground="{StaticResource SecondaryTextBrush}"
+                           HorizontalAlignment="Center"/>
             </StackPanel>
         </Grid>
     </Grid>

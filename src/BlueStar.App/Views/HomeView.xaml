@@ -10,269 +10,1531 @@
              Foreground="{StaticResource PrimaryTextBrush}"
              FontFamily="{StaticResource MainFontFamily}">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="32,24" MaxWidth="1100" HorizontalAlignment="Stretch">
+    <UserControl.RenderTransform>
+        <TranslateTransform Y="0"/>
+    </UserControl.RenderTransform>
 
-            <!-- ═══ GREETING & HERO HEADER ═══ -->
-            <Border Background="{StaticResource SurfaceCardBrush}"
-                    BorderBrush="{StaticResource SubtleBorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="{StaticResource RadiusLg}"
-                    Padding="28,24"
-                    Margin="0,0,0,24">
-                <Grid>
+    <UserControl.Triggers>
+        <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+            <BeginStoryboard>
+                <Storyboard>
+                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                     From="0.0" To="1.0" Duration="0:0:0.22">
+                        <DoubleAnimation.EasingFunction>
+                            <CubicEase EasingMode="EaseOut"/>
+                        </DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                     From="12" To="0" Duration="0:0:0.22">
+                        <DoubleAnimation.EasingFunction>
+                            <CubicEase EasingMode="EaseOut"/>
+                        </DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                </Storyboard>
+            </BeginStoryboard>
+        </EventTrigger>
+    </UserControl.Triggers>
+
+    <Grid>
+        <!-- ═══ MAIN DASHBOARD SCROLLABLE CONTENT ═══ -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="32,24" MaxWidth="1180" HorizontalAlignment="Stretch">
+
+                <!-- ═══ COMPACT GREETING & HERO HEADER ═══ -->
+                <Border Background="{StaticResource SurfaceCardBrush}"
+                        BorderBrush="{StaticResource SubtleBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource RadiusLg}"
+                        Padding="20,14"
+                        Margin="0,0,0,16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                <TextBlock Text="{Binding GreetingText}" Style="{StaticResource H2}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="★" FontSize="18" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="Your favorite games in one place"
+                                       Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+
+                            <!-- Compact Quick Stats Hub Row -->
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="10,4" Margin="0,0,8,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding TotalInstancesCount}" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}" FontSize="11" Margin="0,0,5,0"/>
+                                        <TextBlock Text="Instances" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Background="{StaticResource SuccessBgBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="10,4" Margin="0,0,8,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding ReadyInstancesCount}" FontWeight="Bold" Foreground="{StaticResource SuccessBrush}" FontSize="11" Margin="0,0,5,0"/>
+                                        <TextBlock Text="Ready to Play" FontSize="11" Foreground="{StaticResource SuccessBrush}"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Background="{StaticResource AccentTranslucentBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="10,4" Margin="0,0,8,0"
+                                        Visibility="{Binding CurrentActiveDownload, Converter={StaticResource NullToVisibilityConverter}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="● Downloading" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" FontSize="11"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Quick Actions: Compact '+' Button with Rotation on Active / Menu Open -->
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal">
+                            
+                            <!-- Circular '+' Button with Rotation on Active / Menu Open -->
+                            <Grid Margin="0,0,10,0">
+                                <Button x:Name="ImportMenuButton"
+                                        Command="{Binding ToggleImportMenuCommand}"
+                                        Width="34" Height="34"
+                                        Padding="0"
+                                        ToolTip="Import instance from..."
+                                        Style="{StaticResource SecondaryButton}"
+                                        Cursor="Hand">
+                                    <Path x:Name="PlusIcon"
+                                          Data="{StaticResource IconPlus}"
+                                          Fill="{StaticResource PrimaryTextBrush}"
+                                          Stretch="Uniform" Width="14" Height="14"
+                                          RenderTransformOrigin="0.5,0.5">
+                                        <Path.RenderTransform>
+                                            <RotateTransform x:Name="PlusIconRotate" Angle="0"/>
+                                        </Path.RenderTransform>
+                                        <Path.Style>
+                                            <Style TargetType="Path">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsImportMenuOpen}" Value="True">
+                                                        <DataTrigger.EnterActions>
+                                                            <BeginStoryboard>
+                                                                <Storyboard>
+                                                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                                                     To="45" Duration="0:0:0.2"/>
+                                                                </Storyboard>
+                                                            </BeginStoryboard>
+                                                        </DataTrigger.EnterActions>
+                                                        <DataTrigger.ExitActions>
+                                                            <BeginStoryboard>
+                                                                <Storyboard>
+                                                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                                                     To="0" Duration="0:0:0.2"/>
+                                                                </Storyboard>
+                                                            </BeginStoryboard>
+                                                        </DataTrigger.ExitActions>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Path.Style>
+                                    </Path>
+                                </Button>
+
+                                <!-- Floating Import Source Dropdown Popup -->
+                                <Popup IsOpen="{Binding IsImportMenuOpen, Mode=TwoWay}"
+                                       PlacementTarget="{Binding ElementName=ImportMenuButton}"
+                                       Placement="Bottom"
+                                       VerticalOffset="6"
+                                       HorizontalOffset="0"
+                                       StaysOpen="False"
+                                       AllowsTransparency="True"
+                                       PopupAnimation="Fade">
+                                    <Border Background="{StaticResource SurfaceCardElevatedBrush}"
+                                            BorderBrush="{StaticResource SubtleBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="{StaticResource RadiusMd}"
+                                            Padding="6"
+                                            Width="220"
+                                            SnapsToDevicePixels="True"
+                                            UseLayoutRounding="True">
+                                        <Border.Effect>
+                                            <DropShadowEffect Color="#000000" BlurRadius="16" ShadowDepth="4" Opacity="0.6"/>
+                                        </Border.Effect>
+                                        <StackPanel>
+                                            <TextBlock Text="Import instance from"
+                                                       Style="{StaticResource CaptionBold}"
+                                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                                       Margin="8,4,8,8"/>
+
+                                            <!-- Option 1: Steam -->
+                                            <Button Style="{StaticResource GhostButton}"
+                                                    HorizontalContentAlignment="Left"
+                                                    Padding="8,8"
+                                                    Margin="0,0,0,2"
+                                                    Command="{Binding OpenSteamImportModalCommand}">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="22"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Path Grid.Column="0" Data="{StaticResource IconGamepad}" Fill="{StaticResource AccentBrush}"
+                                                          Stretch="Uniform" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                                        <TextBlock Text="Steam" FontWeight="SemiBold" FontSize="13"/>
+                                                        <TextBlock Text="Import installed Steam game" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Button>
+
+                                            <!-- Option 2: Depot ZIP -->
+                                            <Button Style="{StaticResource GhostButton}"
+                                                    HorizontalContentAlignment="Left"
+                                                    Padding="8,8"
+                                                    Margin="0,0,0,2"
+                                                    Command="{Binding OpenZipImportModalCommand}">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="22"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Path Grid.Column="0" Data="{StaticResource IconDownload}" Fill="{StaticResource WarningBrush}"
+                                                          Stretch="Uniform" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                                        <TextBlock Text="Depot ZIP" FontWeight="SemiBold" FontSize="13"/>
+                                                        <TextBlock Text="Import DepotBox archive" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Button>
+
+                                            <!-- Option 3: Folder -->
+                                            <Button Style="{StaticResource GhostButton}"
+                                                    HorizontalContentAlignment="Left"
+                                                    Padding="8,8"
+                                                    Command="{Binding OpenFolderImportModalCommand}">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="22"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Path Grid.Column="0" Data="{StaticResource IconFolder}" Fill="{StaticResource SuccessBrush}"
+                                                          Stretch="Uniform" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                                        <TextBlock Text="Folder" FontWeight="SemiBold" FontSize="13"/>
+                                                        <TextBlock Text="Import existing game folder" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Button>
+                                        </StackPanel>
+                                    </Border>
+                                </Popup>
+                            </Grid>
+
+                            <Button Content="🎮 My Instances"
+                                    Style="{StaticResource PrimaryButton}"
+                                    Padding="14,7"
+                                    FontSize="12"
+                                    Command="{Binding NavigateToCommand}"
+                                    CommandParameter="Library"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- ═══ ACTIVE DOWNLOAD BANNER (Visible if downloading) ═══ -->
+                <Border Background="{StaticResource SurfaceCardElevatedBrush}"
+                        BorderBrush="{StaticResource AccentBrush}"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource RadiusLg}"
+                        Padding="16,12"
+                        Margin="0,0,0,16"
+                        Visibility="{Binding CurrentActiveDownload, Converter={StaticResource NullToVisibilityConverter}, FallbackValue=Collapsed}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="8"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="6"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Path Grid.Column="0" Data="{StaticResource IconDownload}" Fill="{StaticResource AccentBrush}" Stretch="Uniform" Width="16" Height="16" Margin="0,0,10,0" VerticalAlignment="Center"/>
+
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Active Download:" Style="{StaticResource CaptionBold}" Margin="0,0,6,0"/>
+                                    <TextBlock Text="{Binding CurrentActiveDownload.Instance.Name}" Style="{StaticResource H3}" FontWeight="Bold"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <Button Grid.Column="2" Content="View Downloads ➔"
+                                    Style="{StaticResource GhostButton}"
+                                    Foreground="{StaticResource AccentBrush}"
+                                    Padding="8,4"
+                                    Command="{Binding NavigateToCommand}"
+                                    CommandParameter="Downloads"/>
+                        </Grid>
+
+                        <ProgressBar Grid.Row="2"
+                                     Value="{Binding CurrentActiveDownload.Percentage}"
+                                     Maximum="100"
+                                     Style="{StaticResource DownloadProgressBar}"/>
+
+                        <Grid Grid.Row="4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding CurrentActiveDownload.FormattedProgress}" Style="{StaticResource Caption}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding CurrentActiveDownload.FormattedSpeed}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}"/>
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <!-- ═══ 1. RECENT INSTANCES SECTION (SINGLE ROW WITH SAME CARD SIZES & TOP-RIGHT UPDATE BADGE) ═══ -->
+                <Grid Margin="0,0,0,10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel Grid.Column="0">
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                            <TextBlock Text="{Binding GreetingText}" Style="{StaticResource H1}" Margin="0,0,8,0"/>
-                            <TextBlock Text="★" FontSize="22" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
-                        </StackPanel>
-                        <TextBlock Text="Universal game instance manager and ecosystem launcher."
-                                   Style="{StaticResource Subtitle}"/>
-
-                        <!-- Quick Stats Row -->
-                        <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
-                            <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusMd}" Padding="12,6" Margin="0,0,10,0">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{Binding TotalInstancesCount}" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,6,0"/>
-                                    <TextBlock Text="Instances" Style="{StaticResource Caption}"/>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Background="{StaticResource SuccessBgBrush}" CornerRadius="{StaticResource RadiusMd}" Padding="12,6" Margin="0,0,10,0">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{Binding ReadyInstancesCount}" FontWeight="Bold" Foreground="{StaticResource SuccessBrush}" Margin="0,0,6,0"/>
-                                    <TextBlock Text="Ready to Play" Style="{StaticResource Caption}" Foreground="{StaticResource SuccessBrush}"/>
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource AccentBrush}" Stretch="Uniform" Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="Recent Instances" Style="{StaticResource H2}" VerticalAlignment="Center"/>
                     </StackPanel>
 
-                    <!-- Quick Action Buttons -->
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal">
-                        <Button Content="🧭 Explore DepotBox"
-                                Style="{StaticResource SecondaryButton}"
-                                Margin="0,0,10,0"
-                                Padding="16,10"
-                                Command="{Binding NavigateToCommand}"
-                                CommandParameter="Explore"/>
-
-                        <Button Content="🎮 My Instances"
-                                Style="{StaticResource PrimaryButton}"
-                                Padding="18,10"
-                                Command="{Binding NavigateToCommand}"
-                                CommandParameter="Library"/>
-                    </StackPanel>
+                    <Button Grid.Column="1" Content="View All ➔"
+                            Style="{StaticResource GhostButton}"
+                            Padding="8,4"
+                            Command="{Binding NavigateToCommand}"
+                            CommandParameter="Library"/>
                 </Grid>
-            </Border>
 
-            <!-- ═══ ACTIVE DOWNLOAD BANNER (Visible if downloading) ═══ -->
-            <Border Background="{StaticResource SurfaceCardElevatedBrush}"
-                    BorderBrush="{StaticResource AccentBrush}"
+                <!-- Empty State for Instances -->
+                <Border Background="{StaticResource SurfaceCardBrush}"
+                        BorderBrush="{StaticResource SubtleBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource RadiusLg}"
+                        Padding="24"
+                        Margin="0,0,0,18"
+                        Visibility="{Binding RecentInstances.Count, Converter={StaticResource ZeroToVisibilityConverter}, FallbackValue=Collapsed}">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}" Stretch="Uniform" Width="40" Height="40" Margin="0,0,0,12" HorizontalAlignment="Center"/>
+                        <TextBlock Text="No game instances configured yet" Style="{StaticResource H3}" HorizontalAlignment="Center"/>
+                        <TextBlock Text="Click the '+' button above to import from Steam, ZIP or Folder, or search games below."
+                                   Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,4,0,12"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Recent Cards Carousel (Uniform 310x290 Size with Lateral Hover Controls & Top-Right Update Badge) -->
+                <Grid x:Name="RecentCarouselContainer" Margin="0,0,0,18">
+                    <ScrollViewer x:Name="RecentInstancesScrollViewer"
+                                  HorizontalScrollBarVisibility="Hidden"
+                                  VerticalScrollBarVisibility="Disabled"
+                                  Padding="0,0,0,4">
+                        <ItemsControl ItemsSource="{Binding RecentInstances}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource Card}" Width="360" Margin="0,0,16,0">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="168"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="14"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+
+                                            <!-- Game banner / cover image (Strict 460x215 aspect ratio, 360x168) -->
+                                            <Border Grid.Row="0" CornerRadius="8,8,0,0"
+                                                    Background="{StaticResource SurfaceCardHoverBrush}"
+                                                    ClipToBounds="True"
+                                                    Margin="-16,-16,-16,12">
+                                                <Grid>
+                                                    <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}" Stretch="Uniform" Width="36" Height="36" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    <Image Source="{Binding HeaderImageUrl}"
+                                                           Stretch="UniformToFill"
+                                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+
+                                                    <!-- 🔔 TOP-RIGHT GAME UPDATE BADGE -->
+                                                    <Border HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                            Margin="0,8,8,0"
+                                                            Background="#E11D48"
+                                                            BorderBrush="#FFFFFF"
+                                                            BorderThickness="1"
+                                                            CornerRadius="{StaticResource RadiusPill}"
+                                                            Padding="7,2"
+                                                            Visibility="{Binding HasUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                            ToolTip="{Binding UpdateDescription, FallbackValue='Game update available'}">
+                                                        <Border.Effect>
+                                                            <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="2" Opacity="0.6"/>
+                                                        </Border.Effect>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="▲ Update" FontSize="10" FontWeight="Bold" Foreground="#FFFFFF"/>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+
+                                            <!-- Title & AppId -->
+                                            <StackPanel Grid.Row="1">
+                                                <TextBlock Text="{Binding Name}"
+                                                           Style="{StaticResource H3}"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{Binding AppId, StringFormat='Steam AppID: {0}'}"
+                                                           Style="{StaticResource Caption}" Margin="0,2,0,0"/>
+                                            </StackPanel>
+
+                                            <!-- Engine Badge & Status Row -->
+                                            <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
+                                                <!-- Engine Badge -->
+                                                <Border CornerRadius="{StaticResource RadiusSm}"
+                                                        Padding="8,3"
+                                                        Margin="0,0,6,0"
+                                                        Background="{StaticResource SurfaceInputBrush}"
+                                                        BorderBrush="{Binding Engine, Converter={StaticResource EngineTypeToBrushConverter}, FallbackValue={StaticResource SubtleBorderBrush}, TargetNullValue={StaticResource SubtleBorderBrush}}"
+                                                        BorderThickness="1">
+                                                    <TextBlock Text="{Binding Engine.DisplayText, FallbackValue='Generic Game', TargetNullValue='Generic Game'}"
+                                                               FontSize="11"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{Binding Engine, Converter={StaticResource EngineTypeToBrushConverter}, FallbackValue={StaticResource SecondaryTextBrush}, TargetNullValue={StaticResource SecondaryTextBrush}}"/>
+                                                </Border>
+
+                                                <!-- Status Badge -->
+                                                <Border CornerRadius="{StaticResource RadiusSm}"
+                                                        Padding="8,3"
+                                                        Background="{Binding Status, Converter={StaticResource InstanceStatusToBgBrushConverter}, FallbackValue={StaticResource SurfaceInputBrush}, TargetNullValue={StaticResource SurfaceInputBrush}}">
+                                                    <TextBlock Text="{Binding Status, FallbackValue='Ready', TargetNullValue='Ready'}"
+                                                               FontSize="11"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{Binding Status, Converter={StaticResource InstanceStatusToBrushConverter}, FallbackValue={StaticResource SuccessBrush}, TargetNullValue={StaticResource SuccessBrush}}"/>
+                                                </Border>
+                                            </StackPanel>
+
+                                            <!-- Action Buttons Row (Pinned to bottom) -->
+                                            <Grid Grid.Row="4" VerticalAlignment="Bottom">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="8"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <Button Grid.Column="0" Content="Manage"
+                                                        Style="{StaticResource SecondaryButton}"
+                                                        Padding="12,7"
+                                                        FontSize="12"
+                                                        Command="{Binding DataContext.ManageInstanceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}"/>
+
+                                                <Button Grid.Column="2" Content="▶ Play"
+                                                        Style="{StaticResource PrimaryButton}"
+                                                        Padding="16,7"
+                                                        FontSize="12"
+                                                        Command="{Binding DataContext.PlayInstanceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}"/>
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <!-- Left Lateral Scroll Arrow (Fades in on Container Hover) -->
+                    <Button x:Name="ScrollLeftBtn"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center"
+                            Margin="4,0,0,0"
+                            Width="36" Height="36"
+                            Click="OnScrollLeftClick"
+                            ToolTip="Scroll Left">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource CarouselArrowButton}">
+                                <Setter Property="Opacity" Value="0.0"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsMouseOver, ElementName=RecentCarouselContainer}" Value="True">
+                                        <DataTrigger.EnterActions>
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" To="1.0" Duration="0:0:0.2"/>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </DataTrigger.EnterActions>
+                                        <DataTrigger.ExitActions>
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0.0" Duration="0:0:0.25"/>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </DataTrigger.ExitActions>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <Path Data="{StaticResource IconChevronLeft}" Fill="{StaticResource PrimaryTextBrush}" Stretch="Uniform" Width="13" Height="13"/>
+                    </Button>
+
+                    <!-- Right Lateral Scroll Arrow (Fades in on Container Hover) -->
+                    <Button x:Name="ScrollRightBtn"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,4,0"
+                            Width="36" Height="36"
+                            Click="OnScrollRightClick"
+                            ToolTip="Scroll Right">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource CarouselArrowButton}">
+                                <Setter Property="Opacity" Value="0.0"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsMouseOver, ElementName=RecentCarouselContainer}" Value="True">
+                                        <DataTrigger.EnterActions>
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" To="1.0" Duration="0:0:0.2"/>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </DataTrigger.EnterActions>
+                                        <DataTrigger.ExitActions>
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0.0" Duration="0:0:0.25"/>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </DataTrigger.ExitActions>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <Path Data="{StaticResource IconChevronRight}" Fill="{StaticResource PrimaryTextBrush}" Stretch="Uniform" Width="13" Height="13"/>
+                    </Button>
+                </Grid>
+
+                <!-- ═══ 2. UNIFIED DISCOVERY & QUICK CATALOG EXPLORER ═══ -->
+                <Border Background="{StaticResource SurfaceCardBrush}"
+                        BorderBrush="{StaticResource SubtleBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource RadiusLg}"
+                        Padding="20"
+                        Margin="0,0,0,24">
+                    <StackPanel>
+                        <!-- Section Title -->
+                        <Grid Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Data="{StaticResource IconSparkles}" Fill="{StaticResource AccentBrush}" Stretch="Uniform" Width="20" Height="20" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Explore &amp; Discover Games" Style="{StaticResource H2}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock Text="Search games and manifests across DepotBox to create and install new instances instantly."
+                                           Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                            </StackPanel>
+
+                            <Button Grid.Column="1" Content="Full Catalog View ➔"
+                                    Style="{StaticResource GhostButton}"
+                                    Command="{Binding NavigateToCommand}"
+                                    CommandParameter="Explore"/>
+                        </Grid>
+
+                        <!-- Compact & Left-Aligned Search Input Box -->
+                        <Grid Margin="0,0,0,16" HorizontalAlignment="Left" MaxWidth="560">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="380"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0"
+                                    Background="{StaticResource SurfaceInputBrush}"
+                                    BorderBrush="{StaticResource SubtleBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="{StaticResource RadiusMd}"
+                                    Padding="10,0">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Path Grid.Column="0" Data="{StaticResource IconSearch}"
+                                          Fill="{StaticResource MutedTextBrush}"
+                                          Stretch="Uniform" Width="14" Height="14"
+                                          Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Column="1"
+                                             Text="{Binding CatalogSearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             Foreground="{StaticResource PrimaryTextBrush}"
+                                             CaretBrush="{StaticResource PrimaryTextBrush}"
+                                             FontSize="12"
+                                             Padding="0,8"
+                                             VerticalContentAlignment="Center">
+                                        <TextBox.InputBindings>
+                                            <KeyBinding Key="Return" Command="{Binding SearchCatalogCommand}"/>
+                                        </TextBox.InputBindings>
+                                    </TextBox>
+                                </Grid>
+                            </Border>
+
+                            <Button Grid.Column="2" Content="Search"
+                                    Style="{StaticResource PrimaryButton}"
+                                    Padding="16,7"
+                                    FontSize="12"
+                                    Command="{Binding SearchCatalogCommand}"
+                                    IsEnabled="{Binding IsSearchingCatalog, Converter={StaticResource InverseBoolConverter}}"/>
+                        </Grid>
+
+                        <!-- Catalog Error Banner -->
+                        <Border Background="{StaticResource DangerBgBrush}"
+                                BorderBrush="{StaticResource DangerBrush}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource RadiusMd}"
+                                Padding="12,8"
+                                Margin="0,0,0,14"
+                                Visibility="{Binding CatalogErrorMessage, Converter={StaticResource NullToVisibilityConverter}}">
+                            <TextBlock Text="{Binding CatalogErrorMessage}" Foreground="{StaticResource DangerBrush}" Style="{StaticResource CaptionBold}"/>
+                        </Border>
+
+                        <!-- Loading State -->
+                        <StackPanel HorizontalAlignment="Center" Margin="0,16"
+                                    Visibility="{Binding IsSearchingCatalog, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Path Data="{StaticResource IconExplore}" Fill="{StaticResource AccentBrush}"
+                                  Stretch="Uniform" Width="32" Height="32" Margin="0,0,0,10" HorizontalAlignment="Center"/>
+                            <TextBlock Text="Searching DepotBox catalog..." Style="{StaticResource CaptionBold}" HorizontalAlignment="Center"/>
+                        </StackPanel>
+
+                        <!-- Discovered Catalog Games Grid -->
+                        <ItemsControl ItemsSource="{Binding DiscoveredGames}"
+                                      Visibility="{Binding IsSearchingCatalog, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource Card}" Width="350" Margin="0,0,18,18">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="140"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="12"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+
+                                            <!-- Header Image -->
+                                            <Border Grid.Row="0" CornerRadius="8"
+                                                    Background="{StaticResource SurfaceCardHoverBrush}"
+                                                    ClipToBounds="True"
+                                                    Margin="-16,-16,-16,10">
+                                                <Grid>
+                                                    <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}"
+                                                          Stretch="Uniform" Width="36" Height="36"
+                                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    <Image Source="{Binding HeaderImageUrl}"
+                                                           Stretch="UniformToFill"
+                                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                </Grid>
+                                            </Border>
+
+                                            <!-- Title & AppId -->
+                                            <StackPanel Grid.Row="1">
+                                                <TextBlock Text="{Binding Name}" Style="{StaticResource H3}"
+                                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
+                                                <TextBlock Text="{Binding AppId, StringFormat='Steam AppID: {0}'}"
+                                                           Style="{StaticResource Caption}" Margin="0,2,0,0"/>
+                                            </StackPanel>
+
+                                            <!-- Badges: AppType, Version, DLCs -->
+                                            <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,6,0,0">
+                                                <Border CornerRadius="{StaticResource RadiusSm}"
+                                                        Padding="7,2" Margin="0,0,6,4"
+                                                        Background="{StaticResource SurfaceInputBrush}"
+                                                        BorderBrush="{StaticResource SubtleBorderBrush}"
+                                                        BorderThickness="1">
+                                                    <TextBlock Text="{Binding AppType}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                </Border>
+
+                                                <Border CornerRadius="{StaticResource RadiusSm}"
+                                                        Padding="7,2" Margin="0,0,6,4"
+                                                        Background="{StaticResource SurfaceInputBrush}"
+                                                        BorderBrush="{StaticResource SubtleBorderBrush}"
+                                                        BorderThickness="1"
+                                                        Visibility="{Binding Version, Converter={StaticResource NullToVisibilityConverter}}">
+                                                    <TextBlock Text="{Binding Version, StringFormat='🏷️ {0}'}" FontSize="11" Foreground="{StaticResource PrimaryTextBrush}"/>
+                                                </Border>
+
+                                                <Border CornerRadius="{StaticResource RadiusSm}"
+                                                        Padding="7,2" Margin="0,0,6,4"
+                                                        Background="#258B5CF6"
+                                                        BorderBrush="#608B5CF6"
+                                                        BorderThickness="1"
+                                                        Visibility="{Binding DlcCount, Converter={StaticResource NullToVisibilityConverter}}">
+                                                    <TextBlock Text="{Binding DlcCount, StringFormat='🎁 {0} DLCs'}" FontSize="11" FontWeight="SemiBold" Foreground="#A78BFA"/>
+                                                </Border>
+                                            </WrapPanel>
+
+                                            <!-- OS & DepotBox Ready Tags -->
+                                            <WrapPanel Grid.Row="3" Orientation="Horizontal" Margin="0,2,0,0">
+                                                <Border CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="0,0,5,4"
+                                                        Background="#201B90FF" BorderBrush="#501B90FF" BorderThickness="1"
+                                                        Visibility="{Binding HasWindows, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <TextBlock Text="🪟 Windows" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
+                                                </Border>
+                                                <Border CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="0,0,5,4"
+                                                        Background="{StaticResource SuccessBgBrush}">
+                                                    <TextBlock Text="● DepotBox Ready" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource SuccessBrush}"/>
+                                                </Border>
+                                            </WrapPanel>
+
+                                            <!-- Actions: ➕ Add to Instances -->
+                                            <Grid Grid.Row="5">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="8"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <Button Grid.Column="0"
+                                                        Style="{StaticResource PrimaryButton}"
+                                                        Padding="12,8"
+                                                        Command="{Binding DataContext.AddCatalogGameCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        IsEnabled="{Binding IsCreating, Converter={StaticResource InverseBoolConverter}}">
+                                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                                        <TextBlock Text="⏳ " Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                        <TextBlock Text="{Binding CreationStatus}" Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                        <TextBlock Text="➕ Add to Instances" Visibility="{Binding IsCreating, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                                    </StackPanel>
+                                                </Button>
+
+                                                <Button Grid.Column="2"
+                                                        Style="{StaticResource SecondaryButton}"
+                                                        Padding="10,8"
+                                                        ToolTip="View on SteamDB"
+                                                        Command="{Binding DataContext.OpenSteamDbCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}">
+                                                    <TextBlock Text="🌐 SteamDB" FontSize="11" FontWeight="SemiBold"/>
+                                                </Button>
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ═══════════════════════════════════════════════════════════════
+             MODAL 1: STEAM GAMES IMPORT OVERLAY
+             ═══════════════════════════════════════════════════════════════ -->
+        <Grid Background="{StaticResource ModalOverlayBrush}"
+              Visibility="{Binding IsSteamImportModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
+              Panel.ZIndex="100"
+              SnapsToDevicePixels="True"
+              UseLayoutRounding="True"
+              TextOptions.TextFormattingMode="Display"
+              TextOptions.TextRenderingMode="ClearType">
+            
+            <Border Background="#161822"
+                    BorderBrush="#2E3748"
                     BorderThickness="1"
-                    CornerRadius="{StaticResource RadiusLg}"
-                    Padding="20,16"
-                    Margin="0,0,0,24"
-                    Visibility="{Binding CurrentActiveDownload, Converter={StaticResource NullToVisibilityConverter}, FallbackValue=Collapsed}">
+                    CornerRadius="12"
+                    Padding="24"
+                    Width="680" MaxHeight="600"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="10"/>
+                        <RowDefinition Height="14"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="16"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
+                    <!-- Header -->
                     <Grid Grid.Row="0">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-
-                        <Path Grid.Column="0" Data="{StaticResource IconDownload}" Fill="{StaticResource AccentBrush}" Stretch="Uniform" Width="18" Height="18" Margin="0,0,12,0" VerticalAlignment="Center"/>
-
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <StackPanel Grid.Column="0">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Active Download:" Style="{StaticResource CaptionBold}" Margin="0,0,6,0"/>
-                                <TextBlock Text="{Binding CurrentActiveDownload.Instance.Name}" Style="{StaticResource H3}" FontWeight="Bold"/>
+                                <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource AccentBrush}" Stretch="Uniform" Width="20" Height="20" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Import from Steam Library" Style="{StaticResource H2}" Foreground="{StaticResource WhiteBrush}" VerticalAlignment="Center"/>
                             </StackPanel>
+                            <TextBlock Text="Select an installed game from your Steam library to manage in BlueStar."
+                                       Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,4,0,0"/>
                         </StackPanel>
-
-                        <Button Grid.Column="2" Content="View Downloads ➔"
-                                Style="{StaticResource GhostButton}"
-                                Foreground="{StaticResource AccentBrush}"
-                                Command="{Binding NavigateToCommand}"
-                                CommandParameter="Downloads"/>
+                        <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}"
+                                Command="{Binding CloseSteamImportModalCommand}"/>
                     </Grid>
 
-                    <ProgressBar Grid.Row="2"
-                                 Value="{Binding CurrentActiveDownload.Percentage}"
-                                 Maximum="100"
-                                 Style="{StaticResource DownloadProgressBar}"/>
+                    <!-- Search Filter Box -->
+                    <Border Grid.Row="2"
+                            Background="{StaticResource SurfaceInputBrush}"
+                            BorderBrush="{StaticResource SubtleBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusMd}"
+                            Padding="10,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Path Grid.Column="0" Data="{StaticResource IconSearch}" Fill="{StaticResource MutedTextBrush}" Stretch="Uniform" Width="14" Height="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBox Grid.Column="1"
+                                     Text="{Binding SteamSearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Foreground="{StaticResource PrimaryTextBrush}"
+                                     CaretBrush="{StaticResource PrimaryTextBrush}"
+                                     FontSize="13"
+                                     Padding="0,8"
+                                     VerticalContentAlignment="Center"/>
+                        </Grid>
+                    </Border>
 
+                    <!-- Body / List or Loading -->
+                    <Grid Grid.Row="4">
+                        <!-- Loading State -->
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Visibility="{Binding IsScanningSteam, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource AccentBrush}" Stretch="Uniform" Width="36" Height="36" Margin="0,0,0,12" HorizontalAlignment="Center"/>
+                            <TextBlock Text="Scanning local Steam library folders..." Style="{StaticResource CaptionBold}" Foreground="{StaticResource PrimaryTextBrush}" HorizontalAlignment="Center"/>
+                        </StackPanel>
+
+                        <!-- Error State -->
+                        <Border Background="{StaticResource DangerBgBrush}"
+                                BorderBrush="{StaticResource DangerBrush}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource RadiusMd}"
+                                Padding="16"
+                                VerticalAlignment="Center"
+                                Visibility="{Binding SteamScanError, Converter={StaticResource NullToVisibilityConverter}}">
+                            <TextBlock Text="{Binding SteamScanError}" Foreground="{StaticResource DangerBrush}" TextWrapping="Wrap"/>
+                        </Border>
+
+                        <!-- Duplicate Steam Game Confirmation Alert -->
+                        <Border Background="#2A1B1E" BorderBrush="#F43F5E" BorderThickness="1"
+                                CornerRadius="{StaticResource RadiusMd}" Padding="12" Margin="0,0,0,12"
+                                VerticalAlignment="Top"
+                                Visibility="{Binding IsDuplicateSteamPromptOpen, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="8"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <StackPanel Grid.Row="0">
+                                    <TextBlock Text="⚠️ Game Already in Library" FontWeight="Bold" FontSize="13" Foreground="#F43F5E"/>
+                                    <TextBlock Text="{Binding DuplicateSteamGame.Name, StringFormat='An instance for \'{0}\' already exists. Do you want to import it as a duplicate instance?'}"
+                                               Style="{StaticResource Caption}" Foreground="{StaticResource PrimaryTextBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Button Content="Cancel" Style="{StaticResource SecondaryButton}" Padding="12,5" FontSize="11" Margin="0,0,8,0"
+                                            Command="{Binding CancelDuplicateSteamGameCommand}"/>
+                                    <Button Content="Confirm Import" Style="{StaticResource PrimaryButton}" Background="#F43F5E" BorderBrush="#E11D48" Padding="12,5" FontSize="11"
+                                            Command="{Binding ConfirmDuplicateSteamGameCommand}"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Games List -->
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      Visibility="{Binding IsScanningSteam, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                            <ItemsControl ItemsSource="{Binding InstalledSteamGames}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{StaticResource SurfaceCardBrush}"
+                                                BorderBrush="{StaticResource SubtleBorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="{StaticResource RadiusMd}"
+                                                Padding="12,10"
+                                                Margin="0,0,0,8">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                   <ColumnDefinition Width="90"/>
+                                                    <ColumnDefinition Width="12"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="10"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <!-- Artwork -->
+                                                <Border Grid.Column="0" CornerRadius="4" ClipToBounds="True" Height="42" Background="{StaticResource SurfaceInputBrush}">
+                                                    <Image Source="{Binding HeaderImageUrlFormatted}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                </Border>
+
+                                                <!-- Info -->
+                                                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Name}" Style="{StaticResource BodyMedium}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                                        <TextBlock Text="{Binding AppId, StringFormat='AppID: {0}'}" Style="{StaticResource Caption}" Margin="0,0,10,0"/>
+                                                        <TextBlock Text="{Binding FormattedSize}" Style="{StaticResource Caption}" Foreground="{StaticResource AccentBrush}"/>
+                                                    </StackPanel>
+                                                </StackPanel>
+
+                                                <!-- Import Button -->
+                                                <Button Grid.Column="4" Content="📥 Import"
+                                                        Style="{StaticResource PrimaryButton}"
+                                                        Padding="14,6"
+                                                        FontSize="12"
+                                                        VerticalAlignment="Center"
+                                                        Command="{Binding DataContext.ImportSteamGameCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+
+                    <!-- Footer -->
+                    <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="Close" Style="{StaticResource SecondaryButton}" Padding="16,8"
+                                Command="{Binding CloseSteamImportModalCommand}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ═══════════════════════════════════════════════════════════════
+             MODAL 2: DEPOT ZIP IMPORT OVERLAY (LARGE DROP BOX & MANIFESTS)
+             ═══════════════════════════════════════════════════════════════ -->
+        <Grid Background="{StaticResource ModalOverlayBrush}"
+              Visibility="{Binding IsZipImportModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
+              Panel.ZIndex="100"
+              SnapsToDevicePixels="True"
+              UseLayoutRounding="True"
+              TextOptions.TextFormattingMode="Display"
+              TextOptions.TextRenderingMode="ClearType">
+            
+            <Border Background="#161822"
+                    BorderBrush="#2E3748"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Padding="24"
+                    Width="700" MaxHeight="620"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="14"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="16"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Header -->
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Data="{StaticResource IconDownload}" Fill="{StaticResource WarningBrush}" Stretch="Uniform" Width="20" Height="20" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Import DepotBox ZIP Archive" Style="{StaticResource H2}" Foreground="{StaticResource WhiteBrush}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="Inspect detected games and manifests before adding to BlueStar."
+                                       Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,4,0,0"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}"
+                                Command="{Binding CloseZipImportModalCommand}"/>
+                    </Grid>
+
+                    <!-- Body -->
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            
+                            <!-- ── 1. LARGE CENTERED DROP BOX (When no ZIP loaded) ── -->
+                            <Border Background="{StaticResource SurfaceCardBrush}"
+                                    BorderBrush="{StaticResource SubtleBorderBrush}"
+                                    BorderThickness="2"
+                                    CornerRadius="{StaticResource RadiusLg}"
+                                    Padding="32,28"
+                                    AllowDrop="True"
+                                    Drop="OnZipDrop"
+                                    Margin="0,0,0,14"
+                                    Visibility="{Binding PendingZipPath, Converter={StaticResource InverseNullToVisibilityConverter}}">
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <!-- Big Centered Icon -->
+                                    <Border Background="{StaticResource AccentTranslucentBrush}"
+                                            Width="64" Height="64"
+                                            CornerRadius="32"
+                                            HorizontalAlignment="Center"
+                                            Margin="0,0,0,14">
+                                        <Path Data="{StaticResource IconDownload}" Fill="{StaticResource AccentBrush}" Stretch="Uniform" Width="30" Height="30" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+
+                                    <!-- Centered Titles -->
+                                    <TextBlock Text="Drag &amp; drop DepotBox .ZIP here"
+                                               Style="{StaticResource H3}"
+                                               Foreground="{StaticResource WhiteBrush}"
+                                               HorizontalAlignment="Center"
+                                               Margin="0,0,0,4"/>
+                                    <TextBlock Text="Supports official DepotBox ZIP archives containing game files and manifests"
+                                               Style="{StaticResource Caption}"
+                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                               HorizontalAlignment="Center"
+                                               Margin="0,0,0,18"/>
+
+                                    <!-- Browse Button -->
+                                    <Button Content="📁 Browse ZIP File..."
+                                            Style="{StaticResource PrimaryButton}"
+                                            Padding="22,10"
+                                            HorizontalAlignment="Center"
+                                            Command="{Binding BrowseZipFileCommand}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- ── 2. SELECTED ZIP DETAILS (When ZIP is loaded) ── -->
+                            <StackPanel Visibility="{Binding PendingZipPath, Converter={StaticResource NullToVisibilityConverter}}">
+                                
+                                <!-- Selected File Bar with Re-browse / Drag option -->
+                                <Border Background="{StaticResource SurfaceInputBrush}"
+                                        BorderBrush="{StaticResource SubtleBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource RadiusMd}"
+                                        Padding="14,10"
+                                        AllowDrop="True"
+                                        Drop="OnZipDrop"
+                                        Margin="0,0,0,12">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="10"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Path Grid.Column="0" Data="{StaticResource IconDownload}" Fill="{StaticResource AccentBrush}" Stretch="Uniform" Width="18" Height="18" VerticalAlignment="Center"/>
+                                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding PendingZipPath}" FontWeight="SemiBold" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="Archive loaded successfully" Style="{StaticResource Caption}" Foreground="{StaticResource SuccessBrush}"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="3" Content="Change ZIP..." Style="{StaticResource SecondaryButton}" Padding="10,5" FontSize="11" VerticalAlignment="Center"
+                                                Command="{Binding BrowseZipFileCommand}"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Game Overview Banner (Well proportioned, without cut-off) -->
+                                <Border CornerRadius="8" Height="135"
+                                        Background="#121218"
+                                        BorderBrush="{StaticResource SubtleBorderBrush}"
+                                        BorderThickness="1"
+                                        ClipToBounds="True" Margin="0,0,0,14">
+                                    <Grid>
+                                        <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}"
+                                              Stretch="Uniform" Width="36" Height="36" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        <Image Source="{Binding ZipHeaderImageUrl}" Stretch="UniformToFill" VerticalAlignment="Center"
+                                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Details Card (Manifest Date instead of Engine) -->
+                                <Border Background="{StaticResource SurfaceCardBrush}"
+                                        BorderBrush="{StaticResource SubtleBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource RadiusMd}"
+                                        Padding="14"
+                                        Margin="0,0,0,12">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="6"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="6"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="130"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Game Name:" Style="{StaticResource CaptionBold}"/>
+                                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ZipGameName}" Style="{StaticResource BodyMedium}" FontWeight="Bold"/>
+
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Steam AppID:" Style="{StaticResource CaptionBold}"/>
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding ZipAppId}" Style="{StaticResource Body}"/>
+
+                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Manifest Date:" Style="{StaticResource CaptionBold}"/>
+                                        <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding ZipManifestDateFormatted}" Style="{StaticResource BodySmall}" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Depots & DLCs Interactive Buttons -->
+                                <Grid Margin="0,0,0,12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="10"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Depots Button / Card -->
+                                    <Button Grid.Column="0" Style="{StaticResource GhostButton}" Padding="0" HorizontalContentAlignment="Stretch"
+                                            Command="{Binding ToggleDepotsListCommand}">
+                                        <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusMd}" Padding="10">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock Text="Depots Found" Style="{StaticResource Caption}"/>
+                                                    <TextBlock Text="{Binding PreviewDepots.Count}" Style="{StaticResource H3}" FontWeight="Bold" Margin="0,2,0,0"/>
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1" Text="▾ View" Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+                                    </Button>
+
+                                    <!-- DLCs Button / Card -->
+                                    <Button Grid.Column="2" Style="{StaticResource GhostButton}" Padding="0" HorizontalContentAlignment="Stretch"
+                                            Command="{Binding ToggleDlcsListCommand}">
+                                        <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusMd}" Padding="10">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock Text="DLCs Included" Style="{StaticResource Caption}"/>
+                                                    <TextBlock Text="{Binding PreviewDlcs.Count}" Style="{StaticResource H3}" FontWeight="Bold" Margin="0,2,0,0"/>
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1" Text="▾ View" Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+                                    </Button>
+                                </Grid>
+
+                                <!-- Expanded Depots List -->
+                                <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusMd}" Padding="8" Margin="0,0,0,12"
+                                        Visibility="{Binding IsDepotsListExpanded, Converter={StaticResource BoolToVisibilityConverter}}" MaxHeight="140">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl ItemsSource="{Binding PreviewDepots}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Padding="8,4" Margin="0,0,0,3" Background="{StaticResource SurfaceCardBrush}" CornerRadius="4">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Text="{Binding Name}" Style="{StaticResource CaptionBold}" TextTrimming="CharacterEllipsis"/>
+                                                            <TextBlock Grid.Column="1" Text="{Binding DepotId, StringFormat='ID: {0}'}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </Border>
+
+                                <!-- Expanded DLCs List -->
+                                <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusMd}" Padding="8" Margin="0,0,0,12"
+                                        Visibility="{Binding IsDlcsListExpanded, Converter={StaticResource BoolToVisibilityConverter}}" MaxHeight="140">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl ItemsSource="{Binding PreviewDlcs}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Padding="8,4" Margin="0,0,0,3" Background="{StaticResource SurfaceCardBrush}" CornerRadius="4">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Text="{Binding Name}" Style="{StaticResource CaptionBold}" TextTrimming="CharacterEllipsis"/>
+                                                            <TextBlock Grid.Column="1" Text="{Binding AppId, StringFormat='AppID: {0}'}" Style="{StaticResource Caption}" Foreground="{StaticResource AccentBrush}"/>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </Border>
+
+                                <!-- Install Path Row -->
+                                <TextBlock Text="Destination Install Path" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding ZipInstallPath, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource DarkTextBox}"
+                                         Padding="10,8"
+                                         Margin="0,0,0,14"/>
+                            </StackPanel>
+
+                            <!-- Error Message -->
+                            <Border Background="{StaticResource DangerBgBrush}"
+                                    BorderBrush="{StaticResource DangerBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="{StaticResource RadiusMd}"
+                                    Padding="12,8"
+                                    Margin="0,0,0,12"
+                                    Visibility="{Binding ZipErrorMessage, Converter={StaticResource NullToVisibilityConverter}}">
+                                <TextBlock Text="{Binding ZipErrorMessage}" Foreground="{StaticResource DangerBrush}" Style="{StaticResource CaptionBold}"/>
+                            </Border>
+
+                            <!-- Loading State -->
+                            <StackPanel HorizontalAlignment="Center" Margin="0,12"
+                                        Visibility="{Binding IsParsingZip, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <TextBlock Text="Analyzing ZIP archive contents..." Style="{StaticResource CaptionBold}" Foreground="{StaticResource PrimaryTextBrush}" HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- Footer Buttons -->
                     <Grid Grid.Row="4">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{Binding CurrentActiveDownload.FormattedProgress}" Style="{StaticResource Caption}"/>
-                        <TextBlock Grid.Column="1" Text="{Binding CurrentActiveDownload.FormattedSpeed}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}"/>
+                        <Button Grid.Column="0" Content="Cancel" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Padding="16,8"
+                                Command="{Binding CloseZipImportModalCommand}"/>
+                        <Button Grid.Column="1" Content="📥 Import &amp; Configure Instance" Style="{StaticResource PrimaryButton}" Padding="18,8"
+                                Command="{Binding ConfirmZipImportCommand}"
+                                IsEnabled="{Binding PendingZipPath, Converter={StaticResource NullToBoolConverter}}"/>
                     </Grid>
                 </Grid>
             </Border>
+        </Grid>
 
-            <!-- ═══ RECENT INSTANCES SECTION ═══ -->
-            <Grid Margin="0,0,0,14">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <TextBlock Grid.Column="0" Text="Recent Instances" Style="{StaticResource H2}"/>
-
-                <Button Grid.Column="1" Content="View All ➔"
-                        Style="{StaticResource GhostButton}"
-                        Command="{Binding NavigateToCommand}"
-                        CommandParameter="Library"/>
-            </Grid>
-
-            <!-- Empty State for Instances -->
-            <Border Background="{StaticResource SurfaceCardBrush}"
-                    BorderBrush="{StaticResource SubtleBorderBrush}"
+        <!-- ═══════════════════════════════════════════════════════════════
+             MODAL 3: EXISTING FOLDER IMPORT OVERLAY (APPID LOOKUP & EDIT)
+             ═══════════════════════════════════════════════════════════════ -->
+        <Grid Background="{StaticResource ModalOverlayBrush}"
+              Visibility="{Binding IsFolderImportModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
+              Panel.ZIndex="100"
+              SnapsToDevicePixels="True"
+              UseLayoutRounding="True"
+              TextOptions.TextFormattingMode="Display"
+              TextOptions.TextRenderingMode="ClearType">
+            
+            <Border Background="#161822"
+                    BorderBrush="#2E3748"
                     BorderThickness="1"
-                    CornerRadius="{StaticResource RadiusLg}"
-                    Padding="32"
-                    Visibility="{Binding RecentInstances.Count, Converter={StaticResource ZeroToVisibilityConverter}, FallbackValue=Collapsed}">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}" Stretch="Uniform" Width="48" Height="48" Margin="0,0,0,16" HorizontalAlignment="Center"/>
-                    <TextBlock Text="No game instances yet" Style="{StaticResource H3}" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Explore games in DepotBox or import a ZIP package to start playing."
-                               Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,6,0,20"/>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                        <Button Content="🧭 Explore Games"
-                                Style="{StaticResource PrimaryButton}"
-                                Margin="0,0,10,0"
-                                Command="{Binding NavigateToCommand}"
-                                CommandParameter="Explore"/>
-                        <Button Content="📦 Go to Instances"
-                                Style="{StaticResource SecondaryButton}"
-                                Command="{Binding NavigateToCommand}"
-                                CommandParameter="Library"/>
-                    </StackPanel>
-                </StackPanel>
-            </Border>
+                    CornerRadius="12"
+                    Padding="24"
+                    Width="660" MaxHeight="580"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="14"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="16"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-            <!-- Recent Cards Grid -->
-            <ItemsControl ItemsSource="{Binding RecentInstances}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <WrapPanel Orientation="Horizontal"/>
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Border Style="{StaticResource Card}" Width="330" Margin="0,0,18,18">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="130"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="12"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
+                    <!-- Header -->
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Data="{StaticResource IconFolder}" Fill="{StaticResource SuccessBrush}" Stretch="Uniform" Width="20" Height="20" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Import Game Folder" Style="{StaticResource H2}" Foreground="{StaticResource WhiteBrush}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="Select a local folder. BlueStar will auto-detect AppID, engine and executable."
+                                       Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,4,0,0"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}"
+                                Command="{Binding CloseFolderImportModalCommand}"/>
+                    </Grid>
 
-                                <!-- Game banner / cover image -->
-                                <Border Grid.Row="0" CornerRadius="8"
-                                        Background="{StaticResource SurfaceCardHoverBrush}"
-                                        ClipToBounds="True"
-                                        Margin="-16,-16,-16,12">
+                    <!-- Body -->
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            
+                            <!-- ── 1. LARGE CENTERED DROP BOX (When no folder selected) ── -->
+                            <Border Background="{StaticResource SurfaceCardBrush}"
+                                    BorderBrush="{StaticResource SubtleBorderBrush}"
+                                    BorderThickness="2"
+                                    CornerRadius="{StaticResource RadiusLg}"
+                                    Padding="32,28"
+                                    AllowDrop="True"
+                                    Drop="OnFolderDrop"
+                                    Margin="0,0,0,14"
+                                    Visibility="{Binding FolderPath, Converter={StaticResource InverseNullToVisibilityConverter}}">
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <!-- Big Centered Icon -->
+                                    <Border Background="{StaticResource SuccessBgBrush}"
+                                            Width="64" Height="64"
+                                            CornerRadius="32"
+                                            HorizontalAlignment="Center"
+                                            Margin="0,0,0,14">
+                                        <Path Data="{StaticResource IconFolder}" Fill="{StaticResource SuccessBrush}" Stretch="Uniform" Width="30" Height="30" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+
+                                    <!-- Centered Titles -->
+                                    <TextBlock Text="Drag &amp; drop game folder here"
+                                               Style="{StaticResource H3}"
+                                               Foreground="{StaticResource WhiteBrush}"
+                                               HorizontalAlignment="Center"
+                                               Margin="0,0,0,4"/>
+                                    <TextBlock Text="BlueStar will auto-detect executable, engine and Steam AppID"
+                                               Style="{StaticResource Caption}"
+                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                               HorizontalAlignment="Center"
+                                               Margin="0,0,0,18"/>
+
+                                    <!-- Browse Button -->
+                                    <Button Content="📁 Browse Game Folder..."
+                                            Style="{StaticResource PrimaryButton}"
+                                            Padding="22,10"
+                                            HorizontalAlignment="Center"
+                                            Command="{Binding BrowseFolderCommand}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- ── 2. SELECTED FOLDER DETAILS (When folder is chosen) ── -->
+                            <StackPanel Visibility="{Binding FolderPath, Converter={StaticResource NullToVisibilityConverter}}">
+                                
+                                <!-- Selected Folder Bar -->
+                                <Border Background="{StaticResource SurfaceInputBrush}"
+                                        BorderBrush="{StaticResource SubtleBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource RadiusMd}"
+                                        Padding="14,10"
+                                        AllowDrop="True"
+                                        Drop="OnFolderDrop"
+                                        Margin="0,0,0,12">
                                     <Grid>
-                                        <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}" Stretch="Uniform" Width="36" Height="36" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        <Image Source="{Binding HeaderImageUrl}"
-                                               Stretch="UniformToFill"
-                                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="10"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Path Grid.Column="0" Data="{StaticResource IconFolder}" Fill="{StaticResource SuccessBrush}" Stretch="Uniform" Width="18" Height="18" VerticalAlignment="Center"/>
+                                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding FolderPath}" FontWeight="SemiBold" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="Folder selected" Style="{StaticResource Caption}" Foreground="{StaticResource SuccessBrush}"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="3" Content="Change..." Style="{StaticResource SecondaryButton}" Padding="10,5" FontSize="11" VerticalAlignment="Center"
+                                                Command="{Binding BrowseFolderCommand}"/>
                                     </Grid>
                                 </Border>
 
-                                <!-- Title & AppId -->
-                                <StackPanel Grid.Row="1">
-                                    <TextBlock Text="{Binding Name}"
-                                               Style="{StaticResource H3}"
-                                               TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Text="{Binding AppId, StringFormat='Steam AppID: {0}'}"
-                                               Style="{StaticResource Caption}" Margin="0,2,0,0"/>
-                                </StackPanel>
+                                <!-- Artwork & Engine Row -->
+                                <Border Background="{StaticResource SurfaceCardBrush}"
+                                        BorderBrush="{StaticResource SubtleBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource RadiusMd}"
+                                        Padding="12"
+                                        Margin="0,0,0,14">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110"/>
+                                            <ColumnDefinition Width="12"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
 
-                                <!-- Engine Badge & Status Row -->
-                                <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
-                                    <!-- Engine Badge -->
-                                    <Border CornerRadius="{StaticResource RadiusSm}"
-                                            Padding="8,3"
-                                            Margin="0,0,6,0"
-                                            Background="{StaticResource SurfaceInputBrush}"
-                                            BorderBrush="{Binding Engine, Converter={StaticResource EngineTypeToBrushConverter}, FallbackValue={StaticResource SubtleBorderBrush}, TargetNullValue={StaticResource SubtleBorderBrush}}"
-                                            BorderThickness="1">
-                                        <TextBlock Text="{Binding Engine.DisplayText, FallbackValue='Generic Game', TargetNullValue='Generic Game'}"
-                                                   FontSize="11"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="{Binding Engine, Converter={StaticResource EngineTypeToBrushConverter}, FallbackValue={StaticResource SecondaryTextBrush}, TargetNullValue={StaticResource SecondaryTextBrush}}"/>
-                                    </Border>
+                                        <Border Grid.Column="0" CornerRadius="6" ClipToBounds="True" Height="52" Background="{StaticResource SurfaceInputBrush}">
+                                            <Image Source="{Binding FolderHeaderImageUrl}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                        </Border>
 
-                                    <!-- Status Badge -->
-                                    <Border CornerRadius="{StaticResource RadiusSm}"
-                                            Padding="8,3"
-                                            Background="{Binding Status, Converter={StaticResource InstanceStatusToBgBrushConverter}, FallbackValue={StaticResource SurfaceInputBrush}, TargetNullValue={StaticResource SurfaceInputBrush}}">
-                                        <TextBlock Text="{Binding Status, FallbackValue='Ready', TargetNullValue='Ready'}"
-                                                   FontSize="11"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="{Binding Status, Converter={StaticResource InstanceStatusToBrushConverter}, FallbackValue={StaticResource SuccessBrush}, TargetNullValue={StaticResource SuccessBrush}}"/>
-                                    </Border>
+                                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="Engine: " Style="{StaticResource CaptionBold}"/>
+                                                <TextBlock Text="{Binding FolderEngine.DisplayText, FallbackValue='Generic Game'}"
+                                                           Foreground="{Binding FolderEngine, Converter={StaticResource EngineTypeToBrushConverter}, FallbackValue={StaticResource SecondaryTextBrush}}"
+                                                           FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                            
+                                            <!-- Executable row with Browse button -->
+                                            <Grid Margin="0,4,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="8"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding FolderExecutablePath, StringFormat='Executable: {0}', FallbackValue='Executable: None detected'}"
+                                                           Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                                <Button Grid.Column="2" Content="Browse .exe..." Style="{StaticResource GhostButton}"
+                                                        Padding="8,2" FontSize="11" Command="{Binding BrowseFolderExecutableCommand}"/>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
 
-                                    <!-- Emulator Update Available Tag -->
-                                    <Border CornerRadius="{StaticResource RadiusSm}"
-                                            Padding="8,3"
-                                            Margin="6,0,0,0"
-                                            Background="{StaticResource WarningBgBrush}"
-                                            BorderBrush="{StaticResource WarningBrush}"
-                                            BorderThickness="1"
-                                            ToolTip="Actualización del emulador ReFix disponible para esta instancia"
-                                            Visibility="{Binding Converter={StaticResource InstanceEmulatorUpdateVisibilityConverter}}">
-                                        <TextBlock Text="{Binding Converter={StaticResource InstanceEmulatorUpdateTextConverter}}"
-                                                   FontSize="11"
-                                                   FontWeight="Bold"
-                                                   Foreground="{StaticResource WarningBrush}"/>
-                                    </Border>
-                                </StackPanel>
+                                <!-- Game Name (Editable) -->
+                                <TextBlock Text="Game Name (Editable)" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding FolderGameName, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource DarkTextBox}"
+                                         Padding="10,8"
+                                         Margin="0,0,0,12"/>
 
-                                <!-- Action Buttons Row -->
-                                <Grid Grid.Row="4">
+                                <!-- Steam AppID (Editable) + Search on Steam button -->
+                                <TextBlock Text="Steam AppID (Editable)" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                                <Grid Margin="0,0,0,4">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="8"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-
-                                    <Button Grid.Column="0" Content="Manage"
+                                    <TextBox Grid.Column="0"
+                                             Text="{Binding FolderAppId, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource DarkTextBox}"
+                                             Padding="10,8"/>
+                                    <Button Grid.Column="2" Content="🔍 Search on Steam"
                                             Style="{StaticResource SecondaryButton}"
-                                            Command="{Binding DataContext.ManageInstanceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                            CommandParameter="{Binding}"/>
-
-                                    <Button Grid.Column="2" Content="▶ Play"
-                                            Style="{StaticResource PrimaryButton}"
-                                            Command="{Binding DataContext.PlayInstanceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                            CommandParameter="{Binding}"/>
+                                            Padding="12,7" FontSize="11"
+                                            Command="{Binding OpenSteamSearchModalCommand}"/>
                                 </Grid>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                                <TextBlock Text="If no AppID was found or if Spacewar (480) was detected, search was performed automatically."
+                                           Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,14"/>
+                            </StackPanel>
 
-        </StackPanel>
-    </ScrollViewer>
+                            <!-- Error Message -->
+                            <Border Background="{StaticResource DangerBgBrush}"
+                                    BorderBrush="{StaticResource DangerBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="{StaticResource RadiusMd}"
+                                    Padding="12,8"
+                                    Margin="0,0,0,12"
+                                    Visibility="{Binding FolderErrorMessage, Converter={StaticResource NullToVisibilityConverter}}">
+                                <TextBlock Text="{Binding FolderErrorMessage}" Foreground="{StaticResource DangerBrush}" Style="{StaticResource CaptionBold}"/>
+                            </Border>
+
+                            <!-- Scanning State -->
+                            <StackPanel HorizontalAlignment="Center" Margin="0,10"
+                                        Visibility="{Binding IsScanningFolder, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <TextBlock Text="Inspecting game folder, engine and Steam AppID..." Style="{StaticResource CaptionBold}" Foreground="{StaticResource PrimaryTextBrush}" HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- Footer Buttons -->
+                    <Grid Grid.Row="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0" Content="Cancel" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Padding="16,8"
+                                Command="{Binding CloseFolderImportModalCommand}"/>
+                        <Button Grid.Column="1" Content="📥 Create Instance" Style="{StaticResource PrimaryButton}" Padding="18,8"
+                                Command="{Binding ConfirmFolderImportCommand}"
+                                IsEnabled="{Binding FolderPath, Converter={StaticResource NullToBoolConverter}}"/>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ═══════════════════════════════════════════════════════════════
+             STEAM STORE SEARCH SUB-MODAL OVERLAY (FOR FOLDER IMPORT)
+             ═══════════════════════════════════════════════════════════════ -->
+        <Grid Visibility="{Binding IsSteamSearchModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
+              Background="#B0000000"
+              SnapsToDevicePixels="True"
+              UseLayoutRounding="True"
+              TextOptions.TextFormattingMode="Display"
+              TextOptions.TextRenderingMode="ClearType"
+              Panel.ZIndex="150">
+            <Border Background="{StaticResource SurfaceCardElevatedBrush}"
+                    BorderBrush="{StaticResource StrongBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="22"
+                    Width="480" MaxHeight="460"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Header -->
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="🔍 Search Game on Steam" Style="{StaticResource H3}"/>
+                        <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}" Command="{Binding CloseSteamSearchModalCommand}"/>
+                    </Grid>
+
+                    <!-- Search Input -->
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Style="{StaticResource DarkTextBox}"
+                                 Text="{Binding SteamSearchStoreQuery, UpdateSourceTrigger=PropertyChanged}"/>
+                        <Button Grid.Column="2" Content="Search" Style="{StaticResource PrimaryButton}"
+                                Command="{Binding SearchSteamStoreCommand}" Padding="14,7"/>
+                    </Grid>
+
+                    <!-- Search Results List -->
+                    <Border Grid.Row="4" Background="{StaticResource SurfaceInputBrush}"
+                            BorderBrush="{StaticResource SubtleBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusMd}"
+                            Padding="6" MinHeight="160">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Text="Searching Steam Store..." Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,20"
+                                           Visibility="{Binding IsSearchingSteamStore, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <ItemsControl ItemsSource="{Binding SteamStoreSearchResults}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Padding="8,6" Margin="0,0,0,4" Background="{StaticResource SurfaceCardBrush}" CornerRadius="{StaticResource RadiusSm}">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="60"/>
+                                                        <ColumnDefinition Width="10"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0" Height="28" CornerRadius="3" ClipToBounds="True" Background="#121218">
+                                                        <Image Source="{Binding FormattedThumbnail}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                    </Border>
+                                                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Name}" Style="{StaticResource BodySmall}" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
+                                                        <TextBlock Text="{Binding AppId, StringFormat='AppID: {0}'}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                    </StackPanel>
+                                                    <Button Grid.Column="3" Content="Select" Style="{StaticResource PrimaryButton}" Padding="10,4" FontSize="11"
+                                                            Command="{Binding DataContext.SelectSteamSearchResultCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            CommandParameter="{Binding}"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+
+                    <!-- Close Button -->
+                    <Button Grid.Row="6" Content="Close" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Right" Padding="14,6"
+                            Command="{Binding CloseSteamSearchModalCommand}"/>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
 </UserControl>

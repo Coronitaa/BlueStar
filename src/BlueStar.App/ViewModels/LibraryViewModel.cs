@@ -3,12 +3,15 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using BlueStar.Core.Helpers;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
+using BlueStar.Infrastructure.Steam;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -17,7 +20,7 @@ using Microsoft.Win32;
 namespace BlueStar.App.ViewModels;
 
 /// <summary>
-/// ViewModel for the instance library view with search, engine/status filters, and rich Add Instance / ZIP Preview modal.
+/// ViewModel for the instance library view with search, compact dropdown filters, and unified expandable Add Instance modal.
 /// </summary>
 public partial class LibraryViewModel : ObservableObject
 {
@@ -38,6 +41,7 @@ public partial class LibraryViewModel : ObservableObject
     [ObservableProperty]
     private string _searchFilter = string.Empty;
 
+    // ── Dropdown Filters State ──
     [ObservableProperty]
     private string _selectedEngineFilter = "All";
 
@@ -45,17 +49,98 @@ public partial class LibraryViewModel : ObservableObject
     private string _selectedStatusFilter = "All";
 
     [ObservableProperty]
+    private string _selectedSort = "Alphabetical";
+
+    [ObservableProperty]
+    private bool _isSortAscending = true;
+
+    [ObservableProperty]
+    private string _selectedGroupFilter = "All";
+
+    [ObservableProperty]
+    private bool _isSortDropdownOpen;
+
+    [ObservableProperty]
+    private bool _isGroupDropdownOpen;
+
+    [ObservableProperty]
+    private bool _isFilterDropdownOpen;
+
+    public string SelectedSortDisplayName => SelectedSort switch
+    {
+        "Alphabetical" => "Name",
+        "Recent" => "Last played",
+        "PlayTime" => "Hours played",
+        "Oldest" => "Date created",
+        "AlphabeticalDesc" => "Date modified",
+        "Loader" => "Loader",
+        "GameVersion" => "Game version",
+        _ => "Name"
+    };
+
+    public string SelectedGroupDisplayName => string.IsNullOrWhiteSpace(SelectedGroupFilter) || SelectedGroupFilter == "All"
+        ? "Custom group"
+        : SelectedGroupFilter;
+
+    public bool HasActiveFilter => SelectedEngineFilter != "All" || SelectedStatusFilter != "All";
+
+    [ObservableProperty]
+    private bool _isCreateGroupOpen;
+
+    [ObservableProperty]
+    private string _newGroupName = "Group 1";
+
+    [ObservableProperty]
+    private ObservableCollection<string> _customGroups = new();
+
+    [ObservableProperty]
+    private ObservableCollection<GroupItemSelection> _groupSelectableInstances = new();
+
+    private readonly Dictionary<string, HashSet<Guid>> _groupMemberships = new();
+
+    public ObservableCollection<Guid> SelectedGroupInstanceIds { get; } = new();
+
+    [ObservableProperty]
     private bool _isLoading;
 
     [ObservableProperty]
     private string? _errorMessage;
 
-    // ── Add Instance & ZIP Preview Modal State ──
+    // ── Unified Add Game Instance Modal State (Multi-step with Expandable Views) ──
     [ObservableProperty]
-    private bool _isAddMenuOpen;
+    private bool _isAddInstanceModalOpen;
 
     [ObservableProperty]
-    private bool _isZipPreviewOpen;
+    private string _addModalStep = "SelectSource"; // "SelectSource", "Steam", "Zip", "Folder"
+
+    // 1. Steam Sub-View
+    [ObservableProperty]
+    private bool _isScanningSteam;
+
+    [ObservableProperty]
+    private string _steamSearchQuery = string.Empty;
+
+    [ObservableProperty]
+    private string? _steamScanError;
+
+    [ObservableProperty]
+    private ObservableCollection<InstalledSteamGame> _installedSteamGames = [];
+
+    private readonly List<InstalledSteamGame> _allDetectedSteamGames = [];
+
+    // Steam duplicate check & imported trackers
+    [ObservableProperty]
+    private bool _isDuplicateSteamPromptOpen;
+
+    [ObservableProperty]
+    private InstalledSteamGame? _duplicateSteamGame;
+
+    [ObservableProperty]
+    private ObservableCollection<uint> _importedSteamAppIds = [];
+
+    // 2. Depot ZIP Sub-View
+    [ObservableProperty]
+    private bool _isParsingZip;
 
     [ObservableProperty]
     private string? _pendingZipPath;
@@ -70,10 +155,25 @@ public partial class LibraryViewModel : ObservableObject
     private EngineInfo? _previewEngine;
 
     [ObservableProperty]
+    private string _previewManifestDateFormatted = "Unknown";
+
+    [ObservableProperty]
     private int _previewDepotsCount;
 
     [ObservableProperty]
     private int _previewDlcsCount;
+
+    [ObservableProperty]
+    private bool _isDepotsListExpanded;
+
+    [ObservableProperty]
+    private bool _isDlcsListExpanded;
+
+    [ObservableProperty]
+    private ObservableCollection<DepotPreviewItem> _previewDepots = [];
+
+    [ObservableProperty]
+    private ObservableCollection<DlcPreviewItem> _previewDlcs = [];
 
     [ObservableProperty]
     private string _previewInstallPath = string.Empty;
@@ -81,7 +181,50 @@ public partial class LibraryViewModel : ObservableObject
     [ObservableProperty]
     private string _previewHeaderImageUrl = string.Empty;
 
+    [ObservableProperty]
+    private string? _zipErrorMessage;
+
     private DepotBoxArchive? _pendingArchive;
+
+    // 3. Existing Folder Sub-View
+    [ObservableProperty]
+    private bool _isScanningFolder;
+
+    [ObservableProperty]
+    private string _folderPath = string.Empty;
+
+    [ObservableProperty]
+    private string _folderGameName = string.Empty;
+
+    [ObservableProperty]
+    private uint _folderAppId;
+
+    [ObservableProperty]
+    private string _folderExecutablePath = string.Empty;
+
+    [ObservableProperty]
+    private EngineInfo? _folderEngine;
+
+    [ObservableProperty]
+    private string? _folderHeaderImageUrl;
+
+    [ObservableProperty]
+    private string? _folderErrorMessage;
+
+    // 4. Steam Search Sub-Modal for Folder Import
+    [ObservableProperty]
+    private bool _isSteamSearchModalOpen;
+
+    [ObservableProperty]
+    private string _steamSearchStoreQuery = string.Empty;
+
+    [ObservableProperty]
+    private bool _isSearchingSteamStore;
+
+    [ObservableProperty]
+    private ObservableCollection<SteamStoreSearchItem> _steamStoreSearchResults = [];
+
+    private readonly INotificationService? _notificationService;
 
     public Action<GameInstance>? OnManageInstanceRequested { get; set; }
 
@@ -91,7 +234,8 @@ public partial class LibraryViewModel : ObservableObject
         IEngineDetector engineDetector,
         IGameLauncher gameLauncher,
         ILogger<LibraryViewModel> logger,
-        IMetadataProvider? metadataProvider = null)
+        IMetadataProvider? metadataProvider = null,
+        INotificationService? notificationService = null)
     {
         _instanceManager = instanceManager;
         _archiveParser = archiveParser;
@@ -99,6 +243,7 @@ public partial class LibraryViewModel : ObservableObject
         _gameLauncher = gameLauncher;
         _logger = logger;
         _metadataProvider = metadataProvider;
+        _notificationService = notificationService;
         _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
         _gameLauncher.RunningStateChanged += OnRunningStateChanged;
@@ -130,6 +275,9 @@ public partial class LibraryViewModel : ObservableObject
     partial void OnSearchFilterChanged(string value) => ApplyFilters();
     partial void OnSelectedEngineFilterChanged(string value) => ApplyFilters();
     partial void OnSelectedStatusFilterChanged(string value) => ApplyFilters();
+    partial void OnSelectedGroupFilterChanged(string value) => ApplyFilters();
+    partial void OnSelectedSortChanged(string value) => ApplyFilters();
+    partial void OnIsSortAscendingChanged(bool value) => ApplyFilters();
 
     private void ApplyFilters()
     {
@@ -146,6 +294,14 @@ public partial class LibraryViewModel : ObservableObject
                 (i.Metadata != null && !string.IsNullOrEmpty(i.Metadata.Developer) && i.Metadata.Developer.Contains(rawSearch, StringComparison.OrdinalIgnoreCase)) ||
                 (i.Metadata != null && !string.IsNullOrEmpty(i.Metadata.Publisher) && i.Metadata.Publisher.Contains(rawSearch, StringComparison.OrdinalIgnoreCase)) ||
                 (!string.IsNullOrEmpty(i.InstallPath) && i.InstallPath.Contains(rawSearch, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(SelectedGroupFilter) && SelectedGroupFilter != "All")
+        {
+            if (_groupMemberships.TryGetValue(SelectedGroupFilter, out var memberIds))
+            {
+                query = query.Where(i => memberIds.Contains(i.Id));
+            }
         }
 
         if (SelectedEngineFilter != "All")
@@ -169,9 +325,49 @@ public partial class LibraryViewModel : ObservableObject
                 "Running" => query.Where(i => i.Status == InstanceStatus.Running),
                 "Downloading" => query.Where(i => i.Status == InstanceStatus.Downloading),
                 "NotInstalled" => query.Where(i => i.Status == InstanceStatus.NotInstalled),
+                "UpdateAvailable" => query.Where(i => i.HasUpdateAvailable),
                 _ => query
             };
         }
+
+        // Apply Sorting with Invert Direction Support
+        query = SelectedSort switch
+        {
+            "Alphabetical" => IsSortAscending
+                ? query.OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
+                : query.OrderByDescending(i => i.Name, StringComparer.OrdinalIgnoreCase),
+
+            "Recent" => IsSortAscending
+                ? query.OrderBy(i => i.LastPlayedAt.HasValue)
+                       .ThenBy(i => i.LastPlayedAt ?? i.CreatedAt)
+                : query.OrderByDescending(i => i.LastPlayedAt.HasValue)
+                       .ThenByDescending(i => i.LastPlayedAt ?? i.CreatedAt)
+                       .ThenByDescending(i => i.CreatedAt),
+
+            "PlayTime" => IsSortAscending
+                ? query.OrderBy(i => i.TotalPlayTime)
+                : query.OrderByDescending(i => i.TotalPlayTime),
+
+            "Oldest" => IsSortAscending
+                ? query.OrderBy(i => i.CreatedAt)
+                : query.OrderByDescending(i => i.CreatedAt),
+
+            "AlphabeticalDesc" => IsSortAscending
+                ? query.OrderByDescending(i => i.Name, StringComparer.OrdinalIgnoreCase)
+                : query.OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase),
+
+            "Loader" => IsSortAscending
+                ? query.OrderBy(i => i.Engine?.DisplayText ?? string.Empty)
+                : query.OrderByDescending(i => i.Engine?.DisplayText ?? string.Empty),
+
+            "GameVersion" => IsSortAscending
+                ? query.OrderBy(i => i.Engine?.Version ?? i.InstalledEmulatorVersion ?? string.Empty)
+                : query.OrderByDescending(i => i.Engine?.Version ?? i.InstalledEmulatorVersion ?? string.Empty),
+
+            _ => IsSortAscending
+                ? query.OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
+                : query.OrderByDescending(i => i.Name, StringComparer.OrdinalIgnoreCase)
+        };
 
         FilteredInstances = new ObservableCollection<GameInstance>(query.ToList());
     }
@@ -245,11 +441,453 @@ public partial class LibraryViewModel : ObservableObject
         }
     }
 
+    // ── Dropdown Filters Commands ──
     [RelayCommand]
-    private void ToggleAddMenu() => IsAddMenuOpen = !IsAddMenuOpen;
+    public void ToggleSortDirection()
+    {
+        IsSortAscending = !IsSortAscending;
+    }
 
     [RelayCommand]
-    private void CloseAddMenu() => IsAddMenuOpen = false;
+    public void ToggleSortDropdown()
+    {
+        IsSortDropdownOpen = !IsSortDropdownOpen;
+        if (IsSortDropdownOpen)
+        {
+            IsGroupDropdownOpen = false;
+            IsFilterDropdownOpen = false;
+        }
+    }
+
+    [RelayCommand]
+    public void CloseSortDropdown() => IsSortDropdownOpen = false;
+
+    [RelayCommand]
+    public void SelectSort(string sortKey)
+    {
+        SelectedSort = sortKey;
+        OnPropertyChanged(nameof(SelectedSortDisplayName));
+        IsSortDropdownOpen = false;
+        ApplyFilters();
+    }
+
+    [RelayCommand]
+    public void ToggleGroupDropdown()
+    {
+        IsGroupDropdownOpen = !IsGroupDropdownOpen;
+        if (IsGroupDropdownOpen)
+        {
+            IsSortDropdownOpen = false;
+            IsFilterDropdownOpen = false;
+        }
+    }
+
+    [RelayCommand]
+    public void CloseGroupDropdown() => IsGroupDropdownOpen = false;
+
+    [RelayCommand]
+    public void SelectGroup(string groupKey)
+    {
+        SelectedGroupFilter = groupKey;
+        OnPropertyChanged(nameof(SelectedGroupDisplayName));
+        IsGroupDropdownOpen = false;
+        ApplyFilters();
+    }
+
+    [RelayCommand]
+    public void DeleteGroup(string groupName)
+    {
+        if (CustomGroups.Contains(groupName))
+        {
+            CustomGroups.Remove(groupName);
+            _groupMemberships.Remove(groupName);
+            if (SelectedGroupFilter == groupName)
+            {
+                SelectedGroupFilter = "All";
+                OnPropertyChanged(nameof(SelectedGroupDisplayName));
+            }
+            ApplyFilters();
+        }
+    }
+
+    [RelayCommand]
+    public void ToggleFilterDropdown()
+    {
+        IsFilterDropdownOpen = !IsFilterDropdownOpen;
+        if (IsFilterDropdownOpen)
+        {
+            IsSortDropdownOpen = false;
+            IsGroupDropdownOpen = false;
+        }
+    }
+
+    [RelayCommand]
+    public void CloseFilterDropdown() => IsFilterDropdownOpen = false;
+
+    [RelayCommand]
+    public void SelectEngineFilter(string engine)
+    {
+        SelectedEngineFilter = engine;
+        OnPropertyChanged(nameof(HasActiveFilter));
+        ApplyFilters();
+    }
+
+    [RelayCommand]
+    public void SelectStatusFilter(string status)
+    {
+        SelectedStatusFilter = status;
+        OnPropertyChanged(nameof(HasActiveFilter));
+        ApplyFilters();
+    }
+
+    [RelayCommand]
+    public void ClearFilters()
+    {
+        SelectedEngineFilter = "All";
+        SelectedStatusFilter = "All";
+        OnPropertyChanged(nameof(HasActiveFilter));
+        ApplyFilters();
+    }
+
+    [RelayCommand]
+    public void OpenCreateGroup()
+    {
+        NewGroupName = $"Group {CustomGroups.Count + 1}";
+        GroupSelectableInstances = new ObservableCollection<GroupItemSelection>(
+            Instances.Select(i => new GroupItemSelection { Instance = i, IsSelected = false }));
+        IsCreateGroupOpen = true;
+        IsGroupDropdownOpen = false;
+    }
+
+    [RelayCommand]
+    public void CloseCreateGroup() => IsCreateGroupOpen = false;
+
+    [RelayCommand]
+    public void ToggleGroupItemSelection(GroupItemSelection item)
+    {
+        if (item != null)
+        {
+            item.IsSelected = !item.IsSelected;
+        }
+    }
+
+    [RelayCommand]
+    public void SaveNewGroup()
+    {
+        var name = (NewGroupName ?? string.Empty).Trim();
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            if (!CustomGroups.Contains(name))
+            {
+                CustomGroups.Add(name);
+            }
+            var selectedIds = GroupSelectableInstances.Where(x => x.IsSelected).Select(x => x.Instance.Id).ToHashSet();
+            _groupMemberships[name] = selectedIds;
+            SelectedGroupFilter = name;
+            OnPropertyChanged(nameof(SelectedGroupDisplayName));
+        }
+        IsCreateGroupOpen = false;
+        ApplyFilters();
+    }
+
+    // ── Unified Add Game Instance Modal Handlers ──
+
+    [RelayCommand]
+    public void OpenAddInstanceModal(string? step = "SelectSource")
+    {
+        AddModalStep = string.IsNullOrWhiteSpace(step) ? "SelectSource" : step;
+        IsAddInstanceModalOpen = true;
+        IsSortDropdownOpen = false;
+        IsGroupDropdownOpen = false;
+        IsFilterDropdownOpen = false;
+
+        if (AddModalStep == "Steam")
+        {
+            _ = OpenSteamStepAsync();
+        }
+        else if (AddModalStep == "SelectSource")
+        {
+            ResetZipPreview();
+        }
+    }
+
+    [RelayCommand]
+    public void CloseAddInstanceModal()
+    {
+        IsAddInstanceModalOpen = false;
+        AddModalStep = "SelectSource";
+        ResetZipPreview();
+    }
+
+    [RelayCommand]
+    public void BackToAddInstanceSource()
+    {
+        AddModalStep = "SelectSource";
+    }
+
+    // ── 1. Steam Step ──
+
+    partial void OnSteamSearchQueryChanged(string value) => ApplySteamFilter();
+
+    private void ApplySteamFilter()
+    {
+        InstalledSteamGames.Clear();
+        var q = SteamSearchQuery?.Trim() ?? string.Empty;
+        var filtered = string.IsNullOrWhiteSpace(q)
+            ? _allDetectedSteamGames
+            : _allDetectedSteamGames.Where(g => g.Name.Contains(q, StringComparison.OrdinalIgnoreCase) || g.AppId.ToString().Contains(q));
+
+        foreach (var g in filtered)
+            InstalledSteamGames.Add(g);
+    }
+
+    [RelayCommand]
+    public async Task OpenSteamStepAsync()
+    {
+        AddModalStep = "Steam";
+        IsScanningSteam = true;
+        SteamScanError = null;
+        SteamSearchQuery = string.Empty;
+        InstalledSteamGames.Clear();
+        _allDetectedSteamGames.Clear();
+
+        try
+        {
+            var games = await SteamLibraryScanner.ScanInstalledGamesAsync(CancellationToken.None).ConfigureAwait(true);
+            if (games.Count == 0)
+            {
+                SteamScanError = "No installed Steam games detected in local library folders.";
+            }
+            else
+            {
+                _allDetectedSteamGames.AddRange(games);
+                ApplySteamFilter();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to scan Steam games");
+            SteamScanError = $"Error scanning Steam library: {ex.Message}";
+        }
+        finally
+        {
+            IsScanningSteam = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task ImportSteamGameAsync(InstalledSteamGame? steamGame)
+    {
+        if (steamGame == null) return;
+
+        // Check if duplicate instance exists
+        if (Instances.Any(i => i.AppId == steamGame.AppId))
+        {
+            DuplicateSteamGame = steamGame;
+            IsDuplicateSteamPromptOpen = true;
+            return;
+        }
+
+        await ExecuteImportSteamGameInternalAsync(steamGame);
+    }
+
+    [RelayCommand]
+    public async Task ConfirmDuplicateSteamGameAsync()
+    {
+        var targetGame = DuplicateSteamGame;
+        IsDuplicateSteamPromptOpen = false;
+        DuplicateSteamGame = null;
+        if (targetGame != null)
+        {
+            await ExecuteImportSteamGameInternalAsync(targetGame);
+        }
+    }
+
+    [RelayCommand]
+    public void CancelDuplicateSteamGame()
+    {
+        IsDuplicateSteamPromptOpen = false;
+        DuplicateSteamGame = null;
+    }
+
+    private async Task ExecuteImportSteamGameInternalAsync(InstalledSteamGame steamGame)
+    {
+        IsLoading = true;
+        try
+        {
+            var engine = await _engineDetector.DetectEngineAsync(steamGame.FullPath, CancellationToken.None).ConfigureAwait(true);
+            var exe = _engineDetector.FindPrimaryExecutable(steamGame.FullPath, steamGame.Name);
+
+            GameMetadata? meta = null;
+            if (_metadataProvider != null && steamGame.AppId > 0)
+            {
+                try
+                {
+                    meta = await _metadataProvider.GetMetadataAsync(steamGame.AppId, CancellationToken.None).ConfigureAwait(true);
+                }
+                catch { }
+            }
+
+            var instance = new GameInstance
+            {
+                Name = steamGame.Name,
+                AppId = steamGame.AppId,
+                InstallPath = steamGame.FullPath,
+                ExecutablePath = exe,
+                Status = File.Exists(exe) ? InstanceStatus.Ready : InstanceStatus.NotInstalled,
+                Metadata = meta,
+                Engine = engine
+            };
+
+            var created = await _instanceManager.CreateAsync(instance, CancellationToken.None).ConfigureAwait(true);
+            Instances.Add(created);
+            ApplyFilters();
+
+            if (!ImportedSteamAppIds.Contains(steamGame.AppId))
+            {
+                ImportedSteamAppIds.Add(steamGame.AppId);
+            }
+
+            _notificationService?.ShowSuccess("Steam Game Imported", $"{steamGame.Name} is now ready in your library!");
+
+            IsAddInstanceModalOpen = false;
+            OnManageInstanceRequested?.Invoke(created);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to import Steam game: {Name}", steamGame.Name);
+            ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    // ── 2. Depot ZIP Step ──
+
+    [RelayCommand]
+    public void OpenZipStep()
+    {
+        AddModalStep = "Zip";
+    }
+
+    public void ResetZipPreview()
+    {
+        PendingZipPath = null;
+        _pendingArchive = null;
+        PreviewGameName = string.Empty;
+        PreviewAppId = 0;
+        PreviewEngine = null;
+        PreviewManifestDateFormatted = "Unknown";
+        PreviewDepotsCount = 0;
+        PreviewDlcsCount = 0;
+        IsDepotsListExpanded = false;
+        IsDlcsListExpanded = false;
+        PreviewDepots.Clear();
+        PreviewDlcs.Clear();
+        PreviewInstallPath = string.Empty;
+        PreviewHeaderImageUrl = string.Empty;
+        ZipErrorMessage = null;
+    }
+
+    [RelayCommand]
+    public void ToggleDepotsList() => IsDepotsListExpanded = !IsDepotsListExpanded;
+
+    [RelayCommand]
+    public void ToggleDlcsList() => IsDlcsListExpanded = !IsDlcsListExpanded;
+
+    [RelayCommand]
+    public async Task BrowseZipFileAsync()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Import DepotBox Archive",
+            Filter = "ZIP Archives (*.zip)|*.zip|All Files (*.*)|*.*",
+            Multiselect = false
+        };
+
+        if (dialog.ShowDialog() != true) return;
+        await LoadZipFileAsync(dialog.FileName);
+    }
+
+    public async Task LoadZipFileAsync(string zipPath)
+    {
+        if (string.IsNullOrWhiteSpace(zipPath) || !File.Exists(zipPath)) return;
+
+        IsParsingZip = true;
+        ZipErrorMessage = null;
+
+        try
+        {
+            _logger.LogInformation("Parsing DepotBox archive: {Path}", zipPath);
+            var archive = await _archiveParser.ParseAsync(zipPath, CancellationToken.None).ConfigureAwait(true);
+            if (archive.Games.Count == 0)
+            {
+                ZipErrorMessage = "No games found inside the selected ZIP archive.";
+                return;
+            }
+
+            var mainGame = archive.Games.FirstOrDefault(g => !g.IsDlc) ?? archive.Games[0];
+            var cleanMainName = CleanName(mainGame.Name) ?? $"App {mainGame.AppId}";
+            var baseDir = Path.GetDirectoryName(zipPath) ?? string.Empty;
+            var installPath = PathHelper.EnsureGameSubfolder(baseDir, cleanMainName);
+
+            var engine = await _engineDetector.DetectEngineAsync(installPath, CancellationToken.None).ConfigureAwait(true);
+
+            // Extract manifest creation date
+            DateTimeOffset? manifestDate = null;
+            try
+            {
+                using var zipStream = new FileStream(zipPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                using var zip = new ZipArchive(zipStream, ZipArchiveMode.Read);
+                var manifestEntry = zip.Entries.FirstOrDefault(e => e.Name.EndsWith(".manifest", StringComparison.OrdinalIgnoreCase));
+                if (manifestEntry != null && manifestEntry.LastWriteTime.Year >= 2005)
+                {
+                    manifestDate = manifestEntry.LastWriteTime;
+                }
+                else if (zip.Entries.Count > 0)
+                {
+                    manifestDate = zip.Entries.Max(e => e.LastWriteTime);
+                }
+            }
+            catch { }
+
+            _pendingArchive = archive;
+            PendingZipPath = zipPath;
+            PreviewGameName = cleanMainName;
+            PreviewAppId = mainGame.AppId;
+            PreviewEngine = engine;
+            PreviewManifestDateFormatted = manifestDate.HasValue
+                ? $"{manifestDate.Value.LocalDateTime:d MMM yyyy}"
+                : "Latest Build";
+
+            var allDepots = archive.Games
+                .SelectMany(g => g.Depots.Select(d => new DepotPreviewItem(d.DepotId, g.Name ?? $"Depot {d.DepotId}", d.ManifestFileName)))
+                .ToList();
+            PreviewDepots = new ObservableCollection<DepotPreviewItem>(allDepots);
+            PreviewDepotsCount = allDepots.Count;
+
+            var allDlcs = archive.Games
+                .Where(g => g.IsDlc)
+                .Select(g => new DlcPreviewItem(g.AppId, CleanName(g.Name) ?? $"DLC {g.AppId}"))
+                .ToList();
+            PreviewDlcs = new ObservableCollection<DlcPreviewItem>(allDlcs);
+            PreviewDlcsCount = allDlcs.Count;
+
+            PreviewInstallPath = installPath;
+            PreviewHeaderImageUrl = await ResolveBannerUrlAsync(mainGame.AppId).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to parse ZIP archive");
+            ZipErrorMessage = $"Error reading ZIP: {ex.Message}";
+        }
+        finally
+        {
+            IsParsingZip = false;
+        }
+    }
 
     [RelayCommand]
     public void BrowsePreviewInstallPath()
@@ -266,63 +904,296 @@ public partial class LibraryViewModel : ObservableObject
         }
     }
 
-    /// <summary>
-    /// Step 1: User selects ZIP. We parse it and display the Preview Modal.
-    /// </summary>
     [RelayCommand]
-    public async Task StartImportZipAsync()
+    public async Task ConfirmZipImportAsync()
     {
-        IsAddMenuOpen = false;
-
-        var dialog = new OpenFileDialog
+        if (_pendingArchive == null || string.IsNullOrWhiteSpace(PendingZipPath))
         {
-            Title = "Import DepotBox Archive",
-            Filter = "ZIP Archives (*.zip)|*.zip|All Files (*.*)|*.*",
-            Multiselect = false
-        };
-
-        if (dialog.ShowDialog() != true) return;
+            ZipErrorMessage = "Please select a valid ZIP archive first.";
+            return;
+        }
 
         IsLoading = true;
-        ErrorMessage = null;
-
         try
         {
-            var zipPath = dialog.FileName;
-            _logger.LogInformation("Parsing DepotBox archive for preview: {Path}", zipPath);
-
-            var archive = await _archiveParser.ParseAsync(zipPath, CancellationToken.None).ConfigureAwait(true);
-            if (archive.Games.Count == 0)
+            var instance = BuildInstanceFromArchive(_pendingArchive, PendingZipPath) with
             {
-                ErrorMessage = "No games found inside the selected ZIP archive.";
-                return;
-            }
+                Name = PreviewGameName,
+                InstallPath = PreviewInstallPath,
+                Engine = PreviewEngine
+            };
 
-            var mainGame = archive.Games.FirstOrDefault(g => !g.IsDlc) ?? archive.Games[0];
-            var cleanMainName = CleanName(mainGame.Name) ?? $"App {mainGame.AppId}";
-            var baseDir = Path.GetDirectoryName(zipPath) ?? string.Empty;
-            var installPath = PathHelper.EnsureGameSubfolder(baseDir, cleanMainName);
+            var created = await _instanceManager.CreateAsync(instance, CancellationToken.None).ConfigureAwait(true);
+            ExtractManifestsToInstanceStorage(PendingZipPath, created.Id);
 
-            // Detect engine from proposed install path or default
-            var engine = await _engineDetector.DetectEngineAsync(installPath, CancellationToken.None).ConfigureAwait(true);
+            Instances.Add(created);
+            ApplyFilters();
 
-            _pendingArchive = archive;
-            PendingZipPath = zipPath;
-            PreviewGameName = cleanMainName;
-            PreviewAppId = mainGame.AppId;
-            PreviewEngine = engine;
-            PreviewDepotsCount = archive.Games.Sum(g => g.Depots.Count);
-            PreviewDlcsCount = archive.Games.Count(g => g.IsDlc);
-            PreviewInstallPath = installPath;
-            PreviewHeaderImageUrl = await ResolveBannerUrlAsync(mainGame.AppId).ConfigureAwait(true);
+            _notificationService?.ShowSuccess("Depot Instance Imported", $"{created.Name} is ready in your library.");
+            _logger.LogInformation("Successfully imported instance: {Name} ({AppId})", created.Name, created.AppId);
+            _ = FetchMissingMetadataAsync(new List<GameInstance> { created });
 
-            // Open Modal
-            IsZipPreviewOpen = true;
+            IsAddInstanceModalOpen = false;
+            ResetZipPreview();
+            OnManageInstanceRequested?.Invoke(created);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to inspect ZIP archive");
-            ErrorMessage = $"Failed to read ZIP: {ex.Message}";
+            _logger.LogError(ex, "Failed to confirm ZIP import");
+            ZipErrorMessage = $"Import failed: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    // ── 3. Folder Step ──
+
+    [RelayCommand]
+    public void OpenFolderStep()
+    {
+        AddModalStep = "Folder";
+        FolderPath = string.Empty;
+        FolderGameName = string.Empty;
+        FolderAppId = 0;
+        FolderExecutablePath = string.Empty;
+        FolderEngine = null;
+        FolderHeaderImageUrl = null;
+        FolderErrorMessage = null;
+    }
+
+    [RelayCommand]
+    public async Task BrowseFolderAsync()
+    {
+        var dialog = new OpenFolderDialog
+        {
+            Title = "Select Game Installation Folder"
+        };
+
+        if (dialog.ShowDialog() != true) return;
+        await LoadFolderAsync(dialog.FolderName);
+    }
+
+    public async Task LoadFolderAsync(string folder)
+    {
+        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder)) return;
+
+        IsScanningFolder = true;
+        FolderErrorMessage = null;
+        FolderPath = folder;
+
+        try
+        {
+            var folderName = Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            FolderGameName = folderName;
+
+            var engine = await _engineDetector.DetectEngineAsync(folder, CancellationToken.None).ConfigureAwait(true);
+            FolderEngine = engine;
+
+            var exe = _engineDetector.FindPrimaryExecutable(folder, folderName);
+            FolderExecutablePath = exe ?? string.Empty;
+
+            var detectedAppId = DetectAppIdFromFolder(folder);
+            if (detectedAppId == 0 || detectedAppId == 480)
+            {
+                // Auto-search Steam by folder name
+                if (_metadataProvider != null)
+                {
+                    try
+                    {
+                        var searchRes = await _metadataProvider.SearchStoreAsync(folderName, CancellationToken.None).ConfigureAwait(true);
+                        if (searchRes.Count > 0)
+                        {
+                            detectedAppId = searchRes[0].AppId;
+                            if (!string.IsNullOrWhiteSpace(searchRes[0].Name))
+                            {
+                                FolderGameName = searchRes[0].Name;
+                            }
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            FolderAppId = detectedAppId;
+            FolderHeaderImageUrl = detectedAppId > 0 && detectedAppId != 480
+                ? $"https://cdn.cloudflare.steamstatic.com/steam/apps/{detectedAppId}/header.jpg"
+                : null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to inspect folder");
+            FolderErrorMessage = ex.Message;
+        }
+        finally
+        {
+            IsScanningFolder = false;
+        }
+    }
+
+    [RelayCommand]
+    public void BrowseFolderExecutable()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Select Game Executable",
+            Filter = "Executable Files (*.exe)|*.exe|All Files (*.*)|*.*",
+            InitialDirectory = Directory.Exists(FolderPath) ? FolderPath : null
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            FolderExecutablePath = dialog.FileName;
+        }
+    }
+
+    // ── Steam Search Sub-Modal for Folder ──
+
+    [RelayCommand]
+    public async Task OpenSteamSearchModalAsync()
+    {
+        SteamSearchStoreQuery = !string.IsNullOrWhiteSpace(FolderGameName) ? FolderGameName : "";
+        IsSteamSearchModalOpen = true;
+        if (!string.IsNullOrWhiteSpace(SteamSearchStoreQuery))
+        {
+            await SearchSteamStoreAsync();
+        }
+    }
+
+    [RelayCommand]
+    public void CloseSteamSearchModal()
+    {
+        IsSteamSearchModalOpen = false;
+    }
+
+    [RelayCommand]
+    public async Task SearchSteamStoreAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SteamSearchStoreQuery) || _metadataProvider == null)
+            return;
+
+        IsSearchingSteamStore = true;
+        try
+        {
+            var results = await _metadataProvider.SearchStoreAsync(SteamSearchStoreQuery, CancellationToken.None).ConfigureAwait(true);
+            SteamStoreSearchResults = new ObservableCollection<SteamStoreSearchItem>(results);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to search Steam Store");
+        }
+        finally
+        {
+            IsSearchingSteamStore = false;
+        }
+    }
+
+    [RelayCommand]
+    public void SelectSteamSearchResult(SteamStoreSearchItem? item)
+    {
+        if (item == null) return;
+        FolderAppId = item.AppId;
+        FolderGameName = item.Name;
+        FolderHeaderImageUrl = item.HeaderImageUrl;
+        IsSteamSearchModalOpen = false;
+    }
+
+    partial void OnFolderAppIdChanged(uint value)
+    {
+        if (value > 0 && value != 480)
+        {
+            FolderHeaderImageUrl = $"https://cdn.cloudflare.steamstatic.com/steam/apps/{value}/header.jpg";
+        }
+        else
+        {
+            FolderHeaderImageUrl = null;
+        }
+    }
+
+    private static uint DetectAppIdFromFolder(string folderPath)
+    {
+        try
+        {
+            // 1. steam_appid.txt
+            var appIdFiles = Directory.GetFiles(folderPath, "steam_appid.txt", SearchOption.AllDirectories);
+            foreach (var f in appIdFiles)
+            {
+                var text = File.ReadAllText(f).Trim();
+                if (uint.TryParse(text, out var id) && id > 0 && id != 480)
+                    return id;
+            }
+
+            // 2. ReFix.ini, steam_emu.ini, etc.
+            var iniFiles = Directory.GetFiles(folderPath, "*.ini", SearchOption.AllDirectories);
+            foreach (var f in iniFiles)
+            {
+                var text = File.ReadAllText(f);
+                var match = Regex.Match(text, @"(?i)^\s*(?:AppId|SteamAppId|MaskAppId)\s*=\s*(\d+)", RegexOptions.Multiline);
+                if (match.Success && uint.TryParse(match.Groups[1].Value, out var id) && id > 0 && id != 480)
+                    return id;
+            }
+
+            // 3. SmokeAPI.config.json, SmokeAPI.json
+            var jsonFiles = Directory.GetFiles(folderPath, "*SmokeAPI*.json", SearchOption.AllDirectories);
+            foreach (var f in jsonFiles)
+            {
+                var text = File.ReadAllText(f);
+                var match = Regex.Match(text, @"(?i)""(?:appid|app_id|SteamAppId)""\s*:\s*(\d+)");
+                if (match.Success && uint.TryParse(match.Groups[1].Value, out var id) && id > 0 && id != 480)
+                    return id;
+            }
+        }
+        catch { }
+        return 0;
+    }
+
+    [RelayCommand]
+    public async Task ConfirmFolderImportAsync()
+    {
+        if (string.IsNullOrWhiteSpace(FolderPath) || !Directory.Exists(FolderPath))
+        {
+            FolderErrorMessage = "Please select a valid game folder first.";
+            return;
+        }
+
+        IsLoading = true;
+        try
+        {
+            GameMetadata? meta = null;
+            if (_metadataProvider != null && FolderAppId > 0 && FolderAppId != 480)
+            {
+                try
+                {
+                    meta = await _metadataProvider.GetMetadataAsync(FolderAppId, CancellationToken.None).ConfigureAwait(true);
+                }
+                catch { }
+            }
+
+            var instance = new GameInstance
+            {
+                Name = string.IsNullOrWhiteSpace(FolderGameName) ? Path.GetFileName(FolderPath) : FolderGameName.Trim(),
+                AppId = FolderAppId,
+                InstallPath = FolderPath,
+                ExecutablePath = File.Exists(FolderExecutablePath) ? FolderExecutablePath : null,
+                Engine = FolderEngine,
+                Metadata = meta,
+                Status = File.Exists(FolderExecutablePath) ? InstanceStatus.Ready : InstanceStatus.NotInstalled
+            };
+
+            var created = await _instanceManager.CreateAsync(instance, CancellationToken.None).ConfigureAwait(true);
+            Instances.Add(created);
+            ApplyFilters();
+
+            _notificationService?.ShowSuccess("Game Folder Imported", $"{created.Name} is now added to your library!");
+
+            IsAddInstanceModalOpen = false;
+            OnManageInstanceRequested?.Invoke(created);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to confirm folder import");
+            FolderErrorMessage = ex.Message;
         }
         finally
         {
@@ -358,67 +1229,11 @@ public partial class LibraryViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Step 2: User confirms ZIP import from the Preview Modal.
-    /// </summary>
-    [RelayCommand]
-    public async Task ConfirmZipImportAsync()
-    {
-        if (_pendingArchive == null || string.IsNullOrWhiteSpace(PendingZipPath))
-        {
-            IsZipPreviewOpen = false;
-            return;
-        }
-
-        IsLoading = true;
-        try
-        {
-            var instance = BuildInstanceFromArchive(_pendingArchive, PendingZipPath) with
-            {
-                Name = PreviewGameName,
-                InstallPath = PreviewInstallPath,
-                Engine = PreviewEngine
-            };
-
-            var created = await _instanceManager.CreateAsync(instance, CancellationToken.None).ConfigureAwait(true);
-            ExtractManifestsToInstanceStorage(PendingZipPath, created.Id);
-
-            Instances.Add(created);
-            ApplyFilters();
-
-            _logger.LogInformation("Successfully imported instance: {Name} ({AppId})", created.Name, created.AppId);
-            _ = FetchMissingMetadataAsync(new List<GameInstance> { created });
-
-            IsZipPreviewOpen = false;
-            _pendingArchive = null;
-            PendingZipPath = null;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to confirm ZIP import");
-            ErrorMessage = $"Import failed: {ex.Message}";
-        }
-        finally
-        {
-            IsLoading = false;
-        }
-    }
-
-    [RelayCommand]
-    public void CancelZipImport()
-    {
-        IsZipPreviewOpen = false;
-        _pendingArchive = null;
-        PendingZipPath = null;
-    }
-
-    /// <summary>
     /// Adds an existing game install folder.
     /// </summary>
     [RelayCommand]
     public async Task AddExistingFolderAsync()
     {
-        IsAddMenuOpen = false;
-
         var dialog = new OpenFolderDialog
         {
             Title = "Select Existing Game Installation Folder"
@@ -627,4 +1442,12 @@ public partial class LibraryViewModel : ObservableObject
         }
         return name;
     }
+}
+
+public partial class GroupItemSelection : ObservableObject
+{
+    public GameInstance Instance { get; init; } = null!;
+
+    [ObservableProperty]
+    private bool _isSelected;
 }
