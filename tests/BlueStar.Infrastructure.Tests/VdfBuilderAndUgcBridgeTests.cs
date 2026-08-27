@@ -239,4 +239,47 @@ public class VdfBuilderAndUgcBridgeTests : IDisposable
         detectedFromBin.Should().BeEquivalentTo(rootDir);
         detectedFromExe.Should().BeEquivalentTo(rootDir);
     }
+
+    [Fact]
+    public void TabletopSimulator_DeploysSaveAndCleansBrokenFiles()
+    {
+        var ttsDir = Path.Combine(_testDir, "TTS_Test_Workshop");
+        Directory.CreateDirectory(ttsDir);
+
+        // Simulate broken files left in Workshop folder
+        File.WriteAllText(Path.Combine(ttsDir, "999_info.json"), "{\"bad\": true}");
+        File.WriteAllText(Path.Combine(ttsDir, "workshop_info.json"), "{\"bad\": true}");
+
+        var staging = Path.Combine(_testDir, "TTS_Staging");
+        Directory.CreateDirectory(staging);
+        File.WriteAllText(Path.Combine(staging, "WorkshopUpload"), "{\"SaveName\":\"Secret Hitler Edition\",\"ObjectStates\":[]}");
+
+        var instance = new GameInstance
+        {
+            Id = Guid.NewGuid(),
+            Name = "Tabletop Simulator",
+            AppId = 286160,
+            InstallPath = Path.Combine(_testDir, "TTS_Install")
+        };
+
+        var details = new WorkshopItemInfo(123456UL, 286160, "Secret Hitler Edition", "Popular game", null, 2048, "Author", DateTimeOffset.UtcNow);
+
+        Mods.GameModPathResolver.AdaptAndDeployWorkshopMod(instance, 123456UL, staging, ttsDir, details);
+
+        // Verification 1: 123456.json exists and contains SaveName
+        var saveJson = Path.Combine(ttsDir, "123456.json");
+        File.Exists(saveJson).Should().BeTrue();
+        File.ReadAllText(saveJson).Should().Contain("Secret Hitler Edition");
+
+        // Verification 2: Bad _info.json and workshop_info.json were cleaned up
+        File.Exists(Path.Combine(ttsDir, "999_info.json")).Should().BeFalse();
+        File.Exists(Path.Combine(ttsDir, "workshop_info.json")).Should().BeFalse();
+        File.Exists(Path.Combine(ttsDir, "123456_info.json")).Should().BeFalse();
+
+        // Verification 3: WorkshopFileInfos.json index exists and registers the item
+        var indexFile = Path.Combine(ttsDir, "WorkshopFileInfos.json");
+        File.Exists(indexFile).Should().BeTrue();
+        File.ReadAllText(indexFile).Should().Contain("123456");
+        File.ReadAllText(indexFile).Should().Contain("Secret Hitler Edition");
+    }
 }

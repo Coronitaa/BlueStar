@@ -74,6 +74,18 @@ public sealed class GenericModManager : IModManager
 
         try
         {
+            // If Tabletop Simulator, perform automatic cleanup of broken metadata files
+            if (resolution.GameCategory == "TabletopSimulator")
+            {
+                foreach (var dir in candidateDirs)
+                {
+                    if (Directory.Exists(dir))
+                    {
+                        GameModPathResolver.CleanUpBrokenTabletopSimulatorFiles(dir);
+                    }
+                }
+            }
+
             foreach (var modsDir in candidateDirs)
             {
                 if (!Directory.Exists(modsDir)) continue;
@@ -84,8 +96,12 @@ public sealed class GenericModManager : IModManager
                 {
                     var fileName = Path.GetFileName(file);
                     if (fileName.Equals("workshop_info.json", StringComparison.OrdinalIgnoreCase) ||
+                        fileName.Equals("WorkshopFileInfos.json", StringComparison.OrdinalIgnoreCase) ||
                         fileName.EndsWith("_info.json", StringComparison.OrdinalIgnoreCase) ||
-                        fileName.EndsWith(".bak", StringComparison.OrdinalIgnoreCase))
+                        fileName.EndsWith(".bak", StringComparison.OrdinalIgnoreCase) ||
+                        fileName.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                        fileName.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                        fileName.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase))
                     {
                         continue;
                     }
@@ -103,6 +119,57 @@ public sealed class GenericModManager : IModManager
                     string? author = null;
                     string? description = null;
                     string category = "Mod File";
+
+                    // Check for Tabletop Simulator .json Save Game metadata
+                    if (ext == ".json" || (ext == ".disabled" && fileName.Contains(".json")))
+                    {
+                        try
+                        {
+                            var text = File.ReadAllText(file);
+                            using var doc = System.Text.Json.JsonDocument.Parse(text);
+                            if (doc.RootElement.TryGetProperty("SaveName", out var sn) && !string.IsNullOrWhiteSpace(sn.GetString()))
+                            {
+                                displayName = sn.GetString()!;
+                                category = "Tabletop Simulator Mod";
+                            }
+                            if (doc.RootElement.TryGetProperty("GameMode", out var gm) && !string.IsNullOrWhiteSpace(gm.GetString()))
+                            {
+                                description = gm.GetString();
+                            }
+                            if (doc.RootElement.TryGetProperty("Date", out var dt) && !string.IsNullOrWhiteSpace(dt.GetString()))
+                            {
+                                if (string.IsNullOrEmpty(description)) description = $"Created: {dt.GetString()}";
+                            }
+                        }
+                        catch { }
+
+                        // If SaveName wasn't in file, check WorkshopFileInfos.json
+                        if (displayName == baseName)
+                        {
+                            var ttsIndex = Path.Combine(modsDir, "WorkshopFileInfos.json");
+                            if (File.Exists(ttsIndex))
+                            {
+                                try
+                                {
+                                    using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(ttsIndex));
+                                    if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                                    {
+                                        foreach (var el in doc.RootElement.EnumerateArray())
+                                        {
+                                            if (el.TryGetProperty("Id", out var idProp) && idProp.GetString() == baseName &&
+                                                el.TryGetProperty("Name", out var nameProp) && !string.IsNullOrWhiteSpace(nameProp.GetString()))
+                                            {
+                                                displayName = nameProp.GetString()!;
+                                                category = "Tabletop Simulator Mod";
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+                    }
 
                     // Check for companion _info.json (e.g. 123456_info.json for 123456.vpk)
                     var companionJson = Path.Combine(modsDir, $"{baseName}_info.json");
