@@ -476,7 +476,7 @@ public static class GameModPathResolver
                 break;
 
             case "Klei":
-                DeployKleiMod(stagingFolder, targetFolder);
+                DeployKleiMod(instance, stagingFolder, targetFolder, publishedFileId);
                 break;
 
             default:
@@ -595,10 +595,47 @@ public static class GameModPathResolver
         }
     }
 
-    private static void DeployKleiMod(string stagingFolder, string targetFolder)
+    private static void DeployKleiMod(GameInstance instance, string stagingFolder, string targetFolder, ulong publishedFileId)
     {
-        // Don't Starve / DST mods require all files inside the workshop-<PublishedFileId> directory
-        CopyDirectoryRecursive(stagingFolder, targetFolder);
+        // Don't Starve / DST mods require modinfo.lua to be placed directly in the root of targetFolder (mods/workshop-<PublishedFileId>/)
+        string modSourceRoot = stagingFolder;
+        var modInfoFiles = Directory.GetFiles(stagingFolder, "modinfo.lua", SearchOption.AllDirectories);
+        if (modInfoFiles.Length > 0)
+        {
+            modSourceRoot = Path.GetDirectoryName(modInfoFiles[0]) ?? stagingFolder;
+        }
+
+        Directory.CreateDirectory(targetFolder);
+        CopyDirectoryRecursive(modSourceRoot, targetFolder);
+
+        // Also check if instance install path has data/mods/ and mirror if present
+        if (!string.IsNullOrWhiteSpace(instance.InstallPath) && Directory.Exists(instance.InstallPath))
+        {
+            var dataMods = Path.Combine(instance.InstallPath, "data", "mods");
+            if (Directory.Exists(dataMods))
+            {
+                var dataTarget = Path.Combine(dataMods, $"workshop-{publishedFileId}");
+                Directory.CreateDirectory(dataTarget);
+                CopyDirectoryRecursive(modSourceRoot, dataTarget);
+            }
+
+            // Check mods/modsettings.lua to ensure ForceEnableMod is configured so Don't Starve enables the mod automatically
+            var modSettingsFile = Path.Combine(instance.InstallPath, "mods", "modsettings.lua");
+            if (File.Exists(modSettingsFile))
+            {
+                try
+                {
+                    var lines = File.ReadAllText(modSettingsFile);
+                    var modIdStr = $"workshop-{publishedFileId}";
+                    if (!lines.Contains(modIdStr, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var appendStr = $"\nForceEnableMod(\"{modIdStr}\")\n";
+                        File.AppendAllText(modSettingsFile, appendStr);
+                    }
+                }
+                catch { }
+            }
+        }
     }
 
     private static void DeployGenericMod(string stagingFolder, string targetFolder)

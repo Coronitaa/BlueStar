@@ -273,6 +273,8 @@ public partial class InstanceDetailViewModel : ObservableObject
                 }
             }
 
+            if (Instance.AppId > 0) return true;
+
             if (_modManagerRegistry != null)
             {
                 var mgr = _modManagerRegistry.GetManagerForInstance(Instance);
@@ -406,10 +408,16 @@ public partial class InstanceDetailViewModel : ObservableObject
 
     // ── Settings Tab State ──
     [ObservableProperty]
+    private string _instanceAlias = string.Empty;
+
+    [ObservableProperty]
     private string _customLaunchArgs = string.Empty;
 
     [ObservableProperty]
     private string _configuredExecutablePath = string.Empty;
+
+    [ObservableProperty]
+    private bool _isDuplicatingInstance;
 
     // ── Instance Deletion State ──
     [ObservableProperty]
@@ -761,6 +769,7 @@ public partial class InstanceDetailViewModel : ObservableObject
             };
 
             ConfiguredExecutablePath = Instance.ExecutablePath ?? string.Empty;
+            InstanceAlias = Instance.Name ?? string.Empty;
             CustomLaunchArgs = Instance.LaunchArguments ?? string.Empty;
             IsUnityEngine = Instance.Engine?.Type == EngineType.Unity;
 
@@ -1639,7 +1648,25 @@ public partial class InstanceDetailViewModel : ObservableObject
             return;
         }
 
-        HasWorkshopSupport = await _workshopService.HasWorkshopSupportAsync(Instance.AppId, CancellationToken.None).ConfigureAwait(true);
+        // Check if metadata categories or engine capabilities already explicitly declare Workshop
+        bool metaSaysWorkshop = Instance.Metadata?.Categories?.Any(c => c.Contains("Workshop", StringComparison.OrdinalIgnoreCase)) == true;
+        bool engineSaysWorkshop = Instance.Engine?.Supports(EngineCapabilities.WorkshopSupported) == true;
+
+        if (metaSaysWorkshop || engineSaysWorkshop)
+        {
+            HasWorkshopSupport = true;
+            return;
+        }
+
+        try
+        {
+            HasWorkshopSupport = await _workshopService.HasWorkshopSupportAsync(Instance.AppId, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch
+        {
+            // Default to true for any valid Steam AppId so the user is never blocked from using Workshop
+            HasWorkshopSupport = true;
+        }
     }
 
     [RelayCommand]
@@ -2223,20 +2250,115 @@ public partial class InstanceDetailViewModel : ObservableObject
         return true;
     }
 
-    // ── Settings Save ──
+    // ── Settings Save & Duplication ──
     [RelayCommand]
     public async Task SaveSettingsAsync()
     {
         if (Instance == null) return;
 
+        var customName = !string.IsNullOrWhiteSpace(InstanceAlias) ? InstanceAlias.Trim() : Instance.Name;
+
         Instance = Instance with
         {
+            Name = customName,
             ExecutablePath = ConfiguredExecutablePath,
             LaunchArguments = CustomLaunchArgs
         };
 
         await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
-        StatusMessage = "✅ Settings saved successfully.";
+        StatusMessage = $"✅ Configuración y alias guardados correctamente: '{customName}'";
+    }
+
+    [RelayCommand]
+    public async Task DuplicateInstanceAsync()
+    {
+        if (Instance == null || IsDuplicatingInstance) return;
+
+        IsDuplicatingInstance = true;
+        try
+        {
+            var baseName = !string.IsNullOrWhiteSpace(InstanceAlias) ? InstanceAlias.Trim() : Instance.Name;
+            var cloneName = $"{baseName} (Clon)";
+
+            StatusMessage = $"⏳ Duplicando instancia '{baseName}' con enlace NTFS Zero-Copy...";
+            var cloned = await _instanceManager.CloneInstanceAsync(Instance.Id, cloneName, CancellationToken.None).ConfigureAwait(true);
+
+            StatusMessage = $"✅ Instancia duplicada con éxito: '{cloned.Name}'";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al duplicar la instancia {Id}", Instance.Id);
+            StatusMessage = $"❌ Error al duplicar instancia: {ex.Message}";
+        }
+        finally
+        {
+            IsDuplicatingInstance = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task DuplicateCleanInstanceAsync()
+    {
+        if (Instance == null || IsDuplicatingInstance) return;
+
+        IsDuplicatingInstance = true;
+        try
+        {
+            var baseName = !string.IsNullOrWhiteSpace(InstanceAlias) ? InstanceAlias.Trim() : Instance.Name;
+            var cleanName = $"{baseName} (Limpia)";
+
+            StatusMessage = $"⏳ Creando instancia limpia para '{baseName}'...";
+
+            var baseDepot = _instanceManager.GetBaseDepotPath(Instance.AppId);
+            if (Directory.Exists(baseDepot))
+            {
+                var cleanInstance = await _instanceManager.CreateInstanceFromDepotAsync(
+                    Instance.AppId,
+                    cleanName,
+                    baseDepot,
+                    ct: CancellationToken.None).ConfigureAwait(true);
+
+                StatusMessage = $"✨ Instancia limpia creada desde base depot: '{cleanInstance.Name}'";
+            }
+            else
+            {
+                // Zero-copy clone game binaries and reset isolated configs/mods
+                var cloned = await _instanceManager.CloneInstanceAsync(Instance.Id, cleanName, CancellationToken.None).ConfigureAwait(true);
+                
+                try
+                {
+                    var modsDir = Path.Combine(cloned.InstallPath, "mods");
+                    if (Directory.Exists(modsDir))
+                    {
+                        foreach (var d in Directory.GetDirectories(modsDir))
+                        {
+                            try { Directory.Delete(d, true); } catch { }
+                        }
+                    }
+
+                    var bepPlugins = Path.Combine(cloned.InstallPath, "BepInEx", "plugins");
+                    if (Directory.Exists(bepPlugins))
+                    {
+                        foreach (var d in Directory.GetDirectories(bepPlugins))
+                        {
+                            try { Directory.Delete(d, true); } catch { }
+                        }
+                    }
+                }
+                catch { }
+
+                StatusMessage = $"✨ Instancia limpia creada con éxito: '{cloned.Name}'";
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al crear instancia limpia para {Id}", Instance.Id);
+            StatusMessage = $"❌ Error al crear instancia limpia: {ex.Message}";
+        }
+        finally
+        {
+            IsDuplicatingInstance = false;
+        }
     }
 
     // ── Logs Console ──

@@ -1003,7 +1003,10 @@
                 <StackPanel Visibility="{Binding SelectedTab, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Settings}">
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <TextBlock Text="Instance Launch Configuration" Style="{StaticResource H2}" Margin="0,0,0,16"/>
+                            <TextBlock Text="Instance Configuration &amp; Launch Options" Style="{StaticResource H2}" Margin="0,0,0,16"/>
+
+                            <TextBlock Text="Instance Alias / Custom Name:" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
+                            <TextBox Style="{StaticResource DarkTextBox}" Text="{Binding InstanceAlias, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,16"/>
 
                             <TextBlock Text="Primary Game Executable (.exe):" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
                             <Grid Margin="0,0,0,16">
@@ -1019,7 +1022,33 @@
                             <TextBlock Text="Custom Launch Command Line Arguments:" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
                             <TextBox Style="{StaticResource DarkTextBox}" Text="{Binding CustomLaunchArgs, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,20"/>
 
-                            <Button Content="Save Launch Settings" Style="{StaticResource PrimaryButton}" Padding="20,10" HorizontalAlignment="Left" Command="{Binding SaveSettingsCommand}"/>
+                            <Button Content="💾 Save Settings &amp; Alias" Style="{StaticResource PrimaryButton}" Padding="20,10" HorizontalAlignment="Left" Command="{Binding SaveSettingsCommand}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Multi-Instance Duplication Card -->
+                    <Border Style="{StaticResource Card}" Margin="0,20,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Multi-Instance Management (Zero-Copy NTFS)" Style="{StaticResource H2}" Margin="0,0,0,8"/>
+                            <TextBlock Text="Duplica esta instancia instantáneamente sin consumir espacio adicional en disco mediante enlaces NTFS. Cada clon cuenta con SteamID y puertos de red aislados para multijugador LAN/Online."
+                                       Style="{StaticResource BodySmall}" Margin="0,0,0,16"/>
+
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="📋 Duplicar Instancia"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Padding="18,10"
+                                        Margin="0,0,12,0"
+                                        Command="{Binding DuplicateInstanceCommand}"
+                                        IsEnabled="{Binding IsDuplicatingInstance, Converter={StaticResource InverseBoolConverter}}"
+                                        ToolTip="Duplica la instancia actual incluyendo todos los mods y configuraciones existentes."/>
+
+                                <Button Content="✨ Duplicar Instancia Limpia"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Padding="18,10"
+                                        Command="{Binding DuplicateCleanInstanceCommand}"
+                                        IsEnabled="{Binding IsDuplicatingInstance, Converter={StaticResource InverseBoolConverter}}"
+                                        ToolTip="Crea una nueva instancia limpia con archivos base originales y sin mods instalados."/>
+                            </StackPanel>
                         </StackPanel>
                     </Border>
 
@@ -1031,10 +1060,10 @@
                                        Style="{StaticResource BodySmall}" Margin="0,0,0,16"/>
 
                             <Button Content="🗑 Delete Instance..."
-                                    Style="{StaticResource DangerButton}"
-                                    Padding="18,10"
-                                    HorizontalAlignment="Left"
-                                    Command="{Binding OpenDeleteModalCommand}"/>
+                                     Style="{StaticResource DangerButton}"
+                                     Padding="18,10"
+                                     HorizontalAlignment="Left"
+                                     Command="{Binding OpenDeleteModalCommand}"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>

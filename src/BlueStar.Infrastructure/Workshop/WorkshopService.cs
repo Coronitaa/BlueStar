@@ -30,36 +30,120 @@ public sealed class WorkshopService : IWorkshopService
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<uint, bool> WorkshopSupportCache = new();
+
+    private static readonly HashSet<uint> KnownWorkshopAppIds = new()
+    {
+        214950, // Don't Starve
+        322330, // Don't Starve Together
+        457140, // Oxygen Not Included
+        730,    // Counter-Strike 2
+        550,    // Left 4 Dead 2
+        4000,   // Garry's Mod
+        286160, // Tabletop Simulator
+        294100, // RimWorld
+        108600, // Project Zomboid
+        255710, // Cities: Skylines
+        1118200,// People Playground
+        1167630,// Teardown
+        620,    // Portal 2
+        440,    // Team Fortress 2
+        252490, // Rust
+        105600, // Terraria
+        250900, // The Binding of Isaac: Rebirth
+        431960, // Wallpaper Engine
+        281990, // Stellaris
+        394360, // Hearts of Iron IV
+        1158310,// Crusader Kings III
+        236850, // Europa Universalis IV
+        381210, // Dead by Daylight
+        211820, // Starbound
+        304930, // Unturned
+        230410, // Warframe
+        221100, // DayZ
+        107410, // Arma 3
+        244850, // Space Engineers
+        220200, // Kerbal Space Program
+        48700,  // Mount & Blade: Warband
+        261550, // Mount & Blade II: Bannerlord
+        289070, // Civilization VI
+        8930,   // Civilization V
+        346110, // ARK: Survival Evolved
+        362890, // Black Mesa
+        227300, // Euro Truck Simulator 2
+        270880, // American Truck Simulator
+        435150, // Divinity: Original Sin 2
+        1091500,// Cyberpunk 2077
+        392110, // Endless Space 2
+        289070, // Sid Meier's Civilization VI
+        206440, // To the Moon
+        1222670,// The Sims 4
+        255710  // Cities: Skylines
+    };
+
     /// <inheritdoc />
     public async Task<bool> HasWorkshopSupportAsync(uint appId, CancellationToken ct = default)
     {
         if (appId == 0) return false;
 
+        if (WorkshopSupportCache.TryGetValue(appId, out var cached))
+            return cached;
+
+        if (KnownWorkshopAppIds.Contains(appId))
+        {
+            WorkshopSupportCache[appId] = true;
+            return true;
+        }
+
         try
         {
             var url = $"https://store.steampowered.com/api/appdetails?appids={appId}&filters=categories";
             using var resp = await _http.GetAsync(url, ct).ConfigureAwait(false);
-            if (!resp.IsSuccessStatusCode) return false;
-
-            using var stream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
-
-            if (doc.RootElement.TryGetProperty(appId.ToString(), out var appElement) &&
-                appElement.TryGetProperty("data", out var dataElement) &&
-                dataElement.TryGetProperty("categories", out var categories))
+            if (resp.IsSuccessStatusCode)
             {
-                foreach (var cat in categories.EnumerateArray())
+                using var stream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+                using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+
+                if (doc.RootElement.TryGetProperty(appId.ToString(), out var appElement) &&
+                    appElement.TryGetProperty("data", out var dataElement) &&
+                    dataElement.TryGetProperty("categories", out var categories))
                 {
-                    if (cat.TryGetProperty("id", out var catId) && catId.GetInt32() == 30) // Category 30 = Steam Workshop
-                        return true;
+                    foreach (var cat in categories.EnumerateArray())
+                    {
+                        if (cat.TryGetProperty("id", out var catId) && catId.GetInt32() == 30) // Category 30 = Steam Workshop
+                        {
+                            WorkshopSupportCache[appId] = true;
+                            return true;
+                        }
+                    }
+
+                    // Explicitly answered categories without category 30
+                    WorkshopSupportCache[appId] = false;
+                    return false;
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Could not check Workshop support for AppId={AppId}", appId);
+            _logger.LogDebug(ex, "Could not check Store API Workshop support for AppId={AppId}", appId);
         }
 
+        // Secondary fallback: Probe Steam Workshop web browse endpoint
+        try
+        {
+            var workshopUrl = $"https://steamcommunity.com/workshop/browse/?appid={appId}";
+            using var req = new HttpRequestMessage(HttpMethod.Head, workshopUrl);
+            using var webResp = await _http.SendAsync(req, ct).ConfigureAwait(false);
+            if (webResp.IsSuccessStatusCode && webResp.RequestMessage?.RequestUri?.ToString().Contains("workshop", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                WorkshopSupportCache[appId] = true;
+                return true;
+            }
+        }
+        catch { }
+
+        // Default to false if unconfirmed, but cache so we do not spam
+        WorkshopSupportCache[appId] = false;
         return false;
     }
 

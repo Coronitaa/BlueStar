@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
@@ -156,5 +156,47 @@ public class VdfBuilderAndUgcBridgeTests : IDisposable
         result.Success.Should().BeTrue();
         result.TargetCategory.Should().Be("UnityBepInExPlugins");
         File.Exists(Path.Combine(instancePath, "BepInEx", "plugins", "CheatsMod", "CheatsMod.dll")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void AdaptAndDeployWorkshopMod_CorrectlyFlattensAndDeploysKleiMod_ForDontStarve()
+    {
+        var stagingFolder = Path.Combine(_testDir, "StagingKlei");
+        var instancePath = Path.Combine(_testDir, "DontStarve_Instance");
+
+        // Simulate a downloaded mod with nested subfolder
+        Directory.CreateDirectory(Path.Combine(stagingFolder, "nested_folder", "scripts"));
+        File.WriteAllText(Path.Combine(stagingFolder, "nested_folder", "modinfo.lua"), "name = 'Combined Status'\nversion = '1.0'");
+        File.WriteAllText(Path.Combine(stagingFolder, "nested_folder", "modmain.lua"), "GLOBAL.print('Mod Loaded')");
+        File.WriteAllText(Path.Combine(stagingFolder, "nested_folder", "scripts", "status.lua"), "-- script");
+
+        // Game instance has mods/ and modsettings.lua
+        Directory.CreateDirectory(Path.Combine(instancePath, "mods"));
+        File.WriteAllText(Path.Combine(instancePath, "mods", "modsettings.lua"), "-- Default settings\n");
+
+        var instance = new GameInstance
+        {
+            Id = Guid.NewGuid(),
+            Name = "Don't Starve",
+            AppId = 214950,
+            InstallPath = instancePath
+        };
+
+        var targetFolder = Mods.GameModPathResolver.GetItemTargetFolder(instance, 378160970UL, "Combined Status");
+        var details = new WorkshopItemInfo(378160970UL, 214950, "Combined Status", "Status mod", null, 1024, "Author", DateTimeOffset.UtcNow);
+
+        Mods.GameModPathResolver.AdaptAndDeployWorkshopMod(instance, 378160970UL, stagingFolder, targetFolder, details);
+
+        // Verification 1: target folder is named workshop-378160970
+        targetFolder.Should().EndWith("workshop-378160970");
+
+        // Verification 2: modinfo.lua and modmain.lua are directly in root of workshop-378160970
+        File.Exists(Path.Combine(targetFolder, "modinfo.lua")).Should().BeTrue();
+        File.Exists(Path.Combine(targetFolder, "modmain.lua")).Should().BeTrue();
+        File.Exists(Path.Combine(targetFolder, "scripts", "status.lua")).Should().BeTrue();
+
+        // Verification 3: ForceEnableMod was registered in modsettings.lua
+        var modsettingsContent = File.ReadAllText(Path.Combine(instancePath, "mods", "modsettings.lua"));
+        modsettingsContent.Should().Contain("ForceEnableMod(\"workshop-378160970\")");
     }
 }
