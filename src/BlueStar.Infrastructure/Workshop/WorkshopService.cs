@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -238,7 +239,36 @@ public sealed class WorkshopService : IWorkshopService
                     if (epoch > 0) updatedAt = DateTimeOffset.FromUnixTimeSeconds(epoch);
                 }
 
+                ulong hcontentFile = 0;
+                if (item.TryGetProperty("hcontent_file", out var hc))
+                {
+                    if (hc.ValueKind == JsonValueKind.Number && hc.TryGetUInt64(out var hcNum)) hcontentFile = hcNum;
+                    else if (hc.ValueKind == JsonValueKind.String && ulong.TryParse(hc.GetString(), out var hcStr)) hcontentFile = hcStr;
+                }
+
                 var fileUrl = item.TryGetProperty("file_url", out var fu) && fu.ValueKind == JsonValueKind.String ? fu.GetString() : null;
+
+                // If file_url is not directly in details, resolve direct Valve UGC CDN URL from hcontent_file
+                if (string.IsNullOrWhiteSpace(fileUrl) && hcontentFile > 0)
+                {
+                    try
+                    {
+                        var ugcUrl = $"https://api.steampowered.com/ISteamRemoteStorage/GetUGCFileDetails/v1/?ugcid={hcontentFile}&appid={appId}";
+                        using var ugcResp = await _http.GetAsync(ugcUrl, ct).ConfigureAwait(false);
+                        if (ugcResp.IsSuccessStatusCode)
+                        {
+                            using var ugcStream = await ugcResp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+                            using var ugcDoc = await JsonDocument.ParseAsync(ugcStream, cancellationToken: ct).ConfigureAwait(false);
+                            if (ugcDoc.RootElement.TryGetProperty("data", out var dataObj) &&
+                                dataObj.TryGetProperty("url", out var directUrlProp) &&
+                                directUrlProp.ValueKind == JsonValueKind.String)
+                            {
+                                fileUrl = directUrlProp.GetString();
+                            }
+                        }
+                    }
+                    catch { }
+                }
 
                 return new WorkshopItemInfo(
                     PublishedFileId: publishedFileId,
@@ -304,7 +334,7 @@ public sealed class WorkshopService : IWorkshopService
             var ddPath = GetDepotDownloaderPath();
             bool downloaded = false;
 
-            // 1. Direct file_url from Steam API if available
+            // 1. Direct file_url from Steam API if available (Valve Akamai/Fastly CDN)
             if (!string.IsNullOrWhiteSpace(details.FileUrl))
             {
                 try
@@ -322,17 +352,37 @@ public sealed class WorkshopService : IWorkshopService
 
                         if (File.Exists(tempFile) && new FileInfo(tempFile).Length > 0)
                         {
+                            bool isHtml = false;
                             try
                             {
-                                using var zip = ZipFile.OpenRead(tempFile);
-                                zip.ExtractToDirectory(stagingFolder, overwriteFiles: true);
-                                downloaded = true;
+                                var headBytes = new byte[Math.Min(256, (int)new FileInfo(tempFile).Length)];
+                                using (var fs = File.OpenRead(tempFile)) { fs.Read(headBytes, 0, headBytes.Length); }
+                                var headStr = Encoding.UTF8.GetString(headBytes).TrimStart();
+                                if (headStr.StartsWith("<!DOCTYPE", StringComparison.OrdinalIgnoreCase) ||
+                                    headStr.StartsWith("<html", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    isHtml = true;
+                                }
                             }
-                            catch
+                            catch { }
+
+                            if (!isHtml)
                             {
-                                var rawDest = Path.Combine(stagingFolder, $"{safeTitle}.bin");
-                                File.Copy(tempFile, rawDest, overwrite: true);
-                                downloaded = true;
+                                try
+                                {
+                                    using var zip = ZipFile.OpenRead(tempFile);
+                                    zip.ExtractToDirectory(stagingFolder, overwriteFiles: true);
+                                    downloaded = true;
+                                }
+                                catch
+                                {
+                                    var rawDest = Path.Combine(stagingFolder, "WorkshopUpload");
+                                    File.Copy(tempFile, rawDest, overwrite: true);
+
+                                    var jsonDest = Path.Combine(stagingFolder, $"{publishedFileId}.json");
+                                    File.Copy(tempFile, jsonDest, overwrite: true);
+                                    downloaded = true;
+                                }
                             }
                         }
                     }
@@ -417,17 +467,37 @@ public sealed class WorkshopService : IWorkshopService
 
                             if (File.Exists(tempZip) && new FileInfo(tempZip).Length > 100)
                             {
+                                bool isHtml = false;
                                 try
                                 {
-                                    using var zip = ZipFile.OpenRead(tempZip);
-                                    zip.ExtractToDirectory(stagingFolder, overwriteFiles: true);
-                                    downloaded = true;
+                                    var headBytes = new byte[Math.Min(256, (int)new FileInfo(tempZip).Length)];
+                                    using (var fsCheck = File.OpenRead(tempZip)) { fsCheck.Read(headBytes, 0, headBytes.Length); }
+                                    var headStr = Encoding.UTF8.GetString(headBytes).TrimStart();
+                                    if (headStr.StartsWith("<!DOCTYPE", StringComparison.OrdinalIgnoreCase) ||
+                                        headStr.StartsWith("<html", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        isHtml = true;
+                                    }
                                 }
-                                catch
+                                catch { }
+
+                                if (!isHtml)
                                 {
-                                    var rawDest = Path.Combine(stagingFolder, $"{safeTitle}.bin");
-                                    File.Copy(tempZip, rawDest, overwrite: true);
-                                    downloaded = true;
+                                    try
+                                    {
+                                        using var zip = ZipFile.OpenRead(tempZip);
+                                        zip.ExtractToDirectory(stagingFolder, overwriteFiles: true);
+                                        downloaded = true;
+                                    }
+                                    catch
+                                    {
+                                        var rawDest = Path.Combine(stagingFolder, "WorkshopUpload");
+                                        File.Copy(tempZip, rawDest, overwrite: true);
+
+                                        var jsonDest = Path.Combine(stagingFolder, $"{publishedFileId}.json");
+                                        File.Copy(tempZip, jsonDest, overwrite: true);
+                                        downloaded = true;
+                                    }
                                 }
                             }
                         }

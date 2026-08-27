@@ -86,6 +86,17 @@ public sealed class UnityModManager : IModManager
 
         try
         {
+            if (resolution.GameCategory == "TabletopSimulator")
+            {
+                foreach (var dir in candidateDirs)
+                {
+                    if (Directory.Exists(dir))
+                    {
+                        GameModPathResolver.CleanUpBrokenTabletopSimulatorFiles(dir);
+                    }
+                }
+            }
+
             foreach (var modsDir in candidateDirs)
             {
                 if (!Directory.Exists(modsDir)) continue;
@@ -96,8 +107,12 @@ public sealed class UnityModManager : IModManager
                 {
                     var fileName = Path.GetFileName(file);
                     if (fileName.Equals("workshop_info.json", StringComparison.OrdinalIgnoreCase) ||
+                        fileName.Equals("WorkshopFileInfos.json", StringComparison.OrdinalIgnoreCase) ||
                         fileName.EndsWith("_info.json", StringComparison.OrdinalIgnoreCase) ||
-                        fileName.EndsWith(".bak", StringComparison.OrdinalIgnoreCase))
+                        fileName.EndsWith(".bak", StringComparison.OrdinalIgnoreCase) ||
+                        fileName.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                        fileName.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                        fileName.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase))
                     {
                         continue;
                     }
@@ -115,6 +130,57 @@ public sealed class UnityModManager : IModManager
                     string? author = null;
                     string? description = null;
                     string category = ext.Contains("dll", StringComparison.OrdinalIgnoreCase) ? "BepInEx Plugin (.dll)" : "Mod File";
+
+                    // Check for Tabletop Simulator .json Save Game metadata
+                    if (ext == ".json" || (ext == ".disabled" && fileName.Contains(".json")))
+                    {
+                        try
+                        {
+                            var text = File.ReadAllText(file);
+                            using var doc = System.Text.Json.JsonDocument.Parse(text);
+                            if (doc.RootElement.TryGetProperty("SaveName", out var sn) && !string.IsNullOrWhiteSpace(sn.GetString()))
+                            {
+                                displayName = sn.GetString()!;
+                                category = "Tabletop Simulator Mod";
+                            }
+                            if (doc.RootElement.TryGetProperty("GameMode", out var gm) && !string.IsNullOrWhiteSpace(gm.GetString()))
+                            {
+                                description = gm.GetString();
+                            }
+                            if (doc.RootElement.TryGetProperty("Date", out var dt) && !string.IsNullOrWhiteSpace(dt.GetString()))
+                            {
+                                if (string.IsNullOrEmpty(description)) description = $"Created: {dt.GetString()}";
+                            }
+                        }
+                        catch { }
+
+                        // If SaveName wasn't in file, check WorkshopFileInfos.json
+                        if (displayName == baseName)
+                        {
+                            var ttsIndex = Path.Combine(modsDir, "WorkshopFileInfos.json");
+                            if (File.Exists(ttsIndex))
+                            {
+                                try
+                                {
+                                    using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(ttsIndex));
+                                    if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                                    {
+                                        foreach (var el in doc.RootElement.EnumerateArray())
+                                        {
+                                            if (el.TryGetProperty("Id", out var idProp) && idProp.GetString() == baseName &&
+                                                el.TryGetProperty("Name", out var nameProp) && !string.IsNullOrWhiteSpace(nameProp.GetString()))
+                                            {
+                                                displayName = nameProp.GetString()!;
+                                                category = "Tabletop Simulator Mod";
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+                    }
 
                     var companionJson = Path.Combine(modsDir, $"{baseName}_info.json");
                     if (File.Exists(companionJson))
@@ -205,7 +271,7 @@ public sealed class UnityModManager : IModManager
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to read Unity plugins for {Game}", instance.Name);
+            _logger.LogError(ex, "Failed to read Unity mods for {Game}", instance.Name);
         }
 
         return Task.FromResult<IReadOnlyList<ModItem>>(result.AsReadOnly());
@@ -247,32 +313,68 @@ public sealed class UnityModManager : IModManager
 
     public Task<bool> UninstallModAsync(GameInstance instance, string modId, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(instance.InstallPath)) return Task.FromResult(false);
+        if (string.IsNullOrWhiteSpace(instance.InstallPath) || string.IsNullOrWhiteSpace(modId))
+            return Task.FromResult(false);
 
-        var candidateDirs = new[]
+        // 1. Direct path check
+        if (File.Exists(modId))
         {
-            GetModsDirectory(instance),
-            Path.Combine(instance.InstallPath, "BepInEx", "plugins"),
-            Path.Combine(instance.InstallPath, "mods"),
-            Path.Combine(instance.InstallPath, "Mods")
-        };
+            try { File.Delete(modId); return Task.FromResult(true); } catch { }
+        }
+        if (Directory.Exists(modId))
+        {
+            try { Directory.Delete(modId, recursive: true); return Task.FromResult(true); } catch { }
+        }
+
+        var candidateDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var resolution = GameModPathResolver.ResolveModPaths(instance);
+        if (!string.IsNullOrWhiteSpace(resolution.PrimaryDirectory)) candidateDirs.Add(resolution.PrimaryDirectory);
+        foreach (var s in resolution.ScanDirectories) candidateDirs.Add(s);
+
+        if (!string.IsNullOrWhiteSpace(instance.InstallPath))
+        {
+            candidateDirs.Add(Path.Combine(instance.InstallPath, "BepInEx", "plugins"));
+            candidateDirs.Add(Path.Combine(instance.InstallPath, "mods"));
+            candidateDirs.Add(Path.Combine(instance.InstallPath, "Mods"));
+        }
+
+        bool deletedAny = false;
+        var cleanModId = modId.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)
+            ? modId.Substring(0, modId.Length - 9)
+            : modId;
 
         try
         {
-            foreach (var modsDir in candidateDirs.Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var modsDir in candidateDirs)
             {
                 if (string.IsNullOrWhiteSpace(modsDir) || !Directory.Exists(modsDir)) continue;
 
-                var file = Path.Combine(modsDir, modId);
-                if (File.Exists(file))
+                var fileCandidates = new[]
                 {
-                    File.Delete(file);
-                    return Task.FromResult(true);
-                }
-                if (Directory.Exists(file))
+                    Path.Combine(modsDir, modId),
+                    Path.Combine(modsDir, cleanModId),
+                    Path.Combine(modsDir, cleanModId + ".disabled")
+                };
+
+                foreach (var f in fileCandidates)
                 {
-                    Directory.Delete(file, recursive: true);
-                    return Task.FromResult(true);
+                    if (File.Exists(f))
+                    {
+                        File.Delete(f);
+                        deletedAny = true;
+
+                        var baseName = Path.GetFileNameWithoutExtension(cleanModId);
+                        var infoJson = Path.Combine(modsDir, $"{baseName}_info.json");
+                        if (File.Exists(infoJson)) File.Delete(infoJson);
+
+                        var thumbPng = Path.Combine(modsDir, $"{baseName}.png");
+                        if (File.Exists(thumbPng)) try { File.Delete(thumbPng); } catch { }
+                    }
+                    else if (Directory.Exists(f))
+                    {
+                        Directory.Delete(f, recursive: true);
+                        deletedAny = true;
+                    }
                 }
             }
         }
@@ -281,45 +383,63 @@ public sealed class UnityModManager : IModManager
             _logger.LogError(ex, "Failed to uninstall Unity plugin {Id}", modId);
         }
 
-        return Task.FromResult(false);
+        return Task.FromResult(deletedAny);
     }
 
     public Task<bool> ToggleModAsync(GameInstance instance, string modId, bool isEnabled, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(instance.InstallPath)) return Task.FromResult(false);
+        if (string.IsNullOrWhiteSpace(instance.InstallPath) || string.IsNullOrWhiteSpace(modId))
+            return Task.FromResult(false);
 
-        var candidateDirs = new[]
+        var candidateDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var resolution = GameModPathResolver.ResolveModPaths(instance);
+        if (!string.IsNullOrWhiteSpace(resolution.PrimaryDirectory)) candidateDirs.Add(resolution.PrimaryDirectory);
+        foreach (var s in resolution.ScanDirectories) candidateDirs.Add(s);
+
+        if (!string.IsNullOrWhiteSpace(instance.InstallPath))
         {
-            GetModsDirectory(instance),
-            Path.Combine(instance.InstallPath, "BepInEx", "plugins"),
-            Path.Combine(instance.InstallPath, "mods"),
-            Path.Combine(instance.InstallPath, "Mods")
-        };
+            candidateDirs.Add(Path.Combine(instance.InstallPath, "BepInEx", "plugins"));
+            candidateDirs.Add(Path.Combine(instance.InstallPath, "mods"));
+            candidateDirs.Add(Path.Combine(instance.InstallPath, "Mods"));
+        }
+
+        var cleanModId = modId.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)
+            ? modId.Substring(0, modId.Length - 9)
+            : modId;
+
+        bool toggledAny = false;
 
         try
         {
-            foreach (var modsDir in candidateDirs.Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var modsDir in candidateDirs)
             {
                 if (string.IsNullOrWhiteSpace(modsDir) || !Directory.Exists(modsDir)) continue;
 
-                var path = Path.Combine(modsDir, modId);
-                if (File.Exists(path))
-                {
-                    string target = isEnabled
-                        ? (path.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase) ? path.Substring(0, path.Length - 9) : path)
-                        : (!path.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase) ? path + ".disabled" : path);
+                var normalPath = Path.Combine(modsDir, cleanModId);
+                var disabledPath = Path.Combine(modsDir, cleanModId + ".disabled");
 
-                    if (path != target) File.Move(path, target, overwrite: true);
-                    return Task.FromResult(true);
+                // Directory toggle
+                if (Directory.Exists(normalPath) && !isEnabled)
+                {
+                    Directory.Move(normalPath, disabledPath);
+                    toggledAny = true;
                 }
-                if (Directory.Exists(path))
+                else if (Directory.Exists(disabledPath) && isEnabled)
                 {
-                    string target = isEnabled
-                        ? (path.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase) ? path.Substring(0, path.Length - 9) : path)
-                        : (!path.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase) ? path + ".disabled" : path);
+                    Directory.Move(disabledPath, normalPath);
+                    toggledAny = true;
+                }
 
-                    if (path != target) Directory.Move(path, target);
-                    return Task.FromResult(true);
+                // File toggle
+                if (File.Exists(normalPath) && !isEnabled)
+                {
+                    File.Move(normalPath, disabledPath, overwrite: true);
+                    toggledAny = true;
+                }
+                else if (File.Exists(disabledPath) && isEnabled)
+                {
+                    File.Move(disabledPath, normalPath, overwrite: true);
+                    toggledAny = true;
                 }
             }
         }
@@ -328,7 +448,7 @@ public sealed class UnityModManager : IModManager
             _logger.LogError(ex, "Failed to toggle Unity plugin {Id}", modId);
         }
 
-        return Task.FromResult(false);
+        return Task.FromResult(toggledAny);
     }
 
     private static long CalculateDirectorySize(string directoryPath)

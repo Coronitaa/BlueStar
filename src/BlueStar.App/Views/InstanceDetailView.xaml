@@ -1,4 +1,5 @@
 <UserControl x:Class="BlueStar.App.Views.InstanceDetailView"
+             x:Name="RootInstanceDetailView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:BlueStar.App.ViewModels"
@@ -716,7 +717,7 @@
                                                           Style="{StaticResource ToggleSwitch}"
                                                           IsChecked="{Binding IsEnabled, Mode=OneWay}"
                                                           ToolTip="Enable / Disable mod"
-                                                          Command="{Binding DataContext.ToggleModCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                          Command="{Binding DataContext.ToggleModCommand, ElementName=RootInstanceDetailView}"
                                                           CommandParameter="{Binding}"/>
 
                                                 <!-- Delete Button -->
@@ -727,7 +728,7 @@
                                                         VerticalAlignment="Center"
                                                         HorizontalContentAlignment="Center"
                                                         VerticalContentAlignment="Center"
-                                                        Command="{Binding DataContext.DeleteModCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        Command="{Binding DataContext.DeleteModCommand, ElementName=RootInstanceDetailView}"
                                                         CommandParameter="{Binding}">
                                                     <Path Data="{StaticResource IconTrash}"
                                                           Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
