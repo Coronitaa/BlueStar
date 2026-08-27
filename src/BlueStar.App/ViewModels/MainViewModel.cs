@@ -349,6 +349,7 @@ public partial class MainViewModel : ObservableObject
             var view = new LibraryView();
             var vm = App.Services.GetRequiredService<LibraryViewModel>();
             vm.OnManageInstanceRequested = OpenInstanceDetail;
+            vm.OnNavigateRequested = Navigate;
             view.DataContext = vm;
             CurrentView = view;
             return;

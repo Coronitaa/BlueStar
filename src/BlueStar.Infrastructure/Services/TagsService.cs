@@ -23,11 +23,11 @@ public sealed class TagsService : ITagsService
 
         // 2. Platforms
         if (result.HasWindows)
-            tags.Add(new GameTag("Windows", TagType.Platform, "Compatible with Windows"));
+            tags.Add(new GameTag("⊞ Windows", TagType.Platform, "Compatible with Windows"));
         if (result.HasLinux)
-            tags.Add(new GameTag("Linux", TagType.Platform, "Compatible with Linux / SteamOS"));
+            tags.Add(new GameTag("🐧 Linux", TagType.Platform, "Compatible with Linux / SteamOS"));
         if (result.HasMac)
-            tags.Add(new GameTag("macOS", TagType.Platform, "Compatible with macOS"));
+            tags.Add(new GameTag("🍎 macOS", TagType.Platform, "Compatible with macOS"));
 
         // 3. DLC Count
         if (result.DlcCount > 0)
@@ -99,7 +99,7 @@ public sealed class TagsService : ITagsService
         }
 
         // 6. Platform
-        tags.Add(new GameTag("Windows", TagType.Platform));
+        tags.Add(new GameTag("⊞ Windows", TagType.Platform));
 
         // Note: Date tags (e.g. 'Nov 2024') are strictly excluded from instance tags per requirements.
 

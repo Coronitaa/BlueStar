@@ -262,8 +262,8 @@
 
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="Active Download:" Style="{StaticResource CaptionBold}" Margin="0,0,6,0"/>
-                                    <TextBlock Text="{Binding CurrentActiveDownload.Instance.Name}" Style="{StaticResource H3}" FontWeight="Bold"/>
+                                    <TextBlock Text="Active Download:" Style="{StaticResource CaptionBold}" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding CurrentActiveDownload.Instance.Name}" Style="{StaticResource H3}" FontWeight="Bold" TextTrimming="CharacterEllipsis" MaxWidth="500" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </StackPanel>
 
@@ -367,7 +367,7 @@
                                                             Background="#E11D48"
                                                             BorderBrush="#FFFFFF"
                                                             BorderThickness="1"
-                                                            CornerRadius="{StaticResource RadiusPill}"
+                                                            CornerRadius="{StaticResource RadiusSm}"
                                                             Padding="7,2"
                                                             Visibility="{Binding HasUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}"
                                                             ToolTip="{Binding UpdateDescription, FallbackValue='Game update available'}">
@@ -375,7 +375,7 @@
                                                             <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="2" Opacity="0.6"/>
                                                         </Border.Effect>
                                                         <StackPanel Orientation="Horizontal">
-                                                            <TextBlock Text="▲ Update" FontSize="10" FontWeight="Bold" Foreground="#FFFFFF"/>
+                                                            <TextBlock Text="▲ Update" FontSize="10" FontWeight="Normal" Foreground="#FFFFFF"/>
                                                         </StackPanel>
                                                     </Border>
                                                 </Grid>
@@ -401,7 +401,7 @@
                                                         BorderThickness="1">
                                                     <TextBlock Text="{Binding Engine.DisplayText, FallbackValue='Generic Game', TargetNullValue='Generic Game'}"
                                                                FontSize="11"
-                                                               FontWeight="SemiBold"
+                                                               FontWeight="Normal"
                                                                Foreground="{Binding Engine, Converter={StaticResource EngineTypeToBrushConverter}, FallbackValue={StaticResource SecondaryTextBrush}, TargetNullValue={StaticResource SecondaryTextBrush}}"/>
                                                 </Border>
 
@@ -411,7 +411,7 @@
                                                         Background="{Binding Status, Converter={StaticResource InstanceStatusToBgBrushConverter}, FallbackValue={StaticResource SurfaceInputBrush}, TargetNullValue={StaticResource SurfaceInputBrush}}">
                                                     <TextBlock Text="{Binding Status, FallbackValue='Ready', TargetNullValue='Ready'}"
                                                                FontSize="11"
-                                                               FontWeight="SemiBold"
+                                                               FontWeight="Normal"
                                                                Foreground="{Binding Status, Converter={StaticResource InstanceStatusToBrushConverter}, FallbackValue={StaticResource SuccessBrush}, TargetNullValue={StaticResource SuccessBrush}}"/>
                                                 </Border>
                                             </StackPanel>
@@ -850,7 +850,7 @@
                                                                 Background="{StaticResource SurfaceInputBrush}"
                                                                 BorderBrush="{StaticResource SubtleBorderBrush}"
                                                                 BorderThickness="1">
-                                                            <TextBlock Text="{Binding AppType}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                            <TextBlock Text="{Binding AppType}" FontSize="11" FontWeight="Normal" Foreground="{StaticResource SecondaryTextBrush}"/>
                                                         </Border>
 
                                                         <Border CornerRadius="{StaticResource RadiusSm}"
@@ -859,7 +859,7 @@
                                                                 BorderBrush="{StaticResource SubtleBorderBrush}"
                                                                 BorderThickness="1"
                                                                 Visibility="{Binding Version, Converter={StaticResource NullToVisibilityConverter}}">
-                                                            <TextBlock Text="{Binding Version, StringFormat='📅 {0}'}" FontSize="11" FontWeight="Medium" Foreground="{StaticResource PrimaryTextBrush}"/>
+                                                            <TextBlock Text="{Binding Version, StringFormat='📅 {0}'}" FontSize="11" FontWeight="Normal" Foreground="{StaticResource PrimaryTextBrush}"/>
                                                         </Border>
 
                                                         <Border CornerRadius="{StaticResource RadiusSm}"
@@ -868,7 +868,7 @@
                                                                 BorderBrush="#608B5CF6"
                                                                 BorderThickness="1"
                                                                 Visibility="{Binding DlcCount, Converter={StaticResource NullToVisibilityConverter}}">
-                                                            <TextBlock Text="{Binding DlcCount, StringFormat='🎁 {0} DLCs'}" FontSize="11" FontWeight="SemiBold" Foreground="#A78BFA"/>
+                                                            <TextBlock Text="{Binding DlcCount, StringFormat='🎁 {0} DLCs'}" FontSize="11" FontWeight="Normal" Foreground="#A78BFA"/>
                                                         </Border>
 
                                                         <!-- NSFW Badge -->
@@ -876,8 +876,8 @@
                                                                 Padding="7,2" Margin="0,0,6,4"
                                                                 Background="#25EF4444" BorderBrush="#60EF4444" BorderThickness="1"
                                                                 Visibility="{Binding IsNsfw, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                                ToolTip="Contenido NSFW / Adultos (18+)">
-                                                            <TextBlock Text="🔞 NSFW" FontSize="11" FontWeight="Bold" Foreground="#EF4444"/>
+                                                                ToolTip="NSFW / Mature Content (18+)">
+                                                            <TextBlock Text="🔞 NSFW" FontSize="11" FontWeight="Normal" Foreground="#EF4444"/>
                                                         </Border>
 
                                                         <!-- DRM Badge -->
@@ -885,8 +885,8 @@
                                                                 Padding="7,2" Margin="0,0,6,4"
                                                                 Background="#25F59E0B" BorderBrush="#60F59E0B" BorderThickness="1"
                                                                 Visibility="{Binding HasDrm, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                                ToolTip="{Binding DrmNotice, FallbackValue='Requiere DRM o cuenta de terceros'}">
-                                                            <TextBlock Text="🔒 DRM" FontSize="11" FontWeight="Bold" Foreground="#F59E0B"/>
+                                                                ToolTip="{Binding DrmNotice, FallbackValue='Requires 3rd-party DRM or account'}">
+                                                            <TextBlock Text="🔒 DRM" FontSize="11" FontWeight="Normal" Foreground="#F59E0B"/>
                                                         </Border>
                                                     </WrapPanel>
 
@@ -895,17 +895,17 @@
                                                         <Border CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="0,0,5,4"
                                                                 Background="#201B90FF" BorderBrush="#501B90FF" BorderThickness="1"
                                                                 Visibility="{Binding HasWindows, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                            <TextBlock Text="Windows" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
+                                                            <TextBlock Text="⊞ Windows" FontSize="10" FontWeight="Normal" Foreground="{StaticResource AccentBrush}"/>
                                                         </Border>
                                                         <Border CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="0,0,5,4"
                                                                 Background="#20F59E0B" BorderBrush="#50F59E0B" BorderThickness="1"
                                                                 Visibility="{Binding HasLinux, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                            <TextBlock Text="🐧 Linux" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource WarningBrush}"/>
+                                                            <TextBlock Text="🐧 Linux" FontSize="10" FontWeight="Normal" Foreground="{StaticResource WarningBrush}"/>
                                                         </Border>
                                                         <Border CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="0,0,5,4"
                                                                 Background="#20A1A1AA" BorderBrush="#50A1A1AA" BorderThickness="1"
                                                                 Visibility="{Binding HasMac, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                            <TextBlock Text="🍎 macOS" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                            <TextBlock Text="🍎 macOS" FontSize="10" FontWeight="Normal" Foreground="{StaticResource SecondaryTextBrush}"/>
                                                         </Border>
                                                     </WrapPanel>
 
@@ -924,9 +924,9 @@
                                                                 CommandParameter="{Binding}"
                                                                 IsEnabled="{Binding IsCreating, Converter={StaticResource InverseBoolConverter}}">
                                                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                                                <TextBlock Text="⏳ " Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                                                <TextBlock Text="{Binding CreationStatus}" Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                                                <TextBlock Text="➕ Add to Instances" Visibility="{Binding IsCreating, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                                                <TextBlock Text="⏳ " FontWeight="Normal" Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                                <TextBlock Text="{Binding CreationStatus}" FontWeight="Normal" Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                                <TextBlock Text="➕ Add to Instances" FontWeight="Normal" Visibility="{Binding IsCreating, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
                                                             </StackPanel>
                                                         </Button>
 
@@ -936,7 +936,7 @@
                                                                 ToolTip="View on SteamDB"
                                                                 Command="{Binding DataContext.OpenSteamDbCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                                 CommandParameter="{Binding}">
-                                                            <TextBlock Text="🌐 SteamDB" FontSize="11" FontWeight="SemiBold"/>
+                                                            <TextBlock Text="🌐 SteamDB" FontSize="11" FontWeight="Normal"/>
                                                         </Button>
                                                     </Grid>
                                                 </Grid>

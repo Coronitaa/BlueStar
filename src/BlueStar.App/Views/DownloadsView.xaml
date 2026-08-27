@@ -49,11 +49,11 @@
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                         <TextBlock Text="Downloads" Style="{StaticResource H1}" Margin="0,0,10,0"/>
                         <Border Background="{StaticResource AccentTranslucentBrush}"
-                                CornerRadius="{StaticResource RadiusPill}"
-                                Padding="8,2" VerticalAlignment="Center"
+                                CornerRadius="{StaticResource RadiusSm}"
+                                Padding="8,3" VerticalAlignment="Center"
                                 Visibility="{Binding DownloadQueue.Count, Converter={StaticResource NullToVisibilityConverter}}">
                             <TextBlock Text="{Binding DownloadQueue.Count, StringFormat='{}{0} in queue'}"
-                                       Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}"/>
+                                       Style="{StaticResource Caption}" FontWeight="Medium" Foreground="{StaticResource AccentBrush}"/>
                         </Border>
                     </StackPanel>
                     <TextBlock Text="Manage active game downloads, queue priorities, and download history."
@@ -61,15 +61,15 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Content="🧹 Limpiar Completados"
+                    <Button Content="🧹 Clear Completed"
                             Style="{StaticResource SecondaryButton}"
                             Padding="12,7" FontSize="12" Margin="0,0,8,0"
                             Command="{Binding ClearCompletedCommand}"/>
-                    <Button Content="⚠ Limpiar Fallidos"
+                    <Button Content="⚠ Clear Failed"
                             Style="{StaticResource SecondaryButton}"
                             Padding="12,7" FontSize="12" Margin="0,0,8,0"
                             Command="{Binding ClearFailedCommand}"/>
-                    <Button Content="🗑 Limpiar Cola"
+                    <Button Content="🗑 Clear Queue"
                             Style="{StaticResource DangerButton}"
                             Padding="12,7" FontSize="12"
                             Command="{Binding ClearAllCommand}"/>
@@ -124,10 +124,10 @@
                                     <!-- Title & Progress text -->
                                     <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                         <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{Binding Instance.Name}" Style="{StaticResource H3}" Margin="0,0,10,0"/>
+                                            <TextBlock Text="{Binding Instance.Name}" Style="{StaticResource H3}" TextTrimming="CharacterEllipsis" MaxWidth="350" Margin="0,0,10,0"/>
                                             <Border CornerRadius="{StaticResource RadiusSm}" Padding="8,2"
                                                     Background="{Binding JobStatus, Converter={StaticResource DownloadStatusToBgBrushConverter}}">
-                                                <TextBlock Text="{Binding StatusMessage}" FontSize="11" FontWeight="SemiBold"
+                                                <TextBlock Text="{Binding StatusMessage}" FontSize="11" FontWeight="Normal"
                                                            Foreground="{Binding JobStatus, Converter={StaticResource DownloadStatusToBrushConverter}}"/>
                                             </Border>
                                         </StackPanel>
@@ -192,7 +192,7 @@
                                 <Border Grid.Row="5" Background="{StaticResource DangerBgBrush}" CornerRadius="{StaticResource RadiusSm}"
                                         Padding="10,6" Margin="0,10,0,0"
                                         Visibility="{Binding ErrorDetail, Converter={StaticResource NullToVisibilityConverter}}">
-                                    <TextBlock Text="{Binding ErrorDetail}" Foreground="{StaticResource DangerBrush}" Style="{StaticResource Caption}"/>
+                                    <TextBlock Text="{Binding ErrorDetail}" Foreground="{StaticResource DangerBrush}" Style="{StaticResource Caption}" TextWrapping="Wrap"/>
                                 </Border>
                             </Grid>
                         </Border>
@@ -215,9 +215,9 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="Recent Download Activity" Style="{StaticResource H3}" VerticalAlignment="Center"/>
                         <StackPanel Grid.Column="1" Orientation="Horizontal">
-                            <Button Content="🧹 Completados" Style="{StaticResource GhostButton}" Padding="10,5" FontSize="11" Margin="0,0,4,0" Command="{Binding ClearCompletedCommand}"/>
-                            <Button Content="⚠ Fallidos" Style="{StaticResource GhostButton}" Padding="10,5" FontSize="11" Margin="0,0,4,0" Command="{Binding ClearFailedCommand}"/>
-                            <Button Content="🗑 Limpiar Todo" Style="{StaticResource GhostButton}" Foreground="{StaticResource DangerBrush}" Padding="10,5" FontSize="11" Command="{Binding ClearAllCommand}"/>
+                            <Button Content="🧹 Completed" Style="{StaticResource GhostButton}" Padding="10,5" FontSize="11" Margin="0,0,4,0" Command="{Binding ClearCompletedCommand}"/>
+                            <Button Content="⚠ Failed" Style="{StaticResource GhostButton}" Padding="10,5" FontSize="11" Margin="0,0,4,0" Command="{Binding ClearFailedCommand}"/>
+                            <Button Content="🗑 Clear All" Style="{StaticResource GhostButton}" Foreground="{StaticResource DangerBrush}" Padding="10,5" FontSize="11" Command="{Binding ClearAllCommand}"/>
                         </StackPanel>
                     </Grid>
 
@@ -237,8 +237,8 @@
                                         <TextBlock Grid.Column="0" Text="{Binding StatusEmoji}" FontSize="16" VerticalAlignment="Center"/>
 
                                         <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding GameName}" Style="{StaticResource BodyMedium}"/>
-                                            <TextBlock Text="{Binding Message}" Style="{StaticResource Caption}"
+                                            <TextBlock Text="{Binding GameName}" Style="{StaticResource BodyMedium}" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding Message}" Style="{StaticResource Caption}" TextWrapping="Wrap"
                                                        Foreground="{Binding Status, Converter={StaticResource DownloadStatusToBrushConverter}}"/>
                                         </StackPanel>
 

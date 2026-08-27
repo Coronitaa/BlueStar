@@ -60,7 +60,7 @@ public class CommunityStatsService : ICommunityStatsService
     /// <inheritdoc />
     public async Task<IReadOnlyList<SearchResult>> GetTrendingBlueStarAsync(CancellationToken ct = default)
     {
-        const string cacheKey = "bluestar_trending_7d_v4";
+        const string cacheKey = "bluestar_trending_7d_v5";
         try
         {
             var cached = await _cacheService.GetAsync<List<SearchResult>>(cacheKey, ct).ConfigureAwait(false);
@@ -93,7 +93,7 @@ public class CommunityStatsService : ICommunityStatsService
     /// <inheritdoc />
     public async Task<IReadOnlyList<SearchResult>> GetMostPlayedBlueStarAsync(CancellationToken ct = default)
     {
-        const string cacheKey = "bluestar_most_played_alltime_v4";
+        const string cacheKey = "bluestar_most_played_alltime_v5";
         try
         {
             var cached = await _cacheService.GetAsync<List<SearchResult>>(cacheKey, ct).ConfigureAwait(false);
@@ -130,7 +130,7 @@ public class CommunityStatsService : ICommunityStatsService
     /// <inheritdoc />
     public async Task<IReadOnlyList<SearchResult>> GetSteamDbListAsync(string listType, int offset, int count = 25, CancellationToken ct = default)
     {
-        var cacheKey = $"steam_list_{listType}_{offset}_{count}";
+        var cacheKey = $"steam_list_{listType}_{offset}_{count}_v5";
         try
         {
             var cached = await _cacheService.GetAsync<List<SearchResult>>(cacheKey, ct).ConfigureAwait(false);
@@ -197,7 +197,7 @@ public class CommunityStatsService : ICommunityStatsService
     /// <inheritdoc />
     public async Task<IReadOnlyList<SearchResult>> GetDepotBoxFeedAsync(string feedType, CancellationToken ct = default)
     {
-        var cacheKey = $"depotbox_feed_{feedType}_v3";
+        var cacheKey = $"depotbox_feed_{feedType}_v4";
         try
         {
             var cached = await _cacheService.GetAsync<List<SearchResult>>(cacheKey, ct).ConfigureAwait(false);
@@ -260,10 +260,7 @@ public class CommunityStatsService : ICommunityStatsService
                             var title = System.Net.WebUtility.HtmlDecode(rawTitle);
 
                             var slice = match.Value;
-                            var imgMatch = SteamImageRegex.Match(slice);
-                            var headerImg = imgMatch.Success
-                                ? imgMatch.Groups["imgurl"].Value
-                                : $"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{appId}/header.jpg";
+                            var headerImg = $"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{appId}/header.jpg";
 
                             var dateMatch = SteamReleaseDateRegex.Match(slice);
                             var releaseDate = dateMatch.Success ? dateMatch.Groups["release"].Value.Trim() : null;
@@ -313,9 +310,7 @@ public class CommunityStatsService : ICommunityStatsService
                 {
                     var id = item.TryGetProperty("id", out var idProp) ? (uint)idProp.GetInt32() : 0u;
                     var name = item.TryGetProperty("name", out var nameProp) ? nameProp.GetString() ?? $"Game {id}" : $"Game {id}";
-                    var tinyImg = item.TryGetProperty("tiny_image", out var imgProp)
-                        ? imgProp.GetString()
-                        : $"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{id}/header.jpg";
+                    var headerImg = $"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{id}/header.jpg";
 
                     if (id > 0)
                     {
@@ -325,7 +320,7 @@ public class CommunityStatsService : ICommunityStatsService
                             Name = name,
                             AppType = "Game",
                             HasWindows = true,
-                            HeaderImageUrl = tinyImg,
+                            HeaderImageUrl = headerImg,
                             Version = "Steam Store"
                         });
                     }

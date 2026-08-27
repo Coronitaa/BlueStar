@@ -700,7 +700,7 @@ public partial class BrowseViewModel : ObservableObject
         IsCreatingInstance = true;
         ErrorMessage = null;
 
-        _notificationService?.ShowInfo("Preparando instancia", $"Obteniendo manifiestos y preparando {result.Name}...");
+        _notificationService?.ShowInfo("Preparing Instance", $"Fetching manifests and preparing {result.Name}...");
 
         try
         {

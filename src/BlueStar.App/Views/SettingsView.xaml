@@ -272,10 +272,10 @@
                                 <Border Background="{StaticResource AccentTranslucentBrush}"
                                         BorderBrush="{StaticResource AccentBrush}"
                                         BorderThickness="1"
-                                        CornerRadius="{StaticResource RadiusPill}"
-                                        Padding="8,2"
+                                        CornerRadius="{StaticResource RadiusSm}"
+                                        Padding="8,3"
                                         VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding AppVersion, StringFormat='v{0} Stable'}" FontSize="11" FontWeight="Bold"
+                                    <TextBlock Text="{Binding AppVersion, StringFormat='v{0} Stable'}" FontSize="11" FontWeight="Medium"
                                                Foreground="{StaticResource AccentBrush}"/>
                                 </Border>
                             </StackPanel>
