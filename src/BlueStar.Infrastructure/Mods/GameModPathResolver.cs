@@ -574,6 +574,39 @@ public static class GameModPathResolver
     );
 
     /// <summary>
+    /// Converts a BSON-encoded byte array or file into a UTF-8 JSON string if it is BSON,
+    /// or returns the original string if it is already text JSON.
+    /// </summary>
+    public static string EnsureJsonFormat(byte[] fileBytes)
+    {
+        if (fileBytes == null || fileBytes.Length == 0) return string.Empty;
+
+        // If it starts with '{' or '[', it's already text JSON
+        if (fileBytes[0] == (byte)'{' || fileBytes[0] == (byte)'[' ||
+            (fileBytes.Length > 3 && fileBytes[0] == 0xEF && fileBytes[1] == 0xBB && fileBytes[2] == 0xBF && (fileBytes[3] == (byte)'{' || fileBytes[3] == (byte)'[')))
+        {
+            return System.Text.Encoding.UTF8.GetString(fileBytes).TrimStart('\uFEFF', ' ', '\t', '\r', '\n');
+        }
+
+        // Try converting from BSON to JSON using Newtonsoft.Json.Bson
+        try
+        {
+            using var ms = new MemoryStream(fileBytes);
+            using var reader = new Newtonsoft.Json.Bson.BsonDataReader(ms);
+            var serializer = new Newtonsoft.Json.JsonSerializer();
+            var jToken = serializer.Deserialize<Newtonsoft.Json.Linq.JToken>(reader);
+            if (jToken != null)
+            {
+                return jToken.ToString(Newtonsoft.Json.Formatting.Indented);
+            }
+        }
+        catch { }
+
+        // Fallback to UTF-8 string
+        return System.Text.Encoding.UTF8.GetString(fileBytes);
+    }
+
+    /// <summary>
     /// Parses a Tabletop Simulator save file in either text JSON or binary BSON format.
     /// </summary>
     public static TabletopSimulatorSaveInfo ParseTabletopSimulatorSave(string filePath)
@@ -587,103 +620,32 @@ public static class GameModPathResolver
             if (fileBytes.Length < 5)
                 return new TabletopSimulatorSaveInfo(null, null, null, false);
 
-            // 1. Text JSON parsing
-            if (fileBytes[0] == (byte)'{' || fileBytes[0] == (byte)'[' ||
-                (fileBytes.Length > 3 && fileBytes[0] == 0xEF && fileBytes[1] == 0xBB && fileBytes[2] == 0xBF && (fileBytes[3] == (byte)'{' || fileBytes[3] == (byte)'[')))
+            var jsonText = EnsureJsonFormat(fileBytes);
+            if (!string.IsNullOrWhiteSpace(jsonText) && (jsonText.StartsWith('{') || jsonText.StartsWith('[')))
             {
-                try
-                {
-                    var text = System.Text.Encoding.UTF8.GetString(fileBytes).TrimStart('\uFEFF', ' ', '\t', '\r', '\n');
-                    using var doc = JsonDocument.Parse(text);
-                    string? saveName = null;
-                    string? gameMode = null;
-                    string? date = null;
+                using var doc = JsonDocument.Parse(jsonText);
+                string? saveName = null;
+                string? gameMode = null;
+                string? date = null;
 
-                    if (doc.RootElement.TryGetProperty("SaveName", out var sn) && !string.IsNullOrWhiteSpace(sn.GetString()))
-                        saveName = sn.GetString();
-                    if (doc.RootElement.TryGetProperty("GameMode", out var gm) && !string.IsNullOrWhiteSpace(gm.GetString()))
-                        gameMode = gm.GetString();
-                    if (doc.RootElement.TryGetProperty("Date", out var dt) && !string.IsNullOrWhiteSpace(dt.GetString()))
-                        date = dt.GetString();
+                if (doc.RootElement.TryGetProperty("SaveName", out var sn) && !string.IsNullOrWhiteSpace(sn.GetString()))
+                    saveName = sn.GetString();
+                if (doc.RootElement.TryGetProperty("GameMode", out var gm) && !string.IsNullOrWhiteSpace(gm.GetString()))
+                    gameMode = gm.GetString();
+                if (doc.RootElement.TryGetProperty("Date", out var dt) && !string.IsNullOrWhiteSpace(dt.GetString()))
+                    date = dt.GetString();
 
-                    bool isTts = saveName != null || gameMode != null ||
-                                 doc.RootElement.TryGetProperty("ObjectStates", out _) ||
-                                 doc.RootElement.TryGetProperty("Table", out _) ||
-                                 doc.RootElement.TryGetProperty("CustomUIAssets", out _);
+                bool isTts = saveName != null || gameMode != null ||
+                             doc.RootElement.TryGetProperty("ObjectStates", out _) ||
+                             doc.RootElement.TryGetProperty("Table", out _) ||
+                             doc.RootElement.TryGetProperty("CustomUIAssets", out _);
 
-                    return new TabletopSimulatorSaveInfo(saveName, gameMode, date, isTts);
-                }
-                catch { }
-            }
-
-            // 2. Binary BSON parsing
-            string? bsonSaveName = ExtractBsonString(fileBytes, "SaveName");
-            string? bsonGameMode = ExtractBsonString(fileBytes, "GameMode");
-            string? bsonDate = ExtractBsonString(fileBytes, "Date");
-
-            bool hasTtsMarkers = bsonSaveName != null || bsonGameMode != null || bsonDate != null ||
-                                 ContainsByteSequence(fileBytes, "ObjectStates"u8.ToArray()) ||
-                                 ContainsByteSequence(fileBytes, "Custom_Tile"u8.ToArray()) ||
-                                 ContainsByteSequence(fileBytes, "Custom_Model"u8.ToArray()) ||
-                                 ContainsByteSequence(fileBytes, "Custom_Deck"u8.ToArray()) ||
-                                 ContainsByteSequence(fileBytes, "CustomImage"u8.ToArray()) ||
-                                 ContainsByteSequence(fileBytes, "LuaScript"u8.ToArray()) ||
-                                 ContainsByteSequence(fileBytes, "Transform"u8.ToArray());
-
-            int docSize = BitConverter.ToInt32(fileBytes, 0);
-            bool isValidBsonSize = docSize > 0 && Math.Abs(docSize - fileBytes.Length) <= 64;
-
-            if (hasTtsMarkers || isValidBsonSize)
-            {
-                return new TabletopSimulatorSaveInfo(bsonSaveName, bsonGameMode, bsonDate, true);
+                return new TabletopSimulatorSaveInfo(saveName, gameMode, date, isTts);
             }
         }
         catch { }
 
         return new TabletopSimulatorSaveInfo(null, null, null, false);
-    }
-
-    private static string? ExtractBsonString(byte[] bytes, string fieldName)
-    {
-        // BSON string format: 0x02 + fieldName + 0x00 + int32(len) + string_bytes(len-1) + 0x00
-        byte[] pattern = new byte[fieldName.Length + 2];
-        pattern[0] = 0x02;
-        System.Text.Encoding.ASCII.GetBytes(fieldName).CopyTo(pattern, 1);
-        pattern[^1] = 0x00;
-
-        int idx = IndexOfSequence(bytes, pattern);
-        if (idx < 0) return null;
-
-        int valLenIdx = idx + pattern.Length;
-        if (valLenIdx + 4 > bytes.Length) return null;
-
-        int strLen = BitConverter.ToInt32(bytes, valLenIdx);
-        if (strLen <= 1 || valLenIdx + 4 + strLen > bytes.Length) return null;
-
-        return System.Text.Encoding.UTF8.GetString(bytes, valLenIdx + 4, strLen - 1);
-    }
-
-    private static int IndexOfSequence(byte[] source, byte[] pattern)
-    {
-        for (int i = 0; i <= source.Length - pattern.Length; i++)
-        {
-            bool match = true;
-            for (int j = 0; j < pattern.Length; j++)
-            {
-                if (source[i + j] != pattern[j])
-                {
-                    match = false;
-                    break;
-                }
-            }
-            if (match) return i;
-        }
-        return -1;
-    }
-
-    private static bool ContainsByteSequence(byte[] source, byte[] pattern)
-    {
-        return IndexOfSequence(source, pattern) >= 0;
     }
 
     private static void DeployTabletopSimulatorMod(string stagingFolder, string targetFolder, ulong publishedFileId, string? title, WorkshopItemInfo? details)
@@ -770,16 +732,19 @@ public static class GameModPathResolver
             }
         }
 
-        // Copy JSON/BSON save to ttsWorkshop/<publishedFileId>.json
+        // Copy JSON save (converted to clean formatted JSON from BSON if needed) to ttsWorkshop/<publishedFileId>.json
         if (validJsonSource != null)
         {
+            var rawBytes = File.ReadAllBytes(validJsonSource);
+            var jsonText = EnsureJsonFormat(rawBytes);
+
             var destJson = Path.Combine(ttsWorkshop, $"{publishedFileId}.json");
-            File.Copy(validJsonSource, destJson, overwrite: true);
+            File.WriteAllText(destJson, jsonText, System.Text.Encoding.UTF8);
 
             if (!string.Equals(ttsWorkshop, targetFolder, StringComparison.OrdinalIgnoreCase))
             {
                 var targetJson = Path.Combine(targetFolder, $"{publishedFileId}.json");
-                File.Copy(validJsonSource, targetJson, overwrite: true);
+                File.WriteAllText(targetJson, jsonText, System.Text.Encoding.UTF8);
             }
         }
 
