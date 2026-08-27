@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -80,16 +80,8 @@ public sealed class UgcBridge : IUgcBridge
                 }
             }
 
-            // 2. Emulator mapping (ReFix / Goldberg)
-            // Look for steam_settings/ in instance root or subdirectories
+            // 2. Emulator mapping (ReFix / Goldberg) - only if steam_settings already exists
             var steamSettingsDirs = Directory.GetDirectories(instancePath, "steam_settings", SearchOption.AllDirectories);
-            if (steamSettingsDirs.Length == 0)
-            {
-                // Ensure steam_settings/ in root
-                var rootSettings = Path.Combine(instancePath, "steam_settings");
-                Directory.CreateDirectory(rootSettings);
-                steamSettingsDirs = [rootSettings];
-            }
 
             foreach (var sDir in steamSettingsDirs)
             {

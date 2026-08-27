@@ -260,31 +260,83 @@ public sealed class GenericModManager : IModManager
 
     public Task<bool> UninstallModAsync(GameInstance instance, string modId, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(instance.InstallPath)) return Task.FromResult(false);
+        if (string.IsNullOrWhiteSpace(instance.InstallPath) || string.IsNullOrWhiteSpace(modId))
+            return Task.FromResult(false);
 
-        var candidateDirs = new[]
+        // 1. Direct path check
+        if (File.Exists(modId))
         {
-            GetModsDirectory(instance),
-            Path.Combine(instance.InstallPath, "mods"),
-            Path.Combine(instance.InstallPath, "Mods")
-        };
+            try { File.Delete(modId); return Task.FromResult(true); } catch { }
+        }
+        if (Directory.Exists(modId))
+        {
+            try { Directory.Delete(modId, recursive: true); return Task.FromResult(true); } catch { }
+        }
+
+        var candidateDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var resolution = GameModPathResolver.ResolveModPaths(instance);
+        if (!string.IsNullOrWhiteSpace(resolution.PrimaryDirectory)) candidateDirs.Add(resolution.PrimaryDirectory);
+        foreach (var s in resolution.ScanDirectories) candidateDirs.Add(s);
+
+        if (!string.IsNullOrWhiteSpace(instance.InstallPath))
+        {
+            candidateDirs.Add(Path.Combine(instance.InstallPath, "mods"));
+            candidateDirs.Add(Path.Combine(instance.InstallPath, "Mods"));
+        }
+
+        bool deletedAny = false;
+        var cleanModId = modId.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)
+            ? modId.Substring(0, modId.Length - 9)
+            : modId;
 
         try
         {
-            foreach (var modsDir in candidateDirs.Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var modsDir in candidateDirs)
             {
                 if (string.IsNullOrWhiteSpace(modsDir) || !Directory.Exists(modsDir)) continue;
 
-                var file = Path.Combine(modsDir, modId);
-                if (File.Exists(file))
+                // Check file
+                var fileCandidates = new[]
                 {
-                    File.Delete(file);
-                    return Task.FromResult(true);
+                    Path.Combine(modsDir, modId),
+                    Path.Combine(modsDir, cleanModId),
+                    Path.Combine(modsDir, cleanModId + ".disabled")
+                };
+
+                foreach (var f in fileCandidates)
+                {
+                    if (File.Exists(f))
+                    {
+                        File.Delete(f);
+                        deletedAny = true;
+
+                        // Delete companion _info.json
+                        var baseName = Path.GetFileNameWithoutExtension(cleanModId);
+                        var infoJson = Path.Combine(modsDir, $"{baseName}_info.json");
+                        if (File.Exists(infoJson)) File.Delete(infoJson);
+                    }
+                    else if (Directory.Exists(f))
+                    {
+                        Directory.Delete(f, recursive: true);
+                        deletedAny = true;
+                    }
                 }
-                if (Directory.Exists(file))
+
+                // If Klei game, remove from modsettings.lua
+                if (resolution.GameCategory == "Klei")
                 {
-                    Directory.Delete(file, recursive: true);
-                    return Task.FromResult(true);
+                    var modSettings = Path.Combine(modsDir, "modsettings.lua");
+                    if (File.Exists(modSettings))
+                    {
+                        try
+                        {
+                            var text = File.ReadAllText(modSettings);
+                            var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                                .Where(l => !l.Contains(cleanModId, StringComparison.OrdinalIgnoreCase));
+                            File.WriteAllText(modSettings, string.Join(Environment.NewLine, lines) + Environment.NewLine);
+                        }
+                        catch { }
+                    }
                 }
             }
         }
@@ -293,44 +345,91 @@ public sealed class GenericModManager : IModManager
             _logger.LogError(ex, "Failed to uninstall mod {Id}", modId);
         }
 
-        return Task.FromResult(false);
+        return Task.FromResult(deletedAny);
     }
 
     public Task<bool> ToggleModAsync(GameInstance instance, string modId, bool isEnabled, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(instance.InstallPath)) return Task.FromResult(false);
+        if (string.IsNullOrWhiteSpace(instance.InstallPath) || string.IsNullOrWhiteSpace(modId))
+            return Task.FromResult(false);
 
-        var candidateDirs = new[]
+        var candidateDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var resolution = GameModPathResolver.ResolveModPaths(instance);
+        if (!string.IsNullOrWhiteSpace(resolution.PrimaryDirectory)) candidateDirs.Add(resolution.PrimaryDirectory);
+        foreach (var s in resolution.ScanDirectories) candidateDirs.Add(s);
+
+        if (!string.IsNullOrWhiteSpace(instance.InstallPath))
         {
-            GetModsDirectory(instance),
-            Path.Combine(instance.InstallPath, "mods"),
-            Path.Combine(instance.InstallPath, "Mods")
-        };
+            candidateDirs.Add(Path.Combine(instance.InstallPath, "mods"));
+            candidateDirs.Add(Path.Combine(instance.InstallPath, "Mods"));
+        }
+
+        var cleanModId = modId.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)
+            ? modId.Substring(0, modId.Length - 9)
+            : modId;
+
+        bool toggledAny = false;
 
         try
         {
-            foreach (var modsDir in candidateDirs.Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var modsDir in candidateDirs)
             {
                 if (string.IsNullOrWhiteSpace(modsDir) || !Directory.Exists(modsDir)) continue;
 
-                var path = Path.Combine(modsDir, modId);
-                if (File.Exists(path))
-                {
-                    string target = isEnabled
-                        ? (path.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase) ? path.Substring(0, path.Length - 9) : path)
-                        : (!path.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase) ? path + ".disabled" : path);
+                var normalPath = Path.Combine(modsDir, cleanModId);
+                var disabledPath = Path.Combine(modsDir, cleanModId + ".disabled");
 
-                    if (path != target) File.Move(path, target, overwrite: true);
-                    return Task.FromResult(true);
+                // If toggling a directory
+                if (Directory.Exists(normalPath) && !isEnabled)
+                {
+                    Directory.Move(normalPath, disabledPath);
+                    toggledAny = true;
                 }
-                if (Directory.Exists(path))
+                else if (Directory.Exists(disabledPath) && isEnabled)
                 {
-                    string target = isEnabled
-                        ? (path.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase) ? path.Substring(0, path.Length - 9) : path)
-                        : (!path.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase) ? path + ".disabled" : path);
+                    Directory.Move(disabledPath, normalPath);
+                    toggledAny = true;
+                }
 
-                    if (path != target) Directory.Move(path, target);
-                    return Task.FromResult(true);
+                // If toggling a single file
+                if (File.Exists(normalPath) && !isEnabled)
+                {
+                    File.Move(normalPath, disabledPath, overwrite: true);
+                    toggledAny = true;
+                }
+                else if (File.Exists(disabledPath) && isEnabled)
+                {
+                    File.Move(disabledPath, normalPath, overwrite: true);
+                    toggledAny = true;
+                }
+
+                // Sync Klei modsettings.lua
+                if (resolution.GameCategory == "Klei")
+                {
+                    var modSettings = Path.Combine(modsDir, "modsettings.lua");
+                    try
+                    {
+                        var text = File.Exists(modSettings) ? File.ReadAllText(modSettings) : "-- Mod Settings\n";
+                        var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+
+                        if (!isEnabled)
+                        {
+                            // Remove force enable lines
+                            lines.RemoveAll(l => l.Contains(cleanModId, StringComparison.OrdinalIgnoreCase));
+                            File.WriteAllText(modSettings, string.Join(Environment.NewLine, lines) + Environment.NewLine);
+                        }
+                        else
+                        {
+                            // Add force enable lines if missing
+                            if (!lines.Any(l => l.Contains(cleanModId, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                lines.Add($"ForceEnableMod(\"{cleanModId}\")");
+                                lines.Add($"EnableMod(\"{cleanModId}\")");
+                                File.WriteAllText(modSettings, string.Join(Environment.NewLine, lines) + Environment.NewLine);
+                            }
+                        }
+                    }
+                    catch { }
                 }
             }
         }
@@ -339,7 +438,7 @@ public sealed class GenericModManager : IModManager
             _logger.LogError(ex, "Failed to toggle generic mod {Id}", modId);
         }
 
-        return Task.FromResult(false);
+        return Task.FromResult(toggledAny);
     }
 
     private static long CalculateDirectorySize(string directoryPath)

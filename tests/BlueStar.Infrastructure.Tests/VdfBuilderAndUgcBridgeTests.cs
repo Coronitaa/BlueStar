@@ -85,6 +85,7 @@ public class VdfBuilderAndUgcBridgeTests : IDisposable
         var instancePath = Path.Combine(_testDir, "GameInstance");
         var cachePath = Path.Combine(_testDir, "Cache", "12345");
         Directory.CreateDirectory(cachePath);
+        Directory.CreateDirectory(Path.Combine(instancePath, "steam_settings"));
         File.WriteAllText(Path.Combine(cachePath, "mod.pak"), "pak mod content");
 
         // Deploy to instance
@@ -170,8 +171,9 @@ public class VdfBuilderAndUgcBridgeTests : IDisposable
         File.WriteAllText(Path.Combine(stagingFolder, "nested_folder", "modmain.lua"), "GLOBAL.print('Mod Loaded')");
         File.WriteAllText(Path.Combine(stagingFolder, "nested_folder", "scripts", "status.lua"), "-- script");
 
-        // Game instance has mods/ and modsettings.lua
+        // Game instance has mods/, modsettings.lua, and optional steam_settings
         Directory.CreateDirectory(Path.Combine(instancePath, "mods"));
+        Directory.CreateDirectory(Path.Combine(instancePath, "steam_settings"));
         File.WriteAllText(Path.Combine(instancePath, "mods", "modsettings.lua"), "-- Default settings\n");
 
         var instance = new GameInstance
@@ -203,6 +205,20 @@ public class VdfBuilderAndUgcBridgeTests : IDisposable
         var subFile = Path.Combine(instancePath, "steam_settings", "subscribed_items.txt");
         File.Exists(subFile).Should().BeTrue();
         File.ReadAllText(subFile).Should().Contain("378160970");
+    }
+
+    [Fact]
+    public void IsEmulatorInstalled_ReturnsFalse_WhenNoEmulatorBinariesExist()
+    {
+        var cleanGameDir = Path.Combine(_testDir, "CleanGameNoEmulator");
+        Directory.CreateDirectory(cleanGameDir);
+        Directory.CreateDirectory(Path.Combine(cleanGameDir, "mods"));
+
+        // Should return false even if steam_settings folder exists without binaries
+        Directory.CreateDirectory(Path.Combine(cleanGameDir, "steam_settings"));
+
+        Emulators.ReFixEmulator.IsEmulatorInstalled(cleanGameDir).Should().BeFalse();
+        Emulators.ReFixEmulator.GetInstalledMode(cleanGameDir).Should().BeNull();
     }
 
     [Fact]

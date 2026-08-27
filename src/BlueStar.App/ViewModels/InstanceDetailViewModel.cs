@@ -1866,9 +1866,28 @@ public partial class InstanceDetailViewModel : ObservableObject
     [RelayCommand]
     public void OpenModsFolder()
     {
-        if (!string.IsNullOrWhiteSpace(ModsDirectoryPath) && Directory.Exists(ModsDirectoryPath))
+        try
         {
-            Process.Start(new ProcessStartInfo { FileName = ModsDirectoryPath, UseShellExecute = true });
+            var target = ModsDirectoryPath;
+            if (string.IsNullOrWhiteSpace(target) && Instance != null)
+            {
+                var res = Mods.GameModPathResolver.ResolveModPaths(Instance);
+                target = res.PrimaryDirectory;
+            }
+
+            if (!string.IsNullOrWhiteSpace(target))
+            {
+                Directory.CreateDirectory(target);
+                Process.Start(new ProcessStartInfo { FileName = target, UseShellExecute = true });
+            }
+            else if (Instance != null && !string.IsNullOrWhiteSpace(Instance.InstallPath) && Directory.Exists(Instance.InstallPath))
+            {
+                Process.Start(new ProcessStartInfo { FileName = Instance.InstallPath, UseShellExecute = true });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to open mods folder in Explorer");
         }
     }
 

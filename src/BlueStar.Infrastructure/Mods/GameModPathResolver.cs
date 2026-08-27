@@ -744,7 +744,7 @@ public static class GameModPathResolver
             File.WriteAllText(metaFile, json);
         }
 
-        // 2. Emulator steam_settings/ integration (Goldberg / ReFix)
+        // 2. Emulator steam_settings/ integration (Goldberg / ReFix) - only if steam_settings already exists
         var steamSettingsDirs = new List<string>();
         var rootSettings = Path.Combine(gameRoot, "steam_settings");
         if (Directory.Exists(rootSettings)) steamSettingsDirs.Add(rootSettings);
@@ -758,12 +758,6 @@ public static class GameModPathResolver
             }
         }
         catch { }
-
-        if (steamSettingsDirs.Count == 0)
-        {
-            Directory.CreateDirectory(rootSettings);
-            steamSettingsDirs.Add(rootSettings);
-        }
 
         foreach (var sDir in steamSettingsDirs)
         {
