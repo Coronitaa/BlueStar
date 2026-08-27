@@ -29,6 +29,11 @@ public partial class LibraryViewModel : ObservableObject
     private readonly IMetadataProvider? _metadataProvider;
     private readonly IEngineDetector _engineDetector;
     private readonly IGameLauncher _gameLauncher;
+    private readonly ITagsService? _tagsService;
+    private readonly IDepotBoxApiClient? _depotBoxApiClient;
+    private readonly IBackgroundTaskService? _backgroundTaskService;
+    private readonly ISteamStatusService? _steamStatusService;
+    private readonly INotificationService? _notificationService;
     private readonly ILogger<LibraryViewModel> _logger;
     private readonly SynchronizationContext _uiContext;
 
@@ -36,7 +41,7 @@ public partial class LibraryViewModel : ObservableObject
     private ObservableCollection<GameInstance> _instances = [];
 
     [ObservableProperty]
-    private ObservableCollection<GameInstance> _filteredInstances = [];
+    private ObservableCollection<InstanceCardItem> _filteredInstances = [];
 
     [ObservableProperty]
     private string _searchFilter = string.Empty;
@@ -224,7 +229,12 @@ public partial class LibraryViewModel : ObservableObject
     [ObservableProperty]
     private ObservableCollection<SteamStoreSearchItem> _steamStoreSearchResults = [];
 
-    private readonly INotificationService? _notificationService;
+    // ── Steam Required for Online Modal State ──
+    [ObservableProperty]
+    private bool _isSteamRequiredModalOpen;
+
+    [ObservableProperty]
+    private GameInstance? _pendingLaunchInstance;
 
     public Action<GameInstance>? OnManageInstanceRequested { get; set; }
 
@@ -235,6 +245,10 @@ public partial class LibraryViewModel : ObservableObject
         IGameLauncher gameLauncher,
         ILogger<LibraryViewModel> logger,
         IMetadataProvider? metadataProvider = null,
+        ITagsService? tagsService = null,
+        IDepotBoxApiClient? depotBoxApiClient = null,
+        IBackgroundTaskService? backgroundTaskService = null,
+        ISteamStatusService? steamStatusService = null,
         INotificationService? notificationService = null)
     {
         _instanceManager = instanceManager;
@@ -243,6 +257,10 @@ public partial class LibraryViewModel : ObservableObject
         _gameLauncher = gameLauncher;
         _logger = logger;
         _metadataProvider = metadataProvider;
+        _tagsService = tagsService;
+        _depotBoxApiClient = depotBoxApiClient;
+        _backgroundTaskService = backgroundTaskService;
+        _steamStatusService = steamStatusService;
         _notificationService = notificationService;
         _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
@@ -369,7 +387,15 @@ public partial class LibraryViewModel : ObservableObject
                 : query.OrderByDescending(i => i.Name, StringComparer.OrdinalIgnoreCase)
         };
 
-        FilteredInstances = new ObservableCollection<GameInstance>(query.ToList());
+        var cardItems = query.Select(inst =>
+        {
+            var tags = _tagsService != null
+                ? _tagsService.GetInstanceTags(inst, inst.HasUpdateAvailable)
+                : [];
+            return new InstanceCardItem(inst, tags);
+        }).ToList();
+
+        FilteredInstances = new ObservableCollection<InstanceCardItem>(cardItems);
     }
 
     [RelayCommand]
@@ -719,11 +745,13 @@ public partial class LibraryViewModel : ObservableObject
             var exe = _engineDetector.FindPrimaryExecutable(steamGame.FullPath, steamGame.Name);
 
             GameMetadata? meta = null;
+            IReadOnlyList<DlcInfo> dlcs = [];
             if (_metadataProvider != null && steamGame.AppId > 0)
             {
                 try
                 {
                     meta = await _metadataProvider.GetMetadataAsync(steamGame.AppId, CancellationToken.None).ConfigureAwait(true);
+                    dlcs = await _metadataProvider.GetDlcListAsync(steamGame.AppId, CancellationToken.None).ConfigureAwait(true);
                 }
                 catch { }
             }
@@ -736,7 +764,9 @@ public partial class LibraryViewModel : ObservableObject
                 ExecutablePath = exe,
                 Status = File.Exists(exe) ? InstanceStatus.Ready : InstanceStatus.NotInstalled,
                 Metadata = meta,
-                Engine = engine
+                Dlcs = dlcs,
+                Engine = engine,
+                Origin = InstanceOrigin.Steam
             };
 
             var created = await _instanceManager.CreateAsync(instance, CancellationToken.None).ConfigureAwait(true);
@@ -1161,11 +1191,13 @@ public partial class LibraryViewModel : ObservableObject
         try
         {
             GameMetadata? meta = null;
+            IReadOnlyList<DlcInfo> dlcs = [];
             if (_metadataProvider != null && FolderAppId > 0 && FolderAppId != 480)
             {
                 try
                 {
                     meta = await _metadataProvider.GetMetadataAsync(FolderAppId, CancellationToken.None).ConfigureAwait(true);
+                    dlcs = await _metadataProvider.GetDlcListAsync(FolderAppId, CancellationToken.None).ConfigureAwait(true);
                 }
                 catch { }
             }
@@ -1178,6 +1210,9 @@ public partial class LibraryViewModel : ObservableObject
                 ExecutablePath = File.Exists(FolderExecutablePath) ? FolderExecutablePath : null,
                 Engine = FolderEngine,
                 Metadata = meta,
+                Dlcs = dlcs,
+                Origin = InstanceOrigin.ImportedFolder,
+                IsDepotBoxAssociated = false,
                 Status = File.Exists(FolderExecutablePath) ? InstanceStatus.Ready : InstanceStatus.NotInstalled
             };
 
@@ -1277,9 +1312,86 @@ public partial class LibraryViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task PlayInstanceAsync(GameInstance instance)
+    private async Task PlayInstanceAsync(object? item)
     {
+        var instance = item is InstanceCardItem card ? card.Instance : item as GameInstance;
         if (instance == null) return;
+
+        if (instance.Status == InstanceStatus.NotInstalled && instance.Origin != InstanceOrigin.Steam)
+        {
+            OnManageInstanceRequested?.Invoke(instance);
+            return;
+        }
+
+        // Check if emulator is online and Steam is not running
+        var isOnlineEmulator = instance.EmulatorEnabled &&
+            (string.Equals(instance.EmulatorId, "refix_valve", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(instance.EmulatorId, "refix", StringComparison.OrdinalIgnoreCase));
+
+        if (isOnlineEmulator && _steamStatusService != null && !_steamStatusService.CurrentStatus.IsRunning)
+        {
+            PendingLaunchInstance = instance;
+            IsSteamRequiredModalOpen = true;
+            return;
+        }
+
+        await LaunchInstanceInternalAsync(instance).ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task StartSteamAndLaunchAsync()
+    {
+        IsSteamRequiredModalOpen = false;
+        var inst = PendingLaunchInstance;
+        if (inst == null) return;
+
+        try
+        {
+            var steamPath = ShortcutHelper.GetSteamPath();
+            if (!string.IsNullOrWhiteSpace(steamPath))
+            {
+                var steamExe = Path.Combine(steamPath, "steam.exe");
+                if (File.Exists(steamExe))
+                {
+                    Process.Start(new ProcessStartInfo(steamExe) { UseShellExecute = true });
+                }
+                else
+                {
+                    Process.Start(new ProcessStartInfo("steam://open/main") { UseShellExecute = true });
+                }
+            }
+            else
+            {
+                Process.Start(new ProcessStartInfo("steam://open/main") { UseShellExecute = true });
+            }
+
+            await Task.Delay(1500).ConfigureAwait(true);
+        }
+        catch { }
+
+        await LaunchInstanceInternalAsync(inst).ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task LaunchAnywayAsync()
+    {
+        IsSteamRequiredModalOpen = false;
+        var inst = PendingLaunchInstance;
+        if (inst != null)
+        {
+            await LaunchInstanceInternalAsync(inst).ConfigureAwait(true);
+        }
+    }
+
+    [RelayCommand]
+    private void CloseSteamRequiredModal()
+    {
+        IsSteamRequiredModalOpen = false;
+        PendingLaunchInstance = null;
+    }
+
+    private async Task LaunchInstanceInternalAsync(GameInstance instance)
+    {
         _logger.LogInformation("Launching instance {Name}", instance.Name);
         var result = await _gameLauncher.LaunchAsync(instance, null, CancellationToken.None).ConfigureAwait(true);
         if (!result.Success)
@@ -1289,15 +1401,59 @@ public partial class LibraryViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void ManageInstance(GameInstance instance)
+    private async Task CheckDepotBoxUpdatesAsync(object? item)
     {
-        OnManageInstanceRequested?.Invoke(instance);
+        var instance = item is InstanceCardItem card ? card.Instance : item as GameInstance;
+        if (instance == null) return;
+
+        // Skip for Steam origin
+        if (instance.Origin == InstanceOrigin.Steam) return;
+
+        _logger.LogInformation("Checking DepotBox updates for {Name}", instance.Name);
+        _notificationService?.ShowInfo("Checking for Updates", $"Checking DepotBox for newer builds of {instance.Name}...", TimeSpan.FromSeconds(4));
+
+        try
+        {
+            if (_depotBoxApiClient != null && instance.AppId > 0)
+            {
+                var search = await _depotBoxApiClient.SearchGamesAsync(instance.AppId.ToString(), CancellationToken.None).ConfigureAwait(true);
+                var match = search.FirstOrDefault(s => s.AppId == instance.AppId);
+                if (match != null && match.IsAvailable)
+                {
+                    _notificationService?.ShowSuccess("DepotBox Check Complete", $"DepotBox build verified for {instance.Name}.", TimeSpan.FromSeconds(5));
+                }
+                else
+                {
+                    _notificationService?.ShowInfo("Up to Date", $"{instance.Name} is up to date on DepotBox.", TimeSpan.FromSeconds(5));
+                }
+            }
+            else
+            {
+                _notificationService?.ShowInfo("Up to Date", $"{instance.Name} is up to date.", TimeSpan.FromSeconds(4));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to check DepotBox updates for {Name}", instance.Name);
+            _notificationService?.ShowWarning("Check Failed", $"Could not check DepotBox updates: {ex.Message}", TimeSpan.FromSeconds(6));
+        }
     }
 
     [RelayCommand]
-    private void OpenFolder(GameInstance instance)
+    private void ManageInstance(object? item)
     {
-        if (!string.IsNullOrWhiteSpace(instance.InstallPath) && Directory.Exists(instance.InstallPath))
+        var instance = item is InstanceCardItem card ? card.Instance : item as GameInstance;
+        if (instance != null)
+        {
+            OnManageInstanceRequested?.Invoke(instance);
+        }
+    }
+
+    [RelayCommand]
+    private void OpenFolder(object? item)
+    {
+        var instance = item is InstanceCardItem card ? card.Instance : item as GameInstance;
+        if (instance != null && !string.IsNullOrWhiteSpace(instance.InstallPath) && Directory.Exists(instance.InstallPath))
         {
             Process.Start(new ProcessStartInfo { FileName = instance.InstallPath, UseShellExecute = true });
         }

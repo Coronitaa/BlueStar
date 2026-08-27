@@ -619,21 +619,70 @@
                         </Grid>
 
                         <!-- Quick Search Suggestion Chips Row (Populated dynamically from Trending on BlueStar) -->
-                        <WrapPanel Margin="0,0,0,10"
+                        <WrapPanel Margin="0,4,0,12"
+                                   VerticalAlignment="Center"
                                    Visibility="{Binding HasSearchedCatalog, Converter={StaticResource InverseBoolToVisibilityConverter}}">
-                            <TextBlock Text="🔥 Trending:" Style="{StaticResource CaptionBold}" Foreground="{StaticResource MutedTextBrush}" Margin="2,4,8,4" VerticalAlignment="Center"/>
-                            <ItemsControl ItemsSource="{Binding TrendingSuggestionChips}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                                <TextBlock Text="🔥" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <TextBlock Text="Trending:" Style="{StaticResource CaptionBold}" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <ItemsControl ItemsSource="{Binding TrendingSuggestionChips}" VerticalAlignment="Center">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
-                                        <WrapPanel Orientation="Horizontal"/>
+                                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center"/>
                                     </ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Button Style="{StaticResource GhostButton}" Padding="8,3" Margin="0,0,6,4"
-                                                Command="{Binding DataContext.QuickSearchCatalogCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                CommandParameter="{Binding}">
-                                            <TextBlock Text="{Binding}" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                        <Button Command="{Binding DataContext.QuickSearchCatalogCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding Name}"
+                                                Cursor="Hand"
+                                                Margin="0,2,8,2"
+                                                VerticalAlignment="Center">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border x:Name="ChipBorder"
+                                                            Background="{Binding BackgroundBrush}"
+                                                            BorderBrush="{Binding BorderBrush}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="{StaticResource RadiusSm}"
+                                                            Padding="8,4"
+                                                            Opacity="{Binding Opacity}"
+                                                            SnapsToDevicePixels="True">
+                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Border Background="{Binding RankBadgeBackgroundBrush}"
+                                                                    CornerRadius="{StaticResource RadiusXs}"
+                                                                    Padding="5,1"
+                                                                    Margin="0,0,7,0"
+                                                                    VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding Rank}"
+                                                                           FontSize="10"
+                                                                           FontWeight="Bold"
+                                                                           Foreground="{Binding RankBadgeTextBrush}"
+                                                                           HorizontalAlignment="Center"
+                                                                           VerticalAlignment="Center"/>
+                                                            </Border>
+                                                            <TextBlock Text="{Binding Name}"
+                                                                       FontSize="12"
+                                                                       FontWeight="SemiBold"
+                                                                       Foreground="{Binding TextBrush}"
+                                                                       VerticalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="ChipBorder" Property="Opacity" Value="1.0"/>
+                                                            <Setter TargetName="ChipBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                                            <Setter TargetName="ChipBorder" Property="Background" Value="{StaticResource AccentTranslucentBrush}"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsPressed" Value="True">
+                                                            <Setter TargetName="ChipBorder" Property="Opacity" Value="0.9"/>
+                                                            <Setter TargetName="ChipBorder" Property="Background" Value="{StaticResource AccentGlowBrush}"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Button.Template>
                                         </Button>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
@@ -846,7 +895,7 @@
                                                         <Border CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="0,0,5,4"
                                                                 Background="#201B90FF" BorderBrush="#501B90FF" BorderThickness="1"
                                                                 Visibility="{Binding HasWindows, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                            <TextBlock Text="🪟 Windows" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
+                                                            <TextBlock Text="Windows" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
                                                         </Border>
                                                         <Border CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="0,0,5,4"
                                                                 Background="#20F59E0B" BorderBrush="#50F59E0B" BorderThickness="1"

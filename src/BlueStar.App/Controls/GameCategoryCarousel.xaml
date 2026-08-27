@@ -214,7 +214,7 @@
                                                     Padding="5,1" Margin="0,0,4,4"
                                                     Background="#201B90FF" BorderBrush="#501B90FF" BorderThickness="1"
                                                     Visibility="{Binding HasWindows, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                <TextBlock Text="🪟 Windows" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
+                                                <TextBlock Text="Windows" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
                                             </Border>
                                             <Border CornerRadius="{StaticResource RadiusSm}"
                                                     Padding="5,1" Margin="0,0,4,4"
@@ -438,7 +438,7 @@
                                                 Padding="6,2" Margin="0,0,5,4"
                                                 Background="#201B90FF" BorderBrush="#501B90FF" BorderThickness="1"
                                                 Visibility="{Binding HasWindows, Converter={StaticResource BoolToVisibilityConverter}}">
-                                            <TextBlock Text="🪟 Windows" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
+                                            <TextBlock Text="Windows" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
                                         </Border>
                                         <Border CornerRadius="{StaticResource RadiusSm}"
                                                 Padding="6,2" Margin="0,0,5,4"

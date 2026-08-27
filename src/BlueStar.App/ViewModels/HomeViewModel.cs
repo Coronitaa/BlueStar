@@ -48,7 +48,7 @@ public partial class HomeViewModel : ObservableObject
     private ObservableCollection<CatalogCategory> _categories = [];
 
     [ObservableProperty]
-    private ObservableCollection<string> _trendingSuggestionChips = [];
+    private ObservableCollection<TrendingChipItem> _trendingSuggestionChips = [];
 
     [ObservableProperty]
     private DownloadJobItem? _currentActiveDownload;
@@ -263,14 +263,14 @@ public partial class HomeViewModel : ObservableObject
         await Task.Yield();
 
         // 1. Initialize category shells with IsLoading=true for immediate skeleton rendering
-        var catTrending = new CatalogCategory("bluestar_trending_7d", "Trending on BlueStar", "Más agregados a instancias en los últimos 7 días", "IconFlame", "#3B82F6", "LAST WEEK");
-        var catMostPlayed = new CatalogCategory("bluestar_most_played_alltime", "Most Added in BlueStar", "Títulos con más instancias creadas históricamente", "IconTrophy", "#8B5CF6", "ALL TIME");
-        var catSteamDbMostPlayed = new CatalogCategory("steamdb_most_played", "Most Played", "Top jugadores concurrentes en tiempo real", "IconUsers", "#10B981", "STEAM");
-        var catSteamDbTrending = new CatalogCategory("steamdb_trending", "Trending Games", "Títulos con mayor crecimiento de actividad reciente", "IconTrending", "#F59E0B", "STEAM");
-        var catSteamDbTopSellers = new CatalogCategory("steamdb_top_sellers", "Top Sellers & Popular", "Los lanzamientos y ofertas más vendidos a nivel global", "IconTag", "#EC4899", "STEAM");
-        var catSteamDbTopRated = new CatalogCategory("steamdb_top_rated", "Top Rated & Anticipated", "Mejor calificados por la crítica y jugadores", "IconStar", "#6366F1", "STEAM");
-        var catDepotBoxNew = new CatalogCategory("depotbox_new_games", "New Games in DepotBox", "Paquetes recién agregados vía DepotBox Webhook", "IconSparkles", "#06B6D4", "DEPOTBOX");
-        var catDepotBoxUpdated = new CatalogCategory("depotbox_updated_games", "Updated Games in DepotBox", "Actualizaciones recientes de manifiestos y builds", "IconRefresh", "#14B8A6", "DEPOTBOX");
+        var catTrending = new CatalogCategory("bluestar_trending_7d", "Trending on BlueStar", "Most added to instances in the last 7 days", "IconFlame", "#3B82F6", "LAST WEEK");
+        var catMostPlayed = new CatalogCategory("bluestar_most_played_alltime", "Most Added in BlueStar", "Titles with the most instances created of all time", "IconTrophy", "#8B5CF6", "ALL TIME");
+        var catSteamDbMostPlayed = new CatalogCategory("steamdb_most_played", "Most Played", "Top concurrent players in real time", "IconUsers", "#10B981", "STEAM");
+        var catSteamDbTrending = new CatalogCategory("steamdb_trending", "Trending Games", "Titles with highest recent activity growth", "IconTrending", "#F59E0B", "STEAM");
+        var catSteamDbTopSellers = new CatalogCategory("steamdb_top_sellers", "Top Sellers & Popular", "Top selling releases and deals worldwide", "IconTag", "#EC4899", "STEAM");
+        var catSteamDbTopRated = new CatalogCategory("steamdb_top_rated", "Top Rated & Anticipated", "Top rated by community and critics", "IconStar", "#6366F1", "STEAM");
+        var catDepotBoxNew = new CatalogCategory("depotbox_new_games", "New Games in DepotBox", "Recently added packages via DepotBox", "IconSparkles", "#06B6D4", "DEPOTBOX");
+        var catDepotBoxUpdated = new CatalogCategory("depotbox_updated_games", "Updated Games in DepotBox", "Recently updated manifests and game builds", "IconRefresh", "#14B8A6", "DEPOTBOX");
 
         Categories = new ObservableCollection<CatalogCategory>
         {
@@ -285,10 +285,9 @@ public partial class HomeViewModel : ObservableObject
         };
 
         // Fallback default suggestions if empty
-        TrendingSuggestionChips = new ObservableCollection<string>
-        {
-            "Cyberpunk 2077", "ELDEN RING", "Baldur's Gate 3", "Black Myth: Wukong", "HELLDIVERS 2", "Palworld", "Manor Lords", "Hades II"
-        };
+        var defaultTrendingNames = new[] { "Counter-Strike 2", "Cyberpunk 2077", "ELDEN RING", "Baldur's Gate 3", "Hades II" };
+        TrendingSuggestionChips = new ObservableCollection<TrendingChipItem>(
+            defaultTrendingNames.Select((name, idx) => TrendingChipItem.Create(name, idx + 1)));
 
         if (_statsService == null)
         {
@@ -313,10 +312,15 @@ public partial class HomeViewModel : ObservableObject
                 // Update search suggestion chips dynamically from top trending games
                 if (filtered.Count > 0)
                 {
-                    var chips = filtered.Take(8).Select(t => t.Name).Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
+                    var chips = filtered.Take(5)
+                        .Select(t => t.Name)
+                        .Where(n => !string.IsNullOrWhiteSpace(n))
+                        .Select((name, idx) => TrendingChipItem.Create(name, idx + 1))
+                        .ToList();
+
                     App.Current?.Dispatcher?.Invoke(() =>
                     {
-                        TrendingSuggestionChips = new ObservableCollection<string>(chips);
+                        TrendingSuggestionChips = new ObservableCollection<TrendingChipItem>(chips);
                     });
                 }
             }

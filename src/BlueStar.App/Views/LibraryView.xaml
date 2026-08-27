@@ -534,35 +534,38 @@
                                                    Style="{StaticResource Caption}" Margin="0,2,0,0"/>
                                     </StackPanel>
 
-                                    <!-- Badges: Engine & Status -->
-                                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
-                                        <!-- Engine Badge -->
-                                        <Border CornerRadius="{StaticResource RadiusSm}"
-                                                Padding="8,3"
-                                                Margin="0,0,6,0"
-                                                Background="{StaticResource SurfaceInputBrush}"
-                                                BorderBrush="{Binding Engine, Converter={StaticResource EngineTypeToBrushConverter}, FallbackValue={StaticResource SubtleBorderBrush}, TargetNullValue={StaticResource SubtleBorderBrush}}"
-                                                BorderThickness="1">
-                                            <TextBlock Text="{Binding Engine.DisplayText, FallbackValue='Generic Game', TargetNullValue='Generic Game'}"
-                                                       FontSize="11" FontWeight="SemiBold"
-                                                       Foreground="{Binding Engine, Converter={StaticResource EngineTypeToBrushConverter}, FallbackValue={StaticResource SecondaryTextBrush}, TargetNullValue={StaticResource SecondaryTextBrush}}"/>
-                                        </Border>
-
-                                        <!-- Status Badge -->
-                                        <Border CornerRadius="{StaticResource RadiusSm}"
-                                                Padding="8,3"
-                                                Background="{Binding Status, Converter={StaticResource InstanceStatusToBgBrushConverter}, FallbackValue={StaticResource SurfaceInputBrush}, TargetNullValue={StaticResource SurfaceInputBrush}}">
-                                            <TextBlock Text="{Binding Status, FallbackValue='Ready', TargetNullValue='Ready'}"
-                                                       FontSize="11" FontWeight="SemiBold"
-                                                       Foreground="{Binding Status, Converter={StaticResource InstanceStatusToBrushConverter}, FallbackValue={StaticResource SuccessBrush}, TargetNullValue={StaticResource SuccessBrush}}"/>
-                                        </Border>
-                                    </StackPanel>
+                                    <!-- Dynamic Badges from ITagsService -->
+                                    <ItemsControl Grid.Row="2" ItemsSource="{Binding Tags}" Margin="0,8,0,0">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel Orientation="Horizontal"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border CornerRadius="{StaticResource RadiusSm}"
+                                                        Padding="7,2"
+                                                        Margin="0,0,5,4"
+                                                        Background="{Binding Type, Converter={StaticResource TagTypeToBgBrushConverter}}"
+                                                        BorderBrush="{Binding Type, Converter={StaticResource TagTypeToBorderBrushConverter}}"
+                                                        BorderThickness="1"
+                                                        ToolTip="{Binding Tooltip}">
+                                                    <TextBlock Text="{Binding Text}"
+                                                               FontSize="10"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{Binding Type, Converter={StaticResource TagTypeToBrushConverter}}"/>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
 
                                     <!-- Action Buttons -->
                                     <Grid Grid.Row="4">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="6"/>
+                                            <ColumnDefinition Width="4"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="4"/>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="6"/>
                                             <ColumnDefinition Width="Auto"/>
@@ -573,7 +576,24 @@
                                                 Command="{Binding DataContext.ManageInstanceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding}"/>
 
-                                        <Button Grid.Column="2" Style="{StaticResource IconButton}"
+                                        <!-- Update Available (DepotBox) Button — only shown when update is available -->
+                                        <Button Grid.Column="2"
+                                                ToolTip="Update Available (DepotBox)"
+                                                Visibility="{Binding HasUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                Command="{Binding DataContext.CheckDepotBoxUpdatesCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
+                                                    <Setter Property="BorderBrush" Value="#F59E0B"/>
+                                                    <Setter Property="BorderThickness" Value="1"/>
+                                                    <Setter Property="Background" Value="#26F59E0B"/>
+                                                </Style>
+                                            </Button.Style>
+                                            <Path Data="{StaticResource IconDownload}" Fill="#F59E0B"
+                                                  Stretch="Uniform" Width="13" Height="13"/>
+                                        </Button>
+
+                                        <Button Grid.Column="4" Style="{StaticResource IconButton}"
                                                 ToolTip="Open Game Folder"
                                                 Command="{Binding DataContext.OpenFolderCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding}">
@@ -581,11 +601,23 @@
                                                   Stretch="Uniform" Width="14" Height="14"/>
                                         </Button>
 
-                                        <Button Grid.Column="4" Content="▶ Play"
-                                                Style="{StaticResource PrimaryButton}"
+                                        <!-- Play or Install Button -->
+                                        <Button Grid.Column="6"
                                                 Padding="16,8"
                                                 Command="{Binding DataContext.PlayInstanceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                CommandParameter="{Binding}"/>
+                                                CommandParameter="{Binding}">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+                                                    <Setter Property="Content" Value="▶ Play"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsNotInstalled}" Value="True">
+                                                            <Setter Property="Content" Value="📥 Install"/>
+                                                            <Setter Property="Background" Value="{StaticResource AccentHoverBrush}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
                                     </Grid>
                                 </Grid>
                             </Border>
@@ -1556,6 +1588,37 @@
                                 Background="#10B981" BorderBrush="#059669"
                                 Padding="16,10" Command="{Binding SaveNewGroupCommand}"/>
                     </Grid>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ═══ STEAM REQUIRED FOR ONLINE FEATURES MODAL OVERLAY ═══ -->
+        <Grid Visibility="{Binding IsSteamRequiredModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
+              Background="{StaticResource ModalOverlayBrush}"
+              Panel.ZIndex="1000">
+            <Border Width="480"
+                    Background="{StaticResource SurfaceCardElevatedBrush}"
+                    BorderBrush="{StaticResource StrongBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="24"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <StackPanel>
+                    <TextBlock Text="🎮 Steam Required for Online Features" Style="{StaticResource H2}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{Binding PendingLaunchInstance.Name, StringFormat='{}Launching {0} with ReFix Online (Spacewar 480).'}"
+                               FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,6"/>
+                    <TextBlock Text="Steam is currently not running in the background. To access online multiplayer lobbies and invitations via Spacewar (AppID 480), Steam must be running."
+                               Style="{StaticResource Body}" TextWrapping="Wrap" LineHeight="20" Margin="0,0,0,20"/>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="Cancel" Style="{StaticResource GhostButton}" Margin="0,0,8,0"
+                                Command="{Binding CloseSteamRequiredModalCommand}"/>
+                        <Button Content="Launch Anyway" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"
+                                Command="{Binding LaunchAnywayCommand}"/>
+                        <Button Content="Start Steam &amp; Play" Style="{StaticResource PrimaryButton}"
+                                Command="{Binding StartSteamAndLaunchCommand}"/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
         </Grid>

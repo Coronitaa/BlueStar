@@ -588,3 +588,131 @@ public sealed class ResourceKeyConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
+/// <summary>
+/// Converts TagType to foreground text brush.
+/// </summary>
+public sealed class TagTypeToBrushConverter : IValueConverter
+{
+    private static readonly SolidColorBrush Accent = new(Color.FromRgb(27, 144, 255));
+    private static readonly SolidColorBrush Green = new(Color.FromRgb(16, 185, 129));
+    private static readonly SolidColorBrush Purple = new(Color.FromRgb(167, 139, 250));
+    private static readonly SolidColorBrush Amber = new(Color.FromRgb(245, 158, 11));
+    private static readonly SolidColorBrush Rose = new(Color.FromRgb(244, 63, 94));
+    private static readonly SolidColorBrush Sky = new(Color.FromRgb(14, 165, 233));
+    private static readonly SolidColorBrush White = new(Color.FromRgb(244, 244, 245));
+    private static readonly SolidColorBrush Muted = new(Color.FromRgb(161, 161, 170));
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is not TagType tagType) return Muted;
+        return tagType switch
+        {
+            TagType.Origin => Sky,
+            TagType.UpdateAvailable => Amber,
+            TagType.Status => Green,
+            TagType.Engine => Purple,
+            TagType.DlcCount => Purple,
+            TagType.Platform => Accent,
+            TagType.Drm => Amber,
+            TagType.Nsfw => Rose,
+            TagType.AppType => White,
+            _ => Muted
+        };
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Converts TagType to background pill brush.
+/// </summary>
+public sealed class TagTypeToBgBrushConverter : IValueConverter
+{
+    private static readonly SolidColorBrush AccentBg = new(Color.FromArgb(0x20, 27, 144, 255));
+    private static readonly SolidColorBrush GreenBg = new(Color.FromArgb(0x20, 16, 185, 129));
+    private static readonly SolidColorBrush PurpleBg = new(Color.FromArgb(0x25, 167, 139, 250));
+    private static readonly SolidColorBrush AmberBg = new(Color.FromArgb(0x20, 245, 158, 11));
+    private static readonly SolidColorBrush RoseBg = new(Color.FromArgb(0x20, 244, 63, 94));
+    private static readonly SolidColorBrush SkyBg = new(Color.FromArgb(0x20, 14, 165, 233));
+    private static readonly SolidColorBrush InputBg = new(Color.FromRgb(24, 24, 27));
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is not TagType tagType) return InputBg;
+        return tagType switch
+        {
+            TagType.Origin => SkyBg,
+            TagType.UpdateAvailable => AmberBg,
+            TagType.Status => GreenBg,
+            TagType.Engine => PurpleBg,
+            TagType.DlcCount => PurpleBg,
+            TagType.Platform => AccentBg,
+            TagType.Drm => AmberBg,
+            TagType.Nsfw => RoseBg,
+            _ => InputBg
+        };
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Converts TagType to border brush.
+/// </summary>
+public sealed class TagTypeToBorderBrushConverter : IValueConverter
+{
+    private static readonly SolidColorBrush AccentBorder = new(Color.FromArgb(0x50, 27, 144, 255));
+    private static readonly SolidColorBrush GreenBorder = new(Color.FromArgb(0x50, 16, 185, 129));
+    private static readonly SolidColorBrush PurpleBorder = new(Color.FromArgb(0x60, 167, 139, 250));
+    private static readonly SolidColorBrush AmberBorder = new(Color.FromArgb(0x50, 245, 158, 11));
+    private static readonly SolidColorBrush RoseBorder = new(Color.FromArgb(0x50, 244, 63, 94));
+    private static readonly SolidColorBrush SkyBorder = new(Color.FromArgb(0x50, 14, 165, 233));
+    private static readonly SolidColorBrush Subtle = new(Color.FromArgb(0x30, 255, 255, 255));
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is not TagType tagType) return Subtle;
+        return tagType switch
+        {
+            TagType.Origin => SkyBorder,
+            TagType.UpdateAvailable => AmberBorder,
+            TagType.Status => GreenBorder,
+            TagType.Engine => PurpleBorder,
+            TagType.DlcCount => PurpleBorder,
+            TagType.Platform => AccentBorder,
+            TagType.Drm => AmberBorder,
+            TagType.Nsfw => RoseBorder,
+            _ => Subtle
+        };
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Converts BackgroundTaskStatus to color brush.
+/// </summary>
+public sealed class BackgroundTaskStatusToBrushConverter : IValueConverter
+{
+    private static readonly SolidColorBrush Blue = new(Color.FromRgb(59, 130, 246));
+    private static readonly SolidColorBrush Green = new(Color.FromRgb(34, 197, 94));
+    private static readonly SolidColorBrush Red = new(Color.FromRgb(239, 68, 68));
+    private static readonly SolidColorBrush Gray = new(Color.FromRgb(161, 161, 170));
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is not BackgroundTaskStatus status) return Gray;
+        return status switch
+        {
+            BackgroundTaskStatus.Running => Blue,
+            BackgroundTaskStatus.Completed => Green,
+            BackgroundTaskStatus.Failed => Red,
+            BackgroundTaskStatus.Cancelled => Gray,
+            _ => Blue
+        };
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
+}
+
+

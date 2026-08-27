@@ -106,6 +106,9 @@ public partial class App : Application
         // Infrastructure services
         services.AddSingleton<BlueStar.Infrastructure.Storage.AppSettingsService>();
         services.AddSingleton<INotificationService, BlueStar.Infrastructure.Services.NotificationService>();
+        services.AddSingleton<IBackgroundTaskService, BlueStar.Infrastructure.Services.BackgroundTaskService>();
+        services.AddSingleton<ITagsService, BlueStar.Infrastructure.Services.TagsService>();
+        services.AddSingleton<IEmulatorLifecycleService, BlueStar.Infrastructure.Services.EmulatorLifecycleService>();
         services.AddSingleton<ILicenseService, BlueStar.Infrastructure.Services.LicenseService>();
         services.AddSingleton<ISecureStorage, SecureStorage>();
         services.AddSingleton<IDepotBoxAuthService, BlueStar.Infrastructure.Services.DepotBoxAuthService>();
@@ -123,7 +126,7 @@ public partial class App : Application
         services.AddHttpClient<ICommunityStatsService, BlueStar.Infrastructure.Services.CommunityStatsService>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(10);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar/1.0.0");
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar/1.1.0");
         });
 
         // HTTP clients
@@ -131,13 +134,13 @@ public partial class App : Application
         {
             client.BaseAddress = new Uri("https://depotbox.org");
             client.Timeout = TimeSpan.FromMinutes(15); // ZIPs are built on-the-fly
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar/1.0.0");
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar/1.1.0");
         });
 
         services.AddHttpClient<SteamStoreApiClient>(client =>
         {
             client.BaseAddress = new Uri("https://store.steampowered.com");
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar/1.0.0");
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar/1.1.0");
         });
 
         // General HTTP Client

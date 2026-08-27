@@ -150,7 +150,42 @@ public partial class InstanceDetailViewModel : ObservableObject
     private readonly SynchronizationContext _uiContext;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HeroTags))]
+    [NotifyPropertyChangedFor(nameof(IsDepotBoxInstance))]
+    [NotifyPropertyChangedFor(nameof(IsSteamInstance))]
+    [NotifyPropertyChangedFor(nameof(IsImportedUnassociatedInstance))]
+    [NotifyPropertyChangedFor(nameof(IsDepotBoxTabsVisible))]
     private GameInstance _instance = null!;
+
+    public IReadOnlyList<GameTag> HeroTags => _tagsService?.GetInstanceDetailHeroTags(Instance, HasGameUpdateAvailable) ?? [];
+    public bool IsDepotBoxInstance => Instance != null && (Instance.Origin == InstanceOrigin.DepotBox || Instance.IsDepotBoxAssociated);
+    public bool IsSteamInstance => Instance != null && Instance.Origin == InstanceOrigin.Steam;
+    public bool IsImportedUnassociatedInstance => Instance != null && Instance.Origin == InstanceOrigin.ImportedFolder && !Instance.IsDepotBoxAssociated;
+    public bool IsDepotBoxTabsVisible => IsDepotBoxInstance;
+
+    // ── Association Modal State (ImportedFolder -> DepotBox) ──
+    [ObservableProperty]
+    private bool _isAssociationModalOpen;
+
+    [ObservableProperty]
+    private bool _isSearchingDepotBoxCandidate;
+
+    [ObservableProperty]
+    private SearchResult? _depotBoxCandidate;
+
+    [ObservableProperty]
+    private string _associationSearchQuery = string.Empty;
+
+    [ObservableProperty]
+    private ObservableCollection<SearchResult> _associationSearchResults = [];
+
+    // ── DLC Warning Modal State ──
+    [ObservableProperty]
+    private bool _isDlcWarningModalOpen;
+
+    // ── Steam Online Launch Required Modal State ──
+    [ObservableProperty]
+    private bool _isSteamRequiredModalOpen;
 
     [ObservableProperty]
     private string _selectedTab = "Overview";
@@ -214,6 +249,34 @@ public partial class InstanceDetailViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _supportsMods;
+
+    public bool IsModsTabVisible
+    {
+        get
+        {
+            if (!IsInstalled) return false;
+            if (Instance == null) return false;
+
+            if (Instance.Engine != null)
+            {
+                if (Instance.Engine.Supports(EngineCapabilities.Mods) ||
+                    Instance.Engine.Supports(EngineCapabilities.WorkshopSupported) ||
+                    Instance.Engine.Supports(EngineCapabilities.BepInExSupported))
+                {
+                    return true;
+                }
+            }
+
+            if (_modManagerRegistry != null)
+            {
+                var mgr = _modManagerRegistry.GetManagerForInstance(Instance);
+                if (mgr != null && mgr.Id != "generic") return true;
+                if (mgr != null && Instance.Engine?.Supports(EngineCapabilities.Mods) == true) return true;
+            }
+
+            return false;
+        }
+    }
 
     [ObservableProperty]
     private string _modsDirectoryPath = string.Empty;
@@ -447,6 +510,10 @@ public partial class InstanceDetailViewModel : ObservableObject
     private readonly IDepotBoxApiClient? _apiClient;
     private readonly IDepotBoxArchiveParser? _archiveParser;
     private readonly IPrerequisiteService? _prerequisiteService;
+    private readonly ITagsService? _tagsService;
+    private readonly IEmulatorLifecycleService? _emulatorLifecycleService;
+    private readonly IBackgroundTaskService? _backgroundTaskService;
+    private readonly ISteamStatusService? _steamStatusService;
 
     public Action? OnNavigateBack { get; set; }
 
@@ -468,7 +535,11 @@ public partial class InstanceDetailViewModel : ObservableObject
         IDepotBoxApiClient? apiClient = null,
         IDepotBoxArchiveParser? archiveParser = null,
         IPrerequisiteService? prerequisiteService = null,
-        IMetadataProvider? metadataProvider = null)
+        IMetadataProvider? metadataProvider = null,
+        ITagsService? tagsService = null,
+        IEmulatorLifecycleService? emulatorLifecycleService = null,
+        IBackgroundTaskService? backgroundTaskService = null,
+        ISteamStatusService? steamStatusService = null)
     {
         _instanceManager = instanceManager;
         _dlcInstaller = dlcInstaller;
@@ -488,6 +559,10 @@ public partial class InstanceDetailViewModel : ObservableObject
         _archiveParser = archiveParser;
         _prerequisiteService = prerequisiteService;
         _metadataProvider = metadataProvider;
+        _tagsService = tagsService;
+        _emulatorLifecycleService = emulatorLifecycleService;
+        _backgroundTaskService = backgroundTaskService;
+        _steamStatusService = steamStatusService;
         _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
         _downloadQueueManager.Queue.CollectionChanged += OnQueueChanged;
@@ -745,6 +820,13 @@ public partial class InstanceDetailViewModel : ObservableObject
             }
 
             _ = CheckSteamVersionDateAsync();
+            _ = LoadDlcsFromMetadataIfEmptyAsync();
+
+            OnPropertyChanged(nameof(IsModsTabVisible));
+            if (!IsModsTabVisible && SelectedTab == "Mods")
+            {
+                SelectedTab = "Overview";
+            }
 
             IsGameRunning = _gameLauncher.IsRunning(Instance.Id);
             ActiveJob = _downloadQueueManager.Queue.FirstOrDefault(j => j.Instance.Id == Instance.Id);
@@ -754,6 +836,49 @@ public partial class InstanceDetailViewModel : ObservableObject
         {
             _logger.LogError(ex, "Error loading game instance details");
             StatusMessage = $"❌ Error loading instance: {ex.Message}";
+        }
+    }
+
+    private async Task LoadDlcsFromMetadataIfEmptyAsync()
+    {
+        if (Instance == null || Instance.AppId == 0 || Instance.AppId == 480 || _metadataProvider == null) return;
+        if (Dlcs.Count > 0) return;
+
+        try
+        {
+            var fetchedDlcs = await _metadataProvider.GetDlcListAsync(Instance.AppId, CancellationToken.None).ConfigureAwait(true);
+            if (fetchedDlcs != null && fetchedDlcs.Count > 0)
+            {
+                var selectableDlcs = fetchedDlcs.Select(d => new SelectableDlcItem
+                {
+                    Dlc = d,
+                    IsSelected = true,
+                    OnSelectionChanged = RecalculateSelectedSize
+                }).ToList();
+
+                _uiContext.Post(async _ =>
+                {
+                    Dlcs = new ObservableCollection<SelectableDlcItem>(selectableDlcs);
+                    Instance = Instance with { Dlcs = fetchedDlcs };
+                    OnPropertyChanged(nameof(HeroTags));
+                    RecalculateSelectedSize();
+
+                    if (Dlcs.Count > 0)
+                    {
+                        IsDlcUnlocked = await _dlcInstaller.IsDlcInstalledAsync(Instance, Dlcs[0].Dlc, CancellationToken.None).ConfigureAwait(true);
+                    }
+
+                    try
+                    {
+                        await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(false);
+                    }
+                    catch { }
+                }, null);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load DLC list for {Name} ({AppId})", Instance.Name, Instance.AppId);
         }
     }
 
@@ -1078,6 +1203,12 @@ public partial class InstanceDetailViewModel : ObservableObject
     {
         if (Instance == null) return;
 
+        if (Instance.Status == InstanceStatus.NotInstalled && Instance.Origin != InstanceOrigin.Steam)
+        {
+            SelectedTab = "Files";
+            return;
+        }
+
         if (IsGameRunning)
         {
             StatusMessage = "Stopping game process...";
@@ -1085,6 +1216,66 @@ public partial class InstanceDetailViewModel : ObservableObject
             return;
         }
 
+        // Check if emulator is online and Steam is not running
+        var isOnlineEmulator = Instance.EmulatorEnabled &&
+            (string.Equals(Instance.EmulatorId, "refix_valve", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(Instance.EmulatorId, "refix", StringComparison.OrdinalIgnoreCase));
+
+        if (isOnlineEmulator && _steamStatusService != null && !_steamStatusService.CurrentStatus.IsRunning)
+        {
+            IsSteamRequiredModalOpen = true;
+            return;
+        }
+
+        await LaunchGameInternalAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    public async Task StartSteamAndLaunchAsync()
+    {
+        IsSteamRequiredModalOpen = false;
+        try
+        {
+            var steamPath = ShortcutHelper.GetSteamPath();
+            if (!string.IsNullOrWhiteSpace(steamPath))
+            {
+                var steamExe = Path.Combine(steamPath, "steam.exe");
+                if (File.Exists(steamExe))
+                {
+                    Process.Start(new ProcessStartInfo(steamExe) { UseShellExecute = true });
+                }
+                else
+                {
+                    Process.Start(new ProcessStartInfo("steam://open/main") { UseShellExecute = true });
+                }
+            }
+            else
+            {
+                Process.Start(new ProcessStartInfo("steam://open/main") { UseShellExecute = true });
+            }
+
+            await Task.Delay(1500).ConfigureAwait(true);
+        }
+        catch { }
+
+        await LaunchGameInternalAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    public async Task LaunchAnywayAsync()
+    {
+        IsSteamRequiredModalOpen = false;
+        await LaunchGameInternalAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    public void CloseSteamRequiredModal()
+    {
+        IsSteamRequiredModalOpen = false;
+    }
+
+    private async Task LaunchGameInternalAsync()
+    {
         StatusMessage = "🚀 Launching game...";
         ConsoleLogs.Add($"[{DateTime.Now:HH:mm:ss}] Launching {Instance.Name}...");
 
@@ -1102,6 +1293,205 @@ public partial class InstanceDetailViewModel : ObservableObject
         {
             StatusMessage = "🎮 Game is running.";
         }
+    }
+
+    // ── DepotBox Association Workflow (ImportedFolder -> DepotBox) ──
+    [RelayCommand]
+    public async Task OpenDepotAssociationModalAsync()
+    {
+        if (Instance == null) return;
+        IsAssociationModalOpen = true;
+        IsSearchingDepotBoxCandidate = true;
+        DepotBoxCandidate = null;
+        AssociationSearchResults.Clear();
+        AssociationSearchQuery = Instance.Name;
+
+        try
+        {
+            if (_apiClient != null)
+            {
+                // 1. Try finding by AppID first if valid
+                if (Instance.AppId > 0 && Instance.AppId != 480)
+                {
+                    var results = await _apiClient.SearchGamesAsync(Instance.AppId.ToString(), CancellationToken.None).ConfigureAwait(true);
+                    var match = results.FirstOrDefault(r => r.AppId == Instance.AppId);
+                    if (match != null)
+                    {
+                        DepotBoxCandidate = match;
+                    }
+                }
+
+                // 2. Fallback to searching by game name
+                if (DepotBoxCandidate == null && !string.IsNullOrWhiteSpace(Instance.Name))
+                {
+                    var results = await _apiClient.SearchGamesAsync(Instance.Name, CancellationToken.None).ConfigureAwait(true);
+                    if (results.Count > 0)
+                    {
+                        DepotBoxCandidate = results[0];
+                        foreach (var r in results) AssociationSearchResults.Add(r);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error searching DepotBox candidate for {Name}", Instance.Name);
+        }
+        finally
+        {
+            IsSearchingDepotBoxCandidate = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task SearchDepotBoxManuallyAsync()
+    {
+        if (string.IsNullOrWhiteSpace(AssociationSearchQuery) || _apiClient == null) return;
+
+        IsSearchingDepotBoxCandidate = true;
+        AssociationSearchResults.Clear();
+
+        try
+        {
+            var results = await _apiClient.SearchGamesAsync(AssociationSearchQuery.Trim(), CancellationToken.None).ConfigureAwait(true);
+            foreach (var r in results)
+            {
+                AssociationSearchResults.Add(r);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Manual DepotBox search failed for {Query}", AssociationSearchQuery);
+        }
+        finally
+        {
+            IsSearchingDepotBoxCandidate = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task ConfirmAssociationWithCandidateAsync()
+    {
+        if (DepotBoxCandidate != null)
+        {
+            await AssociateWithCandidateAsync(DepotBoxCandidate).ConfigureAwait(true);
+        }
+    }
+
+    [RelayCommand]
+    public async Task AssociateWithCandidateAsync(SearchResult? candidate)
+    {
+        if (candidate == null || Instance == null) return;
+
+        IsProcessing = true;
+        StatusMessage = $"⏳ Associating with DepotBox package '{candidate.Name}'...";
+
+        try
+        {
+            var archivesDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "BlueStar", "archives");
+            Directory.CreateDirectory(archivesDir);
+
+            string? archivePath = null;
+            if (_apiClient != null && candidate.AppId > 0)
+            {
+                try
+                {
+                    archivePath = await _apiClient.DownloadArchiveAsync(candidate.AppId, archivesDir, null, CancellationToken.None).ConfigureAwait(true);
+                }
+                catch { }
+            }
+
+            var updatedDepots = new List<DepotInfo>();
+            var updatedDlcs = new List<DlcInfo>();
+
+            if (!string.IsNullOrWhiteSpace(archivePath) && File.Exists(archivePath) && _archiveParser != null)
+            {
+                var parsed = await _archiveParser.ParseAsync(archivePath, CancellationToken.None).ConfigureAwait(true);
+                ExtractManifestsToInstanceStorage(archivePath, Instance.Id);
+
+                updatedDepots = parsed.Games.SelectMany(g => g.Depots.Select(d => new DepotInfo
+                {
+                    DepotId = d.DepotId,
+                    ManifestId = d.ManifestId,
+                    SizeBytes = d.SizeBytes,
+                    DepotKey = g.DepotKey,
+                    Name = d.Name ?? (g.IsDlc ? $"{CleanName(g.Name)} Depot" : "Base Game Content"),
+                    Category = d.Category,
+                    Platform = d.Platform,
+                    Architecture = d.Architecture,
+                    IsSharedDepot = false
+                })).DistinctBy(d => d.DepotId).ToList();
+
+                updatedDlcs = parsed.Games.Where(g => g.IsDlc).Select(dlc => new DlcInfo
+                {
+                    AppId = dlc.AppId,
+                    Name = CleanName(dlc.Name) ?? $"DLC {dlc.AppId}",
+                    Category = "DLC",
+                    Platform = dlc.Depots.FirstOrDefault(d => !string.IsNullOrWhiteSpace(d.Platform))?.Platform ?? "Universal",
+                    Depots = dlc.Depots.Select(d => new DepotInfo
+                    {
+                        DepotId = d.DepotId,
+                        ManifestId = d.ManifestId,
+                        SizeBytes = d.SizeBytes,
+                        DepotKey = dlc.DepotKey,
+                        Name = d.Name ?? $"{CleanName(dlc.Name)} Depot",
+                        Category = "DLC",
+                        Platform = d.Platform,
+                        Architecture = d.Architecture,
+                        IsSharedDepot = false
+                    }).ToList().AsReadOnly(),
+                    IsInstalled = false
+                }).ToList();
+            }
+
+            var newAppId = candidate.AppId > 0 ? candidate.AppId : Instance.AppId;
+            GameMetadata? meta = Instance.Metadata;
+            if (_metadataProvider != null && newAppId > 0 && meta == null)
+            {
+                try
+                {
+                    meta = await _metadataProvider.GetMetadataAsync(newAppId, CancellationToken.None).ConfigureAwait(true);
+                }
+                catch { }
+            }
+
+            var updatedInstance = Instance with
+            {
+                AppId = newAppId,
+                Metadata = meta,
+                SourceArchivePath = archivePath ?? Instance.SourceArchivePath,
+                Depots = updatedDepots.Count > 0 ? updatedDepots.AsReadOnly() : Instance.Depots,
+                Dlcs = updatedDlcs.Count > 0 ? updatedDlcs.AsReadOnly() : Instance.Dlcs,
+                IsDepotBoxAssociated = true
+            };
+
+            await _instanceManager.UpdateAsync(updatedInstance, CancellationToken.None).ConfigureAwait(true);
+            await LoadInstanceAsync(updatedInstance).ConfigureAwait(true);
+
+            IsAssociationModalOpen = false;
+            _notificationService?.ShowSuccess("DepotBox Associated", $"{Instance.Name} is now linked to DepotBox!");
+            StatusMessage = "✅ Associated with DepotBox successfully.";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to associate instance with candidate");
+            StatusMessage = $"❌ Association failed: {ex.Message}";
+            _notificationService?.ShowError("Association Failed", ex.Message);
+        }
+        finally
+        {
+            IsProcessing = false;
+        }
+    }
+
+    [RelayCommand]
+    public void CloseAssociationModal()
+    {
+        IsAssociationModalOpen = false;
+        DepotBoxCandidate = null;
+        AssociationSearchResults.Clear();
     }
 
     // ── BepInEx Management for Unity ──
@@ -1448,7 +1838,7 @@ public partial class InstanceDetailViewModel : ObservableObject
             var options = await _emulatorRatingService.GetOptionsForInstanceAsync(Instance, CancellationToken.None).ConfigureAwait(true);
             AvailableEmulatorOptions = new ObservableCollection<EmulatorOptionInfo>(options);
 
-            RecommendedEmulatorOption = options.FirstOrDefault(o => o.IsRecommended) ?? options.FirstOrDefault();
+            RecommendedEmulatorOption = options.FirstOrDefault(o => o.IsRecommended && o.TotalVotes >= 10);
 
             var emus = _emulatorRegistry.GetSupportedEmulators(Instance);
             AvailableEmulators = new ObservableCollection<IEmulator>(emus);
@@ -1485,9 +1875,6 @@ public partial class InstanceDetailViewModel : ObservableObject
 
         try
         {
-            var refix = _emulatorRegistry.GetById("refix") as ReFixEmulator
-                ?? new ReFixEmulator(_logger as ILogger<ReFixEmulator> ?? LoggerFactory.Create(_ => {}).CreateLogger<ReFixEmulator>());
-
             var progressReporter = new Progress<DeployProgress>(p =>
             {
                 DeployProgress = p.Percentage;
@@ -1495,7 +1882,18 @@ public partial class InstanceDetailViewModel : ObservableObject
                 StatusMessage = $"⏳ {p.Message}";
             });
 
-            var success = await refix.DeployOptionAsync(Instance, option.Id, progressReporter, CancellationToken.None).ConfigureAwait(true);
+            bool success;
+            if (_emulatorLifecycleService != null)
+            {
+                success = await _emulatorLifecycleService.DeployOrUpdateEmulatorWithDlcPreservationAsync(
+                    Instance, option.Id, progressReporter, CancellationToken.None).ConfigureAwait(true);
+            }
+            else
+            {
+                var refix = _emulatorRegistry.GetById("refix") as ReFixEmulator
+                    ?? new ReFixEmulator(_logger as ILogger<ReFixEmulator> ?? LoggerFactory.Create(_ => {}).CreateLogger<ReFixEmulator>());
+                success = await refix.DeployOptionAsync(Instance, option.Id, progressReporter, CancellationToken.None).ConfigureAwait(true);
+            }
 
             if (success)
             {
@@ -1579,9 +1977,6 @@ public partial class InstanceDetailViewModel : ObservableObject
         {
             var optionId = Instance.EmulatorId ?? (InstalledEmulatorMode?.Contains("Goldberg", StringComparison.OrdinalIgnoreCase) == true ? "refix_goldberg" : "refix_valve");
 
-            var refix = _emulatorRegistry.GetById("refix") as ReFixEmulator
-                ?? new ReFixEmulator(_logger as ILogger<ReFixEmulator> ?? LoggerFactory.Create(_ => {}).CreateLogger<ReFixEmulator>());
-
             var progressReporter = new Progress<DeployProgress>(p =>
             {
                 DeployProgress = p.Percentage;
@@ -1589,7 +1984,18 @@ public partial class InstanceDetailViewModel : ObservableObject
                 StatusMessage = $"⏳ {p.Message}";
             });
 
-            var success = await refix.DeployOptionAsync(Instance, optionId, progressReporter, CancellationToken.None).ConfigureAwait(true);
+            bool success;
+            if (_emulatorLifecycleService != null)
+            {
+                success = await _emulatorLifecycleService.DeployOrUpdateEmulatorWithDlcPreservationAsync(
+                    Instance, optionId, progressReporter, CancellationToken.None).ConfigureAwait(true);
+            }
+            else
+            {
+                var refix = _emulatorRegistry.GetById("refix") as ReFixEmulator
+                    ?? new ReFixEmulator(_logger as ILogger<ReFixEmulator> ?? LoggerFactory.Create(_ => {}).CreateLogger<ReFixEmulator>());
+                success = await refix.DeployOptionAsync(Instance, optionId, progressReporter, CancellationToken.None).ConfigureAwait(true);
+            }
 
             if (success)
             {
@@ -1617,6 +2023,16 @@ public partial class InstanceDetailViewModel : ObservableObject
 
                 Instance = updatedInstance;
                 await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+
+                if (_emulatorRatingService != null)
+                {
+                    try
+                    {
+                        await _emulatorRatingService.ResetRatingsForEmulatorAsync("refix", CancellationToken.None).ConfigureAwait(true);
+                    }
+                    catch { }
+                }
+
                 StatusMessage = $"✅ ReFix updated to v{globalVer} in {Instance.Name}.";
                 _notificationService?.ShowSuccess("ReFix Updated", $"ReFix updated to v{globalVer} in {Instance.Name}.");
             }
@@ -1652,10 +2068,25 @@ public partial class InstanceDetailViewModel : ObservableObject
 
         try
         {
-            var refix = _emulatorRegistry.GetById("refix") as ReFixEmulator
-                ?? new ReFixEmulator(_logger as ILogger<ReFixEmulator> ?? LoggerFactory.Create(_ => {}).CreateLogger<ReFixEmulator>());
+            var progressReporter = new Progress<DeployProgress>(p =>
+            {
+                DeployProgress = p.Percentage;
+                DeployProgressMessage = p.Message;
+                StatusMessage = $"⏳ {p.Message}";
+            });
 
-            var success = await refix.UninstallAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+            bool success;
+            if (_emulatorLifecycleService != null)
+            {
+                success = await _emulatorLifecycleService.UninstallEmulatorWithDlcPreservationAsync(
+                    Instance, progressReporter, CancellationToken.None).ConfigureAwait(true);
+            }
+            else
+            {
+                var refix = _emulatorRegistry.GetById("refix") as ReFixEmulator
+                    ?? new ReFixEmulator(_logger as ILogger<ReFixEmulator> ?? LoggerFactory.Create(_ => {}).CreateLogger<ReFixEmulator>());
+                success = await refix.UninstallAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+            }
 
             Instance = Instance with
             {
@@ -1992,23 +2423,31 @@ public partial class InstanceDetailViewModel : ObservableObject
     {
         if (Dlcs.Count == 0 && !IsDlcUnlocked)
         {
-            var prompt = MessageBox.Show(
-                "Advertencia: No se encontraron DLCs registrados para este juego en la base de datos.\n\n" +
-                "Instalar el DLC Unlocker (SmokeAPI / CreamAPI) integrará el wrapper genérico en la carpeta del juego para intentar desbloquear cualquier contenido futuro o no listado.\n\n" +
-                "¿Deseas forzar la instalación del DLC Unlocker de todos modos?",
-                "Confirmar instalación de DLC Unlocker",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
-
-            if (prompt != MessageBoxResult.Yes)
-            {
-                StatusMessage = "ℹ Instalación de DLC Unlocker cancelada.";
-                return;
-            }
+            IsDlcWarningModalOpen = true;
+            return;
         }
 
+        await ExecuteToggleDlcUnlockerInternalAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    public async Task ConfirmUnlockDlcsAsync()
+    {
+        IsDlcWarningModalOpen = false;
+        await ExecuteToggleDlcUnlockerInternalAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    public void CancelUnlockDlcs()
+    {
+        IsDlcWarningModalOpen = false;
+        StatusMessage = "ℹ DLC Unlocker installation cancelled.";
+    }
+
+    private async Task ExecuteToggleDlcUnlockerInternalAsync()
+    {
         IsProcessing = true;
-        StatusMessage = "⏳ Procesando DLC unlocker...";
+        StatusMessage = "⏳ Processing DLC unlocker...";
 
         var dispatcher = Application.Current?.Dispatcher;
         var progress = new Progress<string>(msg =>
@@ -2026,21 +2465,34 @@ public partial class InstanceDetailViewModel : ObservableObject
 
             if (IsDlcUnlocked)
             {
-                StatusMessage = "⏳ Removiendo DLC unlocker...";
+                StatusMessage = "⏳ Removing DLC unlocker...";
                 var success = await _dlcInstaller
                     .UninstallDlcAsync(Instance, targetDlc, CancellationToken.None, progress)
                     .ConfigureAwait(true);
                 IsDlcUnlocked = !success;
-                if (success) _notificationService?.ShowInfo("DLC Unlocker Desinstalado", $"Se desinstaló el wrapper de DLCs en {Instance.Name}.");
+                if (success)
+                {
+                    Instance = Instance with { DlcUnlockerInstalled = false, UnlockedDlcIds = [] };
+                    await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+                    _notificationService?.ShowInfo("DLC Unlocker Uninstalled", $"DLC wrapper was successfully removed for {Instance.Name}.");
+                    StatusMessage = "✅ DLC unlocker uninstalled successfully.";
+                }
             }
             else
             {
-                StatusMessage = "⏳ Instalando DLC unlocker...";
+                StatusMessage = "⏳ Installing DLC unlocker...";
                 var success = await _dlcInstaller
                     .InstallDlcAsync(Instance, targetDlc, CancellationToken.None, progress)
                     .ConfigureAwait(true);
                 IsDlcUnlocked = success;
-                if (success) _notificationService?.ShowSuccess("DLC Unlocker Instalado", $"DLC Unlocker configurado con éxito en {Instance.Name}.");
+                if (success)
+                {
+                    var selectedIds = Dlcs.Where(d => d.IsSelected).Select(d => d.Dlc.AppId).ToList();
+                    Instance = Instance with { DlcUnlockerInstalled = true, UnlockedDlcIds = selectedIds };
+                    await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+                    _notificationService?.ShowSuccess("DLC Unlocker Installed", $"DLC Unlocker configured successfully for {Instance.Name}.");
+                    StatusMessage = "✅ DLC unlocker installed successfully.";
+                }
             }
         }
         catch (Exception ex)

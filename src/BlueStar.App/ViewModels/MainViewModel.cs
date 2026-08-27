@@ -21,7 +21,25 @@ public partial class MainViewModel : ObservableObject
     private readonly ISteamStatusService _steamStatusService;
     private readonly INotificationService _notificationService;
     private readonly IUpdateService _updateService;
+    private readonly IInstanceManager _instanceManager;
+    private readonly IGameLauncher? _gameLauncher;
+    private readonly IDepotBoxApiClient? _apiClient;
+    private readonly IBackgroundTaskService _backgroundTaskService;
     private readonly SynchronizationContext _uiContext;
+
+    public IBackgroundTaskService BackgroundTaskService => _backgroundTaskService;
+
+    [ObservableProperty]
+    private bool _hasActiveTasks;
+
+    [ObservableProperty]
+    private int _activeTasksCount;
+
+    [ObservableProperty]
+    private string _backgroundTaskStatusText = string.Empty;
+
+    [ObservableProperty]
+    private bool _isTasksFlyoutOpen;
 
     public System.Collections.ObjectModel.ReadOnlyObservableCollection<NotificationItem> Notifications => _notificationService.Notifications;
 
@@ -80,6 +98,7 @@ public partial class MainViewModel : ObservableObject
         INotificationService notificationService,
         IUpdateService updateService,
         IInstanceManager instanceManager,
+        IBackgroundTaskService backgroundTaskService,
         IGameLauncher? gameLauncher = null,
         IDepotBoxApiClient? apiClient = null)
     {
@@ -88,6 +107,7 @@ public partial class MainViewModel : ObservableObject
         _notificationService = notificationService;
         _updateService = updateService;
         _instanceManager = instanceManager;
+        _backgroundTaskService = backgroundTaskService;
         _gameLauncher = gameLauncher;
         _apiClient = apiClient;
         _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
@@ -95,6 +115,7 @@ public partial class MainViewModel : ObservableObject
         _downloadQueueManager.Queue.CollectionChanged += (_, _) => _uiContext.Post(_ => UpdateDownloadStats(), null);
         _downloadQueueManager.QueueChanged += (_, _) => _uiContext.Post(_ => UpdateDownloadStats(), null);
         _steamStatusService.StatusChanged += OnSteamStatusChanged;
+        _backgroundTaskService.TasksChanged += (_, _) => _uiContext.Post(_ => UpdateBackgroundTaskStats(), null);
 
         // Auto-refresh sidebar shortcuts on any instance create, update, delete or game launch
         _instanceManager.InstancesChanged += (_, _) => _ = RefreshRecentShortcutsAsync();
@@ -113,10 +134,6 @@ public partial class MainViewModel : ObservableObject
         // Handle initial startup loading & update check
         _ = InitializeStartupAsync();
     }
-
-    private readonly IInstanceManager _instanceManager;
-    private readonly IGameLauncher? _gameLauncher;
-    private readonly IDepotBoxApiClient? _apiClient;
 
     private async Task InitializeStartupAsync()
     {
@@ -430,6 +447,37 @@ public partial class MainViewModel : ObservableObject
         {
             vm.OpenFolderImportModal();
         }
+    }
+
+    private void UpdateBackgroundTaskStats()
+    {
+        HasActiveTasks = _backgroundTaskService.HasActiveTasks;
+        ActiveTasksCount = _backgroundTaskService.ActiveTasksCount;
+        BackgroundTaskStatusText = ActiveTasksCount == 1 ? "1 background task active" : $"{ActiveTasksCount} background tasks active";
+    }
+
+    [RelayCommand]
+    public void ToggleTasksFlyout()
+    {
+        IsTasksFlyoutOpen = !IsTasksFlyoutOpen;
+    }
+
+    [RelayCommand]
+    public void CloseTasksFlyout()
+    {
+        IsTasksFlyoutOpen = false;
+    }
+
+    [RelayCommand]
+    public void CancelBackgroundTask(Guid taskId)
+    {
+        _backgroundTaskService.CancelTask(taskId);
+    }
+
+    [RelayCommand]
+    public void ClearCompletedTasks()
+    {
+        _backgroundTaskService.ClearCompleted();
     }
 
     public async Task RefreshRecentShortcutsAsync()
