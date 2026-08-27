@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -297,12 +297,36 @@ public sealed class InstanceManager : IInstanceManager
 
         await _refixManager.ConfigureInstanceSettingsAsync(newGamePath, refixConfig, ct).ConfigureAwait(false);
 
+        string? newExePath = null;
+        if (!string.IsNullOrWhiteSpace(sourceInstance.ExecutablePath))
+        {
+            try
+            {
+                var relExe = Path.GetRelativePath(sourceInstance.InstallPath, sourceInstance.ExecutablePath);
+                var candidateExe = Path.Combine(newGamePath, relExe);
+                if (File.Exists(candidateExe))
+                {
+                    newExePath = candidateExe;
+                }
+            }
+            catch { }
+        }
+
+        if (string.IsNullOrWhiteSpace(newExePath))
+        {
+            newExePath = _engineDetector.FindPrimaryExecutable(newGamePath, newInstanceName);
+        }
+
+        var engine = await _engineDetector.DetectEngineAsync(newGamePath, ct).ConfigureAwait(false);
+
         var now = DateTimeOffset.UtcNow;
         var clonedInstance = sourceInstance with
         {
             Id = newId,
             Name = newInstanceName,
             InstallPath = newGamePath,
+            ExecutablePath = newExePath ?? sourceInstance.ExecutablePath,
+            Engine = (engine != null && engine.Type != EngineType.Generic) ? engine : sourceInstance.Engine,
             CreatedAt = now,
             UpdatedAt = now
         };

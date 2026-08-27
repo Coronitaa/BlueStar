@@ -13,6 +13,7 @@ using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
 using BlueStar.Infrastructure.Downloader;
 using BlueStar.Infrastructure.Emulators;
+using BlueStar.Infrastructure.Mods;
 using BlueStar.Infrastructure.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -736,7 +737,15 @@ public partial class InstanceDetailViewModel : ObservableObject
                 };
             }).ToList().AsReadOnly();
 
-            var installPath = PathHelper.EnsureGameSubfolder(instance.InstallPath, cleanGameName);
+            var installPath = instance.InstallPath;
+            if (!string.IsNullOrWhiteSpace(installPath) && !Directory.Exists(installPath))
+            {
+                var candidate = PathHelper.EnsureGameSubfolder(installPath, cleanGameName);
+                if (Directory.Exists(candidate))
+                {
+                    installPath = candidate;
+                }
+            }
 
             // Engine detection if missing or generic
             var engine = instance.Engine;
@@ -1871,7 +1880,7 @@ public partial class InstanceDetailViewModel : ObservableObject
             var target = ModsDirectoryPath;
             if (string.IsNullOrWhiteSpace(target) && Instance != null)
             {
-                var res = Mods.GameModPathResolver.ResolveModPaths(Instance);
+                var res = GameModPathResolver.ResolveModPaths(Instance);
                 target = res.PrimaryDirectory;
             }
 
@@ -2329,7 +2338,7 @@ public partial class InstanceDetailViewModel : ObservableObject
             StatusMessage = $"⏳ Creando instancia limpia para '{baseName}'...";
 
             var baseDepot = _instanceManager.GetBaseDepotPath(Instance.AppId);
-            if (Directory.Exists(baseDepot))
+            if (Directory.Exists(baseDepot) && Directory.EnumerateFileSystemEntries(baseDepot).Any())
             {
                 var cleanInstance = await _instanceManager.CreateInstanceFromDepotAsync(
                     Instance.AppId,
@@ -2353,6 +2362,23 @@ public partial class InstanceDetailViewModel : ObservableObject
                         {
                             try { Directory.Delete(d, true); } catch { }
                         }
+                        foreach (var f in Directory.GetFiles(modsDir))
+                        {
+                            try { File.Delete(f); } catch { }
+                        }
+                    }
+
+                    var modsUpper = Path.Combine(cloned.InstallPath, "Mods");
+                    if (Directory.Exists(modsUpper))
+                    {
+                        foreach (var d in Directory.GetDirectories(modsUpper))
+                        {
+                            try { Directory.Delete(d, true); } catch { }
+                        }
+                        foreach (var f in Directory.GetFiles(modsUpper))
+                        {
+                            try { File.Delete(f); } catch { }
+                        }
                     }
 
                     var bepPlugins = Path.Combine(cloned.InstallPath, "BepInEx", "plugins");
@@ -2362,6 +2388,12 @@ public partial class InstanceDetailViewModel : ObservableObject
                         {
                             try { Directory.Delete(d, true); } catch { }
                         }
+                    }
+
+                    var ugcContent = Path.Combine(cloned.InstallPath, "steamapps", "workshop", "content");
+                    if (Directory.Exists(ugcContent))
+                    {
+                        try { Directory.Delete(ugcContent, true); } catch { }
                     }
                 }
                 catch { }
