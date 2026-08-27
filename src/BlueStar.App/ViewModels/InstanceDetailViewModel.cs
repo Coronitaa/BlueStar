@@ -188,6 +188,12 @@ public partial class InstanceDetailViewModel : ObservableObject
     private bool _isSteamRequiredModalOpen;
 
     [ObservableProperty]
+    private bool _isStartingSteam;
+
+    [ObservableProperty]
+    private string? _steamLaunchStatusText;
+
+    [ObservableProperty]
     private string _selectedTab = "Overview";
 
     [ObservableProperty]
@@ -1233,30 +1239,53 @@ public partial class InstanceDetailViewModel : ObservableObject
     [RelayCommand]
     public async Task StartSteamAndLaunchAsync()
     {
-        IsSteamRequiredModalOpen = false;
+        IsStartingSteam = true;
+        SteamLaunchStatusText = "Starting Steam and waiting for user profile to load...";
+        StatusMessage = "⏳ Starting Steam and waiting for user profile to load...";
+
         try
         {
-            var steamPath = ShortcutHelper.GetSteamPath();
-            if (!string.IsNullOrWhiteSpace(steamPath))
+            if (_steamStatusService != null)
             {
-                var steamExe = Path.Combine(steamPath, "steam.exe");
-                if (File.Exists(steamExe))
+                var progress = new Progress<string>(msg =>
                 {
-                    Process.Start(new ProcessStartInfo(steamExe) { UseShellExecute = true });
+                    SteamLaunchStatusText = msg;
+                    StatusMessage = $"⏳ {msg}";
+                });
+
+                await _steamStatusService.LaunchAndWaitForSteamFullyLoadedAsync(
+                    TimeSpan.FromSeconds(50),
+                    progress,
+                    CancellationToken.None).ConfigureAwait(true);
+            }
+            else
+            {
+                var steamPath = ShortcutHelper.GetSteamPath();
+                if (!string.IsNullOrWhiteSpace(steamPath))
+                {
+                    var steamExe = Path.Combine(steamPath, "steam.exe");
+                    if (File.Exists(steamExe))
+                        Process.Start(new ProcessStartInfo(steamExe) { UseShellExecute = true });
+                    else
+                        Process.Start(new ProcessStartInfo("steam://open/main") { UseShellExecute = true });
                 }
                 else
                 {
                     Process.Start(new ProcessStartInfo("steam://open/main") { UseShellExecute = true });
                 }
-            }
-            else
-            {
-                Process.Start(new ProcessStartInfo("steam://open/main") { UseShellExecute = true });
-            }
 
-            await Task.Delay(1500).ConfigureAwait(true);
+                await Task.Delay(3000).ConfigureAwait(true);
+            }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error while starting and waiting for Steam");
+        }
+        finally
+        {
+            IsStartingSteam = false;
+            IsSteamRequiredModalOpen = false;
+        }
 
         await LaunchGameInternalAsync().ConfigureAwait(true);
     }
@@ -1653,19 +1682,19 @@ public partial class InstanceDetailViewModel : ObservableObject
         var id = _workshopService.ParsePublishedFileId(WorkshopSearchInput);
         if (!id.HasValue)
         {
-            WorkshopStatusMessage = "⚠ URL o ID de Steam Workshop inválido.";
+            WorkshopStatusMessage = "⚠ Invalid Steam Workshop URL or ID.";
             IsWorkshopStatusError = true;
             return;
         }
 
         IsLoadingWorkshopPreview = true;
-        WorkshopStatusMessage = "🔍 Buscando información del addon en Steam Workshop...";
+        WorkshopStatusMessage = "🔍 Searching for addon details on Steam Workshop...";
         try
         {
             WorkshopPreviewItem = await _workshopService.GetItemDetailsAsync(id.Value, CancellationToken.None).ConfigureAwait(true);
             if (WorkshopPreviewItem == null)
             {
-                WorkshopStatusMessage = "⚠ Addon no encontrado o es privado. Comprueba el ID o enlace.";
+                WorkshopStatusMessage = "⚠ Addon not found or is private. Check the ID or link.";
                 IsWorkshopStatusError = true;
             }
             else
@@ -2285,7 +2314,7 @@ public partial class InstanceDetailViewModel : ObservableObject
 
         if (!hasValidManifests && !hasSourceArchive && Instance.AppId > 0 && _apiClient is not null && _archiveParser is not null)
         {
-            StatusMessage = "⏳ Obteniendo manifiestos y archivo de DepotBox...";
+            StatusMessage = "⏳ Fetching manifests and archive from DepotBox...";
             var archivesDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "BlueStar", "archives");
@@ -2672,8 +2701,8 @@ public partial class InstanceDetailViewModel : ObservableObject
 
         IsDeletingInstance = true;
         StatusMessage = deleteFiles
-            ? "🗑 Eliminando instancia y borrando datos del juego..."
-            : "🗑 Desvinculando instancia de BlueStar...";
+            ? "🗑 Deleting instance and purging game files..."
+            : "🗑 Unlinking instance from BlueStar...";
 
         try
         {

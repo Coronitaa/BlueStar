@@ -234,6 +234,12 @@ public partial class LibraryViewModel : ObservableObject
     private bool _isSteamRequiredModalOpen;
 
     [ObservableProperty]
+    private bool _isStartingSteam;
+
+    [ObservableProperty]
+    private string? _steamLaunchStatusText;
+
+    [ObservableProperty]
     private GameInstance? _pendingLaunchInstance;
 
     public Action<GameInstance>? OnManageInstanceRequested { get; set; }
@@ -643,6 +649,21 @@ public partial class LibraryViewModel : ObservableObject
         IsAddInstanceModalOpen = false;
         AddModalStep = "SelectSource";
         ResetZipPreview();
+    }
+
+    public Action<string>? OnNavigateRequested { get; set; }
+
+    [RelayCommand]
+    public void ResetAddModal()
+    {
+        AddModalStep = "SelectSource";
+    }
+
+    [RelayCommand]
+    public void ExplorePlatformGames()
+    {
+        IsAddInstanceModalOpen = false;
+        OnNavigateRequested?.Invoke("Explore");
     }
 
     [RelayCommand]
@@ -1341,33 +1362,62 @@ public partial class LibraryViewModel : ObservableObject
     [RelayCommand]
     private async Task StartSteamAndLaunchAsync()
     {
-        IsSteamRequiredModalOpen = false;
         var inst = PendingLaunchInstance;
-        if (inst == null) return;
+        if (inst == null)
+        {
+            IsSteamRequiredModalOpen = false;
+            return;
+        }
+
+        IsStartingSteam = true;
+        SteamLaunchStatusText = "Starting Steam and waiting for user profile to load...";
 
         try
         {
-            var steamPath = ShortcutHelper.GetSteamPath();
-            if (!string.IsNullOrWhiteSpace(steamPath))
+            if (_steamStatusService != null)
             {
-                var steamExe = Path.Combine(steamPath, "steam.exe");
-                if (File.Exists(steamExe))
+                var progress = new Progress<string>(msg =>
                 {
-                    Process.Start(new ProcessStartInfo(steamExe) { UseShellExecute = true });
+                    SteamLaunchStatusText = msg;
+                });
+
+                await _steamStatusService.LaunchAndWaitForSteamFullyLoadedAsync(
+                    TimeSpan.FromSeconds(50),
+                    progress,
+                    CancellationToken.None).ConfigureAwait(true);
+            }
+            else
+            {
+                var steamPath = ShortcutHelper.GetSteamPath();
+                if (!string.IsNullOrWhiteSpace(steamPath))
+                {
+                    var steamExe = Path.Combine(steamPath, "steam.exe");
+                    if (File.Exists(steamExe))
+                    {
+                        Process.Start(new ProcessStartInfo(steamExe) { UseShellExecute = true });
+                    }
+                    else
+                    {
+                        Process.Start(new ProcessStartInfo("steam://open/main") { UseShellExecute = true });
+                    }
                 }
                 else
                 {
                     Process.Start(new ProcessStartInfo("steam://open/main") { UseShellExecute = true });
                 }
-            }
-            else
-            {
-                Process.Start(new ProcessStartInfo("steam://open/main") { UseShellExecute = true });
-            }
 
-            await Task.Delay(1500).ConfigureAwait(true);
+                await Task.Delay(3000).ConfigureAwait(true);
+            }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error while starting and waiting for Steam");
+        }
+        finally
+        {
+            IsStartingSteam = false;
+            IsSteamRequiredModalOpen = false;
+        }
 
         await LaunchInstanceInternalAsync(inst).ConfigureAwait(true);
     }

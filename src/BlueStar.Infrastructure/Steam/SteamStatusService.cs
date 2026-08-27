@@ -168,6 +168,119 @@ public sealed class SteamStatusService : ISteamStatusService
         return (null, null);
     }
 
+    /// <inheritdoc />
+    public async Task<bool> LaunchAndWaitForSteamFullyLoadedAsync(
+        TimeSpan? timeout = null,
+        IProgress<string>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        // 1. Check if Steam is already running and user data is loaded
+        if (IsFullyLoaded())
+        {
+            EvaluateStatus();
+            progress?.Report("Steam is running and user profile is loaded.");
+            return true;
+        }
+
+        // 2. Launch Steam if not running
+        var steamProcesses = Process.GetProcessesByName("steam");
+        if (steamProcesses.Length == 0)
+        {
+            progress?.Report("Starting Steam client...");
+            try
+            {
+                var steamPath = ShortcutHelper.GetSteamPath();
+                if (!string.IsNullOrWhiteSpace(steamPath))
+                {
+                    var steamExe = Path.Combine(steamPath, "steam.exe");
+                    if (File.Exists(steamExe))
+                    {
+                        Process.Start(new ProcessStartInfo(steamExe) { UseShellExecute = true });
+                    }
+                    else
+                    {
+                        Process.Start(new ProcessStartInfo("steam://open/main") { UseShellExecute = true });
+                    }
+                }
+                else
+                {
+                    Process.Start(new ProcessStartInfo("steam://open/main") { UseShellExecute = true });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to launch Steam process");
+            }
+        }
+
+        // 3. Poll until Steam process is alive AND user data is fully loaded (ActiveUser > 0 in ActiveProcess)
+        var maxWait = timeout ?? TimeSpan.FromSeconds(50);
+        var stopwatch = Stopwatch.StartNew();
+
+        while (stopwatch.Elapsed < maxWait && !cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(500, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+
+            var procs = Process.GetProcessesByName("steam");
+            if (procs.Length == 0)
+            {
+                progress?.Report("Waiting for Steam process to start...");
+                continue;
+            }
+
+            if (IsFullyLoaded())
+            {
+                progress?.Report("Steam loaded! Initializing game connection...");
+                // Brief stabilization delay to ensure IPC pipes and overlay hooks are fully ready
+                try
+                {
+                    await Task.Delay(1500, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) { }
+
+                EvaluateStatus();
+                return true;
+            }
+            else
+            {
+                progress?.Report("Steam is logging in and loading user data...");
+            }
+        }
+
+        EvaluateStatus();
+        return _currentStatus.IsRunning;
+    }
+
+    private static bool IsFullyLoaded()
+    {
+        try
+        {
+            var steamProcesses = Process.GetProcessesByName("steam");
+            if (steamProcesses.Length == 0) return false;
+
+            if (!OperatingSystem.IsWindows()) return true;
+
+            using var activeKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam\ActiveProcess");
+            if (activeKey == null) return false;
+
+            var activeUserObj = activeKey.GetValue("ActiveUser");
+            if (activeUserObj is int activeUser32 && activeUser32 > 0)
+            {
+                return true;
+            }
+        }
+        catch { }
+
+        return false;
+    }
+
     public void Dispose()
     {
         if (_disposed) return;

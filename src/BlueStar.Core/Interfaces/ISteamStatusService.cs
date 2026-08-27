@@ -46,4 +46,17 @@ public interface ISteamStatusService : IDisposable
     /// Triggers an immediate status evaluation.
     /// </summary>
     void CheckStatusNow();
+
+    /// <summary>
+    /// Launches the local Steam client (if not already running) and waits until Steam is fully loaded,
+    /// logged in, and user data is initialized (past the "Loading user data" stage).
+    /// </summary>
+    /// <param name="timeout">Maximum time to wait. Defaults to 45 seconds if null.</param>
+    /// <param name="progress">Optional progress reporter for UI status updates.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>True if Steam is fully loaded and logged in; otherwise false.</returns>
+    System.Threading.Tasks.Task<bool> LaunchAndWaitForSteamFullyLoadedAsync(
+        TimeSpan? timeout = null,
+        IProgress<string>? progress = null,
+        System.Threading.CancellationToken cancellationToken = default);
 }

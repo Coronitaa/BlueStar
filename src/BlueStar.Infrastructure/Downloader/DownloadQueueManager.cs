@@ -203,7 +203,7 @@ public class DownloadQueueManager
         existing.StartedAt = DateTimeOffset.Now;
         NotifyQueueChanged();
 
-        _notificationService?.ShowInfo("Descarga iniciada", $"{instance.Name} añadida a la cola de descargas.");
+        _notificationService?.ShowInfo("Download Started", $"{instance.Name} added to the download queue.");
 
         await RunDownloadAsync(existing, instance).ConfigureAwait(false);
     }
@@ -433,7 +433,7 @@ public class DownloadQueueManager
             });
 
             _logger.LogInformation("Download finished for {Game}", instance.Name);
-            _notificationService?.ShowSuccess("Descarga completada", $"{instance.Name} se ha descargado e instalado correctamente.");
+            _notificationService?.ShowSuccess("Download Completed", $"{instance.Name} downloaded and installed successfully.");
         }
         catch (OperationCanceledException) when (job.IsPaused)
         {
@@ -473,7 +473,7 @@ public class DownloadQueueManager
             });
 
             _logger.LogError(ex, "Download failed for {Game}", instance.Name);
-            _notificationService?.ShowError("Error de descarga", $"Falló la descarga de {instance.Name}: {ex.Message}");
+            _notificationService?.ShowError("Download Error", $"Failed to download {instance.Name}: {ex.Message}");
         }
         finally
         {

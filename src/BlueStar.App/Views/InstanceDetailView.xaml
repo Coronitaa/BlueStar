@@ -111,7 +111,7 @@
                                                 ToolTip="{Binding Tooltip}">
                                             <TextBlock Text="{Binding Text}"
                                                        FontSize="11"
-                                                       FontWeight="SemiBold"
+                                                       FontWeight="Normal"
                                                        Foreground="{Binding Type, Converter={StaticResource TagTypeToBrushConverter}}"/>
                                         </Border>
                                     </DataTemplate>
@@ -162,7 +162,7 @@
                         Padding="14,10" Margin="0,0,0,16"
                         Visibility="{Binding StatusMessage, Converter={StaticResource NullToVisibilityConverter}}">
                     <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource BodyMedium}"
-                               Foreground="{StaticResource PrimaryTextBrush}"/>
+                               TextWrapping="Wrap" Foreground="{StaticResource PrimaryTextBrush}"/>
                 </Border>
 
                 <!-- ═══ MODRINTH-STYLE DYNAMIC TAB BAR ═══ -->
@@ -1438,7 +1438,7 @@
                 <StackPanel>
                     <TextBlock Text="🗑 Delete Instance" Style="{StaticResource H1}" Margin="0,0,0,8"/>
                     <TextBlock Text="{Binding Instance.Name, StringFormat='{}How would you like to delete {0}?'}"
-                               Style="{StaticResource Body}" Margin="0,0,0,20"/>
+                               Style="{StaticResource Body}" TextWrapping="Wrap" Margin="0,0,0,20"/>
 
                     <!-- Option 1: Only Unlink from BlueStar -->
                     <Border Background="{StaticResource SurfaceInputBrush}"
@@ -1713,7 +1713,7 @@
                 <StackPanel>
                     <TextBlock Text="⚠️ Confirm DLC Unlocker Setup" Style="{StaticResource H2}" Margin="0,0,0,8"/>
                     <TextBlock Text="No DLCs registered in database"
-                               FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,6"/>
+                               FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,6"/>
                     <TextBlock Text="No specific DLC entries were found for this game in the database. Installing the DLC Unlocker (SmokeAPI / CreamAPI) will integrate the generic wrapper into the game directory to unlock any present or unlisted DLCs. Do you want to proceed?"
                                Style="{StaticResource Body}" TextWrapping="Wrap" LineHeight="20" Margin="0,0,0,20"/>
 
@@ -1742,17 +1742,34 @@
                 <StackPanel>
                     <TextBlock Text="🎮 Steam Required for Online Features" Style="{StaticResource H2}" Margin="0,0,0,8"/>
                     <TextBlock Text="{Binding Instance.Name, StringFormat='{}Launching {0} with ReFix Online (Spacewar 480).'}"
-                               FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,6"/>
+                               FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,6"/>
                     <TextBlock Text="Steam is currently not running in the background. To access online multiplayer lobbies and invitations via Spacewar (AppID 480), Steam must be running."
-                               Style="{StaticResource Body}" TextWrapping="Wrap" LineHeight="20" Margin="0,0,0,20"/>
+                               Style="{StaticResource Body}" TextWrapping="Wrap" LineHeight="20" Margin="0,0,0,16"/>
+
+                    <!-- Loading / Waiting for Steam indicator -->
+                    <Border Background="{StaticResource SurfaceInputBrush}"
+                            BorderBrush="{StaticResource AccentBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusMd}"
+                            Padding="12,10" Margin="0,0,0,16"
+                            Visibility="{Binding IsStartingSteam, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <ProgressBar IsIndeterminate="True" Width="16" Height="16" Margin="0,0,10,0"/>
+                            <TextBlock Text="{Binding SteamLaunchStatusText, FallbackValue='Starting Steam and waiting for user profile to load...'}"
+                                       Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                         <Button Content="Cancel" Style="{StaticResource GhostButton}" Margin="0,0,8,0"
-                                Command="{Binding CloseSteamRequiredModalCommand}"/>
+                                Command="{Binding CloseSteamRequiredModalCommand}"
+                                IsEnabled="{Binding IsStartingSteam, Converter={StaticResource InverseBoolConverter}}"/>
                         <Button Content="Launch Anyway" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"
-                                Command="{Binding LaunchAnywayCommand}"/>
+                                Command="{Binding LaunchAnywayCommand}"
+                                IsEnabled="{Binding IsStartingSteam, Converter={StaticResource InverseBoolConverter}}"/>
                         <Button Content="Start Steam &amp; Play" Style="{StaticResource PrimaryButton}"
-                                Command="{Binding StartSteamAndLaunchCommand}"/>
+                                Command="{Binding StartSteamAndLaunchCommand}"
+                                IsEnabled="{Binding IsStartingSteam, Converter={StaticResource InverseBoolConverter}}"/>
                     </StackPanel>
                 </StackPanel>
             </Border>
