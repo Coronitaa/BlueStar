@@ -73,7 +73,7 @@ public class GitHubUpdateService : IUpdateService
             _logger.LogInformation("Checking for updates from GitHub Releases...");
 
             var request = new HttpRequestMessage(HttpMethod.Get, GitHubReleasesUrl);
-            request.Headers.UserAgent.ParseAdd("BlueStar-Updater/0.1.0");
+            request.Headers.UserAgent.ParseAdd("BlueStar-Updater/1.1.0");
 
             var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
@@ -86,13 +86,25 @@ public class GitHubUpdateService : IUpdateService
             if (release is null || string.IsNullOrWhiteSpace(release.TagName))
                 return null;
 
-            var latestVersionStr = release.TagName.TrimStart('v');
+            var latestVersionStr = release.TagName.Trim().TrimStart('v').Trim();
             if (!Version.TryParse(latestVersionStr, out var latestVersion))
                 return null;
 
-            var currentVersion = Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 1, 0);
+            var rawCurrent = Assembly.GetEntryAssembly()?.GetName().Version
+                          ?? Assembly.GetExecutingAssembly().GetName().Version
+                          ?? new Version(1, 1, 0);
 
-            if (latestVersion > currentVersion)
+            var currentVersion = new Version(
+                Math.Max(0, rawCurrent.Major),
+                Math.Max(0, rawCurrent.Minor),
+                Math.Max(0, rawCurrent.Build));
+
+            var normalizedLatest = new Version(
+                Math.Max(0, latestVersion.Major),
+                Math.Max(0, latestVersion.Minor),
+                Math.Max(0, latestVersion.Build));
+
+            if (normalizedLatest > currentVersion)
             {
                 var asset = release.Assets?.FirstOrDefault(a =>
                     a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||

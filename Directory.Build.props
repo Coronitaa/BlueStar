@@ -1,0 +1,12 @@
+<Project>
+  <PropertyGroup>
+    <Version>1.1.0</Version>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
+    <InformationalVersion>1.1.0</InformationalVersion>
+    <Company>Corøna (BlueStar Developers)</Company>
+    <Product>BlueStar</Product>
+    <Copyright>Copyright (C) 2026 Corøna</Copyright>
+    <Authors>Corøna &amp; BlueStar Developers</Authors>
+  </PropertyGroup>
+</Project>

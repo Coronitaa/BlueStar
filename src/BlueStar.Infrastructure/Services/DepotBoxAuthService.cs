@@ -119,6 +119,6 @@ public sealed class DepotBoxAuthService : IDepotBoxAuthService
     /// </summary>
     private static string GetProtectedBackendKey()
     {
-        return "YOUR_DEPOTBOX_API_KEY";
+        return "bc6b0e18-868b-4628-a4d4-97a932096300";
     }
 }
