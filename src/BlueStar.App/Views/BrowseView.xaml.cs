@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -34,7 +34,7 @@ public partial class BrowseView : UserControl
     {
         if (string.IsNullOrWhiteSpace(categoryId)) return;
 
-        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+        void DoScroll(int retryCount)
         {
             try
             {
@@ -48,12 +48,33 @@ public partial class BrowseView : UserControl
                     var targetOffset = BrowseScrollViewer.VerticalOffset + point.Y - 16;
                     BrowseScrollViewer.ScrollToVerticalOffset(Math.Max(0, targetOffset));
                 }
+                else if (retryCount > 0)
+                {
+                    Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                    {
+                        System.Threading.Tasks.Task.Delay(60).ContinueWith(_ =>
+                        {
+                            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => DoScroll(retryCount - 1)));
+                        });
+                    }));
+                }
             }
             catch
             {
-                // Fallback if visual tree transform not yet ready
+                if (retryCount > 0)
+                {
+                    Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                    {
+                        System.Threading.Tasks.Task.Delay(60).ContinueWith(_ =>
+                        {
+                            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => DoScroll(retryCount - 1)));
+                        });
+                    }));
+                }
             }
-        }));
+        }
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => DoScroll(4)));
     }
 
     private static T? FindVisualChild<T>(DependencyObject parent, Func<T, bool> predicate) where T : DependencyObject

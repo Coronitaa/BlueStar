@@ -49,11 +49,38 @@ public partial class SettingsViewModel : ObservableObject
     private string _instanceRoot = string.Empty;
 
     [ObservableProperty]
+    private string _defaultDownloadDirectory = string.Empty;
+
+    partial void OnDefaultDownloadDirectoryChanged(string value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            _ = _appSettings.SetDefaultDownloadDirectoryAsync(value);
+        }
+    }
+
+    [ObservableProperty]
     private bool _deleteDepotsAfterInstall = true;
 
     partial void OnDeleteDepotsAfterInstallChanged(bool value)
     {
         _ = _appSettings.SetDeleteDepotsAfterInstallAsync(value);
+    }
+
+    [ObservableProperty]
+    private bool _showNsfwContent;
+
+    partial void OnShowNsfwContentChanged(bool value)
+    {
+        _ = _appSettings.SetShowNsfwContentAsync(value);
+    }
+
+    [ObservableProperty]
+    private bool _showDrmContent = true;
+
+    partial void OnShowDrmContentChanged(bool value)
+    {
+        _ = _appSettings.SetShowDrmContentAsync(value);
     }
 
     /// <summary>
@@ -75,8 +102,11 @@ public partial class SettingsViewModel : ObservableObject
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         DeleteDepotsAfterInstall = _appSettings.DeleteDepotsAfterInstall;
+        ShowNsfwContent = _appSettings.ShowNsfwContent;
+        ShowDrmContent = _appSettings.ShowDrmContent;
         DefaultApiUrl = _appSettings.DefaultApiUrl;
         DefaultApiKey = _appSettings.DefaultApiKey ?? string.Empty;
+        DefaultDownloadDirectory = _appSettings.DefaultDownloadDirectory;
 
         InstanceRoot = System.IO.Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -219,6 +249,60 @@ public partial class SettingsViewModel : ObservableObject
         finally
         {
             IsTestingConnection = false;
+        }
+    }
+
+    /// <summary>
+    /// Opens an OpenFolderDialog to select the default game downloads and installs directory.
+    /// </summary>
+    [RelayCommand]
+    private async Task BrowseDownloadDirectoryAsync()
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = "Select Default Game Downloads & Installation Directory",
+            Multiselect = false
+        };
+
+        if (!string.IsNullOrWhiteSpace(DefaultDownloadDirectory) && System.IO.Directory.Exists(DefaultDownloadDirectory))
+        {
+            dialog.InitialDirectory = DefaultDownloadDirectory;
+        }
+
+        if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.FolderName))
+        {
+            DefaultDownloadDirectory = dialog.FolderName;
+            await _appSettings.SetDefaultDownloadDirectoryAsync(dialog.FolderName).ConfigureAwait(true);
+            _notificationService.ShowSuccess("Directory Updated", $"Default download location set to:\n{dialog.FolderName}");
+        }
+    }
+
+    /// <summary>
+    /// Opens the default downloads folder in Windows File Explorer.
+    /// </summary>
+    [RelayCommand]
+    private void OpenDownloadDirectory()
+    {
+        try
+        {
+            var dir = DefaultDownloadDirectory;
+            if (string.IsNullOrWhiteSpace(dir))
+                dir = InstanceRoot;
+
+            if (!System.IO.Directory.Exists(dir))
+            {
+                System.IO.Directory.CreateDirectory(dir);
+            }
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = dir,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to open download directory in Explorer");
         }
     }
 

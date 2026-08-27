@@ -18,6 +18,7 @@ public sealed class GameLauncherService : IGameLauncher
 {
     private readonly IInstanceManager? _instanceManager;
     private readonly IEngineDetector? _engineDetector;
+    private readonly ICommunityStatsService? _statsService;
     private readonly ILogger<GameLauncherService> _logger;
     private readonly ConcurrentDictionary<Guid, Process> _runningProcesses = new();
 
@@ -27,11 +28,13 @@ public sealed class GameLauncherService : IGameLauncher
     public GameLauncherService(
         ILogger<GameLauncherService> logger,
         IInstanceManager? instanceManager = null,
-        IEngineDetector? engineDetector = null)
+        IEngineDetector? engineDetector = null,
+        ICommunityStatsService? statsService = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _instanceManager = instanceManager;
         _engineDetector = engineDetector;
+        _statsService = statsService;
     }
 
     public async Task<GameLaunchResult> LaunchAsync(GameInstance instance, Action<string>? onLog = null, CancellationToken ct = default)
@@ -130,6 +133,11 @@ public sealed class GameLauncherService : IGameLauncher
                     {
                         _logger.LogWarning(ex, "Failed to persist instance status on exit for {Game}", instance.Name);
                     }
+                }
+
+                if (_statsService != null && instance.AppId > 0)
+                {
+                    _ = _statsService.ReportGamePlayAsync((int)instance.AppId, instance.Name, duration, CancellationToken.None);
                 }
             };
 

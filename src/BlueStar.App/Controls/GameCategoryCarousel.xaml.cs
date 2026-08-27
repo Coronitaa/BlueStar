@@ -33,6 +33,10 @@ public partial class GameCategoryCarousel : UserControl
         DependencyProperty.Register(nameof(ViewMoreCommand), typeof(ICommand), typeof(GameCategoryCarousel),
             new PropertyMetadata(null));
 
+    public static readonly DependencyProperty LoadMoreCommandProperty =
+        DependencyProperty.Register(nameof(LoadMoreCommand), typeof(ICommand), typeof(GameCategoryCarousel),
+            new PropertyMetadata(null));
+
     public static readonly DependencyProperty IsExploreTabProperty =
         DependencyProperty.Register(nameof(IsExploreTab), typeof(bool), typeof(GameCategoryCarousel),
             new PropertyMetadata(false));
@@ -59,6 +63,12 @@ public partial class GameCategoryCarousel : UserControl
     {
         get => (ICommand?)GetValue(ViewMoreCommandProperty);
         set => SetValue(ViewMoreCommandProperty, value);
+    }
+
+    public ICommand? LoadMoreCommand
+    {
+        get => (ICommand?)GetValue(LoadMoreCommandProperty);
+        set => SetValue(LoadMoreCommandProperty, value);
     }
 
     public bool IsExploreTab
@@ -239,23 +249,15 @@ public partial class GameCategoryCarousel : UserControl
         }
         else
         {
-            // In Home tab: if already expanded, collapse; if not, invoke ViewMoreCommand to navigate to Explore
-            if (Category.IsExpanded)
+            // In Home tab: navigate to Explore view and expand the selected category
+            if (ViewMoreCommand != null && ViewMoreCommand.CanExecute(Category))
             {
-                Category.IsExpanded = false;
-                EvaluateTimerState();
+                ViewMoreCommand.Execute(Category);
             }
             else
             {
-                if (ViewMoreCommand != null && ViewMoreCommand.CanExecute(Category))
-                {
-                    ViewMoreCommand.Execute(Category);
-                }
-                else
-                {
-                    Category.IsExpanded = true;
-                    EvaluateTimerState();
-                }
+                Category.IsExpanded = !Category.IsExpanded;
+                EvaluateTimerState();
             }
         }
     }

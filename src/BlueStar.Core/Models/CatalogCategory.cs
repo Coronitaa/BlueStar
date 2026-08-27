@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -61,19 +61,83 @@ public class CatalogCategory : INotifyPropertyChanged
     public ObservableCollection<SearchResult> Items
     {
         get => _items;
-        set => SetField(ref _items, value);
+        set
+        {
+            var val = value ?? [];
+            if (_items != null)
+            {
+                _items.CollectionChanged -= OnItemsCollectionChanged;
+            }
+            _items = val;
+            _items.CollectionChanged += OnItemsCollectionChanged;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsVisibleCategory));
+        }
+    }
+
+    private void OnItemsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(IsVisibleCategory));
     }
 
     public bool IsLoading
     {
         get => _isLoading;
-        set => SetField(ref _isLoading, value);
+        set
+        {
+            if (SetField(ref _isLoading, value))
+            {
+                OnPropertyChanged(nameof(IsVisibleCategory));
+            }
+        }
     }
+
+    /// <summary>
+    /// Category is visible if it's currently loading, or if it has 1 or more games.
+    /// If empty after loading, it will be automatically hidden.
+    /// </summary>
+    public bool IsVisibleCategory => IsLoading || (_items != null && _items.Count > 0);
 
     public bool IsExpanded
     {
         get => _isExpanded;
         set => SetField(ref _isExpanded, value);
+    }
+
+    private bool _hasMoreItems = true;
+    private bool _isLoadingMore;
+    private int _displayLimit = 9;
+
+    /// <summary>
+    /// Full candidate pool of games for this category (pre-pagination and replenishment buffer).
+    /// </summary>
+    public List<SearchResult> PoolItems { get; set; } = [];
+
+    /// <summary>
+    /// Current number of items to display in this category. Default is 9 slots.
+    /// </summary>
+    public int DisplayLimit
+    {
+        get => _displayLimit;
+        set => SetField(ref _displayLimit, value);
+    }
+
+    /// <summary>
+    /// Whether more items can be loaded for this category.
+    /// </summary>
+    public bool HasMoreItems
+    {
+        get => _hasMoreItems;
+        set => SetField(ref _hasMoreItems, value);
+    }
+
+    /// <summary>
+    /// Whether additional items are actively being fetched for this category.
+    /// </summary>
+    public bool IsLoadingMore
+    {
+        get => _isLoadingMore;
+        set => SetField(ref _isLoadingMore, value);
     }
 
     public string? ErrorMessage
@@ -84,6 +148,10 @@ public class CatalogCategory : INotifyPropertyChanged
 
     public CatalogCategory()
     {
+        if (_items != null)
+        {
+            _items.CollectionChanged += OnItemsCollectionChanged;
+        }
     }
 
     public CatalogCategory(string id, string title, string subtitle, string iconKey, string tagColor, string badgeText = "")
@@ -96,6 +164,10 @@ public class CatalogCategory : INotifyPropertyChanged
         BadgeText = badgeText;
         IsLoading = true;
         IsExpanded = false;
+        if (_items != null)
+        {
+            _items.CollectionChanged += OnItemsCollectionChanged;
+        }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

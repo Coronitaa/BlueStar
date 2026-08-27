@@ -21,6 +21,9 @@ public class SearchResult : INotifyPropertyChanged
     private bool _hasMac;
     private bool _isDlc;
     private bool _isRedistributable;
+    private bool _isNsfw;
+    private bool _hasDrm;
+    private string? _drmNotice;
     private bool _isCreating;
     private string? _creationStatus;
 
@@ -130,6 +133,33 @@ public class SearchResult : INotifyPropertyChanged
     {
         get => _isRedistributable;
         set => SetField(ref _isRedistributable, value);
+    }
+
+    /// <summary>
+    /// Gets or sets whether this item is marked as NSFW / Adult content.
+    /// </summary>
+    public bool IsNsfw
+    {
+        get => _isNsfw;
+        set => SetField(ref _isNsfw, value);
+    }
+
+    /// <summary>
+    /// Gets or sets whether this item incorporates 3rd-party DRM (Denuvo, EA Account, Ubisoft Connect, etc.).
+    /// </summary>
+    public bool HasDrm
+    {
+        get => _hasDrm;
+        set => SetField(ref _hasDrm, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the 3rd-party DRM description notice if present.
+    /// </summary>
+    public string? DrmNotice
+    {
+        get => _drmNotice;
+        set => SetField(ref _drmNotice, value);
     }
 
     /// <summary>

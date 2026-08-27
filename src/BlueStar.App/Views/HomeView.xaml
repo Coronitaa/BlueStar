@@ -576,7 +576,7 @@
                                                    Foreground="{StaticResource MutedTextBrush}"
                                                    FontSize="12" VerticalAlignment="Center" Margin="2,0,0,0"
                                                    IsHitTestVisible="False"
-                                                   Visibility="{Binding CatalogSearchQuery, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                                   Visibility="{Binding CatalogSearchQuery, Converter={StaticResource InverseNullToVisibilityConverter}}"/>
                                         <TextBox Text="{Binding CatalogSearchQuery, UpdateSourceTrigger=PropertyChanged}"
                                                  Background="Transparent"
                                                  BorderThickness="0"
@@ -650,7 +650,8 @@
                                             IsExploreTab="False"
                                             AddToLibraryCommand="{Binding DataContext.AddCatalogGameCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                             OpenSteamDbCommand="{Binding DataContext.OpenSteamDbCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                            ViewMoreCommand="{Binding DataContext.ViewMoreCategoryCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                                            ViewMoreCommand="{Binding DataContext.ViewMoreCategoryCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            LoadMoreCommand="{Binding DataContext.LoadMoreCategoryItemsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
@@ -809,7 +810,7 @@
                                                                 BorderBrush="{StaticResource SubtleBorderBrush}"
                                                                 BorderThickness="1"
                                                                 Visibility="{Binding Version, Converter={StaticResource NullToVisibilityConverter}}">
-                                                            <TextBlock Text="{Binding Version, StringFormat='🏷️ {0}'}" FontSize="11" Foreground="{StaticResource PrimaryTextBrush}"/>
+                                                            <TextBlock Text="{Binding Version, StringFormat='📅 {0}'}" FontSize="11" FontWeight="Medium" Foreground="{StaticResource PrimaryTextBrush}"/>
                                                         </Border>
 
                                                         <Border CornerRadius="{StaticResource RadiusSm}"
@@ -820,9 +821,27 @@
                                                                 Visibility="{Binding DlcCount, Converter={StaticResource NullToVisibilityConverter}}">
                                                             <TextBlock Text="{Binding DlcCount, StringFormat='🎁 {0} DLCs'}" FontSize="11" FontWeight="SemiBold" Foreground="#A78BFA"/>
                                                         </Border>
+
+                                                        <!-- NSFW Badge -->
+                                                        <Border CornerRadius="{StaticResource RadiusSm}"
+                                                                Padding="7,2" Margin="0,0,6,4"
+                                                                Background="#25EF4444" BorderBrush="#60EF4444" BorderThickness="1"
+                                                                Visibility="{Binding IsNsfw, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                                ToolTip="Contenido NSFW / Adultos (18+)">
+                                                            <TextBlock Text="🔞 NSFW" FontSize="11" FontWeight="Bold" Foreground="#EF4444"/>
+                                                        </Border>
+
+                                                        <!-- DRM Badge -->
+                                                        <Border CornerRadius="{StaticResource RadiusSm}"
+                                                                Padding="7,2" Margin="0,0,6,4"
+                                                                Background="#25F59E0B" BorderBrush="#60F59E0B" BorderThickness="1"
+                                                                Visibility="{Binding HasDrm, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                                ToolTip="{Binding DrmNotice, FallbackValue='Requiere DRM o cuenta de terceros'}">
+                                                            <TextBlock Text="🔒 DRM" FontSize="11" FontWeight="Bold" Foreground="#F59E0B"/>
+                                                        </Border>
                                                     </WrapPanel>
 
-                                                    <!-- OS & DepotBox Ready Tags -->
+                                                    <!-- OS Platforms Tags -->
                                                     <WrapPanel Grid.Row="3" Orientation="Horizontal" Margin="0,2,0,0">
                                                         <Border CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="0,0,5,4"
                                                                 Background="#201B90FF" BorderBrush="#501B90FF" BorderThickness="1"
@@ -830,8 +849,14 @@
                                                             <TextBlock Text="🪟 Windows" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
                                                         </Border>
                                                         <Border CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="0,0,5,4"
-                                                                Background="{StaticResource SuccessBgBrush}">
-                                                            <TextBlock Text="● DepotBox Ready" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource SuccessBrush}"/>
+                                                                Background="#20F59E0B" BorderBrush="#50F59E0B" BorderThickness="1"
+                                                                Visibility="{Binding HasLinux, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                            <TextBlock Text="🐧 Linux" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource WarningBrush}"/>
+                                                        </Border>
+                                                        <Border CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="0,0,5,4"
+                                                                Background="#20A1A1AA" BorderBrush="#50A1A1AA" BorderThickness="1"
+                                                                Visibility="{Binding HasMac, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                            <TextBlock Text="🍎 macOS" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource SecondaryTextBrush}"/>
                                                         </Border>
                                                     </WrapPanel>
 

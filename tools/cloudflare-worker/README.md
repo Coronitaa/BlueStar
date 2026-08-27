@@ -1,71 +1,59 @@
-﻿# BlueStar Cloudflare Worker & DepotBox Webhook Setup
+# BlueStar Cloudflare Worker & DepotBox Webhook Setup
 
-This Cloudflare Worker provides serverless backend endpoints for:
-1. **BlueStar Real Telemetry Collection**: Tracks instances added by BlueStar users.
-2. **DepotBox Webhook Ingestion**: Receives newly added games, updated builds, and API usage logs from DepotBox.
-3. **Sliding-Window Aggregations**: Computes 7-day "Trending on BlueStar" and all-time "Most Added in BlueStar".
-4. **Steam Rankings Proxy & Cache**: Fast edge caching for the 4 Steam rankings categories.
+Este Cloudflare Worker proporciona el backend serverless para:
+1. **Telemetría de Instancias de BlueStar**: Registra silenciosamente las instancias creadas por usuarios de BlueStar para calcular popularidad y tendencias.
+2. **Recepción de Webhooks de DepotBox (Sin Bots)**: Ingiere juegos recién agregados, builds actualizadas y logs de uso directamente desde el panel de DepotBox.
+3. **Agregaciones en Tiempo Real**: Calcula las categorías *Trending on BlueStar* (últimos 7 días) y *Most Added in BlueStar* (histórico global).
+4. **Reenvío Opcional a Discord**: Si se configura `DISCORD_WEBHOOK_URL`, reenvía los webhooks a tu canal de Discord automáticamente.
+5. **Caché Edge de Steam Rankings**: Provee respuestas ultra-rápidas para las 4 categorías de Steam.
 
 ---
 
-## 📋 URLs for DepotBox Webhook Configuration
+## 📋 URLs para la Configuración de Webhooks en DepotBox
 
-In your **DepotBox API Configuration** panel, set the following URLs:
+En tu panel de DepotBox (**Edit API Details**), pega las siguientes URLs:
 
-| Field in DepotBox | Webhook URL to enter | Description |
+| Campo en DepotBox | URL a ingresar | Descripción |
 |---|---|---|
-| **Added Game Webhook URL** | `https://api.bluestar.workers.dev/api/webhooks/depotbox/added` | Receives new games added to DepotBox |
-| **Updated Game Webhook URL** | `https://api.bluestar.workers.dev/api/webhooks/depotbox/updated` | Receives build and manifest updates |
-| **API usage logs webhook URL** | `https://api.bluestar.workers.dev/api/webhooks/depotbox/logs` | Ingests usage/download activity to calculate popularity |
+| **Added Game Webhook URL** | `https://bluestar-api-worker.blustar.workers.dev/api/webhooks/depotbox/added` | Alimenta la categoría *New Games in DepotBox* |
+| **Updated Game Webhook URL** | `https://bluestar-api-worker.blustar.workers.dev/api/webhooks/depotbox/updated` | Alimenta la categoría *Updated Games in DepotBox* |
+| **API usage logs webhook URL** | `https://bluestar-api-worker.blustar.workers.dev/api/webhooks/depotbox/logs` | Ingesta logs de actividad para calcular popularidad |
 
-*(Replace `api.bluestar.workers.dev` with your actual Cloudflare Worker domain).*
-
----
-
-## 🚀 Deployment Instructions
-
-### 1. Install Wrangler CLI
-```bash
-npm install -g wrangler
-```
-
-### 2. Login to Cloudflare
-```bash
-wrangler login
-```
-
-### 3. Create KV Namespaces
-```bash
-wrangler kv:namespace create STATS_KV
-wrangler kv:namespace create DEPOTBOX_KV
-```
-
-Copy the generated IDs and configure `wrangler.toml`:
-```toml
-[[kv_namespaces]]
-binding = "STATS_KV"
-id = "<YOUR_STATS_KV_ID>"
-
-[[kv_namespaces]]
-binding = "DEPOTBOX_KV"
-id = "<YOUR_DEPOTBOX_KV_ID>"
-```
-
-### 4. Deploy to Cloudflare
-```bash
-wrangler deploy
-```
+*(Si despliegas tu propio worker personalizado, reemplaza `bluestar-api-worker.blustar.workers.dev` con tu subdominio de Cloudflare Workers).*
 
 ---
 
-## 🛰️ API Endpoints Summary
+## 🚀 Instrucciones de Despliegue en Cloudflare
 
-- `POST /api/stats/report-instance` - Record instance addition from desktop client (`{ appId, name }`)
-- `POST /api/webhooks/depotbox/logs` - Process DepotBox usage logs to compute 7-day and all-time popularity
-- `POST /api/webhooks/depotbox/added` - Ingest new game additions from DepotBox
-- `POST /api/webhooks/depotbox/updated` - Ingest game updates/patches from DepotBox
-- `GET /api/stats/trending` - Real 7-day trending games added on BlueStar
-- `GET /api/stats/most-played` - Real all-time most added game instances on BlueStar
-- `GET /api/feed/depotbox/added` - Feed of new games from DepotBox webhook
-- `GET /api/feed/depotbox/updated` - Feed of updated games from DepotBox webhook
-- `GET /api/steam/lists?type=most_played|trending|top_sellers|top_rated` - Edge-cached Steam ranking lists
+### Opción 1: Despliegue Rápido vía Wrangler CLI
+
+1. **Iniciar sesión en Cloudflare**:
+   ```bash
+   npx wrangler login
+   ```
+2. **Crear los Namespaces KV** (solo la primera vez):
+   ```bash
+   npx wrangler kv:namespace create STATS_KV
+   npx wrangler kv:namespace create DEPOTBOX_KV
+   ```
+   Copia los IDs generados en tu archivo `wrangler.toml`.
+
+3. **Desplegar**:
+   ```bash
+   npx wrangler deploy
+   ```
+
+---
+
+## 🛰️ Resumen de Endpoints del Worker
+
+- `POST /api/stats/report-instance` - Reporta adición de instancia desde el cliente (`{ appId, name }`)
+- `POST /api/webhooks/depotbox/logs` - Procesa logs de uso de DepotBox
+- `POST /api/webhooks/depotbox/added` - Ingesta nuevos juegos de DepotBox vía webhook
+- `POST /api/webhooks/depotbox/updated` - Ingesta actualizaciones/parches de DepotBox vía webhook
+- `GET  /api/stats/trending` - Juegos tendencia en BlueStar (últimos 7 días)
+- `GET  /api/stats/most-played` - Juegos más agregados en BlueStar (histórico)
+- `GET  /api/feed/depotbox/added` - Feed de nuevos juegos de DepotBox
+- `GET  /api/feed/depotbox/updated` - Feed de juegos actualizados de DepotBox
+- `GET  /api/steam/lists?type=most_played|trending|top_sellers|top_rated` - Rankings cacheados de Steam
+

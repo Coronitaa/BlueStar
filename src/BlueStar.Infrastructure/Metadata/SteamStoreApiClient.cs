@@ -148,183 +148,327 @@ public sealed class SteamStoreApiClient : IMetadataProvider
     {
         if (result == null || result.AppId == 0) return;
 
+        // 1. Try fetching rich store data via Steam Store API (appdetails)
         try
         {
-            var url = $"https://store.steampowered.com/api/appdetails?appids={result.AppId}";
-            var response = await _http.GetAsync(url, ct).ConfigureAwait(false);
-
-            if (!response.IsSuccessStatusCode)
-                return;
-
-            var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            using var doc = JsonDocument.Parse(json);
-
-            var appKey = result.AppId.ToString();
-            if (!doc.RootElement.TryGetProperty(appKey, out var appElement) ||
-                !appElement.TryGetProperty("success", out var s) || !s.GetBoolean() ||
-                !appElement.TryGetProperty("data", out var data))
+            var url = $"https://store.steampowered.com/api/appdetails?appids={result.AppId}&l=english&cc=US";
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            if (!_http.DefaultRequestHeaders.Contains("User-Agent"))
             {
-                return;
+                request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
             }
+            var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
 
-            // 1. DLC Count
-            if (data.TryGetProperty("dlc", out var dlcArray) && dlcArray.ValueKind == JsonValueKind.Array)
+            if (response.IsSuccessStatusCode)
             {
-                result.DlcCount = dlcArray.GetArrayLength();
-            }
+                var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                using var doc = JsonDocument.Parse(json);
 
-            // 2. Supported Platforms
-            if (data.TryGetProperty("platforms", out var platforms) && platforms.ValueKind == JsonValueKind.Object)
-            {
-                if (platforms.TryGetProperty("windows", out var winProp) && winProp.ValueKind is JsonValueKind.True or JsonValueKind.False)
-                    result.HasWindows = winProp.GetBoolean();
-
-                if (platforms.TryGetProperty("linux", out var linProp) && linProp.ValueKind is JsonValueKind.True or JsonValueKind.False)
-                    result.HasLinux = linProp.GetBoolean();
-
-                if (platforms.TryGetProperty("mac", out var macProp) && macProp.ValueKind is JsonValueKind.True or JsonValueKind.False)
-                    result.HasMac = macProp.GetBoolean();
-            }
-
-            // 3. App Type
-            // 3. App Type & Genres Detection (Game vs Application vs Tool)
-            bool isSoftwareGenre = false;
-            if (data.TryGetProperty("genres", out var genresEl) && genresEl.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var g in genresEl.EnumerateArray())
+                var appKey = result.AppId.ToString();
+                if (doc.RootElement.TryGetProperty(appKey, out var appElement) &&
+                    appElement.TryGetProperty("success", out var s) && s.GetBoolean() &&
+                    appElement.TryGetProperty("data", out var data))
                 {
-                    if (g.TryGetProperty("description", out var descProp))
+                    // 1.1 DLC Count
+                    if (data.TryGetProperty("dlc", out var dlcArray) && dlcArray.ValueKind == JsonValueKind.Array)
                     {
-                        var desc = descProp.GetString() ?? "";
-                        if (desc.Equals("Utilities", StringComparison.OrdinalIgnoreCase) ||
-                            desc.Equals("Design & Illustration", StringComparison.OrdinalIgnoreCase) ||
-                            desc.Equals("Animation & Modeling", StringComparison.OrdinalIgnoreCase) ||
-                            desc.Equals("Software Training", StringComparison.OrdinalIgnoreCase) ||
-                            desc.Equals("Software", StringComparison.OrdinalIgnoreCase) ||
-                            desc.Equals("Audio Production", StringComparison.OrdinalIgnoreCase) ||
-                            desc.Equals("Video Production", StringComparison.OrdinalIgnoreCase) ||
-                            desc.Equals("Web Publishing", StringComparison.OrdinalIgnoreCase) ||
-                            desc.Equals("Photo Editing", StringComparison.OrdinalIgnoreCase) ||
-                            desc.Equals("Game Development", StringComparison.OrdinalIgnoreCase) ||
-                            desc.Equals("Education", StringComparison.OrdinalIgnoreCase))
+                        result.DlcCount = dlcArray.GetArrayLength();
+                    }
+
+                    // 1.2 Supported Platforms
+                    if (data.TryGetProperty("platforms", out var platforms) && platforms.ValueKind == JsonValueKind.Object)
+                    {
+                        if (platforms.TryGetProperty("windows", out var winProp) && winProp.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                            result.HasWindows = winProp.GetBoolean();
+
+                        if (platforms.TryGetProperty("linux", out var linProp) && linProp.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                            result.HasLinux = linProp.GetBoolean();
+
+                        if (platforms.TryGetProperty("mac", out var macProp) && macProp.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                            result.HasMac = macProp.GetBoolean();
+                    }
+
+                    // 1.3 App Type & Genres Detection (Game vs Application vs Tool)
+                    bool isSoftwareGenre = false;
+                    if (data.TryGetProperty("genres", out var genresEl) && genresEl.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var g in genresEl.EnumerateArray())
                         {
-                            isSoftwareGenre = true;
-                            break;
+                            if (g.TryGetProperty("description", out var descProp))
+                            {
+                                var desc = descProp.GetString() ?? "";
+                                if (desc.Equals("Utilities", StringComparison.OrdinalIgnoreCase) ||
+                                    desc.Equals("Design & Illustration", StringComparison.OrdinalIgnoreCase) ||
+                                    desc.Equals("Animation & Modeling", StringComparison.OrdinalIgnoreCase) ||
+                                    desc.Equals("Software Training", StringComparison.OrdinalIgnoreCase) ||
+                                    desc.Equals("Software", StringComparison.OrdinalIgnoreCase) ||
+                                    desc.Equals("Audio Production", StringComparison.OrdinalIgnoreCase) ||
+                                    desc.Equals("Video Production", StringComparison.OrdinalIgnoreCase) ||
+                                    desc.Equals("Web Publishing", StringComparison.OrdinalIgnoreCase) ||
+                                    desc.Equals("Photo Editing", StringComparison.OrdinalIgnoreCase) ||
+                                    desc.Equals("Game Development", StringComparison.OrdinalIgnoreCase) ||
+                                    desc.Equals("Education", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    isSoftwareGenre = true;
+                                    break;
+                                }
+                            }
                         }
                     }
-                }
-            }
 
-            string rawType = string.Empty;
-            if (data.TryGetProperty("type", out var typeProp) && typeProp.ValueKind == JsonValueKind.String)
-            {
-                rawType = (typeProp.GetString() ?? "").Trim().ToLowerInvariant();
-            }
-
-            if (rawType is "tool" or "utility" or "driver")
-            {
-                result.AppType = "Tool";
-            }
-            else if (rawType is "application" || isSoftwareGenre)
-            {
-                result.AppType = "Application";
-            }
-            else
-            {
-                result.AppType = "Game";
-            }
-
-            // 4. Header image
-            if (data.TryGetProperty("header_image", out var headerProp) && headerProp.ValueKind == JsonValueKind.String)
-            {
-                var img = headerProp.GetString();
-                if (!string.IsNullOrWhiteSpace(img))
-                    result.HeaderImageUrl = img;
-            }
-
-            // 5. Version / Latest update date from Steam depot history or Steam News
-            try
-            {
-                var depotInfo = await GetAppDepotInfoAsync(result.AppId, ct).ConfigureAwait(false);
-
-                // Check SteamCMD common.type for override (e.g. Wallpaper Engine returns "Application" in SteamCMD)
-                if (!string.IsNullOrWhiteSpace(depotInfo?.AppType))
-                {
-                    var cmdType = depotInfo.AppType.Trim();
-                    if (cmdType.Equals("Application", StringComparison.OrdinalIgnoreCase) ||
-                        cmdType.Equals("Software", StringComparison.OrdinalIgnoreCase))
+                    string rawType = string.Empty;
+                    if (data.TryGetProperty("type", out var typeProp) && typeProp.ValueKind == JsonValueKind.String)
                     {
-                        result.AppType = "Application";
+                        rawType = (typeProp.GetString() ?? "").Trim().ToLowerInvariant();
                     }
-                    else if (cmdType.Equals("Tool", StringComparison.OrdinalIgnoreCase) ||
-                             cmdType.Equals("Utility", StringComparison.OrdinalIgnoreCase) ||
-                             cmdType.Equals("Config", StringComparison.OrdinalIgnoreCase))
+
+                    if (rawType is "tool" or "utility" or "driver")
                     {
                         result.AppType = "Tool";
                     }
-                }
-
-                if (depotInfo?.LatestBuildDate != null)
-                {
-                    result.Version = $"{depotInfo.LatestBuildDate.Value.LocalDateTime:d MMM yyyy}";
-                }
-                else
-                {
-                    var newsUrl = $"https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid={result.AppId}&count=5&maxlength=300";
-                    var request = new HttpRequestMessage(HttpMethod.Get, newsUrl);
-                    if (!_http.DefaultRequestHeaders.Contains("User-Agent"))
+                    else if (rawType is "application" || isSoftwareGenre)
                     {
-                        request.Headers.UserAgent.ParseAdd("BlueStar/0.1.0");
+                        result.AppType = "Application";
                     }
-                    var newsResponse = await _http.SendAsync(request, ct).ConfigureAwait(false);
-                    if (newsResponse.IsSuccessStatusCode)
+                    else
                     {
-                        var newsJson = await newsResponse.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                        using var newsDoc = JsonDocument.Parse(newsJson);
-                        if (newsDoc.RootElement.TryGetProperty("appnews", out var appNews) &&
-                            appNews.TryGetProperty("newsitems", out var newsItems) &&
-                            newsItems.ValueKind == JsonValueKind.Array &&
-                            newsItems.GetArrayLength() > 0)
+                        result.AppType = "Game";
+                    }
+
+                    // 1.4 Header image
+                    if (data.TryGetProperty("header_image", out var headerProp) && headerProp.ValueKind == JsonValueKind.String)
+                    {
+                        var img = headerProp.GetString();
+                        if (!string.IsNullOrWhiteSpace(img))
+                            result.HeaderImageUrl = img;
+                    }
+
+                    // 1.5 NSFW / Adult Content Detection
+                    bool isNsfw = false;
+                    if (data.TryGetProperty("required_age", out var ageProp))
+                    {
+                        if (ageProp.ValueKind == JsonValueKind.Number && ageProp.GetInt32() >= 18) isNsfw = true;
+                        else if (ageProp.ValueKind == JsonValueKind.String && int.TryParse(ageProp.GetString(), out var age) && age >= 18) isNsfw = true;
+                    }
+                    if (data.TryGetProperty("content_descriptors", out var cdProp))
+                    {
+                        if (cdProp.TryGetProperty("ids", out var idsProp) && idsProp.ValueKind == JsonValueKind.Array)
                         {
-                            long maxUnix = 0;
-                            foreach (var item in newsItems.EnumerateArray())
+                            foreach (var id in idsProp.EnumerateArray())
                             {
-                                if (item.TryGetProperty("date", out var dateEl))
+                                if (id.TryGetInt32(out var descriptorId) && descriptorId is 1 or 3 or 4 or 5)
                                 {
-                                    long unix = 0;
-                                    if (dateEl.ValueKind == JsonValueKind.Number) dateEl.TryGetInt64(out unix);
-                                    else if (dateEl.ValueKind == JsonValueKind.String && long.TryParse(dateEl.GetString(), out var p)) unix = p;
-                                    if (unix > maxUnix) maxUnix = unix;
+                                    isNsfw = true;
+                                    break;
                                 }
                             }
-
-                            if (maxUnix > 0)
+                        }
+                        if (cdProp.TryGetProperty("notes", out var cdNotes) && cdNotes.ValueKind == JsonValueKind.String)
+                        {
+                            var notes = cdNotes.GetString() ?? "";
+                            if (notes.Contains("sexual", StringComparison.OrdinalIgnoreCase) ||
+                                notes.Contains("nudity", StringComparison.OrdinalIgnoreCase) ||
+                                notes.Contains("adult", StringComparison.OrdinalIgnoreCase) ||
+                                notes.Contains("erotic", StringComparison.OrdinalIgnoreCase) ||
+                                notes.Contains("hentai", StringComparison.OrdinalIgnoreCase))
                             {
-                                var updateDate = DateTimeOffset.FromUnixTimeSeconds(maxUnix).LocalDateTime;
-                                result.Version = $"{updateDate:d MMM yyyy}";
+                                isNsfw = true;
                             }
                         }
                     }
-                }
-            }
-            catch { }
-
-            // Fallback to release_date if news date is unavailable
-            if (string.IsNullOrWhiteSpace(result.Version))
-            {
-                if (data.TryGetProperty("release_date", out var rd) && rd.TryGetProperty("date", out var dateProp))
-                {
-                    var dateStr = dateProp.GetString();
-                    if (!string.IsNullOrWhiteSpace(dateStr))
+                    if (data.TryGetProperty("genres", out var allGenres) && allGenres.ValueKind == JsonValueKind.Array)
                     {
-                        result.Version = dateStr;
+                        foreach (var g in allGenres.EnumerateArray())
+                        {
+                            if (g.TryGetProperty("description", out var gDescProp))
+                            {
+                                var desc = gDescProp.GetString() ?? "";
+                                if (desc.Equals("Nudity", StringComparison.OrdinalIgnoreCase) ||
+                                    desc.Equals("Sexual Content", StringComparison.OrdinalIgnoreCase) ||
+                                    desc.Equals("Hentai", StringComparison.OrdinalIgnoreCase) ||
+                                    desc.Equals("Adult Only", StringComparison.OrdinalIgnoreCase) ||
+                                    desc.Equals("Mature", StringComparison.OrdinalIgnoreCase) ||
+                                    desc.Equals("Erotic", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    isNsfw = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (data.TryGetProperty("categories", out var allCats) && allCats.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var c in allCats.EnumerateArray())
+                        {
+                            if (c.TryGetProperty("description", out var cDescProp))
+                            {
+                                var desc = cDescProp.GetString() ?? "";
+                                if (desc.Contains("Sexual", StringComparison.OrdinalIgnoreCase) ||
+                                    desc.Contains("Nudity", StringComparison.OrdinalIgnoreCase) ||
+                                    desc.Contains("Adult", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    isNsfw = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (!isNsfw && !string.IsNullOrWhiteSpace(result.Name))
+                    {
+                        var n = result.Name;
+                        if (n.Contains("Hentai", StringComparison.OrdinalIgnoreCase) ||
+                            n.Contains("Sex ", StringComparison.OrdinalIgnoreCase) ||
+                            n.Contains("Porn", StringComparison.OrdinalIgnoreCase) ||
+                            n.Contains("Nude", StringComparison.OrdinalIgnoreCase) ||
+                            n.Contains("Erotic", StringComparison.OrdinalIgnoreCase) ||
+                            n.Contains("Lewd", StringComparison.OrdinalIgnoreCase) ||
+                            n.Contains("Adult Only", StringComparison.OrdinalIgnoreCase) ||
+                            n.Contains("18+", StringComparison.OrdinalIgnoreCase) ||
+                            n.EndsWith(" Sex", StringComparison.OrdinalIgnoreCase))
+                        {
+                            isNsfw = true;
+                        }
+                    }
+                    result.IsNsfw = isNsfw;
+
+                    // 1.6 DRM / 3rd-Party Account Detection
+                    bool hasDrm = false;
+                    string? drmNotice = null;
+                    if (data.TryGetProperty("drm_notice", out var drmProp) && drmProp.ValueKind == JsonValueKind.String)
+                    {
+                        var notice = drmProp.GetString();
+                        if (!string.IsNullOrWhiteSpace(notice))
+                        {
+                            hasDrm = true;
+                            drmNotice = notice.Trim();
+                        }
+                    }
+                    if (data.TryGetProperty("ext_user_account_notice", out var extAccProp) && extAccProp.ValueKind == JsonValueKind.String)
+                    {
+                        var notice = extAccProp.GetString();
+                        if (!string.IsNullOrWhiteSpace(notice))
+                        {
+                            hasDrm = true;
+                            drmNotice = string.IsNullOrWhiteSpace(drmNotice) ? notice.Trim() : $"{drmNotice} • {notice.Trim()}";
+                        }
+                    }
+                    if (data.TryGetProperty("legal_notice", out var legalProp) && legalProp.ValueKind == JsonValueKind.String)
+                    {
+                        var legal = legalProp.GetString() ?? "";
+                        if (legal.Contains("Denuvo", StringComparison.OrdinalIgnoreCase) ||
+                            legal.Contains("SecuROM", StringComparison.OrdinalIgnoreCase) ||
+                            legal.Contains("VMProtect", StringComparison.OrdinalIgnoreCase))
+                        {
+                            hasDrm = true;
+                            if (string.IsNullOrWhiteSpace(drmNotice))
+                                drmNotice = "Incorporates 3rd-party DRM";
+                        }
+                    }
+                    result.HasDrm = hasDrm;
+                    result.DrmNotice = drmNotice;
+
+                    // 1.7 Release Date fallback
+                    if (string.IsNullOrWhiteSpace(result.Version) &&
+                        data.TryGetProperty("release_date", out var rd) &&
+                        rd.TryGetProperty("date", out var dateProp))
+                    {
+                        var dateStr = dateProp.GetString();
+                        if (!string.IsNullOrWhiteSpace(dateStr))
+                        {
+                            result.Version = dateStr;
+                        }
                     }
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Failed to enrich search result for AppId={AppId}", result.AppId);
+            _logger.LogDebug(ex, "Steam Store appdetails API call skipped/failed for AppId={AppId}", result.AppId);
+        }
+
+        // 2. Query SteamCMD AppInfo / Depot Info (for build dates, accurate AppType & manifest data)
+        try
+        {
+            var depotInfo = await GetAppDepotInfoAsync(result.AppId, ct).ConfigureAwait(false);
+
+            if (!string.IsNullOrWhiteSpace(depotInfo?.AppType))
+            {
+                var cmdType = depotInfo.AppType.Trim();
+                if (cmdType.Equals("Application", StringComparison.OrdinalIgnoreCase) ||
+                    cmdType.Equals("Software", StringComparison.OrdinalIgnoreCase))
+                {
+                    result.AppType = "Application";
+                }
+                else if (cmdType.Equals("Tool", StringComparison.OrdinalIgnoreCase) ||
+                         cmdType.Equals("Utility", StringComparison.OrdinalIgnoreCase) ||
+                         cmdType.Equals("Config", StringComparison.OrdinalIgnoreCase))
+                {
+                    result.AppType = "Tool";
+                }
+            }
+
+            if (depotInfo?.LatestBuildDate != null)
+            {
+                result.Version = $"{depotInfo.LatestBuildDate.Value.LocalDateTime:d MMM yyyy}";
+            }
+        }
+        catch { }
+
+        // 3. If latest update date is still null, query Steam News API
+        if (string.IsNullOrWhiteSpace(result.Version))
+        {
+            try
+            {
+                var newsUrl = $"https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid={result.AppId}&count=5&maxlength=300";
+                var request = new HttpRequestMessage(HttpMethod.Get, newsUrl);
+                if (!_http.DefaultRequestHeaders.Contains("User-Agent"))
+                {
+                    request.Headers.UserAgent.ParseAdd("BlueStar/0.1.0");
+                }
+                var newsResponse = await _http.SendAsync(request, ct).ConfigureAwait(false);
+                if (newsResponse.IsSuccessStatusCode)
+                {
+                    var newsJson = await newsResponse.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    using var newsDoc = JsonDocument.Parse(newsJson);
+                    if (newsDoc.RootElement.TryGetProperty("appnews", out var appNews) &&
+                        appNews.TryGetProperty("newsitems", out var newsItems) &&
+                        newsItems.ValueKind == JsonValueKind.Array &&
+                        newsItems.GetArrayLength() > 0)
+                    {
+                        long maxUnix = 0;
+                        foreach (var item in newsItems.EnumerateArray())
+                        {
+                            if (item.TryGetProperty("date", out var dateEl))
+                            {
+                                long unix = 0;
+                                if (dateEl.ValueKind == JsonValueKind.Number) dateEl.TryGetInt64(out unix);
+                                else if (dateEl.ValueKind == JsonValueKind.String && long.TryParse(dateEl.GetString(), out var p)) unix = p;
+                                if (unix > maxUnix) maxUnix = unix;
+                            }
+                        }
+
+                        if (maxUnix > 0)
+                        {
+                            var updateDate = DateTimeOffset.FromUnixTimeSeconds(maxUnix).LocalDateTime;
+                            result.Version = $"{updateDate:d MMM yyyy}";
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // 4. Keyword heuristic overrides for well-known application and tool packages
+        if (result.AppId == 431960 ||
+            (!string.IsNullOrWhiteSpace(result.Name) &&
+             (result.Name.Contains("Wallpaper Engine", StringComparison.OrdinalIgnoreCase) ||
+              result.Name.Contains("Soundpad", StringComparison.OrdinalIgnoreCase) ||
+              result.Name.Contains("Aseprite", StringComparison.OrdinalIgnoreCase) ||
+              result.Name.Contains("3DMark", StringComparison.OrdinalIgnoreCase) ||
+              result.Name.Contains("Benchmark", StringComparison.OrdinalIgnoreCase) ||
+              result.Name.Contains("OBS Studio", StringComparison.OrdinalIgnoreCase))))
+        {
+            result.AppType = "Application";
         }
     }
 

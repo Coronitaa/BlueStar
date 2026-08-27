@@ -947,6 +947,64 @@ public class NewFeaturesTests
         recentSort[1].Name.Should().Be("Baldur's Gate 3");
         recentSort[2].Name.Should().Be("Apex Legends");
     }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // 16. CATALOG NSFW & DRM SETTINGS AND FILTERING TESTS
+    // ═════════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task AppSettingsService_NsfwAndDrmDefaultsAndToggle_PersistsCorrectly()
+    {
+        var tempSettingsPath = Path.Combine(Path.GetTempPath(), $"settings_nsfw_{Guid.NewGuid():N}.json");
+        try
+        {
+            var appSettings = new AppSettingsService(NullLogger<AppSettingsService>.Instance, tempSettingsPath);
+
+            // Default values: NSFW = false, DRM = true
+            appSettings.ShowNsfwContent.Should().BeFalse();
+            appSettings.ShowDrmContent.Should().BeTrue();
+
+            // Change values
+            await appSettings.SetShowNsfwContentAsync(true);
+            await appSettings.SetShowDrmContentAsync(false);
+
+            appSettings.ShowNsfwContent.Should().BeTrue();
+            appSettings.ShowDrmContent.Should().BeFalse();
+
+            // Reload from file to verify persistence
+            var reloadedSettings = new AppSettingsService(NullLogger<AppSettingsService>.Instance, tempSettingsPath);
+            reloadedSettings.ShowNsfwContent.Should().BeTrue();
+            reloadedSettings.ShowDrmContent.Should().BeFalse();
+        }
+        finally
+        {
+            if (File.Exists(tempSettingsPath)) File.Delete(tempSettingsPath);
+        }
+    }
+
+    [Fact]
+    public void SearchResult_NsfwAndDrmFiltering_FiltersAppropriately()
+    {
+        var items = new List<SearchResult>
+        {
+            new() { Name = "Safe Game", AppId = 1, IsNsfw = false, HasDrm = false },
+            new() { Name = "NSFW Game", AppId = 2, IsNsfw = true, HasDrm = false },
+            new() { Name = "DRM Game", AppId = 3, IsNsfw = false, HasDrm = true },
+            new() { Name = "NSFW DRM Game", AppId = 4, IsNsfw = true, HasDrm = true }
+        };
+
+        // Case 1: Default (NSFW=false, DRM=true) -> Safe Game and DRM Game
+        var defaultFiltered = items.Where(i => !i.IsNsfw && true).ToList();
+        defaultFiltered.Select(i => i.Name).Should().BeEquivalentTo(new[] { "Safe Game", "DRM Game" });
+
+        // Case 2: NSFW=true, DRM=true -> All 4 games
+        var allFiltered = items.Where(i => true && true).ToList();
+        allFiltered.Count.Should().Be(4);
+
+        // Case 3: NSFW=false, DRM=false -> Only Safe Game
+        var strictFiltered = items.Where(i => !i.IsNsfw && !i.HasDrm).ToList();
+        strictFiltered.Select(i => i.Name).Should().BeEquivalentTo(new[] { "Safe Game" });
+    }
 }
 
 

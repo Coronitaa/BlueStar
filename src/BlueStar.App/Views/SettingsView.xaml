@@ -106,9 +106,40 @@
             <Border Style="{StaticResource Card}" Margin="0,0,0,20">
                 <StackPanel>
                     <TextBlock Text="Storage &amp; Directories" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                    <TextBlock Text="Persistent directories used for instance configurations, manifests, and cache."
+                    <TextBlock Text="Persistent directories used for game downloads, instance staging, configurations, and cache."
                                Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,16"/>
 
+                    <!-- Default Downloads / Installs Directory -->
+                    <TextBlock Text="Default Game Downloads &amp; Installs Directory:" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                    <Grid Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBox Grid.Column="0"
+                                 Style="{StaticResource DarkTextBox}"
+                                 Text="{Binding DefaultDownloadDirectory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+
+                        <Button Grid.Column="2"
+                                Content="📁 Browse..."
+                                Style="{StaticResource SecondaryButton}"
+                                Padding="14,6"
+                                Command="{Binding BrowseDownloadDirectoryCommand}"
+                                ToolTip="Select a default installation folder on your drive"/>
+
+                        <Button Grid.Column="4"
+                                Content="🌐 Open"
+                                Style="{StaticResource GhostButton}"
+                                Padding="10,6"
+                                Command="{Binding OpenDownloadDirectoryCommand}"
+                                ToolTip="Open this folder in File Explorer"/>
+                    </Grid>
+
+                    <!-- Instances Metadata Root -->
                     <TextBlock Text="Instances Metadata Root:" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
                     <TextBox Style="{StaticResource DarkTextBox}" Text="{Binding InstanceRoot}" IsReadOnly="True"/>
                 </StackPanel>
@@ -127,6 +158,53 @@
                               Margin="0,0,0,8"/>
                     <TextBlock Text="When enabled, .DepotDownloader temp folders and source ZIP archives are cleaned up to free disk space."
                                Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
+            <!-- ═══ CATALOG & CONTENT FILTERS SECTION ═══ -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,20">
+                <StackPanel>
+                    <TextBlock Text="Catalog &amp; Content Filters" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                    <TextBlock Text="Control which tags and types of games appear in the Explore Catalog, Discovery Hub and carousels (does not affect your personal instances list)."
+                               Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,16"/>
+
+                    <!-- NSFW Filter Toggle -->
+                    <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,10" Margin="0,0,0,10">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                                <TextBlock Text="🔞 Show NSFW &amp; Adult Content" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
+                                <TextBlock Text="When disabled, adult games (18+, nudity, sexual themes) are hidden from all carousels and search results."
+                                           Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1"
+                                      IsChecked="{Binding ShowNsfwContent, Mode=TwoWay}"
+                                      Style="{StaticResource DarkCheckBox}"
+                                      VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- DRM Filter Toggle -->
+                    <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,10">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                                <TextBlock Text="🔒 Show 3rd-Party DRM Games" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
+                                <TextBlock Text="When disabled, games requiring Denuvo, EA Account or Ubisoft Connect DRM are filtered out of public catalogs."
+                                           Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1"
+                                      IsChecked="{Binding ShowDrmContent, Mode=TwoWay}"
+                                      Style="{StaticResource DarkCheckBox}"
+                                      VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
                 </StackPanel>
             </Border>
 

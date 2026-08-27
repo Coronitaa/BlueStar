@@ -1,4 +1,4 @@
-﻿/**
+/**
  * BlueStar Cloudflare Worker
  * ─────────────────────────────────────────────────────────────────────────────
  * Real-time community statistics & webhook receiver for BlueStar & DepotBox.
@@ -7,8 +7,9 @@
  * 1. Collects BlueStar instance creations (/api/stats/report-instance)
  * 2. Parses DepotBox API usage logs (/api/webhooks/depotbox/logs)
  * 3. Calculates 7-day "Trending on BlueStar" and all-time "Most Added in BlueStar"
- * 4. Ingests DepotBox "Added Game" and "Updated Game" webhooks
- * 5. Serves cached Steam Rankings for the 4 Steam categories
+ * 4. Ingests DepotBox "Added Game" and "Updated Game" webhooks without any Discord bots
+ * 5. Transparently forwards webhooks to Discord if DISCORD_WEBHOOK_URL is configured
+ * 6. Serves cached Steam Rankings for the 4 Steam categories
  */
 
 export default {
@@ -41,7 +42,8 @@ export default {
       if (url.pathname === "/api/stats/report-instance" && method === "POST") {
         const body = await request.json().catch(() => ({}));
         const appId = Number(body.appId);
-        const name = body.name || `App ${appId}`;
+        const rawName = body.name || `App ${appId}`;
+        const name = cleanGameName(rawName);
 
         if (appId > 0 && env.STATS_KV) {
           await recordInstanceEvent(env.STATS_KV, appId, name);
@@ -61,6 +63,8 @@ export default {
           }
         }
 
+        forwardToDiscordIfConfigured(env, ctx, body);
+
         return new Response(JSON.stringify({ success: true, processedCount: extracted.length }), { headers: corsHeaders });
       }
 
@@ -76,6 +80,8 @@ export default {
           await pushToFeed(env.DEPOTBOX_KV, "feed_depotbox_added", item);
         }
 
+        forwardToDiscordIfConfigured(env, ctx, body);
+
         return new Response(JSON.stringify({ success: true, item }), { headers: corsHeaders });
       }
 
@@ -86,6 +92,8 @@ export default {
         if (env.DEPOTBOX_KV && item) {
           await pushToFeed(env.DEPOTBOX_KV, "feed_depotbox_updated", item);
         }
+
+        forwardToDiscordIfConfigured(env, ctx, body);
 
         return new Response(JSON.stringify({ success: true, item }), { headers: corsHeaders });
       }
@@ -104,6 +112,42 @@ export default {
       if (url.pathname === "/api/stats/most-played" || url.pathname === "/api/stats/most-added") {
         const results = await getMostAddedStats(env.STATS_KV);
         return new Response(JSON.stringify({ count: results.length, results }), { headers: corsHeaders });
+      }
+
+      // Bulk sync: Sync existing local instances to Worker
+      if (url.pathname === "/api/stats/sync-instances" && method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const instances = Array.isArray(body.instances) ? body.instances : [];
+        let count = 0;
+        if (env.STATS_KV && instances.length > 0) {
+          for (const item of instances) {
+            const appId = Number(item.appId);
+            if (appId > 0) {
+              await recordInstanceEvent(env.STATS_KV, appId, cleanGameName(item.name || `App ${appId}`));
+              count++;
+            }
+          }
+        }
+        return new Response(JSON.stringify({ success: true, syncedCount: count }), { headers: corsHeaders });
+      }
+
+      // Admin endpoints to clear test data
+      if (url.pathname === "/api/admin/clear-stats" && method === "POST") {
+        if (env.STATS_KV) {
+          const list = await env.STATS_KV.list({ prefix: "instance_" });
+          for (const key of list.keys) {
+            await env.STATS_KV.delete(key.name);
+          }
+        }
+        return new Response(JSON.stringify({ success: true, message: "Cleared stats in KV" }), { headers: corsHeaders });
+      }
+
+      if (url.pathname === "/api/admin/clear-feed" && method === "POST") {
+        if (env.DEPOTBOX_KV) {
+          await env.DEPOTBOX_KV.delete("feed_depotbox_added");
+          await env.DEPOTBOX_KV.delete("feed_depotbox_updated");
+        }
+        return new Response(JSON.stringify({ success: true, message: "Cleared DepotBox feeds in KV" }), { headers: corsHeaders });
       }
 
       // ═════════════════════════════════════════════════════════════════════
@@ -136,7 +180,7 @@ export default {
       return new Response(JSON.stringify({
         service: "BlueStar Community & Webhooks Worker",
         status: "healthy",
-        version: "2.0.0",
+        version: "2.1.0",
         timestamp: new Date().toISOString(),
         endpoints: [
           "POST /api/stats/report-instance",
@@ -157,7 +201,7 @@ export default {
   }
 };
 
-// ── RECORDING TELEMETRY & STATS IN KV ──────────────────────────────────────────
+// ── TELEMETRY & KV PERSISTENCE ───────────────────────────────────────────────
 
 async function recordInstanceEvent(kv, appId, name) {
   if (!appId || appId <= 0) return;
@@ -168,15 +212,15 @@ async function recordInstanceEvent(kv, appId, name) {
     const raw = await kv.get(key);
     let record = raw ? JSON.parse(raw) : { appId, name, timestamps: [], totalCount: 0 };
 
-    if (name) record.name = name;
+    if (name) record.name = cleanGameName(name);
     record.totalCount = (record.totalCount || 0) + 1;
     record.timestamps = [...(record.timestamps || []), now];
 
-    // Keep timestamps from the last 14 days to prevent storage bloat
+    // Keep timestamps from the last 14 days
     const fourteenDaysAgo = now - (14 * 24 * 60 * 60 * 1000);
     record.timestamps = record.timestamps.filter(ts => ts >= fourteenDaysAgo);
 
-    await kv.put(key, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 90 }); // 90 days retention
+    await kv.put(key, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 90 });
   } catch {}
 }
 
@@ -196,7 +240,7 @@ async function getTrendingStats(kv) {
         if (weeklyEvents.length > 0) {
           items.push({
             appId: record.appId,
-            name: record.name || `App ${record.appId}`,
+            name: cleanGameName(record.name) || `App ${record.appId}`,
             appType: "Game",
             hasWindows: true,
             version: `${weeklyEvents.length} added this week`,
@@ -226,7 +270,7 @@ async function getMostAddedStats(kv) {
         if ((record.totalCount || 0) > 0) {
           items.push({
             appId: record.appId,
-            name: record.name || `App ${record.appId}`,
+            name: cleanGameName(record.name) || `App ${record.appId}`,
             appType: "Game",
             hasWindows: true,
             version: `${record.totalCount} community instances`,
@@ -242,34 +286,80 @@ async function getMostAddedStats(kv) {
   return deduplicate(items);
 }
 
-// ── DEPOTBOX WEBHOOK EXTRACTORS ───────────────────────────────────────────────
+// ── DEPOTBOX WEBHOOK EXTRACTOR (Discord Embeds & JSON) ────────────────────────
 
 function extractSingleGameWebhook(body, defaultVersion) {
   if (!body) return null;
 
-  if (body.appId) {
+  // Case 1: Direct JSON Payload
+  const directAppId = Number(body.appId || body.app_id || body.gameId);
+  if (directAppId > 0) {
+    const buildId = body.buildId || body.build_id;
     return {
-      appId: Number(body.appId),
-      name: body.name || `App ${body.appId}`,
-      version: body.buildId ? `Build ${body.buildId}` : defaultVersion,
+      appId: directAppId,
+      name: cleanGameName(body.name || body.game_name || body.title) || `App ${directAppId}`,
+      version: buildId ? `Build ${buildId}` : defaultVersion,
       appType: body.appType || "Game",
       hasWindows: true,
-      headerImageUrl: `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${body.appId}/header.jpg`
+      headerImageUrl: `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${directAppId}/header.jpg`
     };
   }
 
+  // Case 2: Discord Webhook Embed Payload
   if (body.embeds && Array.isArray(body.embeds) && body.embeds.length > 0) {
     const embed = body.embeds[0];
-    const title = embed.title || embed.description || "";
     let appId = 0;
-    const match = title.match(/(\d{3,9})/);
-    if (match) appId = parseInt(match[1], 10);
+    let name = "";
+    let buildId = "";
+
+    // 2.1 Check embed.fields
+    if (Array.isArray(embed.fields)) {
+      for (const field of embed.fields) {
+        const fieldName = (field.name || "").toLowerCase();
+        const fieldValue = String(field.value || "").trim();
+
+        if (fieldName.includes("app") || fieldName.includes("id")) {
+          const m = fieldValue.match(/(\d{3,9})/);
+          if (m && !appId) appId = parseInt(m[1], 10);
+        }
+        if (fieldName.includes("name") || fieldName.includes("game") || fieldName.includes("title")) {
+          if (!name) name = fieldValue.replace(/`/g, "").trim();
+        }
+        if (fieldName.includes("build") || fieldName.includes("version")) {
+          const m = fieldValue.match(/(\d{5,12})/);
+          if (m && !buildId) buildId = m[1];
+        }
+      }
+    }
+
+    // 2.2 Check embed.title
+    const title = embed.title || "";
+    if (!appId) {
+      const match = title.match(/(\d{3,9})/);
+      if (match) appId = parseInt(match[1], 10);
+    }
+    if (!name && title) {
+      name = cleanGameName(title);
+    }
+
+    // 2.3 Check embed.description
+    const desc = embed.description || "";
+    if (!appId) {
+      const match = desc.match(/app[^\d]{0,5}(\d{3,9})/i) || desc.match(/(\d{3,9})/);
+      if (match) appId = parseInt(match[1], 10);
+    }
+
+    // 2.4 Check embed.url or thumbnail
+    if (!appId && embed.url) {
+      const match = embed.url.match(/apps?\/(\d{3,9})/i);
+      if (match) appId = parseInt(match[1], 10);
+    }
 
     if (appId > 0) {
       return {
         appId,
-        name: title.replace(/\[.*?\]|\(.*?\)/g, "").trim() || `App ${appId}`,
-        version: defaultVersion,
+        name: cleanGameName(name) || `App ${appId}`,
+        version: buildId ? `Build ${buildId}` : defaultVersion,
         appType: "Game",
         hasWindows: true,
         headerImageUrl: `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`
@@ -284,26 +374,70 @@ function extractGamesFromLog(body) {
   const result = [];
   if (!body) return result;
 
-  // If payload contains an array of log events or a single log object
-  const entries = Array.isArray(body.logs) ? body.logs : [body];
+  const entries = Array.isArray(body.logs) ? body.logs : (Array.isArray(body) ? body : [body]);
   for (const entry of entries) {
-    if (entry.appId) {
-      result.push({
-        appId: Number(entry.appId),
-        name: entry.name || `App ${entry.appId}`
-      });
+    if (entry.appId || entry.app_id) {
+      const id = Number(entry.appId || entry.app_id);
+      if (id > 0) {
+        result.push({
+          appId: id,
+          name: cleanGameName(entry.name || entry.game_name) || `App ${id}`
+        });
+      }
     } else if (entry.message) {
       const match = entry.message.match(/(\d{3,9})/);
       if (match) {
         result.push({
           appId: parseInt(match[1], 10),
-          name: entry.name || `App ${match[1]}`
+          name: cleanGameName(entry.name) || `App ${match[1]}`
         });
       }
     }
   }
 
   return result;
+}
+
+function cleanGameName(rawName) {
+  if (!rawName || typeof rawName !== "string") return "";
+  let name = rawName.trim();
+
+  // Strip emojis & icons
+  name = name.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, "").trim();
+
+  // Strip common webhook prefixes
+  const prefixes = [
+    "New game added:", "New game added", "Game updated:", "Game updated",
+    "New Depot Added:", "New Depot Added", "Build updated:", "Build updated",
+    "Added:", "Updated:", "App:"
+  ];
+  for (const p of prefixes) {
+    if (name.toLowerCase().startsWith(p.toLowerCase())) {
+      name = name.substring(p.length).trim();
+    }
+  }
+
+  // Strip leading/trailing AppIDs like [730] or (1091500)
+  name = name.replace(/^\[\d+\]\s*/, "")
+             .replace(/\s*\(\d+\)$/, "")
+             .replace(/\s*\[\d+\]$/, "")
+             .trim();
+
+  return name;
+}
+
+function forwardToDiscordIfConfigured(env, ctx, body) {
+  if (env.DISCORD_WEBHOOK_URL) {
+    try {
+      ctx.waitUntil(
+        fetch(env.DISCORD_WEBHOOK_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        }).catch(() => {})
+      );
+    } catch {}
+  }
 }
 
 async function pushToFeed(kv, feedKey, item) {
@@ -325,7 +459,7 @@ async function getFeed(kv, feedKey) {
   }
 }
 
-// ── STEAM RANKINGS FETCHER (Proxy & Cache) ───────────────────────────────────
+// ── STEAM RANKINGS PROXY & CACHE ─────────────────────────────────────────────
 
 async function fetchSteamRankings(type) {
   try {
@@ -348,7 +482,7 @@ async function fetchSteamRankings(type) {
       if (rawItems.length > 0) {
         const mapped = rawItems.map(item => ({
           appId: item.id,
-          name: item.name,
+          name: cleanGameName(item.name),
           appType: "Game",
           hasWindows: Boolean(item.windows_available),
           hasLinux: Boolean(item.linux_available),

@@ -15,6 +15,7 @@ public sealed class InstanceManager : IInstanceManager
 
     private readonly string _rootPath;
     private readonly ILogger<InstanceManager> _logger;
+    private readonly ICommunityStatsService? _statsService;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -27,10 +28,12 @@ public sealed class InstanceManager : IInstanceManager
     /// Initializes a new instance of the <see cref="InstanceManager"/> class.
     /// </summary>
     /// <param name="logger">Logger instance.</param>
+    /// <param name="statsService">Optional community stats telemetry service.</param>
     /// <param name="rootPath">Optional custom root path. Defaults to %APPDATA%\BlueStar\instances.</param>
-    public InstanceManager(ILogger<InstanceManager> logger, string? rootPath = null)
+    public InstanceManager(ILogger<InstanceManager> logger, ICommunityStatsService? statsService = null, string? rootPath = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _statsService = statsService;
         _rootPath = rootPath ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "BlueStar", "instances");
@@ -125,6 +128,12 @@ public sealed class InstanceManager : IInstanceManager
 
             _lock.Release();
             InstancesChanged?.Invoke(this, EventArgs.Empty);
+
+            if (_statsService != null && newInstance.AppId > 0)
+            {
+                _ = _statsService.ReportInstanceAddedAsync(newInstance.AppId, newInstance.Name, CancellationToken.None);
+            }
+
             return newInstance;
         }
         catch

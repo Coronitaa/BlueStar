@@ -28,6 +28,7 @@ public partial class BrowseViewModel : ObservableObject
     private readonly IEngineDetector _engineDetector;
     private readonly INotificationService? _notificationService;
     private readonly ICommunityStatsService? _statsService;
+    private readonly BlueStar.Infrastructure.Storage.AppSettingsService? _settingsService;
     private readonly ILogger<BrowseViewModel> _logger;
 
     [ObservableProperty]
@@ -73,7 +74,8 @@ public partial class BrowseViewModel : ObservableObject
         ILogger<BrowseViewModel> logger,
         ICommunityStatsService? statsService = null,
         IMetadataProvider? metadataProvider = null,
-        INotificationService? notificationService = null)
+        INotificationService? notificationService = null,
+        BlueStar.Infrastructure.Storage.AppSettingsService? settingsService = null)
     {
         _apiClient = apiClient;
         _instanceManager = instanceManager;
@@ -83,20 +85,38 @@ public partial class BrowseViewModel : ObservableObject
         _statsService = statsService;
         _metadataProvider = metadataProvider;
         _notificationService = notificationService;
+        _settingsService = settingsService;
+
+        if (_settingsService != null)
+        {
+            _settingsService.SettingsChanged += (_, _) =>
+            {
+                App.Current?.Dispatcher?.Invoke(() =>
+                {
+                    _ = LoadCategoryFeedsAsync();
+                    ApplyFilter();
+                });
+            };
+        }
 
         _ = LoadCategoryFeedsAsync();
     }
 
+    private string? _pendingExpandedCategoryId;
     public Action<string>? OnScrollToCategoryRequested;
 
     public void ExpandCategory(string categoryId)
     {
+        _pendingExpandedCategoryId = categoryId;
         HasSearched = false;
         SearchQuery = string.Empty;
 
-        foreach (var cat in Categories)
+        if (Categories != null && Categories.Count > 0)
         {
-            cat.IsExpanded = string.Equals(cat.Id, categoryId, StringComparison.OrdinalIgnoreCase);
+            foreach (var cat in Categories)
+            {
+                cat.IsExpanded = string.Equals(cat.Id, categoryId, StringComparison.OrdinalIgnoreCase);
+            }
         }
 
         OnScrollToCategoryRequested?.Invoke(categoryId);
@@ -109,14 +129,27 @@ public partial class BrowseViewModel : ObservableObject
         category.IsExpanded = !category.IsExpanded;
     }
 
+    private List<SearchResult> FilterBySettings(IEnumerable<SearchResult> source)
+    {
+        if (source == null) return [];
+        var allowNsfw = _settingsService?.ShowNsfwContent ?? false;
+        var allowDrm = _settingsService?.ShowDrmContent ?? true;
+
+        return source.Where(item =>
+            (allowNsfw || !item.IsNsfw) &&
+            (allowDrm || !item.HasDrm)).ToList();
+    }
+
     public async Task LoadCategoryFeedsAsync()
     {
-        var catTrending = new CatalogCategory("bluestar_trending_7d", "Trending on BlueStar", "Más agregados a instancias en los últimos 7 días", "IconFlame", "#3B82F6", "7 DÍAS");
-        var catMostPlayed = new CatalogCategory("bluestar_most_played_alltime", "Most Added in BlueStar", "Títulos con más instancias creadas históricamente", "IconTrophy", "#8B5CF6", "GLOBAL");
-        var catSteamDbMostPlayed = new CatalogCategory("steamdb_most_played", "Steam: Most Played", "Top jugadores concurrentes en tiempo real", "IconUsers", "#10B981", "STEAM");
-        var catSteamDbTrending = new CatalogCategory("steamdb_trending", "Steam: Trending Games", "Títulos con mayor crecimiento de actividad reciente", "IconTrending", "#F59E0B", "STEAM");
-        var catSteamDbTopSellers = new CatalogCategory("steamdb_top_sellers", "Steam: Top Sellers & Popular", "Los lanzamientos y ofertas más vendidos a nivel global", "IconTag", "#EC4899", "STEAM");
-        var catSteamDbTopRated = new CatalogCategory("steamdb_top_rated", "Steam: Top Rated & Anticipated", "Mejor calificados por la crítica y jugadores", "IconStar", "#6366F1", "STEAM");
+        await Task.Yield();
+
+        var catTrending = new CatalogCategory("bluestar_trending_7d", "Trending on BlueStar", "Más agregados a instancias en los últimos 7 días", "IconFlame", "#3B82F6", "LAST WEEK");
+        var catMostPlayed = new CatalogCategory("bluestar_most_played_alltime", "Most Added in BlueStar", "Títulos con más instancias creadas históricamente", "IconTrophy", "#8B5CF6", "ALL TIME");
+        var catSteamDbMostPlayed = new CatalogCategory("steamdb_most_played", "Most Played", "Top jugadores concurrentes en tiempo real", "IconUsers", "#10B981", "STEAM");
+        var catSteamDbTrending = new CatalogCategory("steamdb_trending", "Trending Games", "Títulos con mayor crecimiento de actividad reciente", "IconTrending", "#F59E0B", "STEAM");
+        var catSteamDbTopSellers = new CatalogCategory("steamdb_top_sellers", "Top Sellers & Popular", "Los lanzamientos y ofertas más vendidos a nivel global", "IconTag", "#EC4899", "STEAM");
+        var catSteamDbTopRated = new CatalogCategory("steamdb_top_rated", "Top Rated & Anticipated", "Mejor calificados por la crítica y jugadores", "IconStar", "#6366F1", "STEAM");
         var catDepotBoxNew = new CatalogCategory("depotbox_new_games", "New Games in DepotBox", "Paquetes recién agregados vía DepotBox Webhook", "IconSparkles", "#06B6D4", "DEPOTBOX");
         var catDepotBoxUpdated = new CatalogCategory("depotbox_updated_games", "Updated Games in DepotBox", "Actualizaciones recientes de manifiestos y builds", "IconRefresh", "#14B8A6", "DEPOTBOX");
 
@@ -132,6 +165,15 @@ public partial class BrowseViewModel : ObservableObject
             catDepotBoxUpdated
         };
 
+        if (!string.IsNullOrWhiteSpace(_pendingExpandedCategoryId))
+        {
+            foreach (var cat in Categories)
+            {
+                cat.IsExpanded = string.Equals(cat.Id, _pendingExpandedCategoryId, StringComparison.OrdinalIgnoreCase);
+            }
+            OnScrollToCategoryRequested?.Invoke(_pendingExpandedCategoryId);
+        }
+
         TrendingSuggestionChips = new ObservableCollection<string>
         {
             "Cyberpunk 2077", "ELDEN RING", "Baldur's Gate 3", "Black Myth: Wukong", "HELLDIVERS 2", "Palworld", "Manor Lords", "Hades II"
@@ -143,18 +185,24 @@ public partial class BrowseViewModel : ObservableObject
             return;
         }
 
+        // 2. Load feeds asynchronously & progressively
         _ = Task.Run(async () =>
         {
             try
             {
                 var trendingItems = await _statsService.GetTrendingBlueStarAsync().ConfigureAwait(false);
-                catTrending.Items = new ObservableCollection<SearchResult>(trendingItems);
+                catTrending.PoolItems = trendingItems.ToList();
+                var filtered = FilterBySettings(catTrending.PoolItems);
+                var initial = filtered.Take(catTrending.DisplayLimit).ToList();
+                catTrending.Items = new ObservableCollection<SearchResult>(initial);
                 catTrending.IsLoading = false;
+                catTrending.HasMoreItems = filtered.Count > initial.Count;
+                _ = EnrichResultsAsync(initial, catTrending);
 
-                if (trendingItems.Count > 0)
+                if (filtered.Count > 0)
                 {
-                    var chips = trendingItems.Take(8).Select(t => t.Name).Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
-                    App.Current.Dispatcher.Invoke(() =>
+                    var chips = filtered.Take(8).Select(t => t.Name).Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
+                    App.Current?.Dispatcher?.Invoke(() =>
                     {
                         TrendingSuggestionChips = new ObservableCollection<string>(chips);
                     });
@@ -168,63 +216,34 @@ public partial class BrowseViewModel : ObservableObject
             try
             {
                 var items = await _statsService.GetMostPlayedBlueStarAsync().ConfigureAwait(false);
-                catMostPlayed.Items = new ObservableCollection<SearchResult>(items);
+                catMostPlayed.PoolItems = items.ToList();
+                var filtered = FilterBySettings(catMostPlayed.PoolItems);
+                var initial = filtered.Take(catMostPlayed.DisplayLimit).ToList();
+                catMostPlayed.Items = new ObservableCollection<SearchResult>(initial);
                 catMostPlayed.IsLoading = false;
+                catMostPlayed.HasMoreItems = filtered.Count > initial.Count;
+                _ = EnrichResultsAsync(initial, catMostPlayed);
             }
             catch { catMostPlayed.IsLoading = false; }
         });
 
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                var items = await _statsService.GetSteamDbListAsync("most_played").ConfigureAwait(false);
-                catSteamDbMostPlayed.Items = new ObservableCollection<SearchResult>(items);
-                catSteamDbMostPlayed.IsLoading = false;
-            }
-            catch { catSteamDbMostPlayed.IsLoading = false; }
-        });
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                var items = await _statsService.GetSteamDbListAsync("trending").ConfigureAwait(false);
-                catSteamDbTrending.Items = new ObservableCollection<SearchResult>(items);
-                catSteamDbTrending.IsLoading = false;
-            }
-            catch { catSteamDbTrending.IsLoading = false; }
-        });
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                var items = await _statsService.GetSteamDbListAsync("top_sellers").ConfigureAwait(false);
-                catSteamDbTopSellers.Items = new ObservableCollection<SearchResult>(items);
-                catSteamDbTopSellers.IsLoading = false;
-            }
-            catch { catSteamDbTopSellers.IsLoading = false; }
-        });
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                var items = await _statsService.GetSteamDbListAsync("top_rated").ConfigureAwait(false);
-                catSteamDbTopRated.Items = new ObservableCollection<SearchResult>(items);
-                catSteamDbTopRated.IsLoading = false;
-            }
-            catch { catSteamDbTopRated.IsLoading = false; }
-        });
+        _ = Task.Run(() => LoadSteamCategoryFeedAsync(catSteamDbMostPlayed, "most_played"));
+        _ = Task.Run(() => LoadSteamCategoryFeedAsync(catSteamDbTrending, "trending"));
+        _ = Task.Run(() => LoadSteamCategoryFeedAsync(catSteamDbTopSellers, "top_sellers"));
+        _ = Task.Run(() => LoadSteamCategoryFeedAsync(catSteamDbTopRated, "top_rated"));
 
         _ = Task.Run(async () =>
         {
             try
             {
                 var items = await _statsService.GetDepotBoxFeedAsync("added").ConfigureAwait(false);
-                catDepotBoxNew.Items = new ObservableCollection<SearchResult>(items);
+                catDepotBoxNew.PoolItems = items.ToList();
+                var filtered = FilterBySettings(catDepotBoxNew.PoolItems);
+                var initial = filtered.Take(catDepotBoxNew.DisplayLimit).ToList();
+                catDepotBoxNew.Items = new ObservableCollection<SearchResult>(initial);
                 catDepotBoxNew.IsLoading = false;
+                catDepotBoxNew.HasMoreItems = filtered.Count > initial.Count;
+                _ = EnrichResultsAsync(initial, catDepotBoxNew);
             }
             catch { catDepotBoxNew.IsLoading = false; }
         });
@@ -234,11 +253,46 @@ public partial class BrowseViewModel : ObservableObject
             try
             {
                 var items = await _statsService.GetDepotBoxFeedAsync("updated").ConfigureAwait(false);
-                catDepotBoxUpdated.Items = new ObservableCollection<SearchResult>(items);
+                catDepotBoxUpdated.PoolItems = items.ToList();
+                var filtered = FilterBySettings(catDepotBoxUpdated.PoolItems);
+                var initial = filtered.Take(catDepotBoxUpdated.DisplayLimit).ToList();
+                catDepotBoxUpdated.Items = new ObservableCollection<SearchResult>(initial);
                 catDepotBoxUpdated.IsLoading = false;
+                catDepotBoxUpdated.HasMoreItems = filtered.Count > initial.Count;
+                _ = EnrichResultsAsync(initial, catDepotBoxUpdated);
             }
             catch { catDepotBoxUpdated.IsLoading = false; }
         });
+    }
+
+    private async Task LoadSteamCategoryFeedAsync(CatalogCategory cat, string type)
+    {
+        if (_statsService == null || cat == null) return;
+        try
+        {
+            var items = await _statsService.GetSteamDbListAsync(type, 0, 30).ConfigureAwait(false);
+            cat.PoolItems = items.ToList();
+            var filtered = FilterBySettings(cat.PoolItems);
+
+            // If some items were filtered out by tags and we have less than DisplayLimit (9 slots), fetch more from Steam
+            while (filtered.Count < cat.DisplayLimit)
+            {
+                var offset = cat.PoolItems.Count;
+                var more = await _statsService.GetSteamDbListAsync(type, offset, 25).ConfigureAwait(false);
+                if (more == null || more.Count == 0) break;
+                var newUnique = more.Where(m => m.AppId > 0 && !cat.PoolItems.Any(p => p.AppId == m.AppId)).ToList();
+                if (newUnique.Count == 0) break;
+                cat.PoolItems.AddRange(newUnique);
+                filtered = FilterBySettings(cat.PoolItems);
+            }
+
+            var initial = filtered.Take(cat.DisplayLimit).ToList();
+            cat.Items = new ObservableCollection<SearchResult>(initial);
+            cat.IsLoading = false;
+            cat.HasMoreItems = cat.PoolItems.Count > 0;
+            _ = EnrichResultsAsync(initial, cat);
+        }
+        catch { cat.IsLoading = false; }
     }
 
     [RelayCommand]
@@ -277,7 +331,7 @@ public partial class BrowseViewModel : ObservableObject
             return;
         }
 
-        IEnumerable<SearchResult> filtered = Results;
+        IEnumerable<SearchResult> filtered = FilterBySettings(Results);
 
         if (string.Equals(SelectedTypeFilter, "Games", StringComparison.OrdinalIgnoreCase))
         {
@@ -345,14 +399,17 @@ public partial class BrowseViewModel : ObservableObject
         }
     }
 
-    private async Task EnrichResultsAsync(IEnumerable<SearchResult> results)
+    private async Task EnrichResultsAsync(IEnumerable<SearchResult> results, CatalogCategory? parentCategory = null)
     {
         var items = results.ToList();
+        var allowNsfw = _settingsService?.ShowNsfwContent ?? false;
+        var allowDrm = _settingsService?.ShowDrmContent ?? true;
+
         await Parallel.ForEachAsync(items, new ParallelOptions { MaxDegreeOfParallelism = 4 }, async (result, ct) =>
         {
             try
             {
-                // 1. Enrich from Steam Store / Web API (DLC count, OS compatibility, high-res artwork, release/update date, app type)
+                // 1. Enrich from Steam Store / Web API (DLC count, OS compatibility, high-res artwork, release/update date, app type, NSFW, DRM)
                 if (_metadataProvider != null && result.AppId > 0)
                 {
                     await _metadataProvider.EnrichSearchResultAsync(result, ct).ConfigureAwait(false);
@@ -371,12 +428,241 @@ public partial class BrowseViewModel : ObservableObject
                     }
                     catch { }
                 }
+
+                // 3. If after enrichment this game is NSFW or DRM and user has disabled it in settings, remove it immediately
+                if ((!allowNsfw && result.IsNsfw) || (!allowDrm && result.HasDrm))
+                {
+                    App.Current?.Dispatcher?.Invoke(() =>
+                    {
+                        if (parentCategory != null)
+                        {
+                            parentCategory.Items?.Remove(result);
+                            _ = ReplenishCategoryAsync(parentCategory);
+                        }
+                        if (Results.Contains(result))
+                        {
+                            Results.Remove(result);
+                            ApplyFilter();
+                        }
+                    });
+                }
             }
             catch (Exception ex)
             {
                 _logger.LogDebug(ex, "Background metadata enrichment error for AppId={AppId}", result.AppId);
             }
         }).ConfigureAwait(false);
+    }
+
+    private async Task ReplenishCategoryAsync(CatalogCategory category)
+    {
+        if (category == null || _statsService == null) return;
+        var allowNsfw = _settingsService?.ShowNsfwContent ?? false;
+        var allowDrm = _settingsService?.ShowDrmContent ?? true;
+
+        var needed = category.DisplayLimit - category.Items.Count;
+        if (needed <= 0) return;
+
+        var existingIds = new HashSet<uint>(category.Items.Select(i => i.AppId));
+        var candidates = category.PoolItems
+            .Where(i => i.AppId > 0 && !existingIds.Contains(i.AppId))
+            .Where(i => (allowNsfw || !i.IsNsfw) && (allowDrm || !i.HasDrm))
+            .Take(needed)
+            .ToList();
+
+        // If it's a Steam ranking category and pool has fewer candidates than needed, fetch more from Steam Store
+        if (candidates.Count < needed && IsSteamCategory(category.Id))
+        {
+            try
+            {
+                var listType = GetListTypeForCategory(category.Id);
+                while (candidates.Count < needed)
+                {
+                    var offset = category.Items.Count + category.PoolItems.Count;
+                    var more = await _statsService.GetSteamDbListAsync(listType, offset, 25).ConfigureAwait(false);
+                    if (more == null || more.Count == 0) break;
+
+                    var newUnique = more.Where(m => m.AppId > 0 && !existingIds.Contains(m.AppId) && !category.PoolItems.Any(p => p.AppId == m.AppId)).ToList();
+                    if (newUnique.Count == 0) break;
+
+                    category.PoolItems.AddRange(newUnique);
+
+                    var extra = newUnique
+                        .Where(i => (allowNsfw || !i.IsNsfw) && (allowDrm || !i.HasDrm))
+                        .Take(needed - candidates.Count)
+                        .ToList();
+
+                    candidates.AddRange(extra);
+                }
+            }
+            catch { }
+        }
+
+        if (candidates.Count > 0)
+        {
+            // Pre-enrich candidates before UI insertion
+            await Parallel.ForEachAsync(candidates, new ParallelOptions { MaxDegreeOfParallelism = 4 }, async (candidate, ct) =>
+            {
+                try
+                {
+                    if (_metadataProvider != null && candidate.AppId > 0)
+                    {
+                        await _metadataProvider.EnrichSearchResultAsync(candidate, ct).ConfigureAwait(false);
+                    }
+                }
+                catch { }
+            }).ConfigureAwait(false);
+
+            var clean = candidates.Where(i => (allowNsfw || !i.IsNsfw) && (allowDrm || !i.HasDrm)).ToList();
+            if (clean.Count > 0)
+            {
+                App.Current?.Dispatcher?.Invoke(() =>
+                {
+                    foreach (var item in clean)
+                    {
+                        if (!category.Items.Any(i => i.AppId == item.AppId))
+                        {
+                            category.Items.Add(item);
+                        }
+                    }
+                });
+            }
+
+            // If any candidate was filtered out post-enrichment, replenish again to ensure 9 slots stay full
+            if (clean.Count < candidates.Count && category.Items.Count < category.DisplayLimit)
+            {
+                _ = ReplenishCategoryAsync(category);
+            }
+        }
+    }
+
+    private static bool IsSteamCategory(string categoryId)
+    {
+        return !string.IsNullOrWhiteSpace(categoryId) &&
+               categoryId.StartsWith("steamdb_", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetListTypeForCategory(string categoryId)
+    {
+        if (string.IsNullOrWhiteSpace(categoryId)) return "top_sellers";
+        if (categoryId.Contains("most_played", StringComparison.OrdinalIgnoreCase)) return "most_played";
+        if (categoryId.Contains("trending", StringComparison.OrdinalIgnoreCase)) return "trending";
+        if (categoryId.Contains("top_rated", StringComparison.OrdinalIgnoreCase)) return "top_rated";
+        if (categoryId.Contains("top_sellers", StringComparison.OrdinalIgnoreCase)) return "top_sellers";
+        return "top_sellers";
+    }
+
+    /// <summary>
+    /// Loads more games for the given expanded category.
+    /// Uses skeleton placeholder during background loading and metadata enrichment,
+    /// then cleanly appends the verified games in a single UI dispatch.
+    /// </summary>
+    [RelayCommand]
+    public async Task LoadMoreCategoryItemsAsync(CatalogCategory category)
+    {
+        if (category == null || category.IsLoadingMore || _statsService == null) return;
+        category.IsLoadingMore = true;
+
+        try
+        {
+            var allowNsfw = _settingsService?.ShowNsfwContent ?? false;
+            var allowDrm = _settingsService?.ShowDrmContent ?? true;
+
+            const int batchSize = 9;
+            var existingIds = new HashSet<uint>(category.Items.Select(i => i.AppId));
+            var candidates = new List<SearchResult>();
+
+            // 1. Take unadded candidates from local PoolItems first
+            var poolCandidates = category.PoolItems
+                .Where(i => i.AppId > 0 && !existingIds.Contains(i.AppId))
+                .Where(i => (allowNsfw || !i.IsNsfw) && (allowDrm || !i.HasDrm))
+                .Take(batchSize)
+                .ToList();
+
+            candidates.AddRange(poolCandidates);
+
+            // 2. If it's a Steam ranking category and we need more items, query Steam Store API with pagination
+            if (candidates.Count < batchSize && IsSteamCategory(category.Id))
+            {
+                try
+                {
+                    var listType = GetListTypeForCategory(category.Id);
+                    var offset = category.Items.Count + category.PoolItems.Count;
+                    var more = await _statsService.GetSteamDbListAsync(listType, offset, 25).ConfigureAwait(false);
+
+                    var newUnique = more
+                        .Where(m => m.AppId > 0 && !existingIds.Contains(m.AppId) && !category.PoolItems.Any(p => p.AppId == m.AppId))
+                        .ToList();
+
+                    category.PoolItems.AddRange(newUnique);
+
+                    var extra = newUnique
+                        .Where(i => (allowNsfw || !i.IsNsfw) && (allowDrm || !i.HasDrm))
+                        .Take(batchSize - candidates.Count)
+                        .ToList();
+
+                    candidates.AddRange(extra);
+                    category.HasMoreItems = more.Count > 0;
+                }
+                catch { }
+            }
+            else if (!IsSteamCategory(category.Id))
+            {
+                // For BlueStar and DepotBox, HasMoreItems depends purely on authentic pool items remaining
+                var remainingInPool = category.PoolItems.Count(i => i.AppId > 0 && !existingIds.Contains(i.AppId) && !candidates.Contains(i));
+                category.HasMoreItems = remainingInPool > 0;
+            }
+
+            if (candidates.Count > 0)
+            {
+                // Pre-enrich all candidates in background BEFORE adding them to UI, to prevent layout thrashing
+                await Parallel.ForEachAsync(candidates, new ParallelOptions { MaxDegreeOfParallelism = 4 }, async (candidate, ct) =>
+                {
+                    try
+                    {
+                        if (_metadataProvider != null && candidate.AppId > 0)
+                        {
+                            await _metadataProvider.EnrichSearchResultAsync(candidate, ct).ConfigureAwait(false);
+                        }
+                    }
+                    catch { }
+                }).ConfigureAwait(false);
+
+                // Filter out any candidates that are detected as NSFW or DRM post-enrichment
+                var cleanCandidates = candidates
+                    .Where(i => (allowNsfw || !i.IsNsfw) && (allowDrm || !i.HasDrm))
+                    .ToList();
+
+                if (cleanCandidates.Count > 0)
+                {
+                    category.DisplayLimit += cleanCandidates.Count;
+                    App.Current?.Dispatcher?.Invoke(() =>
+                    {
+                        foreach (var item in cleanCandidates)
+                        {
+                            if (!category.Items.Any(i => i.AppId == item.AppId))
+                            {
+                                category.Items.Add(item);
+                            }
+                        }
+                    });
+                }
+
+                // If some items were filtered out post-enrichment, replenish from pool/Steam
+                if (cleanCandidates.Count < candidates.Count)
+                {
+                    _ = ReplenishCategoryAsync(category);
+                }
+            }
+            else if (IsSteamCategory(category.Id))
+            {
+                category.HasMoreItems = false;
+            }
+        }
+        finally
+        {
+            category.IsLoadingMore = false;
+        }
     }
 
     /// <summary>

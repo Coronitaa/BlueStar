@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -28,6 +28,16 @@ public interface ICommunityStatsService
     Task<IReadOnlyList<SearchResult>> GetSteamDbListAsync(string listType, CancellationToken ct = default);
 
     /// <summary>
+    /// Gets one of the 4 Steam ranking lists with pagination offset and count.
+    /// </summary>
+    Task<IReadOnlyList<SearchResult>> GetSteamDbListAsync(string listType, int offset, int count = 25, CancellationToken ct = default);
+
+    /// <summary>
+    /// Searches Steam Store games catalog with infinite pagination support.
+    /// </summary>
+    Task<IReadOnlyList<SearchResult>> SearchSteamGamesAsync(string query, int offset = 0, int count = 25, CancellationToken ct = default);
+
+    /// <summary>
     /// Gets the latest DepotBox games feed from webhook ingestion ("added" or "updated").
     /// </summary>
     Task<IReadOnlyList<SearchResult>> GetDepotBoxFeedAsync(string feedType, CancellationToken ct = default);
@@ -41,4 +51,9 @@ public interface ICommunityStatsService
     /// Reports an anonymous gameplay session to the Cloudflare analytics worker.
     /// </summary>
     Task ReportGamePlayAsync(int appId, string name, TimeSpan duration, CancellationToken ct = default);
+
+    /// <summary>
+    /// Synchronizes a collection of local instances with the Cloudflare analytics worker.
+    /// </summary>
+    Task SyncInstancesAsync(IEnumerable<GameInstance> instances, CancellationToken ct = default);
 }

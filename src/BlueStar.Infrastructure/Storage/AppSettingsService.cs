@@ -32,8 +32,19 @@ public sealed class AppSettingsService
         LoadSettings();
     }
 
+    /// <summary>Fired whenever application settings are updated and saved.</summary>
+    public event EventHandler? SettingsChanged;
+
     /// <summary>Last directory the user selected as game install path.</summary>
     public string? LastInstallDirectory => _current.LastInstallDirectory;
+
+    /// <summary>Default directory where downloaded games and instances are installed.</summary>
+    public string DefaultDownloadDirectory =>
+        !string.IsNullOrWhiteSpace(_current.DefaultDownloadDirectory)
+            ? _current.DefaultDownloadDirectory
+            : (!string.IsNullOrWhiteSpace(_current.LastInstallDirectory)
+                ? _current.LastInstallDirectory
+                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Games"));
 
     /// <summary>Whether to delete downloaded depot files and archives after installation completes.</summary>
     public bool DeleteDepotsAfterInstall => _current.DeleteDepotsAfterInstall;
@@ -44,6 +55,12 @@ public sealed class AppSettingsService
     /// <summary>Default backend API key configured in backend.</summary>
     public string? DefaultApiKey => _current.DefaultApiKey;
 
+    /// <summary>Whether to show NSFW / adult content in catalogs and searches (default false).</summary>
+    public bool ShowNsfwContent => _current.ShowNsfwContent;
+
+    /// <summary>Whether to show games with 3rd-party DRM in catalogs and searches (default true).</summary>
+    public bool ShowDrmContent => _current.ShowDrmContent;
+
     /// <summary>Persists a new last install directory.</summary>
     public async Task SetLastInstallDirectoryAsync(string path)
     {
@@ -51,10 +68,31 @@ public sealed class AppSettingsService
         await SaveAsync().ConfigureAwait(false);
     }
 
+    /// <summary>Persists the default download and installation directory.</summary>
+    public async Task SetDefaultDownloadDirectoryAsync(string path)
+    {
+        _current = _current with { DefaultDownloadDirectory = path, LastInstallDirectory = path };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
     /// <summary>Persists the delete depots setting.</summary>
     public async Task SetDeleteDepotsAfterInstallAsync(bool delete)
     {
         _current = _current with { DeleteDepotsAfterInstall = delete };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Persists the show NSFW content setting.</summary>
+    public async Task SetShowNsfwContentAsync(bool show)
+    {
+        _current = _current with { ShowNsfwContent = show };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Persists the show DRM content setting.</summary>
+    public async Task SetShowDrmContentAsync(bool show)
+    {
+        _current = _current with { ShowDrmContent = show };
         await SaveAsync().ConfigureAwait(false);
     }
 
@@ -99,6 +137,7 @@ public sealed class AppSettingsService
         {
             var json = JsonSerializer.Serialize(_current, JsonOptions);
             await File.WriteAllTextAsync(_settingsPath, json).ConfigureAwait(false);
+            SettingsChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex)
         {
@@ -113,7 +152,10 @@ public sealed class AppSettingsService
     private sealed record AppSettings
     {
         public string? LastInstallDirectory { get; init; }
+        public string? DefaultDownloadDirectory { get; init; }
         public bool DeleteDepotsAfterInstall { get; init; } = true;
+        public bool ShowNsfwContent { get; init; } = false;
+        public bool ShowDrmContent { get; init; } = true;
         public string? DefaultApiUrl { get; init; } = "https://depotbox.org";
         public string? DefaultApiKey { get; init; }
     }

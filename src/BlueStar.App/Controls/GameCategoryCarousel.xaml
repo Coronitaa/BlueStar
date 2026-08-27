@@ -7,7 +7,8 @@
              mc:Ignorable="d"
              x:Name="RootCarouselControl">
 
-    <StackPanel Margin="0,0,0,32">
+    <StackPanel Margin="0,0,0,32"
+                Visibility="{Binding Category.IsVisibleCategory, ElementName=RootCarouselControl, Converter={StaticResource BoolToVisibilityConverter}}">
         <!-- ═══ 1. CATEGORY HEADER & CONTROLS ROW ═══ -->
         <Grid Margin="0,0,0,12">
             <Grid.ColumnDefinitions>
@@ -49,28 +50,8 @@
                 </StackPanel>
             </StackPanel>
 
-            <!-- Right: Navigation Arrows (< / >) & "Ver más" / "Colapsar" Button -->
+            <!-- Right: "Ver más" / "Colapsar" Action Button -->
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                <!-- Navigation Arrows (only shown when not expanded and items are loaded) -->
-                <StackPanel Orientation="Horizontal" Margin="0,0,10,0"
-                            Visibility="{Binding Category.IsExpanded, ElementName=RootCarouselControl, Converter={StaticResource InverseBoolToVisibilityConverter}}">
-                    <Button x:Name="BtnPrev" Style="{StaticResource GhostButton}"
-                            Padding="8,6" Margin="0,0,4,0"
-                            ToolTip="Desplazar hacia la izquierda"
-                            Click="OnPrevClick">
-                        <Path Data="{StaticResource IconChevronLeft}" Fill="{StaticResource PrimaryTextBrush}"
-                              Stretch="Uniform" Width="14" Height="14"/>
-                    </Button>
-                    <Button x:Name="BtnNext" Style="{StaticResource GhostButton}"
-                            Padding="8,6"
-                            ToolTip="Desplazar hacia la derecha"
-                            Click="OnNextClick">
-                        <Path Data="{StaticResource IconChevronRight}" Fill="{StaticResource PrimaryTextBrush}"
-                              Stretch="Uniform" Width="14" Height="14"/>
-                    </Button>
-                </StackPanel>
-
-                <!-- "Ver más" / "Colapsar" Action Button -->
                 <Button x:Name="BtnViewMore" Style="{StaticResource SecondaryButton}"
                         Padding="14,6" FontSize="12"
                         Click="OnViewMoreClick">
@@ -124,7 +105,8 @@
 
         <!-- ═══ 3. HORIZONTAL AUTO-SCROLL CAROUSEL MODE (When NOT Expanded) ═══ -->
         <Border Visibility="{Binding Category.IsLoading, ElementName=RootCarouselControl, Converter={StaticResource InverseBoolToVisibilityConverter}}">
-            <Grid Visibility="{Binding Category.IsExpanded, ElementName=RootCarouselControl, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+            <Grid x:Name="CarouselContainerGrid"
+                  Visibility="{Binding Category.IsExpanded, ElementName=RootCarouselControl, Converter={StaticResource InverseBoolToVisibilityConverter}}">
                 <ScrollViewer x:Name="HorizontalScrollViewer"
                               HorizontalScrollBarVisibility="Hidden"
                               VerticalScrollBarVisibility="Disabled"
@@ -174,7 +156,7 @@
                                                        Style="{StaticResource Caption}" Margin="0,2,0,0"/>
                                         </StackPanel>
 
-                                        <!-- Badges Row 1 (Type, Version, DLCs) -->
+                                        <!-- Badges Row 1 (Type, Steam Update Date, DLCs, NSFW, DRM) -->
                                         <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,6,0,0">
                                             <Border CornerRadius="{StaticResource RadiusSm}"
                                                     Padding="6,2" Margin="0,0,5,4"
@@ -186,17 +168,19 @@
                                                            Foreground="{StaticResource SecondaryTextBrush}"/>
                                             </Border>
 
+                                            <!-- Steam Update Date -->
                                             <Border CornerRadius="{StaticResource RadiusSm}"
                                                     Padding="6,2" Margin="0,0,5,4"
                                                     Background="{StaticResource SurfaceInputBrush}"
                                                     BorderBrush="{StaticResource SubtleBorderBrush}"
                                                     BorderThickness="1"
                                                     Visibility="{Binding Version, Converter={StaticResource NullToVisibilityConverter}}">
-                                                <TextBlock Text="{Binding Version, StringFormat='🏷️ {0}'}"
+                                                <TextBlock Text="{Binding Version, StringFormat='📅 {0}'}"
                                                            FontSize="10" FontWeight="Medium"
                                                            Foreground="{StaticResource PrimaryTextBrush}"/>
                                             </Border>
 
+                                            <!-- DLCs Badge -->
                                             <Border CornerRadius="{StaticResource RadiusSm}"
                                                     Padding="6,2" Margin="0,0,5,4"
                                                     Background="#258B5CF6" BorderBrush="#608B5CF6" BorderThickness="1"
@@ -204,9 +188,27 @@
                                                 <TextBlock Text="{Binding DlcCount, StringFormat='🎁 {0} DLCs'}"
                                                            FontSize="10" FontWeight="SemiBold" Foreground="#A78BFA"/>
                                             </Border>
+
+                                            <!-- NSFW Badge -->
+                                            <Border CornerRadius="{StaticResource RadiusSm}"
+                                                    Padding="6,2" Margin="0,0,5,4"
+                                                    Background="#25EF4444" BorderBrush="#60EF4444" BorderThickness="1"
+                                                    Visibility="{Binding IsNsfw, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                    ToolTip="Contenido NSFW / Adultos (18+)">
+                                                <TextBlock Text="🔞 NSFW" FontSize="10" FontWeight="Bold" Foreground="#EF4444"/>
+                                            </Border>
+
+                                            <!-- DRM Badge -->
+                                            <Border CornerRadius="{StaticResource RadiusSm}"
+                                                    Padding="6,2" Margin="0,0,5,4"
+                                                    Background="#25F59E0B" BorderBrush="#60F59E0B" BorderThickness="1"
+                                                    Visibility="{Binding HasDrm, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                    ToolTip="{Binding DrmNotice, FallbackValue='Requiere DRM o cuenta de terceros'}">
+                                                <TextBlock Text="🔒 DRM" FontSize="10" FontWeight="Bold" Foreground="#F59E0B"/>
+                                            </Border>
                                         </WrapPanel>
 
-                                        <!-- Badges Row 2 (OS Support & Ready) -->
+                                        <!-- Badges Row 2 (Supported OS Platforms) -->
                                         <WrapPanel Grid.Row="3" Orientation="Horizontal" Margin="0,2,0,0">
                                             <Border CornerRadius="{StaticResource RadiusSm}"
                                                     Padding="5,1" Margin="0,0,4,4"
@@ -222,8 +224,9 @@
                                             </Border>
                                             <Border CornerRadius="{StaticResource RadiusSm}"
                                                     Padding="5,1" Margin="0,0,4,4"
-                                                    Background="{StaticResource SuccessBgBrush}">
-                                                <TextBlock Text="● DepotBox" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource SuccessBrush}"/>
+                                                    Background="#20A1A1AA" BorderBrush="#50A1A1AA" BorderThickness="1"
+                                                    Visibility="{Binding HasMac, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <TextBlock Text="🍎 macOS" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource SecondaryTextBrush}"/>
                                             </Border>
                                         </WrapPanel>
 
@@ -263,6 +266,72 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </ScrollViewer>
+
+                <!-- Left Lateral Scroll Arrow Overlay -->
+                <Button HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Margin="4,0,0,0"
+                        Width="36" Height="36"
+                        Click="OnPrevClick"
+                        ToolTip="Desplazar hacia la izquierda">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource CarouselArrowButton}">
+                            <Setter Property="Opacity" Value="0.0"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMouseOver, ElementName=CarouselContainerGrid}" Value="True">
+                                    <DataTrigger.EnterActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetProperty="Opacity" To="1.0" Duration="0:0:0.2"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </DataTrigger.EnterActions>
+                                    <DataTrigger.ExitActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0.0" Duration="0:0:0.25"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </DataTrigger.ExitActions>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                    <Path Data="{StaticResource IconChevronLeft}" Fill="{StaticResource PrimaryTextBrush}" Stretch="Uniform" Width="13" Height="13"/>
+                </Button>
+
+                <!-- Right Lateral Scroll Arrow Overlay -->
+                <Button HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Margin="0,0,4,0"
+                        Width="36" Height="36"
+                        Click="OnNextClick"
+                        ToolTip="Desplazar hacia la derecha">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource CarouselArrowButton}">
+                            <Setter Property="Opacity" Value="0.0"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMouseOver, ElementName=CarouselContainerGrid}" Value="True">
+                                    <DataTrigger.EnterActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetProperty="Opacity" To="1.0" Duration="0:0:0.2"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </DataTrigger.EnterActions>
+                                    <DataTrigger.ExitActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0.0" Duration="0:0:0.25"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </DataTrigger.ExitActions>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                    <Path Data="{StaticResource IconChevronRight}" Fill="{StaticResource PrimaryTextBrush}" Stretch="Uniform" Width="13" Height="13"/>
+                </Button>
             </Grid>
         </Border>
 
@@ -311,7 +380,7 @@
                                                    Style="{StaticResource Caption}" Margin="0,2,0,0"/>
                                     </StackPanel>
 
-                                    <!-- Badges Row 1 (App Type, Version, DLCs) -->
+                                    <!-- Badges Row 1 (App Type, Steam Update Date, DLCs, NSFW, DRM) -->
                                     <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
                                         <Border CornerRadius="{StaticResource RadiusSm}"
                                                 Padding="7,2" Margin="0,0,6,4"
@@ -323,17 +392,19 @@
                                                        Foreground="{StaticResource SecondaryTextBrush}"/>
                                         </Border>
 
+                                        <!-- Steam Update Date -->
                                         <Border CornerRadius="{StaticResource RadiusSm}"
                                                 Padding="7,2" Margin="0,0,6,4"
                                                 Background="{StaticResource SurfaceInputBrush}"
                                                 BorderBrush="{StaticResource SubtleBorderBrush}"
                                                 BorderThickness="1"
                                                 Visibility="{Binding Version, Converter={StaticResource NullToVisibilityConverter}}">
-                                            <TextBlock Text="{Binding Version, StringFormat='🏷️ {0}'}"
+                                            <TextBlock Text="{Binding Version, StringFormat='📅 {0}'}"
                                                        FontSize="11" FontWeight="Medium"
                                                        Foreground="{StaticResource PrimaryTextBrush}"/>
                                         </Border>
 
+                                        <!-- DLCs -->
                                         <Border CornerRadius="{StaticResource RadiusSm}"
                                                 Padding="7,2" Margin="0,0,6,4"
                                                 Background="#258B5CF6" BorderBrush="#608B5CF6" BorderThickness="1"
@@ -341,9 +412,27 @@
                                             <TextBlock Text="{Binding DlcCount, StringFormat='🎁 {0} DLCs'}"
                                                        FontSize="11" FontWeight="SemiBold" Foreground="#A78BFA"/>
                                         </Border>
+
+                                        <!-- NSFW -->
+                                        <Border CornerRadius="{StaticResource RadiusSm}"
+                                                Padding="7,2" Margin="0,0,6,4"
+                                                Background="#25EF4444" BorderBrush="#60EF4444" BorderThickness="1"
+                                                Visibility="{Binding IsNsfw, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                ToolTip="Contenido NSFW / Adultos (18+)">
+                                            <TextBlock Text="🔞 NSFW" FontSize="11" FontWeight="Bold" Foreground="#EF4444"/>
+                                        </Border>
+
+                                        <!-- DRM -->
+                                        <Border CornerRadius="{StaticResource RadiusSm}"
+                                                Padding="7,2" Margin="0,0,6,4"
+                                                Background="#25F59E0B" BorderBrush="#60F59E0B" BorderThickness="1"
+                                                Visibility="{Binding HasDrm, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                ToolTip="{Binding DrmNotice, FallbackValue='Requiere DRM o cuenta de terceros'}">
+                                            <TextBlock Text="🔒 DRM" FontSize="11" FontWeight="Bold" Foreground="#F59E0B"/>
+                                        </Border>
                                     </WrapPanel>
 
-                                    <!-- Badges Row 2 (OS & Status) -->
+                                    <!-- Badges Row 2 (OS Platforms) -->
                                     <WrapPanel Grid.Row="3" Orientation="Horizontal" Margin="0,2,0,0">
                                         <Border CornerRadius="{StaticResource RadiusSm}"
                                                 Padding="6,2" Margin="0,0,5,4"
@@ -359,8 +448,9 @@
                                         </Border>
                                         <Border CornerRadius="{StaticResource RadiusSm}"
                                                 Padding="6,2" Margin="0,0,5,4"
-                                                Background="{StaticResource SuccessBgBrush}">
-                                            <TextBlock Text="● DepotBox Ready" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource SuccessBrush}"/>
+                                                Background="#20A1A1AA" BorderBrush="#50A1A1AA" BorderThickness="1"
+                                                Visibility="{Binding HasMac, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <TextBlock Text="🍎 macOS" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource SecondaryTextBrush}"/>
                                         </Border>
                                     </WrapPanel>
 
@@ -400,13 +490,61 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <!-- Centered Bottom Collapse Button -->
-                <Button Content="▲ Colapsar a carrusel"
-                        Style="{StaticResource SecondaryButton}"
-                        HorizontalAlignment="Center"
-                        Margin="0,8,0,0"
-                        Padding="20,8"
-                        Click="OnViewMoreClick"/>
+                <!-- Skeleton Placeholders when Loading More Items in Expanded Grid -->
+                <ItemsControl Visibility="{Binding Category.IsLoadingMore, ElementName=RootCarouselControl, Converter={StaticResource BoolToVisibilityConverter}}"
+                              Margin="0,0,0,12">
+                    <ItemsControl.ItemsSource>
+                        <x:Array Type="{x:Type sys:Int32}">
+                            <sys:Int32>1</sys:Int32>
+                            <sys:Int32>2</sys:Int32>
+                            <sys:Int32>3</sys:Int32>
+                            <sys:Int32>4</sys:Int32>
+                            <sys:Int32>5</sys:Int32>
+                            <sys:Int32>6</sys:Int32>
+                            <sys:Int32>7</sys:Int32>
+                            <sys:Int32>8</sys:Int32>
+                            <sys:Int32>9</sys:Int32>
+                        </x:Array>
+                    </ItemsControl.ItemsSource>
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource SkeletonCard}" Width="280" Margin="0,0,14,14">
+                                <StackPanel>
+                                    <Border Style="{StaticResource SkeletonBlock}" Height="130" Margin="-16,-16,-16,12" CornerRadius="8,8,0,0"/>
+                                    <Border Style="{StaticResource SkeletonBlock}" Height="16" Width="160" HorizontalAlignment="Left" Margin="0,0,0,6"/>
+                                    <Border Style="{StaticResource SkeletonBlock}" Height="12" Width="90" HorizontalAlignment="Left" Margin="0,0,0,10"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                        <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="60" Margin="0,0,6,0" CornerRadius="4"/>
+                                        <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="70" CornerRadius="4"/>
+                                    </StackPanel>
+                                    <Border Style="{StaticResource SkeletonBlock}" Height="30" CornerRadius="6"/>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Centered Bottom Buttons: "Ver más juegos" & "Colapsar a carrusel" -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0">
+                    <Button Content="➕ Ver más juegos"
+                            Style="{StaticResource PrimaryButton}"
+                            Margin="0,0,12,0"
+                            Padding="20,8"
+                            Command="{Binding LoadMoreCommand, ElementName=RootCarouselControl}"
+                            CommandParameter="{Binding Category, ElementName=RootCarouselControl}"
+                            Visibility="{Binding Category.HasMoreItems, ElementName=RootCarouselControl, Converter={StaticResource BoolToVisibilityConverter}}"
+                            IsEnabled="{Binding Category.IsLoadingMore, ElementName=RootCarouselControl, Converter={StaticResource InverseBoolConverter}}"/>
+
+                    <Button Content="▲ Colapsar a carrusel"
+                            Style="{StaticResource SecondaryButton}"
+                            Padding="20,8"
+                            Click="OnViewMoreClick"/>
+                </StackPanel>
             </StackPanel>
         </Border>
     </StackPanel>

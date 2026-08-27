@@ -120,7 +120,11 @@ public partial class App : Application
             sp.GetRequiredService<ILogger<BlueStar.Infrastructure.Downloader.DepotDownloaderProvider>>(),
             sp.GetRequiredService<BlueStar.Infrastructure.Storage.AppSettingsService>()));
         services.AddSingleton<IUpdateService, BlueStar.Infrastructure.Update.GitHubUpdateService>();
-        services.AddSingleton<ICommunityStatsService, BlueStar.Infrastructure.Services.CommunityStatsService>();
+        services.AddHttpClient<ICommunityStatsService, BlueStar.Infrastructure.Services.CommunityStatsService>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(10);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar/1.0.0");
+        });
 
         // HTTP clients
         services.AddHttpClient<IDepotBoxApiClient, DepotBoxApiClient>(client =>
