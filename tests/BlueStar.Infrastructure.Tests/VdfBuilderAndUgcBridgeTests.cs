@@ -198,5 +198,29 @@ public class VdfBuilderAndUgcBridgeTests : IDisposable
         // Verification 3: ForceEnableMod was registered in modsettings.lua
         var modsettingsContent = File.ReadAllText(Path.Combine(instancePath, "mods", "modsettings.lua"));
         modsettingsContent.Should().Contain("ForceEnableMod(\"workshop-378160970\")");
+
+        // Verification 4: Subscribed items registered for Goldberg/ReFix emulator
+        var subFile = Path.Combine(instancePath, "steam_settings", "subscribed_items.txt");
+        File.Exists(subFile).Should().BeTrue();
+        File.ReadAllText(subFile).Should().Contain("378160970");
+    }
+
+    [Fact]
+    public void FindGameRoot_CorrectlyClimbsUp_FromBinSubdirectory()
+    {
+        var rootDir = Path.Combine(_testDir, "TrueGameRoot");
+        var binDir = Path.Combine(rootDir, "bin");
+        var exePath = Path.Combine(binDir, "dontstarve_steam.exe");
+
+        Directory.CreateDirectory(binDir);
+        Directory.CreateDirectory(Path.Combine(rootDir, "data"));
+        Directory.CreateDirectory(Path.Combine(rootDir, "mods"));
+        File.WriteAllText(exePath, "fake exe");
+
+        var detectedFromBin = Mods.GameModPathResolver.FindGameRoot(binDir, exePath);
+        var detectedFromExe = Mods.GameModPathResolver.FindGameRoot(exePath, exePath);
+
+        detectedFromBin.Should().BeEquivalentTo(rootDir);
+        detectedFromExe.Should().BeEquivalentTo(rootDir);
     }
 }

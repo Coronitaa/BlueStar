@@ -48,6 +48,7 @@ public static class GameModPathResolver
         }
 
         var installPath = instance.InstallPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var gameRoot = FindGameRoot(installPath, instance.ExecutablePath);
         var scanDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         // ═════════════════════════════════════════════════════════════════════
@@ -59,12 +60,12 @@ public static class GameModPathResolver
         {
             var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             var ttsDocsWorkshop = Path.Combine(docs, "My Games", "Tabletop Simulator", "Mods", "Workshop");
-            var ttsLocalMods = Path.Combine(installPath, "Mods");
+            var ttsLocalMods = Path.Combine(gameRoot, "Mods");
 
             scanDirs.Add(ttsDocsWorkshop);
             if (Directory.Exists(ttsLocalMods)) scanDirs.Add(ttsLocalMods);
 
-            var steamContent = GetSteamWorkshopContentPath(installPath, 286160);
+            var steamContent = GetSteamWorkshopContentPath(gameRoot, 286160);
             if (!string.IsNullOrEmpty(steamContent) && Directory.Exists(steamContent)) scanDirs.Add(steamContent);
 
             return new ModPathResolution(
@@ -75,12 +76,31 @@ public static class GameModPathResolver
             );
         }
 
-        // 2. Don't Starve Together (AppId: 322330) &amp; Don't Starve (AppId: 214950)
-        if (instance.AppId == 322330 || instance.AppId == 214950 ||
-            instance.Name?.Contains("Don't Starve", StringComparison.OrdinalIgnoreCase) == true)
+        // 2. Don't Starve Together (AppId: 322330) & Don't Starve (AppId: 214950) & Oxygen Not Included (457140)
+        if (instance.AppId == 322330 || instance.AppId == 214950 || instance.AppId == 457140 ||
+            instance.Name?.Contains("Don't Starve", StringComparison.OrdinalIgnoreCase) == true ||
+            instance.Name?.Contains("Dont Starve", StringComparison.OrdinalIgnoreCase) == true ||
+            instance.Engine?.Type == EngineType.Klei)
         {
-            var dstMods = Path.Combine(installPath, "mods");
+            var dstMods = Path.Combine(gameRoot, "mods");
+            var dataMods = Path.Combine(gameRoot, "data", "mods");
+            var directInstallMods = Path.Combine(installPath, "mods");
+
             scanDirs.Add(dstMods);
+            if (Directory.Exists(dataMods)) scanDirs.Add(dataMods);
+            if (Directory.Exists(directInstallMods)) scanDirs.Add(directInstallMods);
+
+            // Dynamically discover Klei Documents directories
+            foreach (var docDir in FindKleiUserModDirectories())
+            {
+                if (Directory.Exists(docDir)) scanDirs.Add(docDir);
+            }
+
+            var steamContent = GetSteamWorkshopContentPath(gameRoot, instance.AppId > 0 ? instance.AppId : 214950);
+            if (!string.IsNullOrEmpty(steamContent) && Directory.Exists(steamContent)) scanDirs.Add(steamContent);
+
+            var emulatorMods = Path.Combine(gameRoot, "steam_settings", "mods");
+            if (Directory.Exists(emulatorMods)) scanDirs.Add(emulatorMods);
 
             return new ModPathResolution(
                 PrimaryDirectory: dstMods,
@@ -90,18 +110,18 @@ public static class GameModPathResolver
             );
         }
 
-        // 3. Left 4 Dead 2 (AppId: 550) &amp; Left 4 Dead (AppId: 500)
+        // 3. Left 4 Dead 2 (AppId: 550) & Left 4 Dead (AppId: 500)
         if (instance.AppId == 550 || instance.AppId == 500 ||
             instance.Name?.Contains("Left 4 Dead", StringComparison.OrdinalIgnoreCase) == true)
         {
-            var l4d2Dir = Path.Combine(installPath, "left4dead2");
+            var l4d2Dir = Path.Combine(gameRoot, "left4dead2");
             var targetAddons = Directory.Exists(l4d2Dir)
                 ? Path.Combine(l4d2Dir, "addons", "workshop")
-                : Path.Combine(installPath, "addons", "workshop");
+                : Path.Combine(gameRoot, "addons", "workshop");
 
             var normalAddons = Directory.Exists(l4d2Dir)
                 ? Path.Combine(l4d2Dir, "addons")
-                : Path.Combine(installPath, "addons");
+                : Path.Combine(gameRoot, "addons");
 
             scanDirs.Add(targetAddons);
             if (Directory.Exists(normalAddons)) scanDirs.Add(normalAddons);
@@ -476,7 +496,7 @@ public static class GameModPathResolver
                 break;
 
             case "Klei":
-                DeployKleiMod(instance, stagingFolder, targetFolder, publishedFileId);
+                DeployKleiMod(instance, stagingFolder, targetFolder, publishedFileId, details?.Title);
                 break;
 
             default:
@@ -499,7 +519,7 @@ public static class GameModPathResolver
             catch { }
         }
 
-        // Mirror to steamapps/workshop/content/<AppId>/<PublishedFileId> for ISteamUGC / Goldberg emulator compatibility
+        // Mirror to steamapps/workshop/content/<AppId>/<PublishedFileId> and emulator steam_settings/
         try
         {
             MirrorToSteamUgcFolder(instance, publishedFileId, stagingFolder, details);
@@ -595,9 +615,11 @@ public static class GameModPathResolver
         }
     }
 
-    private static void DeployKleiMod(GameInstance instance, string stagingFolder, string targetFolder, ulong publishedFileId)
+    private static void DeployKleiMod(GameInstance instance, string stagingFolder, string targetFolder, ulong publishedFileId, string? title)
     {
-        // Don't Starve / DST mods require modinfo.lua to be placed directly in the root of targetFolder (mods/workshop-<PublishedFileId>/)
+        var gameRoot = FindGameRoot(instance.InstallPath, instance.ExecutablePath);
+
+        // Find the root of the mod files in staging (containing modinfo.lua)
         string modSourceRoot = stagingFolder;
         var modInfoFiles = Directory.GetFiles(stagingFolder, "modinfo.lua", SearchOption.AllDirectories);
         if (modInfoFiles.Length > 0)
@@ -605,36 +627,91 @@ public static class GameModPathResolver
             modSourceRoot = Path.GetDirectoryName(modInfoFiles[0]) ?? stagingFolder;
         }
 
-        Directory.CreateDirectory(targetFolder);
-        CopyDirectoryRecursive(modSourceRoot, targetFolder);
+        // 1. Primary destination: GameRoot/mods/workshop-<PublishedFileId>/
+        var primaryTarget = Path.Combine(gameRoot, "mods", $"workshop-{publishedFileId}");
+        Directory.CreateDirectory(primaryTarget);
+        CopyDirectoryRecursive(modSourceRoot, primaryTarget);
+        SanitizeLuaFilesAndModInfo(primaryTarget, publishedFileId, title);
 
-        // Also check if instance install path has data/mods/ and mirror if present
-        if (!string.IsNullOrWhiteSpace(instance.InstallPath) && Directory.Exists(instance.InstallPath))
+        // 2. Also deploy by sanitized title if title is available (e.g. mods/CombinedStatus/)
+        var safeTitle = !string.IsNullOrWhiteSpace(title) ? PathHelper.SanitizeFolderName(title) : null;
+        if (!string.IsNullOrWhiteSpace(safeTitle) && !safeTitle.Equals($"workshop-{publishedFileId}", StringComparison.OrdinalIgnoreCase))
         {
-            var dataMods = Path.Combine(instance.InstallPath, "data", "mods");
-            if (Directory.Exists(dataMods))
-            {
-                var dataTarget = Path.Combine(dataMods, $"workshop-{publishedFileId}");
-                Directory.CreateDirectory(dataTarget);
-                CopyDirectoryRecursive(modSourceRoot, dataTarget);
-            }
+            var titleTarget = Path.Combine(gameRoot, "mods", safeTitle);
+            Directory.CreateDirectory(titleTarget);
+            CopyDirectoryRecursive(modSourceRoot, titleTarget);
+            SanitizeLuaFilesAndModInfo(titleTarget, publishedFileId, title);
+        }
 
-            // Check mods/modsettings.lua to ensure ForceEnableMod is configured so Don't Starve enables the mod automatically
-            var modSettingsFile = Path.Combine(instance.InstallPath, "mods", "modsettings.lua");
-            if (File.Exists(modSettingsFile))
+        // 3. Deploy to data/mods/workshop-<PublishedFileId>/ if data/ folder exists
+        var dataDir = Path.Combine(gameRoot, "data");
+        if (Directory.Exists(dataDir))
+        {
+            var dataModsTarget = Path.Combine(dataDir, "mods", $"workshop-{publishedFileId}");
+            Directory.CreateDirectory(dataModsTarget);
+            CopyDirectoryRecursive(modSourceRoot, dataModsTarget);
+            SanitizeLuaFilesAndModInfo(dataModsTarget, publishedFileId, title);
+        }
+
+        // 4. Deploy to installPath/mods if installPath is distinct from gameRoot
+        if (!string.IsNullOrWhiteSpace(instance.InstallPath) && !string.Equals(instance.InstallPath, gameRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            var installModsTarget = Path.Combine(instance.InstallPath, "mods", $"workshop-{publishedFileId}");
+            Directory.CreateDirectory(installModsTarget);
+            CopyDirectoryRecursive(modSourceRoot, installModsTarget);
+            SanitizeLuaFilesAndModInfo(installModsTarget, publishedFileId, title);
+        }
+
+        // 5. Deploy to Klei User Documents directories
+        foreach (var userModDir in FindKleiUserModDirectories())
+        {
+            try
             {
-                try
-                {
-                    var lines = File.ReadAllText(modSettingsFile);
-                    var modIdStr = $"workshop-{publishedFileId}";
-                    if (!lines.Contains(modIdStr, StringComparison.OrdinalIgnoreCase))
-                    {
-                        var appendStr = $"\nForceEnableMod(\"{modIdStr}\")\n";
-                        File.AppendAllText(modSettingsFile, appendStr);
-                    }
-                }
-                catch { }
+                var userTarget = Path.Combine(userModDir, $"workshop-{publishedFileId}");
+                Directory.CreateDirectory(userTarget);
+                CopyDirectoryRecursive(modSourceRoot, userTarget);
+                SanitizeLuaFilesAndModInfo(userTarget, publishedFileId, title);
             }
+            catch { }
+        }
+
+        // 6. Force-enable in modsettings.lua across all candidate mods folders
+        var candidateModsDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            Path.Combine(gameRoot, "mods"),
+            Path.Combine(gameRoot, "data", "mods"),
+            Path.Combine(instance.InstallPath ?? string.Empty, "mods")
+        };
+
+        foreach (var mDir in candidateModsDirs)
+        {
+            if (string.IsNullOrWhiteSpace(mDir) || !Directory.Exists(mDir)) continue;
+
+            var modSettingsFile = Path.Combine(mDir, "modsettings.lua");
+            try
+            {
+                var content = File.Exists(modSettingsFile) ? File.ReadAllText(modSettingsFile) : "-- Mod Settings\n";
+                var modId = $"workshop-{publishedFileId}";
+
+                var linesToAppend = new List<string>();
+                if (!content.Contains(modId, StringComparison.OrdinalIgnoreCase))
+                {
+                    linesToAppend.Add($"ForceEnableMod(\"{modId}\")");
+                    linesToAppend.Add($"EnableMod(\"{modId}\")");
+                }
+                if (!string.IsNullOrWhiteSpace(safeTitle) && !content.Contains(safeTitle, StringComparison.OrdinalIgnoreCase))
+                {
+                    linesToAppend.Add($"ForceEnableMod(\"{safeTitle}\")");
+                    linesToAppend.Add($"EnableMod(\"{safeTitle}\")");
+                }
+
+                if (linesToAppend.Count > 0)
+                {
+                    var appendStr = "\n" + string.Join("\n", linesToAppend) + "\n";
+                    File.AppendAllText(modSettingsFile, appendStr);
+                }
+            }
+            catch { }
         }
     }
 
@@ -647,10 +724,13 @@ public static class GameModPathResolver
     {
         if (instance.AppId == 0 || string.IsNullOrWhiteSpace(instance.InstallPath)) return;
 
-        var contentPath = GetSteamWorkshopContentPath(instance.InstallPath, instance.AppId);
+        var gameRoot = FindGameRoot(instance.InstallPath, instance.ExecutablePath);
+
+        // 1. Steamapps workshop content path
+        var contentPath = GetSteamWorkshopContentPath(gameRoot, instance.AppId);
         if (string.IsNullOrEmpty(contentPath))
         {
-            contentPath = Path.Combine(instance.InstallPath, "steamapps", "workshop", "content", instance.AppId.ToString());
+            contentPath = Path.Combine(gameRoot, "steamapps", "workshop", "content", instance.AppId.ToString());
         }
 
         var itemDir = Path.Combine(contentPath, publishedFileId.ToString());
@@ -663,6 +743,54 @@ public static class GameModPathResolver
             var json = JsonSerializer.Serialize(details, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(metaFile, json);
         }
+
+        // 2. Emulator steam_settings/ integration (Goldberg / ReFix)
+        var steamSettingsDirs = new List<string>();
+        var rootSettings = Path.Combine(gameRoot, "steam_settings");
+        if (Directory.Exists(rootSettings)) steamSettingsDirs.Add(rootSettings);
+
+        try
+        {
+            foreach (var d in Directory.GetDirectories(gameRoot, "steam_settings", SearchOption.AllDirectories))
+            {
+                if (!steamSettingsDirs.Contains(d, StringComparer.OrdinalIgnoreCase))
+                    steamSettingsDirs.Add(d);
+            }
+        }
+        catch { }
+
+        if (steamSettingsDirs.Count == 0)
+        {
+            Directory.CreateDirectory(rootSettings);
+            steamSettingsDirs.Add(rootSettings);
+        }
+
+        foreach (var sDir in steamSettingsDirs)
+        {
+            try
+            {
+                var emulatorModsDir = Path.Combine(sDir, "mods", publishedFileId.ToString());
+                Directory.CreateDirectory(emulatorModsDir);
+                CopyDirectoryRecursive(stagingFolder, emulatorModsDir);
+
+                // Register in subscribed_items.txt and workshop_items.txt
+                var subFile = Path.Combine(sDir, "subscribed_items.txt");
+                var pubIdStr = publishedFileId.ToString();
+                var subContent = File.Exists(subFile) ? File.ReadAllText(subFile) : string.Empty;
+                if (!subContent.Contains(pubIdStr))
+                {
+                    File.AppendAllText(subFile, pubIdStr + Environment.NewLine);
+                }
+
+                var wsFile = Path.Combine(sDir, "workshop_items.txt");
+                var wsContent = File.Exists(wsFile) ? File.ReadAllText(wsFile) : string.Empty;
+                if (!wsContent.Contains(pubIdStr))
+                {
+                    File.AppendAllText(wsFile, pubIdStr + Environment.NewLine);
+                }
+            }
+            catch { }
+        }
     }
 
     private static string? GetSteamWorkshopContentPath(string installPath, uint appId)
@@ -671,7 +799,6 @@ public static class GameModPathResolver
 
         try
         {
-            // If inside .../steamapps/common/<Game>, standard is .../steamapps/workshop/content/<AppId>
             var norm = Path.GetFullPath(installPath);
             var commonIdx = norm.IndexOf(Path.Combine("steamapps", "common"), StringComparison.OrdinalIgnoreCase);
             if (commonIdx >= 0)
@@ -702,5 +829,153 @@ public static class GameModPathResolver
             var destSub = Path.Combine(targetDir, dirName);
             CopyDirectoryRecursive(sub, destSub);
         }
+    }
+
+    /// <summary>
+    /// Dynamically locates the true Game Root directory by inspecting the directory hierarchy,
+    /// traversing up from subfolders like bin, Binaries, Win64, etc., and looking for root markers.
+    /// </summary>
+    public static string FindGameRoot(string installPath, string? executablePath = null)
+    {
+        if (string.IsNullOrWhiteSpace(installPath)) return string.Empty;
+
+        string current = File.Exists(installPath) ? (Path.GetDirectoryName(installPath) ?? installPath) : installPath;
+        current = Path.GetFullPath(current).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        if (!string.IsNullOrWhiteSpace(executablePath) && File.Exists(executablePath))
+        {
+            var exeDir = Path.GetDirectoryName(Path.GetFullPath(executablePath));
+            if (!string.IsNullOrEmpty(exeDir))
+            {
+                var fromExe = InspectHierarchyForGameRoot(exeDir);
+                if (!string.IsNullOrEmpty(fromExe)) return fromExe;
+            }
+        }
+
+        var foundRoot = InspectHierarchyForGameRoot(current);
+        return !string.IsNullOrEmpty(foundRoot) ? foundRoot : current;
+    }
+
+    private static string? InspectHierarchyForGameRoot(string startDir)
+    {
+        try
+        {
+            var dirInfo = new DirectoryInfo(startDir);
+            while (dirInfo != null)
+            {
+                var name = dirInfo.Name;
+
+                // If we are currently inside a binary subfolder, climb up to parent
+                if (name.Equals("bin", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("Binaries", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("Win64", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("Win32", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("x64", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("x86", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("Release", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("Shipping", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (dirInfo.Parent != null)
+                    {
+                        dirInfo = dirInfo.Parent;
+                        continue;
+                    }
+                }
+
+                return dirInfo.FullName;
+            }
+        }
+        catch { }
+
+        return startDir;
+    }
+
+    /// <summary>
+    /// Dynamically finds Klei user document and save directories across Documents and LocalAppData.
+    /// </summary>
+    public static IEnumerable<string> FindKleiUserModDirectories()
+    {
+        var dirs = new List<string>();
+        try
+        {
+            var userDocs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            var kleiDocs = Path.Combine(userDocs, "Klei");
+            if (Directory.Exists(kleiDocs))
+            {
+                foreach (var gameFolder in Directory.GetDirectories(kleiDocs))
+                {
+                    dirs.Add(Path.Combine(gameFolder, "mods"));
+                    dirs.Add(Path.Combine(gameFolder, "client_mods"));
+                }
+            }
+
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var kleiLocal = Path.Combine(localAppData, "Klei");
+            if (Directory.Exists(kleiLocal))
+            {
+                foreach (var gameFolder in Directory.GetDirectories(kleiLocal))
+                {
+                    dirs.Add(Path.Combine(gameFolder, "mods"));
+                    dirs.Add(Path.Combine(gameFolder, "client_mods"));
+                }
+            }
+        }
+        catch { }
+        return dirs;
+    }
+
+    private static void SanitizeLuaFilesAndModInfo(string modDirectory, ulong publishedFileId, string? title)
+    {
+        try
+        {
+            // 1. Strip UTF-8 BOM from all .lua files to avoid Lua 5.1 parser syntax errors
+            foreach (var luaFile in Directory.GetFiles(modDirectory, "*.lua", SearchOption.AllDirectories))
+            {
+                try
+                {
+                    var bytes = File.ReadAllBytes(luaFile);
+                    if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+                    {
+                        var cleanBytes = new byte[bytes.Length - 3];
+                        Array.Copy(bytes, 3, cleanBytes, 0, cleanBytes.Length);
+                        File.WriteAllBytes(luaFile, cleanBytes);
+                    }
+                }
+                catch { }
+            }
+
+            // 2. Ensure modinfo.lua has full compatibility flags
+            var modInfoPath = Path.Combine(modDirectory, "modinfo.lua");
+            if (File.Exists(modInfoPath))
+            {
+                var content = File.ReadAllText(modInfoPath);
+                var appendLines = new List<string>();
+
+                if (!content.Contains("dont_starve_compatible", StringComparison.OrdinalIgnoreCase))
+                    appendLines.Add("dont_starve_compatible = true");
+
+                if (!content.Contains("reign_of_giants_compatible", StringComparison.OrdinalIgnoreCase))
+                    appendLines.Add("reign_of_giants_compatible = true");
+
+                if (!content.Contains("shipwrecked_compatible", StringComparison.OrdinalIgnoreCase))
+                    appendLines.Add("shipwrecked_compatible = true");
+
+                if (!content.Contains("hamlet_compatible", StringComparison.OrdinalIgnoreCase))
+                    appendLines.Add("hamlet_compatible = true");
+
+                if (!content.Contains("dst_compatible", StringComparison.OrdinalIgnoreCase))
+                    appendLines.Add("dst_compatible = true");
+
+                if (!content.Contains("name =", StringComparison.OrdinalIgnoreCase))
+                    appendLines.Add($"name = \"{title ?? $"WorkshopMod_{publishedFileId}"}\"");
+
+                if (appendLines.Count > 0)
+                {
+                    var extra = "\n-- Compatibility flags added by BlueStar\n" + string.Join("\n", appendLines) + "\n";
+                    File.AppendAllText(modInfoPath, extra);
+                }
+            }
+        }
+        catch { }
     }
 }
