@@ -287,7 +287,7 @@ public class CreamInstallerService : IDlcInstaller
         }
 
         // Resolve the download URL from the GitHub API
-        Report(progress, "🌐 Resolviendo URL de descarga de SmokeAPI...");
+        Report(progress, "🌐 Resolving SmokeAPI download URL...");
         using var http = new HttpClient();
         http.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar-Launcher/1.0");
         http.Timeout = TimeSpan.FromMinutes(3);
@@ -363,7 +363,7 @@ public class CreamInstallerService : IDlcInstaller
         var bak = Path.Combine(dir, bakFile);
         var api = Path.Combine(dir, apiFile);
         if (!File.Exists(bak)) return;
-        Report(progress, $"♻ Restaurando {label}...");
+        Report(progress, $"♻ Restoring {label}...");
         if (File.Exists(api)) File.Delete(api);
         File.Move(bak, api);
     }

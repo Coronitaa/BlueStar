@@ -39,4 +39,9 @@ public interface IReFixUpdateService
     /// Checks if a specific game instance has an outdated version of ReFix installed.
     /// </summary>
     bool IsInstanceReFixOutdated(GameInstance instance);
+
+    /// <summary>
+    /// Sequentially updates the emulator on all outdated instances in the background with DLC preservation.
+    /// </summary>
+    Task<int> UpdateAllOutdatedInstancesAsync(IReadOnlyList<GameInstance>? targetInstances = null, CancellationToken ct = default);
 }

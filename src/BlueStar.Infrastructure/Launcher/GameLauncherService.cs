@@ -42,6 +42,30 @@ public sealed class GameLauncherService : IGameLauncher
         if (instance is null)
             return new GameLaunchResult(false, "Instance cannot be null.");
 
+        if (instance.Origin == InstanceOrigin.Steam)
+        {
+            // If install directory or executable is not present on disk, launch via Steam protocol
+            var needsSteamProtocol = string.IsNullOrWhiteSpace(instance.InstallPath) ||
+                                     !Directory.Exists(instance.InstallPath) ||
+                                     string.IsNullOrWhiteSpace(instance.ExecutablePath) ||
+                                     !File.Exists(instance.ExecutablePath);
+
+            if (needsSteamProtocol && instance.AppId > 0)
+            {
+                try
+                {
+                    _logger.LogInformation("Launching Steam game {Name} (AppID: {AppId}) via Steam client protocol...", instance.Name, instance.AppId);
+                    Process.Start(new ProcessStartInfo($"steam://rungameid/{instance.AppId}") { UseShellExecute = true });
+                    return new GameLaunchResult(true, "Launched via Steam");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to launch Steam game via protocol");
+                    return new GameLaunchResult(false, $"Failed to launch Steam game: {ex.Message}");
+                }
+            }
+        }
+
         if (string.IsNullOrWhiteSpace(instance.InstallPath) || !Directory.Exists(instance.InstallPath))
             return new GameLaunchResult(false, "Game install directory does not exist.");
 
@@ -58,6 +82,20 @@ public sealed class GameLauncherService : IGameLauncher
 
         if (string.IsNullOrWhiteSpace(exePath) || !File.Exists(exePath))
         {
+            if (instance.Origin == InstanceOrigin.Steam && instance.AppId > 0)
+            {
+                try
+                {
+                    _logger.LogInformation("Executable not found locally, launching Steam game {Name} via Steam protocol...", instance.Name);
+                    Process.Start(new ProcessStartInfo($"steam://rungameid/{instance.AppId}") { UseShellExecute = true });
+                    return new GameLaunchResult(true, "Launched via Steam");
+                }
+                catch (Exception ex)
+                {
+                    return new GameLaunchResult(false, $"Failed to launch Steam game: {ex.Message}");
+                }
+            }
+
             return new GameLaunchResult(false, "No executable (.exe) found in the game folder. Please configure the executable in instance settings.");
         }
 

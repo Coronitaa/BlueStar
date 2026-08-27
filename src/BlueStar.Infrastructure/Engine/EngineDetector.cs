@@ -176,7 +176,15 @@ public sealed class EngineDetector : IEngineDetector
                 return renpyInfo;
             }
 
-            // ── 17. SUPERGIANT THE FORGE (Hades, Hades II, Transistor, Bastion, Pyre) ──
+            // ── 17. THE BINDING OF ISAAC / NICALIS CUSTOM ENGINE ──
+            var isaacInfo = CheckIsaacEngine(installPath);
+            if (isaacInfo != null)
+            {
+                _logger.LogInformation("Detected Isaac/Nicalis Custom Engine at {Path}", installPath);
+                return isaacInfo;
+            }
+
+            // ── 18. SUPERGIANT THE FORGE (Hades, Hades II, Transistor, Bastion, Pyre) ──
             var supergiantInfo = CheckSupergiantEngine(installPath);
             if (supergiantInfo != null)
             {
@@ -184,7 +192,7 @@ public sealed class EngineDetector : IEngineDetector
                 return supergiantInfo;
             }
 
-            // ── 18. GAMEMAKER ──
+            // ── 19. GAMEMAKER ──
             var gmInfo = CheckGameMaker(installPath);
             if (gmInfo != null)
             {
@@ -980,17 +988,61 @@ public sealed class EngineDetector : IEngineDetector
         return null;
     }
 
+    private static EngineInfo? CheckIsaacEngine(string path)
+    {
+        try
+        {
+            var isIsaac = Directory.GetFiles(path, "isaac-ng*.exe", SafeEnumOptions).Length > 0 ||
+                          Directory.GetFiles(path, "*binding*isaac*.exe", SafeEnumOptions).Length > 0 ||
+                          File.Exists(Path.Combine(path, "isaac-ng.exe")) ||
+                          (Directory.Exists(Path.Combine(path, "resources", "packed")) &&
+                           Directory.GetFiles(Path.Combine(path, "resources", "packed"), "*.a", SafeEnumOptions).Length > 0);
+
+            if (isIsaac)
+            {
+                return new EngineInfo
+                {
+                    Id = "isaac-custom",
+                    Name = "Custom Engine (Isaac)",
+                    Type = EngineType.Custom,
+                    Capabilities = EngineCapabilities.Mods |
+                                   EngineCapabilities.Emulation |
+                                   EngineCapabilities.SteamIntegration |
+                                   EngineCapabilities.CustomFiles |
+                                   EngineCapabilities.LaunchArguments |
+                                   EngineCapabilities.WorkshopSupported
+                };
+            }
+        }
+        catch { }
+
+        return null;
+    }
+
     private static EngineInfo? CheckSupergiantEngine(string path)
     {
         try
         {
-            var hasContentScripts = (Directory.Exists(Path.Combine(path, "Content", "Scripts")) ||
-                                     Directory.GetDirectories(path, "Scripts", SafeEnumOptions).Length > 0) &&
-                                    Directory.GetFiles(path, "*.lua", SafeEnumOptions).Length > 0;
-            var hasGranny = Directory.GetFiles(path, "granny2*.dll", SafeEnumOptions).Length > 0;
-            var hasLua = Directory.GetFiles(path, "lua5*.dll", SafeEnumOptions).Length > 0;
+            var hasSupergiantExe = Directory.GetFiles(path, "Hades*.exe", SafeEnumOptions).Length > 0 ||
+                                   Directory.GetFiles(path, "Transistor*.exe", SafeEnumOptions).Length > 0 ||
+                                   Directory.GetFiles(path, "Bastion*.exe", SafeEnumOptions).Length > 0 ||
+                                   Directory.GetFiles(path, "Pyre*.exe", SafeEnumOptions).Length > 0 ||
+                                   Directory.GetFiles(path, "Pyre*.bin", SafeEnumOptions).Length > 0 ||
+                                   Directory.GetFiles(path, "Engine.Win64.dll", SafeEnumOptions).Length > 0 ||
+                                   Directory.GetFiles(path, "Engine.dll", SafeEnumOptions).Length > 0;
 
-            if (hasContentScripts && (hasGranny || hasLua))
+            var hasSupergiantPackages = (Directory.Exists(Path.Combine(path, "Content", "Packages")) &&
+                                         Directory.GetFiles(Path.Combine(path, "Content", "Packages"), "*.pkg", SafeEnumOptions).Length > 0) ||
+                                        (Directory.Exists(Path.Combine(path, "Packages")) &&
+                                         Directory.GetFiles(Path.Combine(path, "Packages"), "*.pkg", SafeEnumOptions).Length > 0);
+
+            var hasSupergiantScripts = Directory.Exists(Path.Combine(path, "Content", "Scripts")) &&
+                                       (File.Exists(Path.Combine(path, "Content", "Scripts", "RoomManager.lua")) ||
+                                        File.Exists(Path.Combine(path, "Content", "Scripts", "Combat.lua")) ||
+                                        File.Exists(Path.Combine(path, "Content", "Scripts", "TraitData.lua")) ||
+                                        File.Exists(Path.Combine(path, "Content", "Scripts", "GameData.lua")));
+
+            if (hasSupergiantExe || hasSupergiantPackages || hasSupergiantScripts)
             {
                 return new EngineInfo
                 {

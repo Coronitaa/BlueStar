@@ -203,7 +203,7 @@ public sealed class ReFixEmulator : IEmulator
         if (string.IsNullOrWhiteSpace(instance.InstallPath) || !Directory.Exists(instance.InstallPath))
         {
             _logger.LogError("Cannot deploy ReFix: Game is not installed at {Path}", instance.InstallPath);
-            progress?.Report(new DeployProgress { Percentage = 0, Message = "El juego no se encuentra instalado en la ruta especificada. Debes instalarlo primero." });
+            progress?.Report(new DeployProgress { Percentage = 0, Message = "Game is not installed in the specified path. Please install it first." });
             return false;
         }
 
@@ -213,14 +213,14 @@ public sealed class ReFixEmulator : IEmulator
             if (files.Length == 0)
             {
                 _logger.LogError("Cannot deploy ReFix: Install directory '{Path}' is empty.", instance.InstallPath);
-                progress?.Report(new DeployProgress { Percentage = 0, Message = "La carpeta del juego está vacía. Debes descargar o instalar el juego primero." });
+                progress?.Report(new DeployProgress { Percentage = 0, Message = "Game folder is empty. Please download or install the game first." });
                 return false;
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to verify game install path {Path}", instance.InstallPath);
-            progress?.Report(new DeployProgress { Percentage = 0, Message = $"Error verificando instalación: {ex.Message}" });
+            progress?.Report(new DeployProgress { Percentage = 0, Message = $"Error verifying installation: {ex.Message}" });
             return false;
         }
 
@@ -228,14 +228,14 @@ public sealed class ReFixEmulator : IEmulator
         if (deployPath == null)
         {
             _logger.LogError("ReFix_deploy folder not found in known paths.");
-            progress?.Report(new DeployProgress { Percentage = 0, Message = "No se encontró la suite ReFix_deploy en herramientas de la aplicación ni en AppData." });
+            progress?.Report(new DeployProgress { Percentage = 0, Message = "ReFix_deploy suite was not found in application tools or AppData." });
             return false;
         }
 
         var binDir = Directory.Exists(Path.Combine(deployPath, "bin")) ? Path.Combine(deployPath, "bin") : deployPath;
         var isGoldberg = optionId.Contains("goldberg", StringComparison.OrdinalIgnoreCase);
         var onlineMode = isGoldberg ? "goldberg" : "valve";
-        var modeDisplayName = isGoldberg ? "Re:Goldberg LAN (Sin Steam)" : "ReFix Online (Steam Spacewar 480)";
+        var modeDisplayName = isGoldberg ? "Re:Goldberg LAN (No Steam)" : "ReFix Online (Steam Spacewar 480)";
 
         _logger.LogInformation("Deploying ReFix ({Mode}) via ReFix_deploy scripts for {Name} at {Path}", onlineMode, instance.Name, instance.InstallPath);
 

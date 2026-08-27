@@ -119,11 +119,6 @@ public sealed class DepotBoxAuthService : IDepotBoxAuthService
     /// </summary>
     private static string GetProtectedBackendKey()
     {
-        var result = new byte[ObfuscatedKeyData.Length];
-        for (int i = 0; i < ObfuscatedKeyData.Length; i++)
-        {
-            result[i] = (byte)(ObfuscatedKeyData[i] ^ Mask[i % Mask.Length]);
-        }
-        return Encoding.UTF8.GetString(result).Trim('\0');
+        return "YOUR_DEPOTBOX_API_KEY";
     }
 }

@@ -19,10 +19,11 @@ public record EmulatorOptionInfo
     public required string BadgeText { get; init; }
     public int PositiveVotes { get; init; }
     public int NegativeVotes { get; init; }
-    public double ScorePercentage => (PositiveVotes + NegativeVotes) > 0
-        ? (double)PositiveVotes / (PositiveVotes + NegativeVotes) * 100.0
-        : 100.0;
     public int TotalVotes => PositiveVotes + NegativeVotes;
+    public bool HasEnoughVotesForScore => TotalVotes >= 10;
+    public double ScorePercentage => TotalVotes > 0
+        ? (double)PositiveVotes / TotalVotes * 100.0
+        : 0.0;
     public bool IsRecommended { get; init; }
     public bool IsActive { get; init; }
 }
@@ -51,4 +52,9 @@ public interface IEmulatorRatingService
     /// Records that the user has voted or dismissed the feedback prompt for this instance and option.
     /// </summary>
     Task RecordUserVoteFlagAsync(Guid instanceId, string optionId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Resets all community votes and user voting flags to 0 for a given emulator (e.g. after an emulator version update).
+    /// </summary>
+    Task ResetRatingsForEmulatorAsync(string emulatorId, CancellationToken ct = default);
 }

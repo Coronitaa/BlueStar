@@ -120,6 +120,26 @@ public record GameInstance
     public string? UpdateDescription { get; init; }
 
     /// <summary>
+    /// Gets or sets the origin and management type of this instance.
+    /// </summary>
+    public InstanceOrigin Origin { get; init; } = InstanceOrigin.DepotBox;
+
+    /// <summary>
+    /// Gets or sets whether an imported folder instance has been successfully associated with DepotBox.
+    /// </summary>
+    public bool IsDepotBoxAssociated { get; init; } = false;
+
+    /// <summary>
+    /// Gets or sets whether a DLC unlocker (SmokeAPI/CreamAPI) is installed for this instance.
+    /// </summary>
+    public bool DlcUnlockerInstalled { get; init; } = false;
+
+    /// <summary>
+    /// Gets or sets the list of DLC AppIDs that are actively unlocked.
+    /// </summary>
+    public IReadOnlyList<uint> UnlockedDlcIds { get; init; } = [];
+
+    /// <summary>
     /// Gets the Steam header image URL for this game instance.
     /// </summary>
     public string HeaderImageUrl => !string.IsNullOrWhiteSpace(Metadata?.HeaderImageUrl)

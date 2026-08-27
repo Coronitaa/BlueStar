@@ -24,6 +24,7 @@ public sealed class EmulatorRatingService : IEmulatorRatingService
     private readonly string _userVotesFilePath;
     private readonly ConcurrentDictionary<string, RatingData> _ratings = new();
     private readonly ConcurrentDictionary<string, bool> _userVotes = new();
+    private readonly ConcurrentDictionary<string, bool> _resetEmulators = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _fileLock = new(1, 1);
 
     private class RatingData
@@ -35,14 +36,14 @@ public sealed class EmulatorRatingService : IEmulatorRatingService
         public int Negative { get; set; }
     }
 
-    public EmulatorRatingService(ILogger<EmulatorRatingService> logger, HttpClient? http = null)
+    public EmulatorRatingService(ILogger<EmulatorRatingService> logger, HttpClient? http = null, string? dataDirectory = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
 
         _workerBaseUrl = Environment.GetEnvironmentVariable("BLUESTAR_RATINGS_URL") ?? "https://bluestar-emulator-ratings.blustar.workers.dev";
 
-        var appData = Path.Combine(
+        var appData = dataDirectory ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "BlueStar");
         Directory.CreateDirectory(appData);
@@ -159,14 +160,15 @@ public sealed class EmulatorRatingService : IEmulatorRatingService
             IsActive = isGoldbergActive
         });
 
-        // Rank by ScorePercentage (descending), then TotalVotes (descending)
+        // Rank by ScorePercentage (descending), then PositiveVotes (descending), then TotalVotes (descending)
         var sorted = available
             .OrderByDescending(o => o.ScorePercentage)
             .ThenByDescending(o => o.PositiveVotes)
+            .ThenByDescending(o => o.TotalVotes)
             .ToList();
 
-        // Mark the top one as recommended
-        if (sorted.Count > 0)
+        // Mark the top one as recommended ONLY if it reaches the minimum threshold of 10 total votes
+        if (sorted.Count > 0 && sorted[0].TotalVotes >= 10)
         {
             sorted[0] = sorted[0] with { IsRecommended = true };
         }
@@ -194,6 +196,10 @@ public sealed class EmulatorRatingService : IEmulatorRatingService
                     foreach (var kvp in dict)
                     {
                         var key = $"{appId}_{kvp.Key}";
+                        // If this emulator option was reset, don't re-apply old remote votes
+                        var isReset = _resetEmulators.Keys.Any(emu => key.Contains(emu, StringComparison.OrdinalIgnoreCase));
+                        if (isReset) continue;
+
                         _ratings.AddOrUpdate(key, kvp.Value, (_, existing) => new RatingData
                         {
                             Positive = Math.Max(existing.Positive, kvp.Value.Positive),
@@ -213,18 +219,15 @@ public sealed class EmulatorRatingService : IEmulatorRatingService
     public async Task<bool> SubmitVoteAsync(uint appId, string optionId, bool isPositive, CancellationToken ct = default)
     {
         var key = $"{appId}_{optionId}";
-        var stats = _ratings.GetOrAdd(key, _ => new RatingData { Positive = 0, Negative = 0 });
+        var stats = _ratings.AddOrUpdate(
+            key,
+            _ => new RatingData { Positive = isPositive ? 1 : 0, Negative = isPositive ? 0 : 1 },
+            (_, existing) => new RatingData
+            {
+                Positive = isPositive ? existing.Positive + 1 : existing.Positive,
+                Negative = isPositive ? existing.Negative : existing.Negative + 1
+            });
 
-        if (isPositive)
-        {
-            stats.Positive++;
-        }
-        else
-        {
-            stats.Negative++;
-        }
-
-        _ratings[key] = stats;
         await SaveDataAsync(ct).ConfigureAwait(false);
         _logger.LogInformation("Voted locally for {Key}: Positive={Pos}, Negative={Neg}", key, stats.Positive, stats.Negative);
 
@@ -269,6 +272,39 @@ public sealed class EmulatorRatingService : IEmulatorRatingService
     {
         var voteKey = $"{instanceId}_{optionId}";
         _userVotes[voteKey] = true;
+        await SaveDataAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task ResetRatingsForEmulatorAsync(string emulatorId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(emulatorId)) return;
+
+        _logger.LogInformation("Resetting community votes and ratings to 0 for emulator {EmulatorId}...", emulatorId);
+        _resetEmulators[emulatorId] = true;
+
+        // Reset ratings keys related to this emulator
+        var keysToReset = _ratings.Keys
+            .Where(k => k.Contains($"_{emulatorId}", StringComparison.OrdinalIgnoreCase) ||
+                        k.Contains(emulatorId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var key in keysToReset)
+        {
+            _ratings[key] = new RatingData { Positive = 0, Negative = 0 };
+        }
+
+        // Clear user vote flags for this emulator
+        var userVoteKeysToRemove = _userVotes.Keys
+            .Where(k => k.Contains($"_{emulatorId}", StringComparison.OrdinalIgnoreCase) ||
+                        k.Contains(emulatorId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var voteKey in userVoteKeysToRemove)
+        {
+            _userVotes.TryRemove(voteKey, out _);
+        }
+
         await SaveDataAsync(ct).ConfigureAwait(false);
     }
 }

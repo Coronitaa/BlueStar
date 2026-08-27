@@ -27,18 +27,27 @@ public sealed class ReFixUpdateService : IReFixUpdateService
     private readonly HttpClient _httpClient;
     private readonly IInstanceManager? _instanceManager;
     private readonly INotificationService? _notificationService;
+    private readonly IBackgroundTaskService? _backgroundTaskService;
+    private readonly IEmulatorLifecycleService? _emulatorLifecycleService;
+    private readonly IEmulatorRatingService? _emulatorRatingService;
     private readonly ILogger<ReFixUpdateService> _logger;
 
     public ReFixUpdateService(
         HttpClient httpClient,
         ILogger<ReFixUpdateService> logger,
         INotificationService? notificationService = null,
-        IInstanceManager? instanceManager = null)
+        IInstanceManager? instanceManager = null,
+        IBackgroundTaskService? backgroundTaskService = null,
+        IEmulatorLifecycleService? emulatorLifecycleService = null,
+        IEmulatorRatingService? emulatorRatingService = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _notificationService = notificationService;
         _instanceManager = instanceManager;
+        _backgroundTaskService = backgroundTaskService;
+        _emulatorLifecycleService = emulatorLifecycleService;
+        _emulatorRatingService = emulatorRatingService;
     }
 
     /// <inheritdoc />
@@ -211,12 +220,25 @@ public sealed class ReFixUpdateService : IReFixUpdateService
 
             _logger.LogInformation("ReFix update v{Version} successfully applied!", update.Version);
 
+            // Reset community ratings to 0 for this emulator on version update
+            if (_emulatorRatingService != null)
+            {
+                try
+                {
+                    await _emulatorRatingService.ResetRatingsForEmulatorAsync("refix", ct).ConfigureAwait(false);
+                }
+                catch (Exception rex)
+                {
+                    _logger.LogWarning(rex, "Failed to reset emulator ratings after ReFix update");
+                }
+            }
+
             _notificationService?.ShowSuccess(
-                "ReFix Actualizado",
-                $"El emulador ReFix se ha actualizado a la versión {update.Version} en segundo plano.",
+                "ReFix Updated",
+                $"ReFix emulator was successfully updated to v{update.Version} in the background.",
                 TimeSpan.FromSeconds(8));
 
-            // Check if any instances are outdated and notify
+            // Check if any instances are outdated and trigger aggregated notification
             await CheckAndNotifyOutdatedInstancesAsync(ct).ConfigureAwait(false);
 
             return true;
@@ -243,8 +265,8 @@ public sealed class ReFixUpdateService : IReFixUpdateService
             {
                 _logger.LogInformation("New ReFix update detected: v{Version}. Starting background download...", update.Version);
                 _notificationService?.ShowInfo(
-                    "Actualización de ReFix",
-                    $"Nueva versión v{update.Version} encontrada. Descargando en segundo plano...",
+                    "ReFix Update Detected",
+                    $"New version v{update.Version} found. Downloading in the background...",
                     TimeSpan.FromSeconds(5));
 
                 var applied = await DownloadAndApplyUpdateAsync(update, null, ct).ConfigureAwait(false);
@@ -268,29 +290,135 @@ public sealed class ReFixUpdateService : IReFixUpdateService
         try
         {
             var instances = await _instanceManager.GetAllAsync(ct).ConfigureAwait(false);
-            var currentVersion = GetCurrentInstalledVersion();
+            var outdated = instances.Where(IsInstanceReFixOutdated).ToList();
 
-            foreach (var instance in instances)
-            {
-                if (IsInstanceReFixOutdated(instance))
+            if (outdated.Count == 0) return;
+
+            var currentVersion = GetCurrentInstalledVersion();
+            var count = outdated.Count;
+            var title = count == 1 ? "Emulator Update Available" : "Emulator Updates Available";
+            var message = count == 1
+                ? $"Instance '{outdated[0].Name}' has ReFix v{outdated[0].InstalledEmulatorVersion ?? "older"}. New version v{currentVersion} is ready to install."
+                : $"{count} instances have outdated emulators. Would you like to update all of them to v{currentVersion}?";
+
+            var actionText = count == 1 ? "Update" : "Update All";
+
+            _notificationService?.ShowWarning(
+                title,
+                message,
+                TimeSpan.FromSeconds(20),
+                actionText,
+                () =>
                 {
-                    var instVersion = instance.InstalledEmulatorVersion ?? "anterior";
-                    _notificationService?.ShowWarning(
-                        "Actualización de ReFix en instancia",
-                        $"La instancia '{instance.Name}' tiene ReFix v{instVersion}. Nueva versión v{currentVersion} lista para instalar.",
-                        TimeSpan.FromSeconds(10),
-                        "Actualizar",
-                        () =>
-                        {
-                            _logger.LogInformation("User clicked update ReFix notification for instance {Name}", instance.Name);
-                        });
-                }
-            }
+                    _logger.LogInformation("User clicked '{Action}' for {Count} outdated instance(s)", actionText, count);
+                    _ = UpdateAllOutdatedInstancesAsync(outdated, CancellationToken.None);
+                });
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Error scanning instances for outdated ReFix");
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<int> UpdateAllOutdatedInstancesAsync(IReadOnlyList<GameInstance>? targetInstances = null, CancellationToken ct = default)
+    {
+        if (_instanceManager == null) return 0;
+
+        var instances = targetInstances?.ToList()
+            ?? (await _instanceManager.GetAllAsync(ct).ConfigureAwait(false)).Where(IsInstanceReFixOutdated).ToList();
+
+        if (instances.Count == 0) return 0;
+
+        var total = instances.Count;
+        _logger.LogInformation("Starting bulk update for {Count} outdated instance(s)...", total);
+
+        if (_backgroundTaskService != null)
+        {
+            _backgroundTaskService.QueueTask(
+                total == 1 ? $"Updating Emulator: {instances[0].Name}" : $"Bulk Emulator Update ({total} games)",
+                total == 1 ? instances[0].Name : null,
+                async (progress, taskCt) =>
+                {
+                    int updatedCount = 0;
+                    for (int i = 0; i < instances.Count; i++)
+                    {
+                        taskCt.ThrowIfCancellationRequested();
+                        var inst = instances[i];
+                        var pct = (double)i / total * 100.0;
+                        progress.Report(new BackgroundTaskProgress(pct, $"Updating {inst.Name} ({i + 1}/{total})...", "Updating"));
+
+                        try
+                        {
+                            var optionId = inst.EmulatorId ?? "refix_valve";
+                            if (_emulatorLifecycleService != null)
+                            {
+                                var success = await _emulatorLifecycleService.DeployOrUpdateEmulatorWithDlcPreservationAsync(inst, optionId, null, taskCt).ConfigureAwait(false);
+                                if (success) updatedCount++;
+                            }
+                            else
+                            {
+                                var emu = new ReFixEmulator(LoggerFactory.Create(b => { }).CreateLogger<ReFixEmulator>());
+                                var success = await emu.DeployOptionAsync(inst, optionId, null, taskCt).ConfigureAwait(false);
+                                if (success)
+                                {
+                                    var updated = inst with { InstalledEmulatorVersion = GetCurrentInstalledVersion() };
+                                    await _instanceManager.UpdateAsync(updated, taskCt).ConfigureAwait(false);
+                                    updatedCount++;
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Failed to update emulator for instance {Name} during bulk update", inst.Name);
+                        }
+                    }
+
+                    progress.Report(new BackgroundTaskProgress(100, $"Successfully updated {updatedCount}/{total} instances.", "Complete"));
+                    _notificationService?.ShowSuccess(
+                        "Emulator Update Complete",
+                        $"Successfully updated emulators on {updatedCount}/{total} instances.",
+                        TimeSpan.FromSeconds(10));
+                });
+
+            return total;
+        }
+
+        // Direct sequential fallback
+        int updated = 0;
+        foreach (var inst in instances)
+        {
+            try
+            {
+                var optionId = inst.EmulatorId ?? "refix_valve";
+                if (_emulatorLifecycleService != null)
+                {
+                    if (await _emulatorLifecycleService.DeployOrUpdateEmulatorWithDlcPreservationAsync(inst, optionId, null, ct).ConfigureAwait(false))
+                        updated++;
+                }
+                else
+                {
+                    var emu = new ReFixEmulator(LoggerFactory.Create(b => { }).CreateLogger<ReFixEmulator>());
+                    if (await emu.DeployOptionAsync(inst, optionId, null, ct).ConfigureAwait(false))
+                    {
+                        var updatedInst = inst with { InstalledEmulatorVersion = GetCurrentInstalledVersion() };
+                        await _instanceManager.UpdateAsync(updatedInst, ct).ConfigureAwait(false);
+                        updated++;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating {Game}", inst.Name);
+            }
+        }
+
+        _notificationService?.ShowSuccess(
+            "Emulator Update Complete",
+            $"Updated emulators on {updated}/{total} instances.",
+            TimeSpan.FromSeconds(8));
+
+        return updated;
     }
 
     /// <inheritdoc />

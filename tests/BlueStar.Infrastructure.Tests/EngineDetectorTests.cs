@@ -204,6 +204,43 @@ public class EngineDetectorTests : IDisposable
     }
 
     [Fact]
+    public async Task DetectEngineAsync_DetectsIsaacEngine_WhenIsaacFilesPresent()
+    {
+        var gameDir = Path.Combine(_tempTestDir, "BindingOfIsaac");
+        Directory.CreateDirectory(Path.Combine(gameDir, "resources", "packed"));
+        Directory.CreateDirectory(Path.Combine(gameDir, "resources", "scripts"));
+        File.WriteAllText(Path.Combine(gameDir, "isaac-ng.exe"), "isaac");
+        File.WriteAllText(Path.Combine(gameDir, "resources", "packed", "afterbirth.a"), "archive");
+        File.WriteAllText(Path.Combine(gameDir, "lua5.3.dll"), "lua dll");
+        File.WriteAllText(Path.Combine(gameDir, "resources", "scripts", "main.lua"), "lua script");
+
+        var detector = new EngineDetector(NullLogger<EngineDetector>.Instance);
+        var engine = await detector.DetectEngineAsync(gameDir);
+
+        engine.Should().NotBeNull();
+        engine.Type.Should().Be(EngineType.Custom);
+        engine.Name.Should().Contain("Isaac");
+        engine.Type.Should().NotBe(EngineType.Supergiant);
+    }
+
+    [Fact]
+    public async Task DetectEngineAsync_DetectsSupergiant_WhenHadesFilesPresent()
+    {
+        var gameDir = Path.Combine(_tempTestDir, "HadesGame");
+        Directory.CreateDirectory(Path.Combine(gameDir, "Content", "Packages"));
+        Directory.CreateDirectory(Path.Combine(gameDir, "Content", "Scripts"));
+        File.WriteAllText(Path.Combine(gameDir, "Hades.exe"), "hades");
+        File.WriteAllText(Path.Combine(gameDir, "Content", "Packages", "Package1.pkg"), "pkg");
+        File.WriteAllText(Path.Combine(gameDir, "Content", "Scripts", "RoomManager.lua"), "lua");
+
+        var detector = new EngineDetector(NullLogger<EngineDetector>.Instance);
+        var engine = await detector.DetectEngineAsync(gameDir);
+
+        engine.Should().NotBeNull();
+        engine.Type.Should().Be(EngineType.Supergiant);
+    }
+
+    [Fact]
     public async Task DetectEngineAsync_FallbackToGeneric_WhenNoEngineSignaturesFound()
     {
         var gameDir = Path.Combine(_tempTestDir, "SimpleGame");
