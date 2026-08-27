@@ -969,33 +969,13 @@ public static class GameModPathResolver
             modSourceRoot = Path.GetDirectoryName(modInfoFiles[0]) ?? stagingFolder;
         }
 
-        // 1. Primary destination: GameRoot/mods/workshop-<PublishedFileId>/
+        // Primary and only standard destination: GameRoot/mods/workshop-<PublishedFileId>/
         var primaryTarget = Path.Combine(gameRoot, "mods", $"workshop-{publishedFileId}");
         Directory.CreateDirectory(primaryTarget);
         CopyDirectoryRecursive(modSourceRoot, primaryTarget);
         SanitizeLuaFilesAndModInfo(primaryTarget, publishedFileId, title);
 
-        // 2. Also deploy by sanitized title if title is available (e.g. mods/CombinedStatus/)
-        var safeTitle = !string.IsNullOrWhiteSpace(title) ? PathHelper.SanitizeFolderName(title) : null;
-        if (!string.IsNullOrWhiteSpace(safeTitle) && !safeTitle.Equals($"workshop-{publishedFileId}", StringComparison.OrdinalIgnoreCase))
-        {
-            var titleTarget = Path.Combine(gameRoot, "mods", safeTitle);
-            Directory.CreateDirectory(titleTarget);
-            CopyDirectoryRecursive(modSourceRoot, titleTarget);
-            SanitizeLuaFilesAndModInfo(titleTarget, publishedFileId, title);
-        }
-
-        // 3. Deploy to data/mods/workshop-<PublishedFileId>/ if data/ folder exists
-        var dataDir = Path.Combine(gameRoot, "data");
-        if (Directory.Exists(dataDir))
-        {
-            var dataModsTarget = Path.Combine(dataDir, "mods", $"workshop-{publishedFileId}");
-            Directory.CreateDirectory(dataModsTarget);
-            CopyDirectoryRecursive(modSourceRoot, dataModsTarget);
-            SanitizeLuaFilesAndModInfo(dataModsTarget, publishedFileId, title);
-        }
-
-        // 4. Deploy to installPath/mods if installPath is distinct from gameRoot
+        // Also deploy to installPath/mods if installPath is distinct from gameRoot
         if (!string.IsNullOrWhiteSpace(instance.InstallPath) && !string.Equals(instance.InstallPath, gameRoot, StringComparison.OrdinalIgnoreCase))
         {
             var installModsTarget = Path.Combine(instance.InstallPath, "mods", $"workshop-{publishedFileId}");
@@ -1004,20 +984,7 @@ public static class GameModPathResolver
             SanitizeLuaFilesAndModInfo(installModsTarget, publishedFileId, title);
         }
 
-        // 5. Deploy to Klei User Documents directories
-        foreach (var userModDir in FindKleiUserModDirectories())
-        {
-            try
-            {
-                var userTarget = Path.Combine(userModDir, $"workshop-{publishedFileId}");
-                Directory.CreateDirectory(userTarget);
-                CopyDirectoryRecursive(modSourceRoot, userTarget);
-                SanitizeLuaFilesAndModInfo(userTarget, publishedFileId, title);
-            }
-            catch { }
-        }
-
-        // 6. Force-enable in modsettings.lua across all candidate mods folders
+        // Update modsettings.lua cleanly with ForceEnableMod ONLY (Klei Lua does not have EnableMod)
         var candidateModsDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             Path.Combine(gameRoot, "mods"),
@@ -1033,25 +1000,17 @@ public static class GameModPathResolver
             try
             {
                 var content = File.Exists(modSettingsFile) ? File.ReadAllText(modSettingsFile) : "-- Mod Settings\n";
+                var lines = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Where(l => !l.Trim().StartsWith("EnableMod(", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
                 var modId = $"workshop-{publishedFileId}";
-
-                var linesToAppend = new List<string>();
-                if (!content.Contains(modId, StringComparison.OrdinalIgnoreCase))
+                if (!lines.Any(l => l.Contains(modId, StringComparison.OrdinalIgnoreCase)))
                 {
-                    linesToAppend.Add($"ForceEnableMod(\"{modId}\")");
-                    linesToAppend.Add($"EnableMod(\"{modId}\")");
-                }
-                if (!string.IsNullOrWhiteSpace(safeTitle) && !content.Contains(safeTitle, StringComparison.OrdinalIgnoreCase))
-                {
-                    linesToAppend.Add($"ForceEnableMod(\"{safeTitle}\")");
-                    linesToAppend.Add($"EnableMod(\"{safeTitle}\")");
+                    lines.Add($"ForceEnableMod(\"{modId}\")");
                 }
 
-                if (linesToAppend.Count > 0)
-                {
-                    var appendStr = "\n" + string.Join("\n", linesToAppend) + "\n";
-                    File.AppendAllText(modSettingsFile, appendStr);
-                }
+                File.WriteAllText(modSettingsFile, string.Join(Environment.NewLine, lines) + Environment.NewLine);
             }
             catch { }
         }

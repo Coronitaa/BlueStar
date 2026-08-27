@@ -83,6 +83,8 @@ public sealed class UnityModManager : IModManager
 
         var result = new List<ModItem>();
         var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenWorkshopIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         try
         {
@@ -241,6 +243,31 @@ public sealed class UnityModManager : IModManager
                             category = "Steam Workshop";
                         }
                         catch { }
+                    }
+
+                    // Deduplication logic
+                    string? wsNum = null;
+                    if (cleanDirName.StartsWith("workshop-", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var candidate = cleanDirName.Substring(9);
+                        if (ulong.TryParse(candidate, out _)) wsNum = candidate;
+                    }
+                    else if (ulong.TryParse(cleanDirName, out _))
+                    {
+                        wsNum = cleanDirName;
+                    }
+
+                    if (!string.IsNullOrEmpty(wsNum) && !seenWorkshopIds.Add(wsNum))
+                    {
+                        continue;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(displayName) && !displayName.Equals(cleanDirName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!seenNames.Add(displayName))
+                        {
+                            continue;
+                        }
                     }
 
                     var modId = dirName;

@@ -717,7 +717,7 @@
                                                           Style="{StaticResource ToggleSwitch}"
                                                           IsChecked="{Binding IsEnabled, Mode=OneWay}"
                                                           ToolTip="Enable / Disable mod"
-                                                          Command="{Binding DataContext.ToggleModCommand, ElementName=RootInstanceDetailView}"
+                                                          Command="{Binding DataContext.ToggleModCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                           CommandParameter="{Binding}"/>
 
                                                 <!-- Delete Button -->
@@ -728,7 +728,7 @@
                                                         VerticalAlignment="Center"
                                                         HorizontalContentAlignment="Center"
                                                         VerticalContentAlignment="Center"
-                                                        Command="{Binding DataContext.DeleteModCommand, ElementName=RootInstanceDetailView}"
+                                                        Command="{Binding DataContext.DeleteModCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                         CommandParameter="{Binding}">
                                                     <Path Data="{StaticResource IconTrash}"
                                                           Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"

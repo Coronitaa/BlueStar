@@ -71,6 +71,8 @@ public sealed class GenericModManager : IModManager
 
         var result = new List<ModItem>();
         var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenWorkshopIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         try
         {
@@ -257,6 +259,32 @@ public sealed class GenericModManager : IModManager
                         catch { }
                     }
 
+                    // Deduplication logic:
+                    // Check if folder is a workshop ID (e.g. workshop-12345 or 12345)
+                    string? wsNum = null;
+                    if (cleanDirName.StartsWith("workshop-", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var candidate = cleanDirName.Substring(9);
+                        if (ulong.TryParse(candidate, out _)) wsNum = candidate;
+                    }
+                    else if (ulong.TryParse(cleanDirName, out _))
+                    {
+                        wsNum = cleanDirName;
+                    }
+
+                    if (!string.IsNullOrEmpty(wsNum) && !seenWorkshopIds.Add(wsNum))
+                    {
+                        continue;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(displayName) && !displayName.Equals(cleanDirName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!seenNames.Add(displayName))
+                        {
+                            continue;
+                        }
+                    }
+
                     var modId = dirName;
                     if (seenIds.Add(modId))
                     {
@@ -283,38 +311,43 @@ public sealed class GenericModManager : IModManager
         return Task.FromResult<IReadOnlyList<ModItem>>(result.AsReadOnly());
     }
 
-    public async Task<bool> InstallModAsync(GameInstance instance, string sourceFilePath, CancellationToken ct = default)
+    public Task<bool> InstallModAsync(GameInstance instance, string sourceFilePath, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(sourceFilePath) || !File.Exists(sourceFilePath))
-            return false;
+        if (string.IsNullOrWhiteSpace(instance.InstallPath) || string.IsNullOrWhiteSpace(sourceFilePath) || !File.Exists(sourceFilePath))
+            return Task.FromResult(false);
 
-        var modsDir = GetModsDirectory(instance);
-        if (string.IsNullOrWhiteSpace(modsDir)) return false;
+        var resolution = GameModPathResolver.ResolveModPaths(instance);
+        var targetDir = GetModsDirectory(instance);
+        var fileName = Path.GetFileName(sourceFilePath);
+        var ext = Path.GetExtension(sourceFilePath).ToLowerInvariant();
 
-        return await Task.Run(() =>
+        try
         {
-            try
+            Directory.CreateDirectory(targetDir);
+
+            if (ext == ".zip")
             {
-                var ext = Path.GetExtension(sourceFilePath).ToLowerInvariant();
-                if (ext == ".zip")
+                var extractFolder = Path.Combine(targetDir, Path.GetFileNameWithoutExtension(sourceFilePath));
+                if (Directory.Exists(extractFolder))
                 {
-                    var modFolder = Path.Combine(modsDir, Path.GetFileNameWithoutExtension(sourceFilePath));
-                    ZipFile.ExtractToDirectory(sourceFilePath, modFolder, overwriteFiles: true);
-                    return true;
+                    Directory.Delete(extractFolder, recursive: true);
                 }
-                else
-                {
-                    var dest = Path.Combine(modsDir, Path.GetFileName(sourceFilePath));
-                    File.Copy(sourceFilePath, dest, overwrite: true);
-                    return true;
-                }
+                Directory.CreateDirectory(extractFolder);
+                ZipFile.ExtractToDirectory(sourceFilePath, extractFolder, overwriteFiles: true);
+                return Task.FromResult(true);
             }
-            catch (Exception ex)
+            else
             {
-                _logger.LogError(ex, "Failed to install generic mod {Path}", sourceFilePath);
-                return false;
+                var destPath = Path.Combine(targetDir, fileName);
+                File.Copy(sourceFilePath, destPath, overwrite: true);
+                return Task.FromResult(true);
             }
-        }, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to install generic mod {File} to {Dir}", fileName, targetDir);
+            return Task.FromResult(false);
+        }
     }
 
     public Task<bool> UninstallModAsync(GameInstance instance, string modId, CancellationToken ct = default)
@@ -391,7 +424,8 @@ public sealed class GenericModManager : IModManager
                         {
                             var text = File.ReadAllText(modSettings);
                             var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                                .Where(l => !l.Contains(cleanModId, StringComparison.OrdinalIgnoreCase));
+                                .Where(l => !l.Contains(cleanModId, StringComparison.OrdinalIgnoreCase) &&
+                                            !l.Trim().StartsWith("EnableMod(", StringComparison.OrdinalIgnoreCase));
                             File.WriteAllText(modSettings, string.Join(Environment.NewLine, lines) + Environment.NewLine);
                         }
                         catch { }
@@ -469,7 +503,9 @@ public sealed class GenericModManager : IModManager
                     try
                     {
                         var text = File.Exists(modSettings) ? File.ReadAllText(modSettings) : "-- Mod Settings\n";
-                        var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+                        var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                            .Where(l => !l.Trim().StartsWith("EnableMod(", StringComparison.OrdinalIgnoreCase))
+                            .ToList();
 
                         if (!isEnabled)
                         {
