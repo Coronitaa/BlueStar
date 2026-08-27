@@ -566,6 +566,126 @@ public static class GameModPathResolver
         CopyDirectoryRecursive(stagingFolder, targetFolder);
     }
 
+    public record TabletopSimulatorSaveInfo(
+        string? SaveName,
+        string? GameMode,
+        string? Date,
+        bool IsValidSave
+    );
+
+    /// <summary>
+    /// Parses a Tabletop Simulator save file in either text JSON or binary BSON format.
+    /// </summary>
+    public static TabletopSimulatorSaveInfo ParseTabletopSimulatorSave(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+            return new TabletopSimulatorSaveInfo(null, null, null, false);
+
+        try
+        {
+            var fileBytes = File.ReadAllBytes(filePath);
+            if (fileBytes.Length < 5)
+                return new TabletopSimulatorSaveInfo(null, null, null, false);
+
+            // 1. Text JSON parsing
+            if (fileBytes[0] == (byte)'{' || fileBytes[0] == (byte)'[' ||
+                (fileBytes.Length > 3 && fileBytes[0] == 0xEF && fileBytes[1] == 0xBB && fileBytes[2] == 0xBF && (fileBytes[3] == (byte)'{' || fileBytes[3] == (byte)'[')))
+            {
+                try
+                {
+                    var text = System.Text.Encoding.UTF8.GetString(fileBytes).TrimStart('\uFEFF', ' ', '\t', '\r', '\n');
+                    using var doc = JsonDocument.Parse(text);
+                    string? saveName = null;
+                    string? gameMode = null;
+                    string? date = null;
+
+                    if (doc.RootElement.TryGetProperty("SaveName", out var sn) && !string.IsNullOrWhiteSpace(sn.GetString()))
+                        saveName = sn.GetString();
+                    if (doc.RootElement.TryGetProperty("GameMode", out var gm) && !string.IsNullOrWhiteSpace(gm.GetString()))
+                        gameMode = gm.GetString();
+                    if (doc.RootElement.TryGetProperty("Date", out var dt) && !string.IsNullOrWhiteSpace(dt.GetString()))
+                        date = dt.GetString();
+
+                    bool isTts = saveName != null || gameMode != null ||
+                                 doc.RootElement.TryGetProperty("ObjectStates", out _) ||
+                                 doc.RootElement.TryGetProperty("Table", out _) ||
+                                 doc.RootElement.TryGetProperty("CustomUIAssets", out _);
+
+                    return new TabletopSimulatorSaveInfo(saveName, gameMode, date, isTts);
+                }
+                catch { }
+            }
+
+            // 2. Binary BSON parsing
+            string? bsonSaveName = ExtractBsonString(fileBytes, "SaveName");
+            string? bsonGameMode = ExtractBsonString(fileBytes, "GameMode");
+            string? bsonDate = ExtractBsonString(fileBytes, "Date");
+
+            bool hasTtsMarkers = bsonSaveName != null || bsonGameMode != null || bsonDate != null ||
+                                 ContainsByteSequence(fileBytes, "ObjectStates"u8.ToArray()) ||
+                                 ContainsByteSequence(fileBytes, "Custom_Tile"u8.ToArray()) ||
+                                 ContainsByteSequence(fileBytes, "Custom_Model"u8.ToArray()) ||
+                                 ContainsByteSequence(fileBytes, "Custom_Deck"u8.ToArray()) ||
+                                 ContainsByteSequence(fileBytes, "CustomImage"u8.ToArray()) ||
+                                 ContainsByteSequence(fileBytes, "LuaScript"u8.ToArray()) ||
+                                 ContainsByteSequence(fileBytes, "Transform"u8.ToArray());
+
+            int docSize = BitConverter.ToInt32(fileBytes, 0);
+            bool isValidBsonSize = docSize > 0 && Math.Abs(docSize - fileBytes.Length) <= 64;
+
+            if (hasTtsMarkers || isValidBsonSize)
+            {
+                return new TabletopSimulatorSaveInfo(bsonSaveName, bsonGameMode, bsonDate, true);
+            }
+        }
+        catch { }
+
+        return new TabletopSimulatorSaveInfo(null, null, null, false);
+    }
+
+    private static string? ExtractBsonString(byte[] bytes, string fieldName)
+    {
+        // BSON string format: 0x02 + fieldName + 0x00 + int32(len) + string_bytes(len-1) + 0x00
+        byte[] pattern = new byte[fieldName.Length + 2];
+        pattern[0] = 0x02;
+        System.Text.Encoding.ASCII.GetBytes(fieldName).CopyTo(pattern, 1);
+        pattern[^1] = 0x00;
+
+        int idx = IndexOfSequence(bytes, pattern);
+        if (idx < 0) return null;
+
+        int valLenIdx = idx + pattern.Length;
+        if (valLenIdx + 4 > bytes.Length) return null;
+
+        int strLen = BitConverter.ToInt32(bytes, valLenIdx);
+        if (strLen <= 1 || valLenIdx + 4 + strLen > bytes.Length) return null;
+
+        return System.Text.Encoding.UTF8.GetString(bytes, valLenIdx + 4, strLen - 1);
+    }
+
+    private static int IndexOfSequence(byte[] source, byte[] pattern)
+    {
+        for (int i = 0; i <= source.Length - pattern.Length; i++)
+        {
+            bool match = true;
+            for (int j = 0; j < pattern.Length; j++)
+            {
+                if (source[i + j] != pattern[j])
+                {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) return i;
+        }
+        return -1;
+    }
+
+    private static bool ContainsByteSequence(byte[] source, byte[] pattern)
+    {
+        return IndexOfSequence(source, pattern) >= 0;
+    }
+
     private static void DeployTabletopSimulatorMod(string stagingFolder, string targetFolder, ulong publishedFileId, string? title, WorkshopItemInfo? details)
     {
         var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
@@ -580,7 +700,7 @@ public static class GameModPathResolver
         Directory.CreateDirectory(ttsModels);
         Directory.CreateDirectory(ttsAssetbundles);
 
-        // 1. Clean up old broken metadata files that cause TTS in-game "BROKEN" question-mark tiles
+        // 1. Clean up old broken metadata files
         CleanUpBrokenTabletopSimulatorFiles(ttsWorkshop);
         if (!string.Equals(ttsWorkshop, targetFolder, StringComparison.OrdinalIgnoreCase) && Directory.Exists(targetFolder))
         {
@@ -599,7 +719,7 @@ public static class GameModPathResolver
             catch { }
         }
 
-        // 3. Locate the true TTS save JSON
+        // 3. Locate the true TTS save file (JSON or BSON)
         string? validJsonSource = null;
         string? detectedSaveName = title;
 
@@ -609,61 +729,48 @@ public static class GameModPathResolver
             var fileName = Path.GetFileName(file);
             if (fileName.Equals("workshop_info.json", StringComparison.OrdinalIgnoreCase) ||
                 fileName.EndsWith("_info.json", StringComparison.OrdinalIgnoreCase) ||
-                fileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                fileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+                fileName.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                fileName.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                fileName.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            try
+            var saveInfo = ParseTabletopSimulatorSave(file);
+            if (saveInfo.IsValidSave)
             {
-                var text = File.ReadAllText(file).TrimStart();
-                if (text.StartsWith('{') || text.StartsWith('['))
+                validJsonSource = file;
+                if (!string.IsNullOrWhiteSpace(saveInfo.SaveName))
                 {
-                    using var doc = JsonDocument.Parse(text);
-                    bool isTtsSave = doc.RootElement.TryGetProperty("SaveName", out _) ||
-                                     doc.RootElement.TryGetProperty("ObjectStates", out _) ||
-                                     doc.RootElement.TryGetProperty("GameMode", out _) ||
-                                     doc.RootElement.TryGetProperty("Table", out _) ||
-                                     fileName.Equals("WorkshopUpload", StringComparison.OrdinalIgnoreCase);
-
-                    if (isTtsSave)
-                    {
-                        validJsonSource = file;
-                        if (doc.RootElement.TryGetProperty("SaveName", out var sNameProp) && !string.IsNullOrWhiteSpace(sNameProp.GetString()))
-                        {
-                            detectedSaveName = sNameProp.GetString();
-                        }
-                        break;
-                    }
+                    detectedSaveName = saveInfo.SaveName;
                 }
+                break;
             }
-            catch { }
         }
 
-        // Fallback: any JSON or text file
+        // Fallback: any WorkshopUpload, .json, .bin, or extensionless file in staging
         if (validJsonSource == null)
         {
             foreach (var file in allFiles)
             {
                 var ext = Path.GetExtension(file).ToLowerInvariant();
                 var fName = Path.GetFileName(file);
-                if (ext == ".json" || fName.Equals("WorkshopUpload", StringComparison.OrdinalIgnoreCase) || !Path.HasExtension(file))
+                if (fName.Equals("WorkshopUpload", StringComparison.OrdinalIgnoreCase) ||
+                    fName.Equals($"{publishedFileId}.json", StringComparison.OrdinalIgnoreCase) ||
+                    ext is ".json" or ".bin" || !Path.HasExtension(file))
                 {
-                    try
+                    var fi = new FileInfo(file);
+                    if (fi.Length > 100)
                     {
-                        var text = File.ReadAllText(file).TrimStart();
-                        if (text.StartsWith('{') || text.StartsWith('['))
-                        {
-                            validJsonSource = file;
-                            break;
-                        }
+                        validJsonSource = file;
+                        break;
                     }
-                    catch { }
                 }
             }
         }
 
-        // Copy JSON save to ttsWorkshop/<publishedFileId>.json
+        // Copy JSON/BSON save to ttsWorkshop/<publishedFileId>.json
         if (validJsonSource != null)
         {
             var destJson = Path.Combine(ttsWorkshop, $"{publishedFileId}.json");
@@ -774,38 +881,49 @@ public static class GameModPathResolver
                 // Delete known bad metadata files that break TTS in-game workshop browser
                 if (fileName.Equals("workshop_info.json", StringComparison.OrdinalIgnoreCase) ||
                     fileName.EndsWith("_info.json", StringComparison.OrdinalIgnoreCase) ||
-                    ext == ".zip" || ext == ".bak")
+                    ext == ".zip" || ext == ".bak" || ext == ".tmp")
                 {
                     try { File.Delete(file); } catch { }
                     continue;
                 }
 
-                // If it is a .json file (not WorkshopFileInfos.json), verify if it is valid JSON
+                // Check .json files (excluding WorkshopFileInfos.json)
                 if (ext == ".json" && !fileName.Equals("WorkshopFileInfos.json", StringComparison.OrdinalIgnoreCase))
                 {
                     try
                     {
-                        var text = File.ReadAllText(file).TrimStart();
-                        if (!text.StartsWith('{') && !text.StartsWith('['))
+                        var fi = new FileInfo(file);
+                        if (fi.Length == 0)
                         {
                             File.Delete(file);
+                            continue;
                         }
-                        else
+
+                        // Check if it is an HTML error page
+                        var headBytes = new byte[Math.Min(512, (int)fi.Length)];
+                        using (var fs = File.OpenRead(file)) { fs.Read(headBytes, 0, headBytes.Length); }
+                        var headStr = System.Text.Encoding.UTF8.GetString(headBytes).TrimStart();
+                        if (headStr.StartsWith("<!DOCTYPE", StringComparison.OrdinalIgnoreCase) ||
+                            headStr.StartsWith("<html", StringComparison.OrdinalIgnoreCase))
                         {
-                            using var doc = JsonDocument.Parse(text);
-                            // If it's a BlueStar metadata file (has PublishedFileId but no ObjectStates/SaveName), remove it from Workshop/
+                            File.Delete(file);
+                            continue;
+                        }
+
+                        // Check if it's a BlueStar metadata file (has PublishedFileId but no TTS markers)
+                        if (headStr.StartsWith('{'))
+                        {
+                            using var doc = JsonDocument.Parse(headStr.Length < fi.Length ? File.ReadAllText(file) : headStr);
                             if (doc.RootElement.TryGetProperty("PublishedFileId", out _) &&
                                 !doc.RootElement.TryGetProperty("SaveName", out _) &&
-                                !doc.RootElement.TryGetProperty("ObjectStates", out _))
+                                !doc.RootElement.TryGetProperty("ObjectStates", out _) &&
+                                !doc.RootElement.TryGetProperty("Table", out _))
                             {
                                 File.Delete(file);
                             }
                         }
                     }
-                    catch
-                    {
-                        try { File.Delete(file); } catch { }
-                    }
+                    catch { }
                 }
             }
         }
@@ -838,15 +956,13 @@ public static class GameModPathResolver
                                 var name = item.TryGetProperty("Name", out var n) ? n.GetString() ?? "" : "";
                                 var id = item.TryGetProperty("Id", out var i) ? i.GetString() ?? "" : "";
 
-                                var relativeOrDirect = dir.StartsWith("Workshop/", StringComparison.OrdinalIgnoreCase)
-                                    ? Path.Combine(ttsWorkshopDir, Path.GetFileName(dir))
-                                    : Path.Combine(ttsWorkshopDir, dir);
+                                var checkFile = Path.Combine(ttsWorkshopDir, Path.GetFileName(dir));
 
-                                if (File.Exists(relativeOrDirect) && !dir.EndsWith("_info.json", StringComparison.OrdinalIgnoreCase))
+                                if (File.Exists(checkFile) && !dir.EndsWith("_info.json", StringComparison.OrdinalIgnoreCase))
                                 {
                                     entries.Add(new Dictionary<string, string>
                                     {
-                                        ["Directory"] = dir,
+                                        ["Directory"] = $"Workshop/{Path.GetFileName(dir)}",
                                         ["Name"] = name,
                                         ["Id"] = id
                                     });

@@ -134,25 +134,17 @@ public sealed class UnityModManager : IModManager
                     // Check for Tabletop Simulator .json Save Game metadata
                     if (ext == ".json" || (ext == ".disabled" && fileName.Contains(".json")))
                     {
-                        try
+                        var saveInfo = GameModPathResolver.ParseTabletopSimulatorSave(file);
+                        if (saveInfo.IsValidSave)
                         {
-                            var text = File.ReadAllText(file);
-                            using var doc = System.Text.Json.JsonDocument.Parse(text);
-                            if (doc.RootElement.TryGetProperty("SaveName", out var sn) && !string.IsNullOrWhiteSpace(sn.GetString()))
-                            {
-                                displayName = sn.GetString()!;
-                                category = "Tabletop Simulator Mod";
-                            }
-                            if (doc.RootElement.TryGetProperty("GameMode", out var gm) && !string.IsNullOrWhiteSpace(gm.GetString()))
-                            {
-                                description = gm.GetString();
-                            }
-                            if (doc.RootElement.TryGetProperty("Date", out var dt) && !string.IsNullOrWhiteSpace(dt.GetString()))
-                            {
-                                if (string.IsNullOrEmpty(description)) description = $"Created: {dt.GetString()}";
-                            }
+                            category = "Tabletop Simulator Mod";
+                            if (!string.IsNullOrWhiteSpace(saveInfo.SaveName))
+                                displayName = saveInfo.SaveName;
+                            if (!string.IsNullOrWhiteSpace(saveInfo.GameMode))
+                                description = saveInfo.GameMode;
+                            if (!string.IsNullOrWhiteSpace(saveInfo.Date) && string.IsNullOrEmpty(description))
+                                description = $"Created: {saveInfo.Date}";
                         }
-                        catch { }
 
                         // If SaveName wasn't in file, check WorkshopFileInfos.json
                         if (displayName == baseName)
