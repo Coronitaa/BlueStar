@@ -2278,6 +2278,95 @@ public partial class InstanceDetailViewModel : ObservableObject
         return true;
     }
 
+    /// <summary>
+    /// Generates a unique instance name using Windows-style numbering: "Name (2)", "Name (3)", etc.
+    /// </summary>
+    private async Task<string> GenerateUniqueInstanceNameAsync(string baseName)
+    {
+        var allInstances = await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
+        var existingNames = new HashSet<string>(allInstances.Select(i => i.Name), StringComparer.OrdinalIgnoreCase);
+
+        // If the base name itself is available, use it
+        if (!existingNames.Contains(baseName))
+            return baseName;
+
+        // Find next available number (2), (3), etc.
+        int counter = 2;
+        while (existingNames.Contains($"{baseName} ({counter})"))
+        {
+            counter++;
+        }
+        return $"{baseName} ({counter})";
+    }
+
+    /// <summary>
+    /// Removes all emulator-related files (ReFix, Goldberg, SmokeAPI) from a game directory.
+    /// </summary>
+    private static void RemoveEmulatorFiles(string installPath)
+    {
+        if (string.IsNullOrWhiteSpace(installPath) || !Directory.Exists(installPath)) return;
+
+        var searchOpts = new EnumerationOptions
+        {
+            MaxRecursionDepth = 6,
+            RecurseSubdirectories = true,
+            IgnoreInaccessible = true,
+            ReturnSpecialDirectories = false
+        };
+
+        // Remove steam_settings directories
+        try
+        {
+            foreach (var dir in Directory.GetDirectories(installPath, "steam_settings", searchOpts))
+            {
+                try { Directory.Delete(dir, true); } catch { }
+            }
+        }
+        catch { }
+
+        // Remove emulator-specific files
+        var emulatorFilePatterns = new[]
+        {
+            "ReFix.ini",
+            "steam_api64_valve.dll", "steam_api_valve.dll",
+            "steam_api64_o.dll", "steam_api_o.dll",
+            "goldberg_steam_api64.dll", "goldberg_steam_api.dll",
+            "local_save.txt",
+            "CreamAPI.ini", "cream_api.ini",
+            "SmokeAPI.config.json", "SmokeAPI64.dll", "SmokeAPI.dll"
+        };
+
+        foreach (var pattern in emulatorFilePatterns)
+        {
+            try
+            {
+                foreach (var file in Directory.GetFiles(installPath, pattern, searchOpts))
+                {
+                    try { File.Delete(file); } catch { }
+                }
+            }
+            catch { }
+        }
+
+        // Restore original Steam API DLLs from backups if they exist
+        try
+        {
+            foreach (var backupFile in Directory.GetFiles(installPath, "steam_api*_valve.dll", searchOpts))
+            {
+                var dir = Path.GetDirectoryName(backupFile)!;
+                var originalName = Path.GetFileName(backupFile).Replace("_valve", "");
+                var originalPath = Path.Combine(dir, originalName);
+                try
+                {
+                    File.Copy(backupFile, originalPath, overwrite: true);
+                    File.Delete(backupFile);
+                }
+                catch { }
+            }
+        }
+        catch { }
+    }
+
     // ── Settings Save & Duplication ──
     [RelayCommand]
     public async Task SaveSettingsAsync()
@@ -2306,7 +2395,7 @@ public partial class InstanceDetailViewModel : ObservableObject
         try
         {
             var baseName = !string.IsNullOrWhiteSpace(InstanceAlias) ? InstanceAlias.Trim() : Instance.Name;
-            var cloneName = $"{baseName} (Clon)";
+            var cloneName = await GenerateUniqueInstanceNameAsync(baseName).ConfigureAwait(true);
 
             StatusMessage = $"⏳ Duplicando instancia '{baseName}' con enlace NTFS Zero-Copy...";
             var cloned = await _instanceManager.CloneInstanceAsync(Instance.Id, cloneName, CancellationToken.None).ConfigureAwait(true);
@@ -2333,7 +2422,7 @@ public partial class InstanceDetailViewModel : ObservableObject
         try
         {
             var baseName = !string.IsNullOrWhiteSpace(InstanceAlias) ? InstanceAlias.Trim() : Instance.Name;
-            var cleanName = $"{baseName} (Limpia)";
+            var cleanName = await GenerateUniqueInstanceNameAsync($"{baseName} - Limpia").ConfigureAwait(true);
 
             StatusMessage = $"⏳ Creando instancia limpia para '{baseName}'...";
 
@@ -2345,6 +2434,18 @@ public partial class InstanceDetailViewModel : ObservableObject
                     cleanName,
                     baseDepot,
                     ct: CancellationToken.None).ConfigureAwait(true);
+
+                // Ensure clean instance has no emulator or DLC unlocker
+                RemoveEmulatorFiles(cleanInstance.InstallPath);
+                var cleanedFromDepot = cleanInstance with
+                {
+                    EmulatorEnabled = false,
+                    EmulatorId = null,
+                    InstalledEmulatorVersion = null,
+                    DlcUnlockerInstalled = false,
+                    UnlockedDlcIds = []
+                };
+                await _instanceManager.UpdateAsync(cleanedFromDepot, CancellationToken.None).ConfigureAwait(true);
 
                 StatusMessage = $"✨ Instancia limpia creada desde base depot: '{cleanInstance.Name}'";
             }
@@ -2395,8 +2496,22 @@ public partial class InstanceDetailViewModel : ObservableObject
                     {
                         try { Directory.Delete(ugcContent, true); } catch { }
                     }
+
+                    // Remove emulator files from the clean clone
+                    RemoveEmulatorFiles(cloned.InstallPath);
                 }
                 catch { }
+
+                // Reset emulator and DLC unlocker state for clean instance
+                var cleanedInstance = cloned with
+                {
+                    EmulatorEnabled = false,
+                    EmulatorId = null,
+                    InstalledEmulatorVersion = null,
+                    DlcUnlockerInstalled = false,
+                    UnlockedDlcIds = []
+                };
+                await _instanceManager.UpdateAsync(cleanedInstance, CancellationToken.None).ConfigureAwait(true);
 
                 StatusMessage = $"✨ Instancia limpia creada con éxito: '{cloned.Name}'";
             }

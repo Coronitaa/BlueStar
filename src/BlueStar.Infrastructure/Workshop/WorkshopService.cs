@@ -446,6 +446,7 @@ public sealed class WorkshopService : IWorkshopService
             {
                 var candidateUrls = new[]
                 {
+                    $"https://steamcommunity.com/sharedfiles/filedetails/?id={publishedFileId}&raw=file",
                     $"https://backend-02-download.steamworkshop.download/download/{publishedFileId}",
                     $"https://steamworkshop.download/download/{publishedFileId}",
                     $"https://steamworkshopdownload.infamous.workers.dev/?id={publishedFileId}"
@@ -470,11 +471,13 @@ public sealed class WorkshopService : IWorkshopService
                                 bool isHtml = false;
                                 try
                                 {
-                                    var headBytes = new byte[Math.Min(256, (int)new FileInfo(tempZip).Length)];
+                                    var headBytes = new byte[Math.Min(512, (int)new FileInfo(tempZip).Length)];
                                     using (var fsCheck = File.OpenRead(tempZip)) { fsCheck.Read(headBytes, 0, headBytes.Length); }
                                     var headStr = Encoding.UTF8.GetString(headBytes).TrimStart();
                                     if (headStr.StartsWith("<!DOCTYPE", StringComparison.OrdinalIgnoreCase) ||
-                                        headStr.StartsWith("<html", StringComparison.OrdinalIgnoreCase))
+                                        headStr.StartsWith("<html", StringComparison.OrdinalIgnoreCase) ||
+                                        headStr.StartsWith("<head", StringComparison.OrdinalIgnoreCase) ||
+                                        headStr.Contains("<title>Steam Community", StringComparison.OrdinalIgnoreCase))
                                     {
                                         isHtml = true;
                                     }
@@ -491,6 +494,7 @@ public sealed class WorkshopService : IWorkshopService
                                     }
                                     catch
                                     {
+                                        // Not a zip — treat as raw file (could be TTS JSON save, etc.)
                                         var rawDest = Path.Combine(stagingFolder, "WorkshopUpload");
                                         File.Copy(tempZip, rawDest, overwrite: true);
 
@@ -522,6 +526,55 @@ public sealed class WorkshopService : IWorkshopService
             {
                 _logger.LogWarning("No files could be downloaded for Workshop item {Title} ({Id})", details.Title, publishedFileId);
                 return false;
+            }
+
+            // Post-download content validation: reject HTML error pages and corrupt data
+            bool hasValidContent = false;
+            foreach (var file in downloadedFiles)
+            {
+                var fileName = Path.GetFileName(file);
+                if (fileName.StartsWith(".") || fileName.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                try
+                {
+                    var fi = new FileInfo(file);
+                    if (fi.Length < 10) continue; // Too small to be meaningful
+
+                    var headBytes = new byte[Math.Min(512, (int)fi.Length)];
+                    using (var fs = File.OpenRead(file)) { fs.Read(headBytes, 0, headBytes.Length); }
+                    var headStr = Encoding.UTF8.GetString(headBytes).TrimStart();
+
+                    // Reject HTML error pages
+                    if (headStr.StartsWith("<!DOCTYPE", StringComparison.OrdinalIgnoreCase) ||
+                        headStr.StartsWith("<html", StringComparison.OrdinalIgnoreCase) ||
+                        headStr.StartsWith("<head", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogWarning("Staging file {File} appears to be an HTML error page, removing", fileName);
+                        try { File.Delete(file); } catch { }
+                        continue;
+                    }
+
+                    hasValidContent = true;
+                }
+                catch { }
+            }
+
+            if (!hasValidContent)
+            {
+                _logger.LogWarning("All downloaded files for Workshop item {Title} ({Id}) were invalid (HTML errors or corrupt)", details.Title, publishedFileId);
+                return false;
+            }
+
+            // Clean up stale files from target directory before deploying (prevents showing old mods)
+            if (resolution.GameCategory == "TabletopSimulator")
+            {
+                // Remove stale <publishedFileId>.json and <publishedFileId>.png from TTS Workshop directory
+                var staleJson = Path.Combine(targetFolder, $"{publishedFileId}.json");
+                if (File.Exists(staleJson)) try { File.Delete(staleJson); } catch { }
+
+                var stalePng = Path.Combine(targetFolder, $"{publishedFileId}.png");
+                if (File.Exists(stalePng)) try { File.Delete(stalePng); } catch { }
             }
 
             progress?.Report(90.0);

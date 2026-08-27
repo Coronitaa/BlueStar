@@ -280,22 +280,30 @@ public sealed class InstanceManager : IInstanceManager
             throw new InvalidOperationException($"Failed to clone instance: {deployResult.ErrorMessage}");
         }
 
-        // Configure unique emulator settings
-        int existingCount = Directory.GetDirectories(_rootPath).Length;
-        var steamId = _refixManager.GenerateUniqueSteamId(newId, slotIndex: existingCount);
-        var listenPort = _refixManager.GenerateUniquePort(slotIndex: existingCount);
+        // Configure unique emulator settings only if source instance has an emulator
+        bool sourceHasEmulator = sourceInstance.EmulatorEnabled ||
+            !string.IsNullOrWhiteSpace(sourceInstance.EmulatorId) ||
+            ReFixEmulator.IsEmulatorInstalled(sourceInstance.InstallPath);
 
-        var refixConfig = new InstanceReFixConfig
+        if (sourceHasEmulator)
         {
-            AppId = sourceInstance.AppId,
-            SteamId = steamId,
-            AccountName = newInstanceName,
-            ListenPort = listenPort,
-            DisableOverlay = true,
-            LocalSave = true
-        };
+            int existingCount = Directory.GetDirectories(_rootPath).Length;
+            var steamId = _refixManager.GenerateUniqueSteamId(newId, slotIndex: existingCount);
+            var listenPort = _refixManager.GenerateUniquePort(slotIndex: existingCount);
 
-        await _refixManager.ConfigureInstanceSettingsAsync(newGamePath, refixConfig, ct).ConfigureAwait(false);
+            var refixConfig = new InstanceReFixConfig
+            {
+                AppId = sourceInstance.AppId,
+                SteamId = steamId,
+                AccountName = newInstanceName,
+                ListenPort = listenPort,
+                DisableOverlay = true,
+                LocalSave = true
+            };
+
+            await _refixManager.ConfigureInstanceSettingsAsync(newGamePath, refixConfig, ct).ConfigureAwait(false);
+        }
+
 
         string? newExePath = null;
         if (!string.IsNullOrWhiteSpace(sourceInstance.ExecutablePath))
