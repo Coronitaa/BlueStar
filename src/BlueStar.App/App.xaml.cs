@@ -146,6 +146,15 @@ public partial class App : Application
         // General HTTP Client
         services.AddHttpClient();
 
+        // Storage, Linking, and Multi-Instance Services
+        services.AddSingleton<BlueStar.Core.Storage.IWin32Linker, BlueStar.Infrastructure.Storage.Win32Linker>();
+        services.AddSingleton<BlueStar.Core.Storage.IInstanceStorageManager, BlueStar.Infrastructure.Storage.InstanceStorageManager>();
+        services.AddSingleton<IReFixManager, BlueStar.Infrastructure.Emulators.ReFixManager>();
+        services.AddSingleton<IModLoaderProvisioner, BlueStar.Infrastructure.Mods.ModLoaderProvisioner>();
+        services.AddSingleton<IUgcBridge, BlueStar.Infrastructure.Workshop.UgcBridge>();
+        services.AddSingleton<IHeuristicModDispatcher, BlueStar.Infrastructure.Workshop.HeuristicModDispatcher>();
+        services.AddSingleton<IWorkshopDownloader, BlueStar.Infrastructure.Workshop.WorkshopDownloader>();
+
         // Engine & Modding & Emulator services
         services.AddSingleton<IEngineDetector, BlueStar.Infrastructure.Engine.EngineDetector>();
         services.AddHttpClient<IBepInExService, BlueStar.Infrastructure.Mods.BepInExService>();

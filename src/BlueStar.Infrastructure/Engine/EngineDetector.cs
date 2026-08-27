@@ -236,6 +236,39 @@ public sealed class EngineDetector : IEngineDetector
                        EngineCapabilities.WorkshopSupported
     };
 
+    private static TargetArchitecture DetectPeArchitecture(string filePath)
+    {
+        try
+        {
+            if (!File.Exists(filePath)) return TargetArchitecture.Unknown;
+            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var br = new BinaryReader(fs);
+
+            if (fs.Length < 64) return TargetArchitecture.Unknown;
+            if (br.ReadUInt16() != 0x5A4D) return TargetArchitecture.Unknown; // "MZ"
+
+            fs.Seek(0x3C, SeekOrigin.Begin);
+            int peOffset = br.ReadInt32();
+            if (peOffset < 0 || peOffset > fs.Length - 24) return TargetArchitecture.Unknown;
+
+            fs.Seek(peOffset, SeekOrigin.Begin);
+            if (br.ReadUInt32() != 0x00004550) return TargetArchitecture.Unknown; // "PE\0\0"
+
+            ushort machine = br.ReadUInt16();
+            return machine switch
+            {
+                0x8664 => TargetArchitecture.X64,
+                0x014c => TargetArchitecture.X86,
+                0xAA64 => TargetArchitecture.Arm64,
+                _ => TargetArchitecture.Unknown
+            };
+        }
+        catch
+        {
+            return TargetArchitecture.Unknown;
+        }
+    }
+
     private static EngineInfo? CheckUnrealEngine(string path)
     {
         try
@@ -253,18 +286,29 @@ public sealed class EngineDetector : IEngineDetector
             if (hasEngineDir || hasUProject || hasShippingExe || (hasBinariesWin64 && hasPaks))
             {
                 var version = DetectUnrealVersion(path);
+                var arch = TargetArchitecture.X64;
+                var sampleExe = Directory.GetFiles(path, "*.exe", SafeEnumOptions).FirstOrDefault();
+                if (sampleExe != null)
+                {
+                    var detectedArch = DetectPeArchitecture(sampleExe);
+                    if (detectedArch != TargetArchitecture.Unknown) arch = detectedArch;
+                }
+
                 return new EngineInfo
                 {
                     Id = "unreal",
                     Name = "Unreal Engine",
                     Type = EngineType.UnrealEngine,
                     Version = version,
+                    Architecture = arch,
+                    RecommendedLoader = RecommendedModLoader.UE4SS_x64,
                     Capabilities = EngineCapabilities.Mods |
                                    EngineCapabilities.Emulation |
                                    EngineCapabilities.SteamIntegration |
                                    EngineCapabilities.CustomFiles |
                                    EngineCapabilities.LaunchArguments |
-                                   EngineCapabilities.WorkshopSupported
+                                   EngineCapabilities.WorkshopSupported |
+                                   EngineCapabilities.UE4SSSupported
                 };
             }
         }
@@ -341,12 +385,53 @@ public sealed class EngineDetector : IEngineDetector
             if (hasUnityPlayer || hasDataFolder || (hasGameAssembly && hasUnityCrash) || hasGlobalGameManagers || hasDataUnity3d || (hasBootConfig && hasManagedUnityEngine))
             {
                 var version = DetectUnityVersion(path);
+
+                // Detect Mono vs IL2CPP
+                var hasIl2CppData = Directory.GetDirectories(path, "il2cpp_data", SafeEnumOptions).Length > 0;
+                var isIl2Cpp = hasGameAssembly || hasIl2CppData;
+                var flavor = isIl2Cpp ? UnityFlavor.IL2CPP : UnityFlavor.Mono;
+
+                // Detect architecture
+                var arch = TargetArchitecture.X64;
+                var playerDll = Directory.GetFiles(path, "UnityPlayer.dll", SafeEnumOptions).FirstOrDefault() ??
+                                Directory.GetFiles(path, "GameAssembly.dll", SafeEnumOptions).FirstOrDefault();
+                if (playerDll != null)
+                {
+                    var detected = DetectPeArchitecture(playerDll);
+                    if (detected != TargetArchitecture.Unknown) arch = detected;
+                }
+                else
+                {
+                    var primaryExe = Directory.GetFiles(path, "*.exe", SafeEnumOptions).FirstOrDefault(f => !f.Contains("UnityCrashHandler", StringComparison.OrdinalIgnoreCase));
+                    if (primaryExe != null)
+                    {
+                        var detected = DetectPeArchitecture(primaryExe);
+                        if (detected != TargetArchitecture.Unknown) arch = detected;
+                    }
+                }
+
+                // Recommended mod loader
+                RecommendedModLoader recLoader;
+                if (isIl2Cpp)
+                {
+                    recLoader = RecommendedModLoader.BepInEx6_IL2CPP_x64;
+                }
+                else
+                {
+                    recLoader = arch == TargetArchitecture.X86
+                        ? RecommendedModLoader.BepInEx5_x86
+                        : RecommendedModLoader.BepInEx5_x64;
+                }
+
                 return new EngineInfo
                 {
                     Id = "unity",
                     Name = "Unity",
                     Type = EngineType.Unity,
                     Version = version,
+                    UnityFlavor = flavor,
+                    Architecture = arch,
+                    RecommendedLoader = recLoader,
                     Capabilities = EngineCapabilities.Mods |
                                    EngineCapabilities.BepInExSupported |
                                    EngineCapabilities.SteamIntegration |

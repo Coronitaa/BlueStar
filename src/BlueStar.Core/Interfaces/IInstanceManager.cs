@@ -1,8 +1,9 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using BlueStar.Core.Models;
+using BlueStar.Core.Storage;
 
 namespace BlueStar.Core.Interfaces;
 
@@ -15,42 +16,53 @@ public interface IInstanceManager
     /// Event raised whenever instances are created, updated, or deleted.
     /// </summary>
     event EventHandler? InstancesChanged;
+
     /// <summary>
     /// Retrieves all managed game instances.
     /// </summary>
-    /// <param name="ct">A token to monitor for cancellation requests.</param>
-    /// <returns>A task that represents the asynchronous operation. The task result contains a read-only list of game instances.</returns>
     Task<IReadOnlyList<GameInstance>> GetAllAsync(CancellationToken ct);
 
     /// <summary>
     /// Retrieves a specific game instance by its unique identifier.
     /// </summary>
-    /// <param name="id">The unique identifier of the game instance.</param>
-    /// <param name="ct">A token to monitor for cancellation requests.</param>
-    /// <returns>A task that represents the asynchronous operation. The task result contains the game instance, or null if it was not found.</returns>
     Task<GameInstance?> GetByIdAsync(Guid id, CancellationToken ct);
 
     /// <summary>
     /// Creates a new game instance.
     /// </summary>
-    /// <param name="instance">The game instance to create.</param>
-    /// <param name="ct">A token to monitor for cancellation requests.</param>
-    /// <returns>A task that represents the asynchronous operation. The task result contains the created game instance.</returns>
     Task<GameInstance> CreateAsync(GameInstance instance, CancellationToken ct);
 
     /// <summary>
     /// Updates an existing game instance.
     /// </summary>
-    /// <param name="instance">The game instance to update.</param>
-    /// <param name="ct">A token to monitor for cancellation requests.</param>
-    /// <returns>A task that represents the asynchronous operation. The task result contains the updated game instance.</returns>
     Task<GameInstance> UpdateAsync(GameInstance instance, CancellationToken ct);
 
     /// <summary>
     /// Deletes a game instance by its unique identifier.
     /// </summary>
-    /// <param name="id">The unique identifier of the game instance to delete.</param>
-    /// <param name="ct">A token to monitor for cancellation requests.</param>
-    /// <returns>A task that represents the asynchronous operation. The task result is true if the instance was successfully deleted; otherwise, false.</returns>
     Task<bool> DeleteAsync(Guid id, CancellationToken ct);
+
+    /// <summary>
+    /// Deploys a new zero-copy game instance from an immutable base depot with isolated ReFix settings.
+    /// </summary>
+    Task<GameInstance> CreateInstanceFromDepotAsync(
+        uint appId,
+        string instanceName,
+        string depotPath,
+        string? customInstancePath = null,
+        InstanceDeployOptions? deployOptions = null,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Clones an existing game instance with zero-copy hardlinks, allocating unique SteamID and ports.
+    /// </summary>
+    Task<GameInstance> CloneInstanceAsync(
+        Guid sourceInstanceId,
+        string newInstanceName,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Gets the standard immutable base depot path for an AppId (e.g., data/depots/<AppId>_base/).
+    /// </summary>
+    string GetBaseDepotPath(uint appId);
 }

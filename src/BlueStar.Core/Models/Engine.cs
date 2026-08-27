@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace BlueStar.Core.Models;
 
@@ -31,6 +31,40 @@ public enum EngineType
 }
 
 /// <summary>
+/// Distinguishes Unity scripting backend implementations.
+/// </summary>
+public enum UnityFlavor
+{
+    None,
+    Mono,
+    IL2CPP
+}
+
+/// <summary>
+/// Identifies the processor architecture of the game binaries.
+/// </summary>
+public enum TargetArchitecture
+{
+    Unknown,
+    X86,
+    X64,
+    Arm64
+}
+
+/// <summary>
+/// Identifies the recommended mod loader for the detected game engine.
+/// </summary>
+public enum RecommendedModLoader
+{
+    None,
+    BepInEx5_x64,
+    BepInEx5_x86,
+    BepInEx6_IL2CPP_x64,
+    UE4SS_x64,
+    ProxyDll
+}
+
+/// <summary>
 /// Bitwise flags declaring capabilities supported by a game engine or instance.
 /// </summary>
 [Flags]
@@ -44,7 +78,8 @@ public enum EngineCapabilities
     LaunchArguments = 1 << 4,
     BepInExSupported = 1 << 5,
     WorkshopSupported = 1 << 6,
-    All = Mods | Emulation | SteamIntegration | CustomFiles | LaunchArguments | BepInExSupported | WorkshopSupported
+    UE4SSSupported = 1 << 7,
+    All = Mods | Emulation | SteamIntegration | CustomFiles | LaunchArguments | BepInExSupported | WorkshopSupported | UE4SSSupported
 }
 
 /// <summary>
@@ -73,6 +108,21 @@ public record EngineInfo
     public string? Version { get; init; }
 
     /// <summary>
+    /// Unity scripting backend flavor (Mono vs IL2CPP) if Unity.
+    /// </summary>
+    public UnityFlavor UnityFlavor { get; init; } = UnityFlavor.None;
+
+    /// <summary>
+    /// Detected binary target architecture.
+    /// </summary>
+    public TargetArchitecture Architecture { get; init; } = TargetArchitecture.Unknown;
+
+    /// <summary>
+    /// Recommended mod loader for this engine instance.
+    /// </summary>
+    public RecommendedModLoader RecommendedLoader { get; init; } = RecommendedModLoader.None;
+
+    /// <summary>
     /// Capabilities supported for this engine instance.
     /// </summary>
     public EngineCapabilities Capabilities { get; init; } = EngineCapabilities.None;
@@ -83,9 +133,24 @@ public record EngineInfo
     public bool Supports(EngineCapabilities capability) => (Capabilities & capability) == capability;
 
     /// <summary>
-    /// Formatted display text (e.g. "Unreal Engine 4.27" or "Unity").
+    /// Formatted display text (e.g. "Unreal Engine 4.27", "Unity (Mono x64)", or "Unity").
     /// </summary>
-    public string DisplayText => !string.IsNullOrWhiteSpace(Version)
-        ? $"{Name} {Version}"
-        : Name;
+    public string DisplayText
+    {
+        get
+        {
+            if (Type == EngineType.Unity && UnityFlavor != UnityFlavor.None)
+            {
+                var flavorStr = UnityFlavor == UnityFlavor.IL2CPP ? "IL2CPP" : "Mono";
+                var archStr = Architecture == TargetArchitecture.X86 ? "x86" : "x64";
+                return !string.IsNullOrWhiteSpace(Version)
+                    ? $"{Name} {Version} ({flavorStr} {archStr})"
+                    : $"{Name} ({flavorStr} {archStr})";
+            }
+
+            return !string.IsNullOrWhiteSpace(Version)
+                ? $"{Name} {Version}"
+                : Name;
+        }
+    }
 }

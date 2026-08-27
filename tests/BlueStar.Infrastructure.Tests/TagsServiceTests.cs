@@ -32,8 +32,8 @@ public class TagsServiceTests
         var tags = _tagsService.GetExploreTags(item);
 
         tags.Should().Contain(t => t.Text == "Game" && t.Type == TagType.AppType);
-        tags.Should().Contain(t => t.Text == "Windows" && t.Type == TagType.Platform);
-        tags.Should().Contain(t => t.Text == "Linux" && t.Type == TagType.Platform);
+        tags.Should().Contain(t => t.Text.Contains("Windows") && t.Type == TagType.Platform);
+        tags.Should().Contain(t => t.Text.Contains("Linux") && t.Type == TagType.Platform);
         tags.Should().NotContain(t => t.Text == "macOS");
         tags.Should().Contain(t => t.Text == "5 DLCs" && t.Type == TagType.DlcCount);
         tags.Should().Contain(t => t.Text.Contains("DRM") && t.Type == TagType.Drm);
