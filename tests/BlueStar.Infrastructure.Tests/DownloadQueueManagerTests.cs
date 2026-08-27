@@ -120,8 +120,8 @@ public class DownloadQueueManagerTests
                 downloadCallCount++;
                 progress?.Report(new DownloadProgress
                 {
-                    Percentage = 50,
-                    DownloadedBytes = 500,
+                    Percentage = 100,
+                    DownloadedBytes = 1000,
                     TotalBytes = 1000
                 });
                 return Task.CompletedTask;

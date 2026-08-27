@@ -1011,6 +1011,24 @@ public static class GameModPathResolver
                 File.WriteAllText(modSettingsFile, string.Join(Environment.NewLine, lines) + Environment.NewLine);
             }
             catch { }
+
+            // 3. Configure dedicated_server_mods_setup.lua (DST auto-registration)
+            var serverSetupFile = Path.Combine(modsDir, "dedicated_server_mods_setup.lua");
+            if (File.Exists(serverSetupFile))
+            {
+                try
+                {
+                    var sContent = File.ReadAllText(serverSetupFile);
+                    var pubIdStr = publishedFileId.ToString();
+                    var setupLine = $"ServerModSetup(\"{pubIdStr}\")";
+
+                    if (!sContent.Contains(pubIdStr, StringComparison.OrdinalIgnoreCase))
+                    {
+                        File.AppendAllText(serverSetupFile, Environment.NewLine + setupLine + Environment.NewLine);
+                    }
+                }
+                catch { }
+            }
         }
     }
 

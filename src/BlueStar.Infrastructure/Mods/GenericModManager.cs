@@ -149,10 +149,16 @@ public sealed class GenericModManager : IModManager
                                     {
                                         foreach (var el in doc.RootElement.EnumerateArray())
                                         {
-                                            if (el.TryGetProperty("Id", out var idProp) && idProp.GetString() == baseName &&
-                                                el.TryGetProperty("Name", out var nameProp) && !string.IsNullOrWhiteSpace(nameProp.GetString()))
+                                            var entryId = el.TryGetProperty("Id", out var idProp) ? idProp.GetString() : null;
+                                            var entryDir = el.TryGetProperty("Directory", out var dirProp) ? dirProp.GetString() : null;
+                                            var entryName = el.TryGetProperty("Name", out var nameProp) ? nameProp.GetString() : null;
+
+                                            bool isMatch = string.Equals(entryId, baseName, StringComparison.OrdinalIgnoreCase) ||
+                                                           (!string.IsNullOrEmpty(entryDir) && Path.GetFileNameWithoutExtension(entryDir).Equals(baseName, StringComparison.OrdinalIgnoreCase));
+
+                                            if (isMatch && !string.IsNullOrWhiteSpace(entryName))
                                             {
-                                                displayName = nameProp.GetString()!;
+                                                displayName = entryName;
                                                 category = "Tabletop Simulator Mod";
                                                 break;
                                             }
