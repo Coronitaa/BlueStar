@@ -969,45 +969,43 @@ public static class GameModPathResolver
             modSourceRoot = Path.GetDirectoryName(modInfoFiles[0]) ?? stagingFolder;
         }
 
-        // Primary and only standard destination: GameRoot/mods/workshop-<PublishedFileId>/
+        // 1. Primary destination: GameRoot/mods/workshop-<PublishedFileId>/
         var primaryTarget = Path.Combine(gameRoot, "mods", $"workshop-{publishedFileId}");
         Directory.CreateDirectory(primaryTarget);
         CopyDirectoryRecursive(modSourceRoot, primaryTarget);
-        SanitizeLuaFilesAndModInfo(primaryTarget, publishedFileId, title);
+        SanitizeLuaFilesAndModInfo(primaryTarget, publishedFileId, title, instance.AppId);
 
-        // Also deploy to installPath/mods if installPath is distinct from gameRoot
-        if (!string.IsNullOrWhiteSpace(instance.InstallPath) && !string.Equals(instance.InstallPath, gameRoot, StringComparison.OrdinalIgnoreCase))
+        // Remove any old redundant duplicate folders named by title in mods/ to avoid duplicate prefab crash
+        var safeTitle = !string.IsNullOrWhiteSpace(title) ? PathHelper.SanitizeFolderName(title) : null;
+        if (!string.IsNullOrWhiteSpace(safeTitle) && !safeTitle.Equals($"workshop-{publishedFileId}", StringComparison.OrdinalIgnoreCase))
         {
-            var installModsTarget = Path.Combine(instance.InstallPath, "mods", $"workshop-{publishedFileId}");
-            Directory.CreateDirectory(installModsTarget);
-            CopyDirectoryRecursive(modSourceRoot, installModsTarget);
-            SanitizeLuaFilesAndModInfo(installModsTarget, publishedFileId, title);
+            var oldTitleTarget = Path.Combine(gameRoot, "mods", safeTitle);
+            if (Directory.Exists(oldTitleTarget))
+            {
+                try { Directory.Delete(oldTitleTarget, true); } catch { }
+            }
         }
 
-        // Update modsettings.lua cleanly with ForceEnableMod ONLY (Klei Lua does not have EnableMod)
-        var candidateModsDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        // 2. Configure modsettings.lua using only valid ForceEnableMod calls
+        var modsDir = Path.Combine(gameRoot, "mods");
+        if (Directory.Exists(modsDir))
         {
-            Path.Combine(gameRoot, "mods"),
-            Path.Combine(gameRoot, "data", "mods"),
-            Path.Combine(instance.InstallPath ?? string.Empty, "mods")
-        };
-
-        foreach (var mDir in candidateModsDirs)
-        {
-            if (string.IsNullOrWhiteSpace(mDir) || !Directory.Exists(mDir)) continue;
-
-            var modSettingsFile = Path.Combine(mDir, "modsettings.lua");
+            var modSettingsFile = Path.Combine(modsDir, "modsettings.lua");
             try
             {
                 var content = File.Exists(modSettingsFile) ? File.ReadAllText(modSettingsFile) : "-- Mod Settings\n";
+
+                // Strip any invalid EnableMod calls that cause runtime Lua crashes
                 var lines = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Where(l => !l.Trim().StartsWith("EnableMod(", StringComparison.OrdinalIgnoreCase))
+                    .Where(l => !l.TrimStart().StartsWith("EnableMod(", StringComparison.OrdinalIgnoreCase))
                     .ToList();
 
                 var modId = $"workshop-{publishedFileId}";
+                var forceLine = $"ForceEnableMod(\"{modId}\")";
+
                 if (!lines.Any(l => l.Contains(modId, StringComparison.OrdinalIgnoreCase)))
                 {
-                    lines.Add($"ForceEnableMod(\"{modId}\")");
+                    lines.Add(forceLine);
                 }
 
                 File.WriteAllText(modSettingsFile, string.Join(Environment.NewLine, lines) + Environment.NewLine);
@@ -1219,7 +1217,7 @@ public static class GameModPathResolver
         return dirs;
     }
 
-    private static void SanitizeLuaFilesAndModInfo(string modDirectory, ulong publishedFileId, string? title)
+    private static void SanitizeLuaFilesAndModInfo(string modDirectory, ulong publishedFileId, string? title, uint appId = 0)
     {
         try
         {
@@ -1239,27 +1237,30 @@ public static class GameModPathResolver
                 catch { }
             }
 
-            // 2. Ensure modinfo.lua has full compatibility flags
+            // 2. Ensure modinfo.lua has clean compatibility flags
             var modInfoPath = Path.Combine(modDirectory, "modinfo.lua");
             if (File.Exists(modInfoPath))
             {
                 var content = File.ReadAllText(modInfoPath);
                 var appendLines = new List<string>();
 
-                if (!content.Contains("dont_starve_compatible", StringComparison.OrdinalIgnoreCase))
-                    appendLines.Add("dont_starve_compatible = true");
-
-                if (!content.Contains("reign_of_giants_compatible", StringComparison.OrdinalIgnoreCase))
-                    appendLines.Add("reign_of_giants_compatible = true");
-
-                if (!content.Contains("shipwrecked_compatible", StringComparison.OrdinalIgnoreCase))
-                    appendLines.Add("shipwrecked_compatible = true");
-
-                if (!content.Contains("hamlet_compatible", StringComparison.OrdinalIgnoreCase))
-                    appendLines.Add("hamlet_compatible = true");
-
-                if (!content.Contains("dst_compatible", StringComparison.OrdinalIgnoreCase))
-                    appendLines.Add("dst_compatible = true");
+                // If Don't Starve Together (322330)
+                if (appId == 322330 || content.Contains("dst_compatible", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!content.Contains("dst_compatible", StringComparison.OrdinalIgnoreCase))
+                        appendLines.Add("dst_compatible = true");
+                }
+                else
+                {
+                    if (!content.Contains("dont_starve_compatible", StringComparison.OrdinalIgnoreCase))
+                        appendLines.Add("dont_starve_compatible = true");
+                    if (!content.Contains("reign_of_giants_compatible", StringComparison.OrdinalIgnoreCase))
+                        appendLines.Add("reign_of_giants_compatible = true");
+                    if (!content.Contains("shipwrecked_compatible", StringComparison.OrdinalIgnoreCase))
+                        appendLines.Add("shipwrecked_compatible = true");
+                    if (!content.Contains("hamlet_compatible", StringComparison.OrdinalIgnoreCase))
+                        appendLines.Add("hamlet_compatible = true");
+                }
 
                 if (!content.Contains("name =", StringComparison.OrdinalIgnoreCase))
                     appendLines.Add($"name = \"{title ?? $"WorkshopMod_{publishedFileId}"}\"");

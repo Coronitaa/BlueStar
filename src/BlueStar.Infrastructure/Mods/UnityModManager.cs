@@ -84,7 +84,6 @@ public sealed class UnityModManager : IModManager
         var result = new List<ModItem>();
         var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var seenWorkshopIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         try
         {
@@ -194,7 +193,14 @@ public sealed class UnityModManager : IModManager
                         catch { }
                     }
 
-                    if (seenIds.Add(modId))
+                    var normalizedFileKey = baseName.StartsWith("workshop-", StringComparison.OrdinalIgnoreCase)
+                        ? baseName.Substring(9)
+                        : baseName;
+
+                    bool isFileDuplicate = !seenIds.Add(normalizedFileKey) ||
+                                           (!string.IsNullOrWhiteSpace(displayName) && !seenNames.Add(displayName.Trim()));
+
+                    if (!isFileDuplicate)
                     {
                         result.Add(new ModItem
                         {
@@ -245,33 +251,15 @@ public sealed class UnityModManager : IModManager
                         catch { }
                     }
 
-                    // Deduplication logic
-                    string? wsNum = null;
-                    if (cleanDirName.StartsWith("workshop-", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var candidate = cleanDirName.Substring(9);
-                        if (ulong.TryParse(candidate, out _)) wsNum = candidate;
-                    }
-                    else if (ulong.TryParse(cleanDirName, out _))
-                    {
-                        wsNum = cleanDirName;
-                    }
-
-                    if (!string.IsNullOrEmpty(wsNum) && !seenWorkshopIds.Add(wsNum))
-                    {
-                        continue;
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(displayName) && !displayName.Equals(cleanDirName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (!seenNames.Add(displayName))
-                        {
-                            continue;
-                        }
-                    }
-
                     var modId = dirName;
-                    if (seenIds.Add(modId))
+                    var normalizedKey = cleanDirName.StartsWith("workshop-", StringComparison.OrdinalIgnoreCase)
+                        ? cleanDirName.Substring(9)
+                        : cleanDirName;
+
+                    bool isDirDuplicate = !seenIds.Add(normalizedKey) ||
+                                          (!string.IsNullOrWhiteSpace(displayName) && !seenNames.Add(displayName.Trim()));
+
+                    if (!isDirDuplicate)
                     {
                         result.Add(new ModItem
                         {
