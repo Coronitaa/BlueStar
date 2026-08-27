@@ -717,7 +717,7 @@
                                                           Style="{StaticResource ToggleSwitch}"
                                                           IsChecked="{Binding IsEnabled, Mode=OneWay}"
                                                           ToolTip="Enable / Disable mod"
-                                                          Command="{Binding DataContext.ToggleModCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                          Command="{Binding DataContext.ToggleModCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
                                                           CommandParameter="{Binding}"/>
 
                                                 <!-- Delete Button -->
@@ -728,12 +728,13 @@
                                                         VerticalAlignment="Center"
                                                         HorizontalContentAlignment="Center"
                                                         VerticalContentAlignment="Center"
-                                                        Command="{Binding DataContext.DeleteModCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        Command="{Binding DataContext.DeleteModCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
                                                         CommandParameter="{Binding}">
                                                     <Path Data="{StaticResource IconTrash}"
                                                           Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                                           Stretch="Uniform"
                                                           Width="14" Height="14"
+                                                          IsHitTestVisible="False"
                                                           HorizontalAlignment="Center"
                                                           VerticalAlignment="Center"/>
                                                 </Button>

@@ -160,16 +160,12 @@ public sealed class UnityModManager : IModManager
                                     {
                                         foreach (var el in doc.RootElement.EnumerateArray())
                                         {
-                                            var entryId = el.TryGetProperty("Id", out var idProp) ? idProp.GetString() : null;
-                                            var entryDir = el.TryGetProperty("Directory", out var dirProp) ? dirProp.GetString() : null;
-                                            var entryName = el.TryGetProperty("Name", out var nameProp) ? nameProp.GetString() : null;
-
-                                            bool isMatch = string.Equals(entryId, baseName, StringComparison.OrdinalIgnoreCase) ||
-                                                           (!string.IsNullOrEmpty(entryDir) && Path.GetFileNameWithoutExtension(entryDir).Equals(baseName, StringComparison.OrdinalIgnoreCase));
-
-                                            if (isMatch && !string.IsNullOrWhiteSpace(entryName))
+                                            bool matchId = el.TryGetProperty("Id", out var idProp) && idProp.GetString() == baseName;
+                                            bool matchDir = el.TryGetProperty("Directory", out var dirProp) && dirProp.GetString()?.Contains(baseName) == true;
+                                            if ((matchId || matchDir) &&
+                                                el.TryGetProperty("Name", out var nameProp) && !string.IsNullOrWhiteSpace(nameProp.GetString()))
                                             {
-                                                displayName = entryName;
+                                                displayName = nameProp.GetString()!;
                                                 category = "Tabletop Simulator Mod";
                                                 break;
                                             }
@@ -382,6 +378,47 @@ public sealed class UnityModManager : IModManager
 
                         var thumbPng = Path.Combine(modsDir, $"{baseName}.png");
                         if (File.Exists(thumbPng)) try { File.Delete(thumbPng); } catch { }
+
+                        // If Tabletop Simulator, remove entry from WorkshopFileInfos.json
+                        if (resolution.GameCategory == "TabletopSimulator")
+                        {
+                            var ttsIndex = Path.Combine(modsDir, "WorkshopFileInfos.json");
+                            if (File.Exists(ttsIndex))
+                            {
+                                try
+                                {
+                                    var text = File.ReadAllText(ttsIndex);
+                                    if (!string.IsNullOrWhiteSpace(text))
+                                    {
+                                        using var doc = System.Text.Json.JsonDocument.Parse(text);
+                                        if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                                        {
+                                            var remaining = new List<Dictionary<string, string>>();
+                                            foreach (var el in doc.RootElement.EnumerateArray())
+                                            {
+                                                var dirStr = el.TryGetProperty("Directory", out var d) ? d.GetString() ?? "" : "";
+                                                var idStr = el.TryGetProperty("Id", out var i) ? i.GetString() ?? "" : "";
+                                                var nameStr = el.TryGetProperty("Name", out var n) ? n.GetString() ?? "" : "";
+
+                                                if (idStr == baseName || dirStr.Contains(baseName))
+                                                    continue;
+
+                                                remaining.Add(new Dictionary<string, string>
+                                                {
+                                                    ["Directory"] = dirStr,
+                                                    ["Name"] = nameStr,
+                                                    ["Id"] = idStr
+                                                });
+                                            }
+
+                                            var newJson = System.Text.Json.JsonSerializer.Serialize(remaining, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                                            File.WriteAllText(ttsIndex, newJson);
+                                        }
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
                     }
                     else if (Directory.Exists(f))
                     {

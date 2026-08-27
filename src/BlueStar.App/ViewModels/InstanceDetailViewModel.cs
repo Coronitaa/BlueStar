@@ -197,6 +197,22 @@ public partial class InstanceDetailViewModel : ObservableObject
     [ObservableProperty]
     private string _selectedTab = "Overview";
 
+    partial void OnSelectedTabChanged(string value)
+    {
+        if (value == "Mods")
+        {
+            _ = LoadModsAsync();
+        }
+        else if (value == "Emulator")
+        {
+            _ = LoadEmulatorsAsync();
+        }
+        else if (value == "Prerequisites")
+        {
+            _ = ScanPrerequisitesAsync();
+        }
+    }
+
     [ObservableProperty]
     private ObservableCollection<SelectableDepotItem> _depots = [];
 
@@ -1867,6 +1883,33 @@ public partial class InstanceDetailViewModel : ObservableObject
         if (Instance == null || mod == null) return;
         var manager = _modManagerRegistry.GetManagerForInstance(Instance);
         if (manager == null) return;
+
+        // Directly purge target path if available
+        if (!string.IsNullOrWhiteSpace(mod.FilePath))
+        {
+            try
+            {
+                if (File.Exists(mod.FilePath))
+                {
+                    File.Delete(mod.FilePath);
+                    var dir = Path.GetDirectoryName(mod.FilePath);
+                    var baseName = Path.GetFileNameWithoutExtension(mod.FilePath);
+                    if (dir != null)
+                    {
+                        var companionJson = Path.Combine(dir, $"{baseName}_info.json");
+                        if (File.Exists(companionJson)) try { File.Delete(companionJson); } catch { }
+
+                        var thumbPng = Path.Combine(dir, $"{baseName}.png");
+                        if (File.Exists(thumbPng)) try { File.Delete(thumbPng); } catch { }
+                    }
+                }
+                else if (Directory.Exists(mod.FilePath))
+                {
+                    Directory.Delete(mod.FilePath, recursive: true);
+                }
+            }
+            catch { }
+        }
 
         await manager.UninstallModAsync(Instance, mod.Id, CancellationToken.None).ConfigureAwait(true);
         await LoadModsAsync().ConfigureAwait(true);

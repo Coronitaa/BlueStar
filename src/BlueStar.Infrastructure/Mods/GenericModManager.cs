@@ -149,16 +149,12 @@ public sealed class GenericModManager : IModManager
                                     {
                                         foreach (var el in doc.RootElement.EnumerateArray())
                                         {
-                                            var entryId = el.TryGetProperty("Id", out var idProp) ? idProp.GetString() : null;
-                                            var entryDir = el.TryGetProperty("Directory", out var dirProp) ? dirProp.GetString() : null;
-                                            var entryName = el.TryGetProperty("Name", out var nameProp) ? nameProp.GetString() : null;
-
-                                            bool isMatch = string.Equals(entryId, baseName, StringComparison.OrdinalIgnoreCase) ||
-                                                           (!string.IsNullOrEmpty(entryDir) && Path.GetFileNameWithoutExtension(entryDir).Equals(baseName, StringComparison.OrdinalIgnoreCase));
-
-                                            if (isMatch && !string.IsNullOrWhiteSpace(entryName))
+                                            bool matchId = el.TryGetProperty("Id", out var idProp) && idProp.GetString() == baseName;
+                                            bool matchDir = el.TryGetProperty("Directory", out var dirProp) && dirProp.GetString()?.Contains(baseName) == true;
+                                            if ((matchId || matchDir) &&
+                                                el.TryGetProperty("Name", out var nameProp) && !string.IsNullOrWhiteSpace(nameProp.GetString()))
                                             {
-                                                displayName = entryName;
+                                                displayName = nameProp.GetString()!;
                                                 category = "Tabletop Simulator Mod";
                                                 break;
                                             }
@@ -504,7 +500,6 @@ public sealed class GenericModManager : IModManager
                             if (!lines.Any(l => l.Contains(cleanModId, StringComparison.OrdinalIgnoreCase)))
                             {
                                 lines.Add($"ForceEnableMod(\"{cleanModId}\")");
-                                lines.Add($"EnableMod(\"{cleanModId}\")");
                                 File.WriteAllText(modSettings, string.Join(Environment.NewLine, lines) + Environment.NewLine);
                             }
                         }
