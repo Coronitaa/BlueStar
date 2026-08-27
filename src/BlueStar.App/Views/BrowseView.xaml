@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:sys="clr-namespace:System;assembly=mscorlib"
              xmlns:vm="clr-namespace:BlueStar.App.ViewModels"
+             xmlns:controls="clr-namespace:BlueStar.App.Controls"
              d:DataContext="{d:DesignInstance vm:BrowseViewModel}"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -36,26 +37,26 @@
         </EventTrigger>
     </UserControl.Triggers>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <ScrollViewer x:Name="BrowseScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="32,24" MaxWidth="1180" HorizontalAlignment="Stretch">
 
-            <!-- ═══ HEADER & EXPLORE SEARCH BAR ═══ -->
+            <!-- ═══ HEADER & EXPLORE HERO SEARCH BAR ═══ -->
             <Border Background="{StaticResource SurfaceCardBrush}"
                     BorderBrush="{StaticResource SubtleBorderBrush}"
                     BorderThickness="1"
                     CornerRadius="{StaticResource RadiusLg}"
-                    Padding="28,24"
-                    Margin="0,0,0,24">
+                    Padding="28,22"
+                    Margin="0,0,0,20">
                 <StackPanel>
-                    <TextBlock Text="Explore Catalog" Style="{StaticResource H1}" Margin="0,0,0,6"/>
-                    <TextBlock Text="Search games, manifests, and content packages from DepotBox."
-                               Style="{StaticResource Subtitle}" Margin="0,0,0,20"/>
+                    <TextBlock Text="Explore Catalog" Style="{StaticResource H1}" Margin="0,0,0,4"/>
+                    <TextBlock Text="Search games, manifests, DLCs and tools directly across DepotBox."
+                               Style="{StaticResource Subtitle}" Margin="0,0,0,18"/>
 
                     <!-- Search Input Box Row -->
-                    <Grid>
+                    <Grid Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="10"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
@@ -69,33 +70,70 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <Path Grid.Column="0" Data="{StaticResource IconSearch}"
                                       Fill="{StaticResource MutedTextBrush}"
                                       Stretch="Uniform" Width="16" Height="16"
                                       Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                <TextBox Grid.Column="1"
-                                         Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
-                                         Background="Transparent"
-                                         BorderThickness="0"
-                                         Foreground="{StaticResource PrimaryTextBrush}"
-                                         CaretBrush="{StaticResource PrimaryTextBrush}"
-                                         FontSize="14"
-                                         Padding="0,10"
-                                         VerticalContentAlignment="Center">
-                                    <TextBox.InputBindings>
-                                        <KeyBinding Key="Return" Command="{Binding SearchCommand}"/>
-                                    </TextBox.InputBindings>
-                                </TextBox>
+                                <Grid Grid.Column="1">
+                                    <TextBlock Text="Search games, manifests, Steam AppID or keywords (e.g. Counter-Strike, Cyberpunk)..."
+                                               Foreground="{StaticResource MutedTextBrush}"
+                                               FontSize="13" VerticalAlignment="Center" Margin="2,0,0,0"
+                                               IsHitTestVisible="False"
+                                               Visibility="{Binding SearchQuery, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                    <TextBox Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             Foreground="{StaticResource PrimaryTextBrush}"
+                                             CaretBrush="{StaticResource PrimaryTextBrush}"
+                                             FontSize="13"
+                                             Padding="0,10"
+                                             VerticalContentAlignment="Center">
+                                        <TextBox.InputBindings>
+                                            <KeyBinding Key="Return" Command="{Binding SearchCommand}"/>
+                                        </TextBox.InputBindings>
+                                    </TextBox>
+                                </Grid>
+                                <Button Grid.Column="2"
+                                        Content="✕"
+                                        Style="{StaticResource GhostButton}"
+                                        Padding="6,2"
+                                        FontSize="12"
+                                        Foreground="{StaticResource MutedTextBrush}"
+                                        Command="{Binding ClearSearchCommand}"
+                                        Visibility="{Binding SearchQuery, Converter={StaticResource NullToVisibilityConverter}}"/>
                             </Grid>
                         </Border>
 
                         <Button Grid.Column="2" Content="Search Catalog"
                                 Style="{StaticResource PrimaryButton}"
-                                Padding="22,10"
+                                Padding="24,10"
+                                FontSize="13"
                                 Command="{Binding SearchCommand}"
                                 IsEnabled="{Binding IsSearching, Converter={StaticResource InverseBoolConverter}}"/>
                     </Grid>
+
+                    <!-- Dynamic Suggestion / Quick Search Chips -->
+                    <WrapPanel Orientation="Horizontal">
+                        <TextBlock Text="🔥 Trending:" Style="{StaticResource CaptionBold}" Foreground="{StaticResource MutedTextBrush}" Margin="2,4,8,4" VerticalAlignment="Center"/>
+                        <ItemsControl ItemsSource="{Binding TrendingSuggestionChips}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource GhostButton}" Padding="8,3" Margin="0,0,6,4"
+                                            Command="{Binding DataContext.QuickSearchCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}">
+                                        <TextBlock Text="{Binding}" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </WrapPanel>
                 </StackPanel>
             </Border>
 
@@ -122,12 +160,12 @@
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                         <Path Data="{StaticResource IconExplore}" Fill="{StaticResource AccentBrush}"
                               Stretch="Uniform" Width="20" Height="20" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                        <TextBlock Text="Searching DepotBox catalog and manifests..." Style="{StaticResource BodyMedium}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <TextBlock Text="Searching DepotBox catalog &amp; retrieving manifests..." Style="{StaticResource BodyMedium}" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
                 <!-- Skeleton Cards Grid -->
-                <ItemsControl>
+                <ItemsControl HorizontalAlignment="Center">
                     <ItemsControl.ItemsSource>
                         <x:Array Type="{x:Type sys:Int32}">
                             <sys:Int32>1</sys:Int32>
@@ -140,14 +178,14 @@
                     </ItemsControl.ItemsSource>
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <WrapPanel Orientation="Horizontal"/>
+                            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center"/>
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Style="{StaticResource SkeletonCard}" Width="350" Margin="0,0,20,20">
+                            <Border Style="{StaticResource SkeletonCard}" Width="360" Margin="0,0,16,16">
                                 <StackPanel>
-                                    <Border Style="{StaticResource SkeletonBlock}" Height="140" Margin="-16,-16,-16,12" CornerRadius="8"/>
+                                    <Border Style="{StaticResource SkeletonBlock}" Height="168" Margin="-16,-16,-16,12" CornerRadius="8,8,0,0"/>
                                     <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="180" HorizontalAlignment="Left" Margin="0,0,0,6"/>
                                     <Border Style="{StaticResource SkeletonBlock}" Height="12" Width="100" HorizontalAlignment="Left" Margin="0,0,0,12"/>
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
@@ -170,230 +208,261 @@
                 </ItemsControl>
             </StackPanel>
 
-            <!-- ═══ INITIAL EMPTY STATE (Before Search) ═══ -->
-            <Border Background="{StaticResource SurfaceCardBrush}"
-                    BorderBrush="{StaticResource SubtleBorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="{StaticResource RadiusLg}"
-                    Padding="48,36"
-                    Visibility="{Binding HasSearched, Converter={StaticResource InverseBoolToVisibilityConverter}}">
-                <StackPanel HorizontalAlignment="Center">
-                    <Path Data="{StaticResource IconExplore}" Fill="{StaticResource MutedTextBrush}"
-                          Stretch="Uniform" Width="52" Height="52" Margin="0,0,0,16" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Discover Games &amp; Manifests" Style="{StaticResource H2}" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Type a game title or keyword above to search through thousands of DepotBox packages."
-                               Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,6,0,0"/>
-                </StackPanel>
-            </Border>
+            <!-- ═══ INITIAL DISCOVERY HUB: 8 CATEGORY CAROUSELS (When NOT searched) ═══ -->
+            <StackPanel Visibility="{Binding HasSearched, Converter={StaticResource InverseBoolToVisibilityConverter}}" Margin="0,4,0,0">
+                <ItemsControl ItemsSource="{Binding Categories}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <controls:GameCategoryCarousel
+                                Category="{Binding}"
+                                IsExploreTab="True"
+                                AddToLibraryCommand="{Binding DataContext.CreateInstanceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                OpenSteamDbCommand="{Binding DataContext.OpenSteamDbCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                ViewMoreCommand="{Binding DataContext.ToggleCategoryExpandCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
 
-            <!-- ═══ NO RESULTS STATE (After Search) ═══ -->
-            <Grid>
-                <Grid.Style>
-                    <Style TargetType="Grid">
-                        <Setter Property="Visibility" Value="Collapsed"/>
-                        <Style.Triggers>
-                            <MultiDataTrigger>
-                                <MultiDataTrigger.Conditions>
-                                    <Condition Binding="{Binding HasSearched}" Value="True"/>
-                                    <Condition Binding="{Binding Results.Count}" Value="0"/>
-                                    <Condition Binding="{Binding IsSearching}" Value="False"/>
-                                </MultiDataTrigger.Conditions>
-                                <Setter Property="Visibility" Value="Visible"/>
-                            </MultiDataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Grid.Style>
+            <!-- ═══ SEARCH RESULTS AREA (When Searched) ═══ -->
+            <StackPanel Visibility="{Binding HasSearched, Converter={StaticResource BoolToVisibilityConverter}}">
+                <StackPanel Visibility="{Binding IsSearching, Converter={StaticResource InverseBoolToVisibilityConverter}}">
 
-                <Border Background="{StaticResource SurfaceCardBrush}"
-                        BorderBrush="{StaticResource SubtleBorderBrush}"
-                        BorderThickness="1"
-                        CornerRadius="{StaticResource RadiusLg}"
-                        Padding="48,36">
-                    <StackPanel HorizontalAlignment="Center">
-                        <Path Data="{StaticResource IconSearch}" Fill="{StaticResource MutedTextBrush}"
-                              Stretch="Uniform" Width="48" Height="48" Margin="0,0,0,16" HorizontalAlignment="Center"/>
-                        <TextBlock Text="No results found" Style="{StaticResource H2}" HorizontalAlignment="Center"/>
-                        <TextBlock Text="Try adjusting your search query or check spelling."
-                                   Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,6,0,0"/>
-                    </StackPanel>
-                </Border>
-            </Grid>
+                    <!-- Results & Filter Toolbar -->
+                    <Grid Margin="0,0,0,18">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-            <!-- ═══ RESULTS GRID ═══ -->
-            <ItemsControl ItemsSource="{Binding Results}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <WrapPanel Orientation="Horizontal"/>
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Border Style="{StaticResource Card}" Width="360" Margin="0,0,20,20">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="145"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="14"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
+                        <!-- Left: Result count & query + Filter Chips -->
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding FilteredResults.Count, StringFormat='Found {0} items'}"
+                                       FontWeight="Bold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}"
+                                       VerticalAlignment="Center" Margin="0,0,12,0"/>
 
-                                <!-- Game Cover Header Artwork (Banner) -->
-                                <Border Grid.Row="0" CornerRadius="8"
-                                        Background="{StaticResource SurfaceCardHoverBrush}"
-                                        ClipToBounds="True"
-                                        Margin="-16,-16,-16,12">
+                            <!-- Type Filter Chips -->
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <RadioButton GroupName="BrowseTypeFilter" Style="{StaticResource FilterChipRadioButton}" Content="All"
+                                             IsChecked="{Binding SelectedTypeFilter, Converter={StaticResource StringMatchConverter}, ConverterParameter=All}"
+                                             Command="{Binding SelectTypeFilterCommand}" CommandParameter="All"/>
+                                <RadioButton GroupName="BrowseTypeFilter" Style="{StaticResource FilterChipCyan}" Content="🎮 Games"
+                                             IsChecked="{Binding SelectedTypeFilter, Converter={StaticResource StringMatchConverter}, ConverterParameter=Games}"
+                                             Command="{Binding SelectTypeFilterCommand}" CommandParameter="Games"/>
+                                <RadioButton GroupName="BrowseTypeFilter" Style="{StaticResource FilterChipPurple}" Content="🎁 DLCs"
+                                             IsChecked="{Binding SelectedTypeFilter, Converter={StaticResource StringMatchConverter}, ConverterParameter=DLCs}"
+                                             Command="{Binding SelectTypeFilterCommand}" CommandParameter="DLCs"/>
+                                <RadioButton GroupName="BrowseTypeFilter" Style="{StaticResource FilterChipAmber}" Content="🛠️ Tools"
+                                             IsChecked="{Binding SelectedTypeFilter, Converter={StaticResource StringMatchConverter}, ConverterParameter=Tools}"
+                                             Command="{Binding SelectTypeFilterCommand}" CommandParameter="Tools"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Right: Reset / Clear search -->
+                        <Button Grid.Column="1" Content="✕ Clear Search"
+                                Style="{StaticResource GhostButton}"
+                                Foreground="{StaticResource MutedTextBrush}"
+                                Padding="8,4"
+                                Command="{Binding ClearSearchCommand}"/>
+                    </Grid>
+
+                    <!-- Results Cards Grid -->
+                    <ItemsControl ItemsSource="{Binding FilteredResults}" HorizontalAlignment="Center">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource Card}" Width="360" Margin="0,0,16,16">
                                     <Grid>
-                                        <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}"
-                                              Stretch="Uniform" Width="36" Height="36"
-                                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        <Image Source="{Binding HeaderImageUrl}"
-                                               Stretch="UniformToFill"
-                                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="168"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="14"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Game Cover Header Artwork (Banner 460x215 aspect ratio, 360x168) -->
+                                        <Border Grid.Row="0" CornerRadius="8,8,0,0"
+                                                Background="{StaticResource SurfaceCardHoverBrush}"
+                                                ClipToBounds="True"
+                                                Margin="-16,-16,-16,12">
+                                            <Grid>
+                                                <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}"
+                                                      Stretch="Uniform" Width="36" Height="36"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                <Image Source="{Binding HeaderImageUrl}"
+                                                       Stretch="UniformToFill"
+                                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- Title & Steam AppId -->
+                                        <StackPanel Grid.Row="1">
+                                            <TextBlock Text="{Binding Name}" Style="{StaticResource H3}"
+                                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
+                                            <TextBlock Text="{Binding AppId, StringFormat='Steam AppID: {0}'}"
+                                                       Style="{StaticResource Caption}" Margin="0,2,0,0"/>
+                                        </StackPanel>
+
+                                        <!-- ═══ GLOBITOS / BADGES ROW 1 (App Type, Version, DLCs) ═══ -->
+                                        <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
+                                            <!-- App Type Badge -->
+                                            <Border CornerRadius="{StaticResource RadiusSm}"
+                                                    Padding="7,2"
+                                                    Margin="0,0,6,4"
+                                                    Background="{StaticResource SurfaceInputBrush}"
+                                                    BorderBrush="{StaticResource SubtleBorderBrush}"
+                                                    BorderThickness="1">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="🎮 " FontSize="10" Visibility="{Binding AppType, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter='Game'}"/>
+                                                    <TextBlock Text="💻 " FontSize="10" Visibility="{Binding AppType, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter='Application'}"/>
+                                                    <TextBlock Text="🛠️ " FontSize="10" Visibility="{Binding AppType, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter='Tool'}"/>
+                                                    <TextBlock Text="{Binding AppType}"
+                                                               FontSize="11" FontWeight="SemiBold"
+                                                               Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <!-- Version Badge (if available) -->
+                                            <Border CornerRadius="{StaticResource RadiusSm}"
+                                                    Padding="7,2"
+                                                    Margin="0,0,6,4"
+                                                    Background="{StaticResource SurfaceInputBrush}"
+                                                    BorderBrush="{StaticResource SubtleBorderBrush}"
+                                                    BorderThickness="1"
+                                                    Visibility="{Binding Version, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <TextBlock Text="{Binding Version, StringFormat='🏷️ {0}'}"
+                                                           FontSize="11" FontWeight="Medium"
+                                                           Foreground="{StaticResource PrimaryTextBrush}"/>
+                                            </Border>
+
+                                            <!-- DLCs Badge (if game has DLCs) -->
+                                            <Border CornerRadius="{StaticResource RadiusSm}"
+                                                    Padding="7,2"
+                                                    Margin="0,0,6,4"
+                                                    Background="#258B5CF6"
+                                                    BorderBrush="#608B5CF6"
+                                                    BorderThickness="1"
+                                                    Visibility="{Binding DlcCount, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <TextBlock Text="{Binding DlcCount, StringFormat='🎁 {0} DLCs'}"
+                                                           FontSize="11" FontWeight="SemiBold"
+                                                           Foreground="#A78BFA"/>
+                                            </Border>
+                                        </WrapPanel>
+
+                                        <!-- ═══ GLOBITOS / BADGES ROW 2 (Supported OS & DepotBox Available) ═══ -->
+                                        <WrapPanel Grid.Row="3" Orientation="Horizontal" Margin="0,2,0,0">
+                                            <!-- Windows OS Badge -->
+                                            <Border CornerRadius="{StaticResource RadiusSm}"
+                                                    Padding="6,2"
+                                                    Margin="0,0,5,4"
+                                                    Background="#201B90FF"
+                                                    BorderBrush="#501B90FF"
+                                                    BorderThickness="1"
+                                                    Visibility="{Binding HasWindows, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                    ToolTip="Windows Compatible">
+                                                <TextBlock Text="🪟 Windows" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
+                                            </Border>
+
+                                            <!-- Linux / SteamOS Badge -->
+                                            <Border CornerRadius="{StaticResource RadiusSm}"
+                                                    Padding="6,2"
+                                                    Margin="0,0,5,4"
+                                                    Background="#20F59E0B"
+                                                    BorderBrush="#50F59E0B"
+                                                    BorderThickness="1"
+                                                    Visibility="{Binding HasLinux, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                    ToolTip="Linux / SteamOS Compatible">
+                                                <TextBlock Text="🐧 Linux" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource WarningBrush}"/>
+                                            </Border>
+
+                                            <!-- macOS Badge -->
+                                            <Border CornerRadius="{StaticResource RadiusSm}"
+                                                    Padding="6,2"
+                                                    Margin="0,0,5,4"
+                                                    Background="#20A1A1AA"
+                                                    BorderBrush="#50A1A1AA"
+                                                    BorderThickness="1"
+                                                    Visibility="{Binding HasMac, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                    ToolTip="macOS Compatible">
+                                                <TextBlock Text="🍎 macOS" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                            </Border>
+
+                                            <!-- DepotBox Ready Badge -->
+                                            <Border CornerRadius="{StaticResource RadiusSm}"
+                                                    Padding="6,2"
+                                                    Margin="0,0,5,4"
+                                                    Background="{StaticResource SuccessBgBrush}">
+                                                <TextBlock Text="● DepotBox Ready"
+                                                           FontSize="10" FontWeight="SemiBold"
+                                                           Foreground="{StaticResource SuccessBrush}"/>
+                                            </Border>
+                                        </WrapPanel>
+
+                                        <!-- ═══ ACTIONS ROW (Add to Instances & SteamDB synergy) ═══ -->
+                                        <Grid Grid.Row="5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="8"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <Button Grid.Column="0"
+                                                    Style="{StaticResource PrimaryButton}"
+                                                    Padding="12,8"
+                                                    Command="{Binding DataContext.AddToLibraryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    IsEnabled="{Binding IsCreating, Converter={StaticResource InverseBoolConverter}}">
+                                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                                    <TextBlock Text="⏳ " Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                    <TextBlock Text="{Binding CreationStatus}" Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                    <TextBlock Text="➕ Add to Instances" Visibility="{Binding IsCreating, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                                </StackPanel>
+                                            </Button>
+
+                                            <!-- SteamDB Synergy Button -->
+                                            <Button Grid.Column="2"
+                                                    Style="{StaticResource SecondaryButton}"
+                                                    Padding="10,8"
+                                                    ToolTip="View depot &amp; app details on SteamDB.info"
+                                                    Command="{Binding DataContext.OpenSteamDbCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}">
+                                                <TextBlock Text="🌐 SteamDB" FontSize="11" FontWeight="SemiBold"/>
+                                            </Button>
+                                        </Grid>
                                     </Grid>
                                 </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
 
-                                <!-- Title & Steam AppId -->
-                                <StackPanel Grid.Row="1">
-                                    <TextBlock Text="{Binding Name}" Style="{StaticResource H3}"
-                                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
-                                    <TextBlock Text="{Binding AppId, StringFormat='Steam AppID: {0}'}"
-                                               Style="{StaticResource Caption}" Margin="0,2,0,0"/>
-                                </StackPanel>
+                    <!-- ═══ NO RESULTS FOUND STATE ═══ -->
+                    <Border Background="{StaticResource SurfaceCardBrush}"
+                            BorderBrush="{StaticResource SubtleBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusLg}"
+                            Padding="48,36"
+                            Margin="0,8,0,0"
+                            Visibility="{Binding FilteredResults.Count, Converter={StaticResource ZeroToVisibilityConverter}}">
+                        <StackPanel HorizontalAlignment="Center">
+                            <Path Data="{StaticResource IconSearch}" Fill="{StaticResource MutedTextBrush}"
+                                  Stretch="Uniform" Width="44" Height="44" Margin="0,0,0,16" HorizontalAlignment="Center"/>
+                            <TextBlock Text="No results found" Style="{StaticResource H2}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="Try adjusting your search query, clearing filters, or checking spelling."
+                                       Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,6,0,16"/>
+                            <Button Content="✕ Reset Search" Style="{StaticResource SecondaryButton}"
+                                    HorizontalAlignment="Center"
+                                    Command="{Binding ClearSearchCommand}"/>
+                        </StackPanel>
+                    </Border>
 
-                                <!-- ═══ GLOBITOS / BADGES ROW 1 (App Type, Version, DLCs) ═══ -->
-                                <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
-                                    <!-- App Type Badge -->
-                                    <Border CornerRadius="{StaticResource RadiusSm}"
-                                            Padding="7,3"
-                                            Margin="0,0,6,4"
-                                            Background="{StaticResource SurfaceInputBrush}"
-                                            BorderBrush="{StaticResource SubtleBorderBrush}"
-                                            BorderThickness="1">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="🎮 " FontSize="10" Visibility="{Binding AppType, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter='Game'}"/>
-                                            <TextBlock Text="💻 " FontSize="10" Visibility="{Binding AppType, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter='Application'}"/>
-                                            <TextBlock Text="🛠️ " FontSize="10" Visibility="{Binding AppType, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter='Tool'}"/>
-                                            <TextBlock Text="{Binding AppType}"
-                                                       FontSize="11" FontWeight="SemiBold"
-                                                       Foreground="{StaticResource SecondaryTextBrush}"/>
-                                        </StackPanel>
-                                    </Border>
-
-                                    <!-- Version Badge (if available) -->
-                                    <Border CornerRadius="{StaticResource RadiusSm}"
-                                            Padding="7,3"
-                                            Margin="0,0,6,4"
-                                            Background="{StaticResource SurfaceInputBrush}"
-                                            BorderBrush="{StaticResource SubtleBorderBrush}"
-                                            BorderThickness="1"
-                                            Visibility="{Binding Version, Converter={StaticResource NullToVisibilityConverter}}">
-                                        <TextBlock Text="{Binding Version, StringFormat='🏷️ {0}'}"
-                                                   FontSize="11" FontWeight="Medium"
-                                                   Foreground="{StaticResource PrimaryTextBrush}"/>
-                                    </Border>
-
-                                    <!-- DLCs Badge (if game has DLCs) -->
-                                    <Border CornerRadius="{StaticResource RadiusSm}"
-                                            Padding="7,3"
-                                            Margin="0,0,6,4"
-                                            Background="#258B5CF6"
-                                            BorderBrush="#608B5CF6"
-                                            BorderThickness="1"
-                                            Visibility="{Binding DlcCount, Converter={StaticResource NullToVisibilityConverter}}">
-                                        <TextBlock Text="{Binding DlcCount, StringFormat='🎁 {0} DLCs'}"
-                                                   FontSize="11" FontWeight="SemiBold"
-                                                   Foreground="#A78BFA"/>
-                                    </Border>
-                                </WrapPanel>
-
-                                <!-- ═══ GLOBITOS / BADGES ROW 2 (Supported OS & DepotBox Available) ═══ -->
-                                <WrapPanel Grid.Row="3" Orientation="Horizontal" Margin="0,2,0,0">
-                                    <!-- Windows OS Badge -->
-                                    <Border CornerRadius="{StaticResource RadiusSm}"
-                                            Padding="6,2"
-                                            Margin="0,0,5,4"
-                                            Background="#201B90FF"
-                                            BorderBrush="#501B90FF"
-                                            BorderThickness="1"
-                                            Visibility="{Binding HasWindows, Converter={StaticResource BoolToVisibilityConverter}}"
-                                            ToolTip="Windows Compatible">
-                                        <TextBlock Text="🪟 Windows" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
-                                    </Border>
-
-                                    <!-- Linux / SteamOS Badge -->
-                                    <Border CornerRadius="{StaticResource RadiusSm}"
-                                            Padding="6,2"
-                                            Margin="0,0,5,4"
-                                            Background="#20F59E0B"
-                                            BorderBrush="#50F59E0B"
-                                            BorderThickness="1"
-                                            Visibility="{Binding HasLinux, Converter={StaticResource BoolToVisibilityConverter}}"
-                                            ToolTip="Linux / SteamOS Compatible">
-                                        <TextBlock Text="🐧 Linux" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource WarningBrush}"/>
-                                    </Border>
-
-                                    <!-- macOS Badge -->
-                                    <Border CornerRadius="{StaticResource RadiusSm}"
-                                            Padding="6,2"
-                                            Margin="0,0,5,4"
-                                            Background="#20A1A1AA"
-                                            BorderBrush="#50A1A1AA"
-                                            BorderThickness="1"
-                                            Visibility="{Binding HasMac, Converter={StaticResource BoolToVisibilityConverter}}"
-                                            ToolTip="macOS Compatible">
-                                        <TextBlock Text="🍎 macOS" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource SecondaryTextBrush}"/>
-                                    </Border>
-
-                                    <!-- DepotBox Ready Badge -->
-                                    <Border CornerRadius="{StaticResource RadiusSm}"
-                                            Padding="6,2"
-                                            Margin="0,0,5,4"
-                                            Background="{StaticResource SuccessBgBrush}">
-                                        <TextBlock Text="● DepotBox Ready"
-                                                   FontSize="10" FontWeight="SemiBold"
-                                                   Foreground="{StaticResource SuccessBrush}"/>
-                                    </Border>
-                                </WrapPanel>
-
-                                <!-- ═══ ACTIONS ROW (Add to Instances & SteamDB synergy) ═══ -->
-                                <Grid Grid.Row="5">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="10"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <Button Grid.Column="0"
-                                            Style="{StaticResource PrimaryButton}"
-                                            Command="{Binding DataContext.AddToLibraryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                            CommandParameter="{Binding}"
-                                            IsEnabled="{Binding IsCreating, Converter={StaticResource InverseBoolConverter}}">
-                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                            <TextBlock Text="⏳ " Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                            <TextBlock Text="{Binding CreationStatus}" Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                            <TextBlock Text="➕ Add to Instances" Visibility="{Binding IsCreating, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
-                                        </StackPanel>
-                                    </Button>
-
-                                    <!-- SteamDB Synergy Button -->
-                                    <Button Grid.Column="2"
-                                            Style="{StaticResource SecondaryButton}"
-                                            Padding="10,8"
-                                            ToolTip="View depot &amp; app details on SteamDB.info"
-                                            Command="{Binding DataContext.OpenSteamDbCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                            CommandParameter="{Binding}">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="🌐 SteamDB" FontSize="12" FontWeight="SemiBold"/>
-                                        </StackPanel>
-                                    </Button>
-                                </Grid>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                </StackPanel>
+            </StackPanel>
 
         </StackPanel>
     </ScrollViewer>

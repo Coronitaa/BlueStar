@@ -32,6 +32,7 @@ public partial class HomeViewModel : ObservableObject
     private readonly IDepotBoxApiClient _apiClient;
     private readonly IDepotBoxArchiveParser _archiveParser;
     private readonly IEngineDetector _engineDetector;
+    private readonly ICommunityStatsService? _statsService;
     private readonly IMetadataProvider? _metadataProvider;
     private readonly INotificationService? _notificationService;
     private readonly ILogger<HomeViewModel> _logger;
@@ -41,6 +42,12 @@ public partial class HomeViewModel : ObservableObject
 
     [ObservableProperty]
     private ObservableCollection<GameInstance> _recentInstances = [];
+
+    [ObservableProperty]
+    private ObservableCollection<CatalogCategory> _categories = [];
+
+    [ObservableProperty]
+    private ObservableCollection<string> _trendingSuggestionChips = [];
 
     [ObservableProperty]
     private DownloadJobItem? _currentActiveDownload;
@@ -186,6 +193,7 @@ public partial class HomeViewModel : ObservableObject
     private string? _catalogErrorMessage;
 
     public Action<string>? OnNavigateRequested { get; set; }
+    public Action<string>? OnNavigateToCategoryRequested { get; set; }
     public Action<GameInstance>? OnManageInstanceRequested { get; set; }
 
     public HomeViewModel(
@@ -196,6 +204,7 @@ public partial class HomeViewModel : ObservableObject
         IDepotBoxArchiveParser archiveParser,
         IEngineDetector engineDetector,
         ILogger<HomeViewModel> logger,
+        ICommunityStatsService? statsService = null,
         IMetadataProvider? metadataProvider = null,
         INotificationService? notificationService = null)
     {
@@ -206,6 +215,7 @@ public partial class HomeViewModel : ObservableObject
         _archiveParser = archiveParser;
         _engineDetector = engineDetector;
         _logger = logger;
+        _statsService = statsService;
         _metadataProvider = metadataProvider;
         _notificationService = notificationService;
 
@@ -213,7 +223,150 @@ public partial class HomeViewModel : ObservableObject
         _downloadQueueManager.Queue.CollectionChanged += (_, _) => UpdateActiveDownload();
 
         _ = LoadDashboardDataAsync();
-        _ = LoadInitialCatalogDiscoveryAsync();
+        _ = LoadCategoryFeedsAsync();
+    }
+
+    [RelayCommand]
+    public void ViewMoreCategory(CatalogCategory category)
+    {
+        if (category == null) return;
+        OnNavigateToCategoryRequested?.Invoke(category.Id);
+    }
+
+    public async Task LoadCategoryFeedsAsync()
+    {
+        // 1. Initialize category shells with IsLoading=true for immediate skeleton rendering
+        var catTrending = new CatalogCategory("bluestar_trending_7d", "Trending on BlueStar", "Más agregados a instancias en los últimos 7 días", "IconFlame", "#3B82F6", "7 DÍAS");
+        var catMostPlayed = new CatalogCategory("bluestar_most_played_alltime", "Most Added in BlueStar", "Títulos con más instancias creadas históricamente", "IconTrophy", "#8B5CF6", "GLOBAL");
+        var catSteamDbMostPlayed = new CatalogCategory("steamdb_most_played", "Steam: Most Played", "Top jugadores concurrentes en tiempo real", "IconUsers", "#10B981", "STEAM");
+        var catSteamDbTrending = new CatalogCategory("steamdb_trending", "Steam: Trending Games", "Títulos con mayor crecimiento de actividad reciente", "IconTrending", "#F59E0B", "STEAM");
+        var catSteamDbTopSellers = new CatalogCategory("steamdb_top_sellers", "Steam: Top Sellers & Popular", "Los lanzamientos y ofertas más vendidos a nivel global", "IconTag", "#EC4899", "STEAM");
+        var catSteamDbTopRated = new CatalogCategory("steamdb_top_rated", "Steam: Top Rated & Anticipated", "Mejor calificados por la crítica y jugadores", "IconStar", "#6366F1", "STEAM");
+        var catDepotBoxNew = new CatalogCategory("depotbox_new_games", "New Games in DepotBox", "Paquetes recién agregados vía DepotBox Webhook", "IconSparkles", "#06B6D4", "DEPOTBOX");
+        var catDepotBoxUpdated = new CatalogCategory("depotbox_updated_games", "Updated Games in DepotBox", "Actualizaciones recientes de manifiestos y builds", "IconRefresh", "#14B8A6", "DEPOTBOX");
+
+        Categories = new ObservableCollection<CatalogCategory>
+        {
+            catTrending,
+            catMostPlayed,
+            catSteamDbMostPlayed,
+            catSteamDbTrending,
+            catSteamDbTopSellers,
+            catSteamDbTopRated,
+            catDepotBoxNew,
+            catDepotBoxUpdated
+        };
+
+        // Fallback default suggestions if empty
+        TrendingSuggestionChips = new ObservableCollection<string>
+        {
+            "Cyberpunk 2077", "ELDEN RING", "Baldur's Gate 3", "Black Myth: Wukong", "HELLDIVERS 2", "Palworld", "Manor Lords", "Hades II"
+        };
+
+        if (_statsService == null)
+        {
+            foreach (var c in Categories) c.IsLoading = false;
+            return;
+        }
+
+        // 2. Load feeds asynchronously & progressively
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var trendingItems = await _statsService.GetTrendingBlueStarAsync().ConfigureAwait(false);
+                catTrending.Items = new ObservableCollection<SearchResult>(trendingItems);
+                catTrending.IsLoading = false;
+
+                // Update search suggestion chips dynamically from top trending games
+                if (trendingItems.Count > 0)
+                {
+                    var chips = trendingItems.Take(8).Select(t => t.Name).Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
+                    App.Current.Dispatcher.Invoke(() =>
+                    {
+                        TrendingSuggestionChips = new ObservableCollection<string>(chips);
+                    });
+                }
+            }
+            catch { catTrending.IsLoading = false; }
+        });
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var items = await _statsService.GetMostPlayedBlueStarAsync().ConfigureAwait(false);
+                catMostPlayed.Items = new ObservableCollection<SearchResult>(items);
+                catMostPlayed.IsLoading = false;
+            }
+            catch { catMostPlayed.IsLoading = false; }
+        });
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var items = await _statsService.GetSteamDbListAsync("most_played").ConfigureAwait(false);
+                catSteamDbMostPlayed.Items = new ObservableCollection<SearchResult>(items);
+                catSteamDbMostPlayed.IsLoading = false;
+            }
+            catch { catSteamDbMostPlayed.IsLoading = false; }
+        });
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var items = await _statsService.GetSteamDbListAsync("trending").ConfigureAwait(false);
+                catSteamDbTrending.Items = new ObservableCollection<SearchResult>(items);
+                catSteamDbTrending.IsLoading = false;
+            }
+            catch { catSteamDbTrending.IsLoading = false; }
+        });
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var items = await _statsService.GetSteamDbListAsync("top_sellers").ConfigureAwait(false);
+                catSteamDbTopSellers.Items = new ObservableCollection<SearchResult>(items);
+                catSteamDbTopSellers.IsLoading = false;
+            }
+            catch { catSteamDbTopSellers.IsLoading = false; }
+        });
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var items = await _statsService.GetSteamDbListAsync("top_rated").ConfigureAwait(false);
+                catSteamDbTopRated.Items = new ObservableCollection<SearchResult>(items);
+                catSteamDbTopRated.IsLoading = false;
+            }
+            catch { catSteamDbTopRated.IsLoading = false; }
+        });
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var items = await _statsService.GetDepotBoxFeedAsync("added").ConfigureAwait(false);
+                catDepotBoxNew.Items = new ObservableCollection<SearchResult>(items);
+                catDepotBoxNew.IsLoading = false;
+            }
+            catch { catDepotBoxNew.IsLoading = false; }
+        });
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var items = await _statsService.GetDepotBoxFeedAsync("updated").ConfigureAwait(false);
+                catDepotBoxUpdated.Items = new ObservableCollection<SearchResult>(items);
+                catDepotBoxUpdated.IsLoading = false;
+            }
+            catch { catDepotBoxUpdated.IsLoading = false; }
+        });
     }
 
     private void SetTimeBasedGreeting()
@@ -269,42 +422,36 @@ public partial class HomeViewModel : ObservableObject
         }
     }
 
-    private async Task LoadInitialCatalogDiscoveryAsync()
+    [RelayCommand]
+    public void ClearCatalogSearch()
     {
-        // Pre-load discovery games if list is empty
-        if (DiscoveredGames.Count > 0) return;
+        CatalogSearchQuery = string.Empty;
+        DiscoveredGames.Clear();
+        HasSearchedCatalog = false;
+        CatalogErrorMessage = null;
+    }
 
-        try
-        {
-            IsSearchingCatalog = true;
-            CatalogErrorMessage = null;
-            var results = await _apiClient.SearchGamesAsync("Steam", CancellationToken.None).ConfigureAwait(true);
-            if (results.Count > 0)
-            {
-                var subset = results.Take(6).ToList();
-                DiscoveredGames = new ObservableCollection<SearchResult>(subset);
-                _ = EnrichResultsAsync(subset);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Initial catalog discovery preview could not be loaded");
-        }
-        finally
-        {
-            IsSearchingCatalog = false;
-        }
+    [RelayCommand]
+    public async Task QuickSearchCatalogAsync(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return;
+        CatalogSearchQuery = query;
+        await SearchCatalogAsync();
     }
 
     [RelayCommand]
     public async Task SearchCatalogAsync()
     {
         if (string.IsNullOrWhiteSpace(CatalogSearchQuery))
+        {
+            ClearCatalogSearch();
             return;
+        }
 
         IsSearchingCatalog = true;
         CatalogErrorMessage = null;
         HasSearchedCatalog = true;
+        DiscoveredGames.Clear();
 
         try
         {
@@ -489,6 +636,7 @@ public partial class HomeViewModel : ObservableObject
 
             _logger.LogInformation("Created new instance from Home: {Id}", created.Id);
             _notificationService?.ShowSuccess("Instance Created", $"Configured {newInstance.Name} with {newInstance.Depots.Count} depot(s).");
+            _ = _statsService?.ReportInstanceAddedAsync(created.AppId, created.Name);
 
             result.CreationStatus = "Ready";
             await LoadDashboardDataAsync();

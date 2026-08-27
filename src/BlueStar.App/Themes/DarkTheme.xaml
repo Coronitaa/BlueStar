@@ -28,5 +28,6 @@
     <conv:PrerequisiteStatusToTextConverter x:Key="PrerequisiteStatusToTextConverter"/>
     <conv:PrerequisiteStatusToBrushConverter x:Key="PrerequisiteStatusToBrushConverter"/>
     <conv:PrerequisiteStatusToBgBrushConverter x:Key="PrerequisiteStatusToBgBrushConverter"/>
+    <conv:ResourceKeyConverter x:Key="ResourceKeyConverter"/>
 
 </ResourceDictionary>

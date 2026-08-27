@@ -569,3 +569,22 @@ public sealed class PrerequisiteStatusToBgBrushConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
+/// <summary>
+/// Resolves a resource key string (e.g. "IconFlame") to its Application resource object.
+/// </summary>
+public sealed class ResourceKeyConverter : IValueConverter
+{
+    public static readonly ResourceKeyConverter Instance = new();
+
+    public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is not string key || string.IsNullOrWhiteSpace(key))
+            return Application.Current.TryFindResource("IconExplore");
+
+        return Application.Current.TryFindResource(key) ?? Application.Current.TryFindResource("IconExplore");
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+

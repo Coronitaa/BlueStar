@@ -126,44 +126,10 @@ public partial class MainViewModel : ObservableObject
             await Task.Delay(150).ConfigureAwait(true);
 
             StartupStatusText = "Loading local instances and manifests...";
-            IReadOnlyList<GameInstance> instances = [];
             try
             {
-                // Ensure instance manager and stored instances are fully resolved
-                instances = await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
-            }
-            catch { }
-
-            StartupStatusText = "Checking for game updates and catalog status...";
-            try
-            {
-                if (_apiClient != null && instances.Count > 0)
-                {
-                    foreach (var inst in instances.Where(i => i.AppId > 0))
-                    {
-                        try
-                        {
-                            var latest = await _apiClient.SearchGamesAsync(inst.Name, CancellationToken.None).ConfigureAwait(false);
-                            var match = latest.FirstOrDefault(g => g.AppId == inst.AppId);
-                            if (match != null)
-                            {
-                                var hasNewDlcs = match.DlcCount.HasValue && match.DlcCount.Value > inst.Dlcs.Count;
-                                var isNewVersion = !string.IsNullOrWhiteSpace(match.Version) && !string.Equals(match.Version, inst.Metadata?.ReleaseDate, StringComparison.OrdinalIgnoreCase);
-
-                                if (hasNewDlcs || isNewVersion)
-                                {
-                                    var updated = inst with
-                                    {
-                                        HasUpdateAvailable = true,
-                                        UpdateDescription = $"New update available ({match.Version ?? "New build"})"
-                                    };
-                                    await _instanceManager.UpdateAsync(updated, CancellationToken.None).ConfigureAwait(false);
-                                }
-                            }
-                        }
-                        catch { }
-                    }
-                }
+                // Ensure instance manager and stored instances are fully resolved locally
+                _ = await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
             }
             catch { }
 
@@ -354,6 +320,7 @@ public partial class MainViewModel : ObservableObject
             var view = new HomeView();
             var vm = App.Services.GetRequiredService<HomeViewModel>();
             vm.OnNavigateRequested = Navigate;
+            vm.OnNavigateToCategoryRequested = NavigateToExploreCategory;
             vm.OnManageInstanceRequested = OpenInstanceDetail;
             view.DataContext = vm;
             CurrentView = view;
@@ -400,6 +367,20 @@ public partial class MainViewModel : ObservableObject
         view.DataContext = vm;
         _ = vm.LoadInstanceAsync(instance);
         CurrentView = view;
+    }
+
+    /// <summary>
+    /// Navigates to the Explore tab, auto-expanding the requested category vertical grid.
+    /// </summary>
+    public void NavigateToExploreCategory(string categoryId)
+    {
+        SelectedNavigation = "Explore";
+        var view = new BrowseView();
+        var vm = App.Services.GetRequiredService<BrowseViewModel>();
+        vm.OnManageInstanceRequested = OpenInstanceDetail;
+        view.DataContext = vm;
+        CurrentView = view;
+        vm.ExpandCategory(categoryId);
     }
 
     [RelayCommand]

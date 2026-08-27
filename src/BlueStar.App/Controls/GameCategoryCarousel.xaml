@@ -1,0 +1,413 @@
+<UserControl x:Class="BlueStar.App.Controls.GameCategoryCarousel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:sys="clr-namespace:System;assembly=mscorlib"
+             mc:Ignorable="d"
+             x:Name="RootCarouselControl">
+
+    <StackPanel Margin="0,0,0,32">
+        <!-- ═══ 1. CATEGORY HEADER & CONTROLS ROW ═══ -->
+        <Grid Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: Category Icon, Title, Subtitle / Badge -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                <Border Width="34" Height="34" CornerRadius="{StaticResource RadiusSm}"
+                        Background="{StaticResource SurfaceInputBrush}"
+                        BorderBrush="{StaticResource SubtleBorderBrush}"
+                        BorderThickness="1"
+                        Margin="0,0,12,0"
+                        VerticalAlignment="Center">
+                    <Path Data="{Binding Category.IconKey, ElementName=RootCarouselControl, Converter={StaticResource ResourceKeyConverter}}"
+                          Fill="{Binding Category.TagColor, ElementName=RootCarouselControl}"
+                          Stretch="Uniform" Width="18" Height="18"
+                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+
+                <StackPanel VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Category.Title, ElementName=RootCarouselControl}"
+                                   Style="{StaticResource H3}" Margin="0,0,10,0"/>
+                        <Border Background="{Binding Category.TagColor, ElementName=RootCarouselControl}"
+                                CornerRadius="{StaticResource RadiusSm}"
+                                Padding="6,2"
+                                Opacity="0.9"
+                                VerticalAlignment="Center"
+                                Visibility="{Binding Category.BadgeText, ElementName=RootCarouselControl, Converter={StaticResource NullToVisibilityConverter}}">
+                            <TextBlock Text="{Binding Category.BadgeText, ElementName=RootCarouselControl}"
+                                       FontSize="10" FontWeight="Bold" Foreground="#FFFFFF"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="{Binding Category.Subtitle, ElementName=RootCarouselControl}"
+                               Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"
+                               Margin="0,2,0,0"/>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Right: Navigation Arrows (< / >) & "Ver más" / "Colapsar" Button -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- Navigation Arrows (only shown when not expanded and items are loaded) -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,10,0"
+                            Visibility="{Binding Category.IsExpanded, ElementName=RootCarouselControl, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                    <Button x:Name="BtnPrev" Style="{StaticResource GhostButton}"
+                            Padding="8,6" Margin="0,0,4,0"
+                            ToolTip="Desplazar hacia la izquierda"
+                            Click="OnPrevClick">
+                        <Path Data="{StaticResource IconChevronLeft}" Fill="{StaticResource PrimaryTextBrush}"
+                              Stretch="Uniform" Width="14" Height="14"/>
+                    </Button>
+                    <Button x:Name="BtnNext" Style="{StaticResource GhostButton}"
+                            Padding="8,6"
+                            ToolTip="Desplazar hacia la derecha"
+                            Click="OnNextClick">
+                        <Path Data="{StaticResource IconChevronRight}" Fill="{StaticResource PrimaryTextBrush}"
+                              Stretch="Uniform" Width="14" Height="14"/>
+                    </Button>
+                </StackPanel>
+
+                <!-- "Ver más" / "Colapsar" Action Button -->
+                <Button x:Name="BtnViewMore" Style="{StaticResource SecondaryButton}"
+                        Padding="14,6" FontSize="12"
+                        Click="OnViewMoreClick">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="▲ Colapsar a carrusel" FontWeight="SemiBold"
+                                   Visibility="{Binding Category.IsExpanded, ElementName=RootCarouselControl, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                        <TextBlock Text="Ver más ➔" FontWeight="SemiBold"
+                                   Visibility="{Binding Category.IsExpanded, ElementName=RootCarouselControl, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- ═══ 2. SKELETON LOADING STATE (Progressive Shimmer) ═══ -->
+        <StackPanel Visibility="{Binding Category.IsLoading, ElementName=RootCarouselControl, Converter={StaticResource BoolToVisibilityConverter}}">
+            <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
+                          PreviewMouseWheel="OnScrollViewerPreviewMouseWheel">
+                <ItemsControl HorizontalAlignment="Left">
+                    <ItemsControl.ItemsSource>
+                        <x:Array Type="{x:Type sys:Int32}">
+                            <sys:Int32>1</sys:Int32>
+                            <sys:Int32>2</sys:Int32>
+                            <sys:Int32>3</sys:Int32>
+                            <sys:Int32>4</sys:Int32>
+                        </x:Array>
+                    </ItemsControl.ItemsSource>
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource SkeletonCard}" Width="320" Margin="0,0,16,0">
+                                <StackPanel>
+                                    <Border Style="{StaticResource SkeletonBlock}" Height="150" Margin="-16,-16,-16,12" CornerRadius="8,8,0,0"/>
+                                    <Border Style="{StaticResource SkeletonBlock}" Height="16" Width="160" HorizontalAlignment="Left" Margin="0,0,0,6"/>
+                                    <Border Style="{StaticResource SkeletonBlock}" Height="12" Width="90" HorizontalAlignment="Left" Margin="0,0,0,10"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                        <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="60" Margin="0,0,6,0" CornerRadius="4"/>
+                                        <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="70" CornerRadius="4"/>
+                                    </StackPanel>
+                                    <Border Style="{StaticResource SkeletonBlock}" Height="30" CornerRadius="6"/>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </StackPanel>
+
+        <!-- ═══ 3. HORIZONTAL AUTO-SCROLL CAROUSEL MODE (When NOT Expanded) ═══ -->
+        <Border Visibility="{Binding Category.IsLoading, ElementName=RootCarouselControl, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+            <Grid Visibility="{Binding Category.IsExpanded, ElementName=RootCarouselControl, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                <ScrollViewer x:Name="HorizontalScrollViewer"
+                              HorizontalScrollBarVisibility="Hidden"
+                              VerticalScrollBarVisibility="Disabled"
+                              Focusable="False"
+                              MouseEnter="OnCarouselMouseEnter"
+                              MouseLeave="OnCarouselMouseLeave"
+                              PreviewMouseWheel="OnScrollViewerPreviewMouseWheel">
+                    <ItemsControl ItemsSource="{Binding Category.Items, ElementName=RootCarouselControl}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource Card}" Width="320" Margin="0,0,16,6">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="150"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="12"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Header Image Banner -->
+                                        <Border Grid.Row="0" CornerRadius="8,8,0,0"
+                                                Background="{StaticResource SurfaceCardHoverBrush}"
+                                                ClipToBounds="True"
+                                                Margin="-16,-16,-16,10">
+                                            <Grid>
+                                                <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}"
+                                                      Stretch="Uniform" Width="32" Height="32"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                <Image Source="{Binding HeaderImageUrl}"
+                                                       Stretch="UniformToFill"
+                                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- Game Title & AppId -->
+                                        <StackPanel Grid.Row="1">
+                                            <TextBlock Text="{Binding Name}" Style="{StaticResource H3}" FontSize="14"
+                                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
+                                            <TextBlock Text="{Binding AppId, StringFormat='Steam AppID: {0}'}"
+                                                       Style="{StaticResource Caption}" Margin="0,2,0,0"/>
+                                        </StackPanel>
+
+                                        <!-- Badges Row 1 (Type, Version, DLCs) -->
+                                        <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,6,0,0">
+                                            <Border CornerRadius="{StaticResource RadiusSm}"
+                                                    Padding="6,2" Margin="0,0,5,4"
+                                                    Background="{StaticResource SurfaceInputBrush}"
+                                                    BorderBrush="{StaticResource SubtleBorderBrush}"
+                                                    BorderThickness="1">
+                                                <TextBlock Text="{Binding AppType, FallbackValue='Game'}"
+                                                           FontSize="10" FontWeight="SemiBold"
+                                                           Foreground="{StaticResource SecondaryTextBrush}"/>
+                                            </Border>
+
+                                            <Border CornerRadius="{StaticResource RadiusSm}"
+                                                    Padding="6,2" Margin="0,0,5,4"
+                                                    Background="{StaticResource SurfaceInputBrush}"
+                                                    BorderBrush="{StaticResource SubtleBorderBrush}"
+                                                    BorderThickness="1"
+                                                    Visibility="{Binding Version, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <TextBlock Text="{Binding Version, StringFormat='🏷️ {0}'}"
+                                                           FontSize="10" FontWeight="Medium"
+                                                           Foreground="{StaticResource PrimaryTextBrush}"/>
+                                            </Border>
+
+                                            <Border CornerRadius="{StaticResource RadiusSm}"
+                                                    Padding="6,2" Margin="0,0,5,4"
+                                                    Background="#258B5CF6" BorderBrush="#608B5CF6" BorderThickness="1"
+                                                    Visibility="{Binding DlcCount, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <TextBlock Text="{Binding DlcCount, StringFormat='🎁 {0} DLCs'}"
+                                                           FontSize="10" FontWeight="SemiBold" Foreground="#A78BFA"/>
+                                            </Border>
+                                        </WrapPanel>
+
+                                        <!-- Badges Row 2 (OS Support & Ready) -->
+                                        <WrapPanel Grid.Row="3" Orientation="Horizontal" Margin="0,2,0,0">
+                                            <Border CornerRadius="{StaticResource RadiusSm}"
+                                                    Padding="5,1" Margin="0,0,4,4"
+                                                    Background="#201B90FF" BorderBrush="#501B90FF" BorderThickness="1"
+                                                    Visibility="{Binding HasWindows, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <TextBlock Text="🪟 Windows" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
+                                            </Border>
+                                            <Border CornerRadius="{StaticResource RadiusSm}"
+                                                    Padding="5,1" Margin="0,0,4,4"
+                                                    Background="#20F59E0B" BorderBrush="#50F59E0B" BorderThickness="1"
+                                                    Visibility="{Binding HasLinux, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <TextBlock Text="🐧 Linux" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource WarningBrush}"/>
+                                            </Border>
+                                            <Border CornerRadius="{StaticResource RadiusSm}"
+                                                    Padding="5,1" Margin="0,0,4,4"
+                                                    Background="{StaticResource SuccessBgBrush}">
+                                                <TextBlock Text="● DepotBox" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource SuccessBrush}"/>
+                                            </Border>
+                                        </WrapPanel>
+
+                                        <!-- Actions Row -->
+                                        <Grid Grid.Row="5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="6"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <Button Grid.Column="0"
+                                                    Style="{StaticResource PrimaryButton}"
+                                                    Padding="10,6"
+                                                    Command="{Binding AddToLibraryCommand, ElementName=RootCarouselControl}"
+                                                    CommandParameter="{Binding}"
+                                                    IsEnabled="{Binding IsCreating, Converter={StaticResource InverseBoolConverter}}">
+                                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                                    <TextBlock Text="⏳ " Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                    <TextBlock Text="{Binding CreationStatus}" Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                    <TextBlock Text="➕ Add to Instances" Visibility="{Binding IsCreating, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                                </StackPanel>
+                                            </Button>
+
+                                            <Button Grid.Column="2"
+                                                    Style="{StaticResource SecondaryButton}"
+                                                    Padding="8,6"
+                                                    ToolTip="View on SteamDB.info"
+                                                    Command="{Binding OpenSteamDbCommand, ElementName=RootCarouselControl}"
+                                                    CommandParameter="{Binding}">
+                                                <TextBlock Text="🌐 SteamDB" FontSize="10" FontWeight="SemiBold"/>
+                                            </Button>
+                                        </Grid>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+
+        <!-- ═══ 4. VERTICAL EXPANDED GRID MODE (When Expanded) ═══ -->
+        <Border Visibility="{Binding Category.IsExpanded, ElementName=RootCarouselControl, Converter={StaticResource BoolToVisibilityConverter}}">
+            <StackPanel Margin="0,8,0,0">
+                <ItemsControl ItemsSource="{Binding Category.Items, ElementName=RootCarouselControl}" HorizontalAlignment="Center">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource Card}" Width="360" Margin="0,0,16,16">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="168"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="14"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Game Cover Header Artwork (360x168 banner) -->
+                                    <Border Grid.Row="0" CornerRadius="8,8,0,0"
+                                            Background="{StaticResource SurfaceCardHoverBrush}"
+                                            ClipToBounds="True"
+                                            Margin="-16,-16,-16,12">
+                                        <Grid>
+                                            <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}"
+                                                  Stretch="Uniform" Width="36" Height="36"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            <Image Source="{Binding HeaderImageUrl}"
+                                                   Stretch="UniformToFill"
+                                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- Title & AppId -->
+                                    <StackPanel Grid.Row="1">
+                                        <TextBlock Text="{Binding Name}" Style="{StaticResource H3}"
+                                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
+                                        <TextBlock Text="{Binding AppId, StringFormat='Steam AppID: {0}'}"
+                                                   Style="{StaticResource Caption}" Margin="0,2,0,0"/>
+                                    </StackPanel>
+
+                                    <!-- Badges Row 1 (App Type, Version, DLCs) -->
+                                    <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
+                                        <Border CornerRadius="{StaticResource RadiusSm}"
+                                                Padding="7,2" Margin="0,0,6,4"
+                                                Background="{StaticResource SurfaceInputBrush}"
+                                                BorderBrush="{StaticResource SubtleBorderBrush}"
+                                                BorderThickness="1">
+                                            <TextBlock Text="{Binding AppType, FallbackValue='Game'}"
+                                                       FontSize="11" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource SecondaryTextBrush}"/>
+                                        </Border>
+
+                                        <Border CornerRadius="{StaticResource RadiusSm}"
+                                                Padding="7,2" Margin="0,0,6,4"
+                                                Background="{StaticResource SurfaceInputBrush}"
+                                                BorderBrush="{StaticResource SubtleBorderBrush}"
+                                                BorderThickness="1"
+                                                Visibility="{Binding Version, Converter={StaticResource NullToVisibilityConverter}}">
+                                            <TextBlock Text="{Binding Version, StringFormat='🏷️ {0}'}"
+                                                       FontSize="11" FontWeight="Medium"
+                                                       Foreground="{StaticResource PrimaryTextBrush}"/>
+                                        </Border>
+
+                                        <Border CornerRadius="{StaticResource RadiusSm}"
+                                                Padding="7,2" Margin="0,0,6,4"
+                                                Background="#258B5CF6" BorderBrush="#608B5CF6" BorderThickness="1"
+                                                Visibility="{Binding DlcCount, Converter={StaticResource NullToVisibilityConverter}}">
+                                            <TextBlock Text="{Binding DlcCount, StringFormat='🎁 {0} DLCs'}"
+                                                       FontSize="11" FontWeight="SemiBold" Foreground="#A78BFA"/>
+                                        </Border>
+                                    </WrapPanel>
+
+                                    <!-- Badges Row 2 (OS & Status) -->
+                                    <WrapPanel Grid.Row="3" Orientation="Horizontal" Margin="0,2,0,0">
+                                        <Border CornerRadius="{StaticResource RadiusSm}"
+                                                Padding="6,2" Margin="0,0,5,4"
+                                                Background="#201B90FF" BorderBrush="#501B90FF" BorderThickness="1"
+                                                Visibility="{Binding HasWindows, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <TextBlock Text="🪟 Windows" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
+                                        </Border>
+                                        <Border CornerRadius="{StaticResource RadiusSm}"
+                                                Padding="6,2" Margin="0,0,5,4"
+                                                Background="#20F59E0B" BorderBrush="#50F59E0B" BorderThickness="1"
+                                                Visibility="{Binding HasLinux, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <TextBlock Text="🐧 Linux" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource WarningBrush}"/>
+                                        </Border>
+                                        <Border CornerRadius="{StaticResource RadiusSm}"
+                                                Padding="6,2" Margin="0,0,5,4"
+                                                Background="{StaticResource SuccessBgBrush}">
+                                            <TextBlock Text="● DepotBox Ready" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource SuccessBrush}"/>
+                                        </Border>
+                                    </WrapPanel>
+
+                                    <!-- Actions Row -->
+                                    <Grid Grid.Row="5">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="8"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <Button Grid.Column="0"
+                                                Style="{StaticResource PrimaryButton}"
+                                                Padding="12,8"
+                                                Command="{Binding AddToLibraryCommand, ElementName=RootCarouselControl}"
+                                                CommandParameter="{Binding}"
+                                                IsEnabled="{Binding IsCreating, Converter={StaticResource InverseBoolConverter}}">
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                                <TextBlock Text="⏳ " Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                <TextBlock Text="{Binding CreationStatus}" Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                <TextBlock Text="➕ Add to Instances" Visibility="{Binding IsCreating, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                            </StackPanel>
+                                        </Button>
+
+                                        <Button Grid.Column="2"
+                                                Style="{StaticResource SecondaryButton}"
+                                                Padding="10,8"
+                                                ToolTip="View on SteamDB.info"
+                                                Command="{Binding OpenSteamDbCommand, ElementName=RootCarouselControl}"
+                                                CommandParameter="{Binding}">
+                                            <TextBlock Text="🌐 SteamDB" FontSize="11" FontWeight="SemiBold"/>
+                                        </Button>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Centered Bottom Collapse Button -->
+                <Button Content="▲ Colapsar a carrusel"
+                        Style="{StaticResource SecondaryButton}"
+                        HorizontalAlignment="Center"
+                        Margin="0,8,0,0"
+                        Padding="20,8"
+                        Click="OnViewMoreClick"/>
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

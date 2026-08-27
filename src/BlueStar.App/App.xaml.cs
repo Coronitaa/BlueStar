@@ -120,6 +120,7 @@ public partial class App : Application
             sp.GetRequiredService<ILogger<BlueStar.Infrastructure.Downloader.DepotDownloaderProvider>>(),
             sp.GetRequiredService<BlueStar.Infrastructure.Storage.AppSettingsService>()));
         services.AddSingleton<IUpdateService, BlueStar.Infrastructure.Update.GitHubUpdateService>();
+        services.AddSingleton<ICommunityStatsService, BlueStar.Infrastructure.Services.CommunityStatsService>();
 
         // HTTP clients
         services.AddHttpClient<IDepotBoxApiClient, DepotBoxApiClient>(client =>

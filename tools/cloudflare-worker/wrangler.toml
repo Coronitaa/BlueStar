@@ -1,0 +1,11 @@
+﻿name = "bluestar-api-worker"
+main = "src/worker.js"
+compatibility_date = "2024-09-01"
+
+[[kv_namespaces]]
+binding = "STATS_KV"
+id = "cbb06b3fc09d433b8d8d58c05578109c"
+
+[[kv_namespaces]]
+binding = "DEPOTBOX_KV"
+id = "ff75500dbbec45ddaeeffaaca93d3a9c"
