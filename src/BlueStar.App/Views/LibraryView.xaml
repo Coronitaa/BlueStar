@@ -485,9 +485,11 @@
                                        Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,8,0,24"/>
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                 <Button Content="📦 Import ZIP Archive" Style="{StaticResource PrimaryButton}"
-                                        Margin="0,0,12,0" Command="{Binding StartImportZipCommand}"/>
+                                        Margin="0,0,12,0" Command="{Binding OpenAddInstanceModalCommand}" CommandParameter="Zip"/>
                                 <Button Content="📁 Add Game Folder" Style="{StaticResource SecondaryButton}"
-                                        Command="{Binding AddExistingFolderCommand}"/>
+                                        Margin="0,0,12,0" Command="{Binding OpenAddInstanceModalCommand}" CommandParameter="Folder"/>
+                                <Button Content="🌐 Explore Catalog" Style="{StaticResource SecondaryButton}"
+                                        Command="{Binding ExplorePlatformGamesCommand}"/>
                             </StackPanel>
                         </StackPanel>
                     </Border>
@@ -511,7 +513,7 @@
                                         <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
 
-                                    <!-- Game Banner Artwork (Strict 460x215 aspect ratio, 360x168) -->
+                                    <!-- Game banner / cover image -->
                                     <Border Grid.Row="0" CornerRadius="8,8,0,0"
                                             Background="{StaticResource SurfaceCardHoverBrush}"
                                             ClipToBounds="True"
@@ -523,13 +525,53 @@
                                             <Image Source="{Binding HeaderImageUrl}"
                                                    Stretch="UniformToFill"
                                                    RenderOptions.BitmapScalingMode="HighQuality"/>
+
+                                            <!-- 🔔 TOP-RIGHT GAME UPDATE BADGE -->
+                                            <Border HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                    Margin="0,8,8,0"
+                                                    Background="#EA580C"
+                                                    BorderBrush="#F59E0B"
+                                                    BorderThickness="1"
+                                                    CornerRadius="{StaticResource RadiusSm}"
+                                                    Padding="7,2"
+                                                    Visibility="{Binding HasUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                    ToolTip="{Binding UpdateDescription, FallbackValue='Game update available'}">
+                                                <Border.Effect>
+                                                    <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="2" Opacity="0.6"/>
+                                                </Border.Effect>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Path Data="{StaticResource IconRefresh}" Fill="#FFFFFF" Stretch="Uniform" Width="9" Height="9" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="Update" FontSize="10" FontWeight="Bold" Foreground="#FFFFFF"/>
+                                                </StackPanel>
+                                            </Border>
                                         </Grid>
                                     </Border>
 
                                     <!-- Title & Steam AppId -->
                                     <StackPanel Grid.Row="1">
-                                        <TextBlock Text="{Binding Name}" Style="{StaticResource H3}"
-                                                   TextTrimming="CharacterEllipsis"/>
+                                        <DockPanel LastChildFill="True">
+                                            <!-- Origin Icons docked right of title -->
+                                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                                <!-- Steam Game Icon -->
+                                                <Path Data="{StaticResource IconSteam}" Fill="#66C0F4"
+                                                      Stretch="Uniform" Width="14" Height="14"
+                                                      Margin="6,0,0,0"
+                                                      VerticalAlignment="Center"
+                                                      Visibility="{Binding IsSteamGame, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                      ToolTip="Steam Game (Imported from Steam)"/>
+                                                <!-- Imported Folder Icon -->
+                                                <Path Data="{StaticResource IconFolder}" Fill="#10B981"
+                                                      Stretch="Uniform" Width="14" Height="14"
+                                                      Margin="6,0,0,0"
+                                                      VerticalAlignment="Center"
+                                                      Visibility="{Binding IsImportedFolder, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                      ToolTip="Imported Game (Folder/ZIP)"/>
+                                            </StackPanel>
+
+                                            <TextBlock Text="{Binding Name}" Style="{StaticResource H3}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center"/>
+                                        </DockPanel>
                                         <TextBlock Text="{Binding AppId, StringFormat='Steam AppID: {0}'}"
                                                    Style="{StaticResource Caption}" Margin="0,2,0,0"/>
                                     </StackPanel>

@@ -62,16 +62,16 @@
                         Margin="0,0,0,20">
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="180"/>
-                            <ColumnDefinition Width="24"/>
+                            <ColumnDefinition Width="235"/>
+                            <ColumnDefinition Width="20"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- Game Cover Image -->
+                        <!-- Game Cover Image (Standard 460x215 aspect ratio: 235x110) -->
                         <Border Grid.Column="0" CornerRadius="8"
                                 Background="{StaticResource SurfaceInputBrush}"
-                                Height="110" ClipToBounds="True">
+                                Width="235" Height="110" ClipToBounds="True">
                             <Grid>
                                 <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}"
                                       Stretch="Uniform" Width="32" Height="32"
@@ -457,7 +457,7 @@
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="70"/>
+                                                    <ColumnDefinition Width="77"/>
                                                     <ColumnDefinition Width="14"/>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
@@ -465,9 +465,9 @@
 
                                                 <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" VerticalAlignment="Center" Margin="0,0,12,0"/>
 
-                                                <!-- DLC Thumbnail -->
-                                                <Border Grid.Column="1" CornerRadius="4" ClipToBounds="True" Height="36" Background="{StaticResource SurfaceCardBrush}">
-                                                    <Image Source="{Binding HeaderImageUrl}" Stretch="UniformToFill"/>
+                                                <!-- DLC Thumbnail (Standard 460:215 aspect ratio: 77x36) -->
+                                                <Border Grid.Column="1" CornerRadius="4" ClipToBounds="True" Width="77" Height="36" Background="{StaticResource SurfaceCardBrush}">
+                                                    <Image Source="{Binding HeaderImageUrl}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                                                 </Border>
 
                                                 <StackPanel Grid.Column="3" VerticalAlignment="Center">
@@ -1028,32 +1028,6 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Multi-Instance Duplication Card -->
-                    <Border Style="{StaticResource Card}" Margin="0,20,0,0">
-                        <StackPanel>
-                            <TextBlock Text="Multi-Instance Management (Zero-Copy NTFS)" Style="{StaticResource H2}" Margin="0,0,0,8"/>
-                            <TextBlock Text="Duplica esta instancia instantáneamente sin consumir espacio adicional en disco mediante enlaces NTFS. Cada clon cuenta con SteamID y puertos de red aislados para multijugador LAN/Online."
-                                       Style="{StaticResource BodySmall}" Margin="0,0,0,16"/>
-
-                            <StackPanel Orientation="Horizontal">
-                                <Button Content="📋 Duplicar Instancia"
-                                        Style="{StaticResource SecondaryButton}"
-                                        Padding="18,10"
-                                        Margin="0,0,12,0"
-                                        Command="{Binding DuplicateInstanceCommand}"
-                                        IsEnabled="{Binding IsDuplicatingInstance, Converter={StaticResource InverseBoolConverter}}"
-                                        ToolTip="Duplica la instancia actual incluyendo todos los mods y configuraciones existentes."/>
-
-                                <Button Content="✨ Duplicar Instancia Limpia"
-                                        Style="{StaticResource SecondaryButton}"
-                                        Padding="18,10"
-                                        Command="{Binding DuplicateCleanInstanceCommand}"
-                                        IsEnabled="{Binding IsDuplicatingInstance, Converter={StaticResource InverseBoolConverter}}"
-                                        ToolTip="Crea una nueva instancia limpia con archivos base originales y sin mods instalados."/>
-                            </StackPanel>
-                        </StackPanel>
-                    </Border>
-
                     <!-- Danger Zone -->
                     <Border Style="{StaticResource Card}" Margin="0,20,0,0" BorderBrush="{StaticResource DangerBorderBrush}" BorderThickness="1">
                         <StackPanel>
@@ -1224,7 +1198,7 @@
                     <TextBlock Text="Shortcut Destinations:" Style="{StaticResource CaptionBold}" Margin="0,0,0,8"/>
                     <CheckBox Content="Desktop Shortcut (.lnk)" Style="{StaticResource DarkCheckBox}" IsChecked="{Binding CreateDesktopShortcut}" Margin="0,0,0,8"/>
                     <CheckBox Content="Start Menu Shortcut" Style="{StaticResource DarkCheckBox}" IsChecked="{Binding CreateStartMenuShortcut}" Margin="0,0,0,8"/>
-                    <CheckBox Content="Steam Library (with 600x900 Posters &amp; Banners)" Style="{StaticResource DarkCheckBox}" IsChecked="{Binding CreateSteamShortcut}" IsEnabled="{Binding IsSteamInstalled}" Margin="0,0,0,16"/>
+                    <CheckBox Content="Steam Library Shortcut" Style="{StaticResource DarkCheckBox}" IsChecked="{Binding CreateSteamShortcut}" IsEnabled="{Binding IsSteamInstalled}" Margin="0,0,0,16"/>
 
                     <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusMd}" Padding="12,8" Margin="0,0,0,16" Visibility="{Binding ShortcutStatusMessage, Converter={StaticResource NullToVisibilityConverter}}">
                         <TextBlock Text="{Binding ShortcutStatusMessage}" Style="{StaticResource Caption}"/>
@@ -1578,6 +1552,7 @@
                                                 <ColumnDefinition Width="Auto"/>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
 
                                             <CheckBox IsChecked="{Binding IsSelected}" VerticalAlignment="Center" Margin="0,0,12,0"/>
@@ -1591,9 +1566,23 @@
                                                 </StackPanel>
                                             </StackPanel>
 
-                                            <TextBlock Grid.Column="2" Text="{Binding FormattedSize}"
+                                            <!-- Same metadata badges as Files & Depots -->
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,14,0">
+                                                <Border Background="{StaticResource SurfaceCardBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,2" Margin="0,0,6,0">
+                                                    <TextBlock Text="{Binding CategoryTag}" Style="{StaticResource CaptionBold}"/>
+                                                </Border>
+                                                <Border Background="{StaticResource InfoBgBrush}" BorderBrush="{StaticResource InfoBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,2" Margin="0,0,6,0">
+                                                    <TextBlock Text="{Binding PlatformTag}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource InfoBrush}"/>
+                                                </Border>
+                                                <Border Background="{StaticResource PurpleBgBrush}" BorderBrush="{StaticResource PurpleBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="6,2"
+                                                        Visibility="{Binding ArchitectureTag, Converter={StaticResource NullToVisibilityConverter}}">
+                                                    <TextBlock Text="{Binding ArchitectureTag}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource PurpleBrush}"/>
+                                                </Border>
+                                            </StackPanel>
+
+                                            <TextBlock Grid.Column="3" Text="{Binding FormattedSize}"
                                                        Style="{StaticResource CaptionBold}"
-                                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                                       Foreground="{StaticResource AccentBrush}"
                                                        VerticalAlignment="Center"/>
                                         </Grid>
                                     </Border>

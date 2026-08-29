@@ -364,8 +364,8 @@
                                                     <!-- 🔔 TOP-RIGHT GAME UPDATE BADGE -->
                                                     <Border HorizontalAlignment="Right" VerticalAlignment="Top"
                                                             Margin="0,8,8,0"
-                                                            Background="#E11D48"
-                                                            BorderBrush="#FFFFFF"
+                                                            Background="#EA580C"
+                                                            BorderBrush="#F59E0B"
                                                             BorderThickness="1"
                                                             CornerRadius="{StaticResource RadiusSm}"
                                                             Padding="7,2"
@@ -375,7 +375,8 @@
                                                             <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="2" Opacity="0.6"/>
                                                         </Border.Effect>
                                                         <StackPanel Orientation="Horizontal">
-                                                            <TextBlock Text="▲ Update" FontSize="10" FontWeight="Normal" Foreground="#FFFFFF"/>
+                                                            <Path Data="{StaticResource IconRefresh}" Fill="#FFFFFF" Stretch="Uniform" Width="9" Height="9" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                                            <TextBlock Text="Update" FontSize="10" FontWeight="Bold" Foreground="#FFFFFF"/>
                                                         </StackPanel>
                                                     </Border>
                                                 </Grid>
@@ -383,9 +384,30 @@
 
                                             <!-- Title & AppId -->
                                             <StackPanel Grid.Row="1">
-                                                <TextBlock Text="{Binding Name}"
-                                                           Style="{StaticResource H3}"
-                                                           TextTrimming="CharacterEllipsis"/>
+                                                <DockPanel LastChildFill="True">
+                                                    <!-- Origin Icons docked right of title -->
+                                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <!-- Steam Game Icon -->
+                                                        <Path Data="{StaticResource IconSteam}" Fill="#66C0F4"
+                                                              Stretch="Uniform" Width="14" Height="14"
+                                                              Margin="6,0,0,0"
+                                                              VerticalAlignment="Center"
+                                                              Visibility="{Binding IsSteamGame, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                              ToolTip="Steam Game (Imported from Steam)"/>
+                                                        <!-- Imported Folder Icon -->
+                                                        <Path Data="{StaticResource IconFolder}" Fill="#10B981"
+                                                              Stretch="Uniform" Width="14" Height="14"
+                                                              Margin="6,0,0,0"
+                                                              VerticalAlignment="Center"
+                                                              Visibility="{Binding IsImportedFolder, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                              ToolTip="Imported Game (Folder/ZIP)"/>
+                                                    </StackPanel>
+
+                                                    <TextBlock Text="{Binding Name}"
+                                                               Style="{StaticResource H3}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               VerticalAlignment="Center"/>
+                                                </DockPanel>
                                                 <TextBlock Text="{Binding AppId, StringFormat='Steam AppID: {0}'}"
                                                            Style="{StaticResource Caption}" Margin="0,2,0,0"/>
                                             </StackPanel>
@@ -420,7 +442,9 @@
                                             <Grid Grid.Row="4" VerticalAlignment="Bottom">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="8"/>
+                                                    <ColumnDefinition Width="4"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="6"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
 
@@ -431,7 +455,24 @@
                                                         Command="{Binding DataContext.ManageInstanceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}"/>
 
-                                                <Button Grid.Column="2" Content="▶ Play"
+                                                <!-- Update Available (DepotBox) Button — only shown when update is available -->
+                                                <Button Grid.Column="2"
+                                                        ToolTip="Update Available (DepotBox)"
+                                                        Visibility="{Binding HasUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                        Command="{Binding DataContext.CheckDepotBoxUpdatesCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
+                                                            <Setter Property="BorderBrush" Value="#F59E0B"/>
+                                                            <Setter Property="BorderThickness" Value="1"/>
+                                                            <Setter Property="Background" Value="#26F59E0B"/>
+                                                        </Style>
+                                                    </Button.Style>
+                                                    <Path Data="{StaticResource IconDownload}" Fill="#F59E0B"
+                                                          Stretch="Uniform" Width="13" Height="13"/>
+                                                </Button>
+
+                                                <Button Grid.Column="4" Content="▶ Play"
                                                         Style="{StaticResource PrimaryButton}"
                                                         Padding="16,7"
                                                         FontSize="12"

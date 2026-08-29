@@ -129,7 +129,7 @@ public class DownloadQueueManager
     private readonly INotificationService? _notificationService;
     private readonly ILogger<DownloadQueueManager> _logger;
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _ctsMap = new();
-    private readonly SynchronizationContext _uiContext;
+    private readonly SynchronizationContext? _uiContext;
 
     /// <summary>All jobs (active + finished) — the UI binds to this for the active card list.</summary>
     public ObservableCollection<DownloadJobItem> Queue { get; } = [];
@@ -150,22 +150,23 @@ public class DownloadQueueManager
         _logger = logger;
         _instanceManager = instanceManager;
         _notificationService = notificationService;
-        // Capture the UI sync context so we can marshal ObservableCollection mutations back to the UI thread
-        _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
+        _uiContext = SynchronizationContext.Current;
     }
 
-    /// <summary>Notifies listeners on the UI thread that the queue or a job state has changed.</summary>
-    public void NotifyQueueChanged()
+    private void RunOnUi(Action action)
     {
-        if (SynchronizationContext.Current == _uiContext)
+        if (_uiContext is null || SynchronizationContext.Current == _uiContext)
         {
-            QueueChanged?.Invoke(this, EventArgs.Empty);
+            action();
         }
         else
         {
-            _uiContext.Post(_ => QueueChanged?.Invoke(this, EventArgs.Empty), null);
+            _uiContext.Post(_ => action(), null);
         }
     }
+
+    /// <summary>Notifies listeners on the UI thread that the queue or a job state has changed.</summary>
+    public void NotifyQueueChanged() => RunOnUi(() => QueueChanged?.Invoke(this, EventArgs.Empty));
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -180,11 +181,11 @@ public class DownloadQueueManager
         {
             existing = new DownloadJobItem { Instance = instance, StatusMessage = "Queued..." };
             var toAdd = existing;
-            _uiContext.Post(_ =>
+            RunOnUi(() =>
             {
                 Queue.Add(toAdd);
                 NotifyQueueChanged();
-            }, null);
+            });
         }
         else
         {
@@ -262,11 +263,11 @@ public class DownloadQueueManager
         var item = Queue.FirstOrDefault(q => q.Instance.Id == instanceId);
         if (item is not null)
         {
-            _uiContext.Post(_ =>
+            RunOnUi(() =>
             {
                 Queue.Remove(item);
                 NotifyQueueChanged();
-            }, null);
+            });
         }
     }
 
@@ -276,18 +277,18 @@ public class DownloadQueueManager
         var item2 = Queue.FirstOrDefault(q => q.Instance.Id == instanceId);
         if (item2 is not null && item2.CanRemove)
         {
-            _uiContext.Post(_ =>
+            RunOnUi(() =>
             {
                 Queue.Remove(item2);
                 NotifyQueueChanged();
-            }, null);
+            });
         }
     }
 
     /// <summary>Clears completed download jobs from history and finished queue cards.</summary>
     public void ClearCompleted()
     {
-        _uiContext.Post(_ =>
+        RunOnUi(() =>
         {
             var toRemoveLogs = HistoryLog.Where(h => h.Status == DownloadJobStatus.Completed).ToList();
             foreach (var log in toRemoveLogs) HistoryLog.Remove(log);
@@ -296,13 +297,13 @@ public class DownloadQueueManager
             foreach (var q in toRemoveQueue) Queue.Remove(q);
 
             NotifyQueueChanged();
-        }, null);
+        });
     }
 
     /// <summary>Clears failed and canceled download jobs from history and queue cards.</summary>
     public void ClearFailed()
     {
-        _uiContext.Post(_ =>
+        RunOnUi(() =>
         {
             var toRemoveLogs = HistoryLog.Where(h => h.Status is DownloadJobStatus.Failed or DownloadJobStatus.Canceled).ToList();
             foreach (var log in toRemoveLogs) HistoryLog.Remove(log);
@@ -311,20 +312,20 @@ public class DownloadQueueManager
             foreach (var q in toRemoveQueue) Queue.Remove(q);
 
             NotifyQueueChanged();
-        }, null);
+        });
     }
 
     /// <summary>Clears all completed, failed, and canceled history entries and inactive queue cards.</summary>
     public void ClearAll()
     {
-        _uiContext.Post(_ =>
+        RunOnUi(() =>
         {
             HistoryLog.Clear();
             var toRemoveQueue = Queue.Where(q => q.CanRemove).ToList();
             foreach (var q in toRemoveQueue) Queue.Remove(q);
 
             NotifyQueueChanged();
-        }, null);
+        });
     }
 
     /// <summary>Clears all history log entries.</summary>
@@ -337,7 +338,7 @@ public class DownloadQueueManager
         var cts = new CancellationTokenSource();
         _ctsMap[instance.Id] = cts;
 
-        _uiContext.Post(_ =>
+        RunOnUi(() =>
         {
             job.Percentage = 0;
             job.DownloadedBytes = 0;
@@ -347,11 +348,11 @@ public class DownloadQueueManager
             job.StatusMessage = "Downloading...";
             job.NotifyMetricsChanged();
             NotifyQueueChanged();
-        }, null);
+        });
 
         var progress = new Progress<DownloadProgress>(p =>
         {
-            _uiContext.Post(_ =>
+            RunOnUi(() =>
             {
                 if (job.JobStatus != DownloadJobStatus.Downloading) return;
                 job.DownloadedBytes = p.DownloadedBytes;
@@ -361,14 +362,14 @@ public class DownloadQueueManager
                 if (!string.IsNullOrWhiteSpace(p.CurrentFile))
                     job.StatusMessage = p.CurrentFile;
                 job.NotifyMetricsChanged();
-            }, null);
+            });
         });
 
         try
         {
             await _downloadProvider.DownloadAsync(instance, progress, cts.Token).ConfigureAwait(true);
 
-            _uiContext.Post(_ =>
+            RunOnUi(() =>
             {
                 job.JobStatus = DownloadJobStatus.Completed;
                 job.Percentage = 100;
@@ -376,7 +377,7 @@ public class DownloadQueueManager
                 job.CompletedAt = DateTimeOffset.Now;
                 job.NotifyMetricsChanged();
                 NotifyQueueChanged();
-            }, null);
+            });
 
             // Update game instance status and depot installed flags in storage
             if (_instanceManager is not null)
@@ -482,8 +483,8 @@ public class DownloadQueueManager
     }
 
     private void AddToLog(DownloadLogEntry entry) =>
-        _uiContext.Post(_ => HistoryLog.Insert(0, entry), null); // newest first
+        RunOnUi(() => HistoryLog.Insert(0, entry)); // newest first
 
     private void ClearHistoryOnUi() =>
-        _uiContext.Post(_ => HistoryLog.Clear(), null);
+        RunOnUi(() => HistoryLog.Clear());
 }

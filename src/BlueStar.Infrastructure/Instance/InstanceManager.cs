@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using BlueStar.Core.Helpers;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
 using BlueStar.Core.Storage;
@@ -71,6 +72,41 @@ public sealed class InstanceManager : IInstanceManager
         _storageManager = storageManager ?? new InstanceStorageManager(defaultLinker, NullLogger<InstanceStorageManager>.Instance);
         _engineDetector = engineDetector ?? new EngineDetector(NullLogger<EngineDetector>.Instance);
         _refixManager = refixManager ?? new ReFixManager(NullLogger<ReFixManager>.Instance);
+    }
+
+    /// <summary>
+    /// Resolves a unique name for a game instance given the existing instances.
+    /// Appends (2), (3), etc. if names collide.
+    /// </summary>
+    public static string ResolveUniqueName(string baseName, IEnumerable<GameInstance>? existingInstances)
+    {
+        var existingNames = (existingInstances ?? []).Select(i => i.Name).ToList();
+        return PathHelper.GenerateUniqueInstanceName(existingNames, baseName);
+    }
+
+    /// <summary>
+    /// Resolves a non-colliding install path for a game instance given the existing instances.
+    /// </summary>
+    public static string ResolveNonCollidingInstallPath(string instanceName, string candidatePath, IEnumerable<GameInstance>? existingInstances)
+    {
+        var existingPaths = (existingInstances ?? []).Select(i => i.InstallPath).Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
+        var existingSet = new HashSet<string>(existingPaths.Select(p => p.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)), StringComparer.OrdinalIgnoreCase);
+
+        var cleanCandidate = candidatePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (!existingSet.Contains(cleanCandidate))
+        {
+            return cleanCandidate;
+        }
+
+        var parentDir = Path.GetDirectoryName(cleanCandidate) ?? string.Empty;
+        var sanitized = PathHelper.SanitizeFolderName(instanceName);
+        var targetPath = Path.Combine(parentDir, sanitized);
+        if (!existingSet.Contains(targetPath))
+        {
+            return targetPath;
+        }
+
+        return PathHelper.GenerateUniqueInstallPath(parentDir, sanitized, existingPaths);
     }
 
     /// <inheritdoc />

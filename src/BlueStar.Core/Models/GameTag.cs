@@ -1,4 +1,4 @@
-﻿namespace BlueStar.Core.Models;
+namespace BlueStar.Core.Models;
 
 /// <summary>
 /// Categorizes the visual styling and semantic meaning of a game tag badge.

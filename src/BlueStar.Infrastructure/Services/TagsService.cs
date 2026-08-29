@@ -58,23 +58,7 @@ public sealed class TagsService : ITagsService
 
         var tags = new List<GameTag>();
 
-        // 1. Instance Origin Badge (Steam Game or Imported)
-        if (instance.Origin == InstanceOrigin.Steam)
-        {
-            tags.Add(new GameTag("Steam Game", TagType.Origin, "Imported from local Steam installation"));
-        }
-        else if (instance.Origin == InstanceOrigin.ImportedFolder && !instance.IsDepotBoxAssociated)
-        {
-            tags.Add(new GameTag("Imported", TagType.Origin, "Imported game folder (not yet linked to DepotBox)"));
-        }
-
-        // 2. Dynamic Update Available (derived dynamically, not a static timestamp)
-        if (hasUpdateAvailable || instance.HasUpdateAvailable)
-        {
-            tags.Add(new GameTag("Update Available", TagType.UpdateAvailable, instance.UpdateDescription ?? "A newer version is available on DepotBox"));
-        }
-
-        // 3. Status Badge
+        // Status Badge
         var statusText = instance.Status switch
         {
             InstanceStatus.Ready => "Ready",

@@ -188,5 +188,103 @@ public class ShortcutHelperTests
             if (File.Exists($"{tempVdf}.bak")) File.Delete($"{tempVdf}.bak");
         }
     }
+
+    [Fact]
+    public async Task InstallSteamGridArtworkAsync_WithValidAppId_CreatesGridFolder()
+    {
+        // Arrange
+        var tempUserFolder = Path.Combine(Path.GetTempPath(), "SteamUser_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempUserFolder);
+
+        try
+        {
+            uint shortcutAppId32 = 0x81234567;
+            uint gameAppId = 1091500; // Cyberpunk 2077
+
+            // Act
+            await ShortcutHelper.InstallSteamGridArtworkAsync(
+                tempUserFolder,
+                shortcutAppId32,
+                gameAppId,
+                customHeaderUrl: null,
+                customCapsuleUrl: null,
+                ct: CancellationToken.None);
+
+            // Assert
+            var gridDir = Path.Combine(tempUserFolder, "config", "grid");
+            Directory.Exists(gridDir).Should().BeTrue();
+
+            var files = Directory.GetFiles(gridDir);
+            files.Should().NotBeEmpty();
+        }
+        finally
+        {
+            if (Directory.Exists(tempUserFolder))
+            {
+                try { Directory.Delete(tempUserFolder, recursive: true); } catch { }
+            }
+        }
+    }
+
+    [Fact]
+    public async Task InstallSteamGridArtworkAsync_WithShiftAtMidnight_DownloadsAllFourAssets()
+    {
+        // Arrange
+        var tempUserFolder = Path.Combine(Path.GetTempPath(), "SteamUser_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempUserFolder);
+
+        try
+        {
+            uint shortcutAppId32 = 0x89abcdef;
+            uint gameAppId = 3722330; // Shift At Midnight
+
+            // Act
+            await ShortcutHelper.InstallSteamGridArtworkAsync(
+                tempUserFolder,
+                shortcutAppId32,
+                gameAppId,
+                customHeaderUrl: null,
+                customCapsuleUrl: null,
+                ct: CancellationToken.None);
+
+            // Assert
+            var gridDir = Path.Combine(tempUserFolder, "config", "grid");
+            Directory.Exists(gridDir).Should().BeTrue();
+
+            string id32 = shortcutAppId32.ToString();
+
+            // 1. Portada (Vertical Capsule)
+            var verticalPath = Path.Combine(gridDir, $"{id32}p.jpg");
+            File.Exists(verticalPath).Should().BeTrue("Portada (vertical capsule) must be downloaded");
+            new FileInfo(verticalPath).Length.Should().BeGreaterThan(5000);
+
+            // 2. Fondo (Hero banner)
+            var heroPath = Path.Combine(gridDir, $"{id32}_hero.jpg");
+            File.Exists(heroPath).Should().BeTrue("Fondo (hero banner) must be downloaded");
+            new FileInfo(heroPath).Length.Should().BeGreaterThan(5000);
+
+            // 3. Logo (Transparent PNG)
+            var logoPath = Path.Combine(gridDir, $"{id32}_logo.png");
+            File.Exists(logoPath).Should().BeTrue("Logo (transparent PNG) must be downloaded");
+            new FileInfo(logoPath).Length.Should().BeGreaterThan(5000);
+
+            // 4. Portada Ancha (Header)
+            var headerPath = Path.Combine(gridDir, $"{id32}.jpg");
+            File.Exists(headerPath).Should().BeTrue("Portada Ancha (header) must be downloaded");
+            new FileInfo(headerPath).Length.Should().BeGreaterThan(5000);
+
+            // 5. Ícono (clienticon .ico)
+            var iconPath = Path.Combine(gridDir, $"{id32}_icon.ico");
+            File.Exists(iconPath).Should().BeTrue("Ícono (.ico) must be downloaded");
+            new FileInfo(iconPath).Length.Should().BeGreaterThan(500);
+        }
+        finally
+        {
+            if (Directory.Exists(tempUserFolder))
+            {
+                try { Directory.Delete(tempUserFolder, recursive: true); } catch { }
+            }
+        }
+    }
 }
 

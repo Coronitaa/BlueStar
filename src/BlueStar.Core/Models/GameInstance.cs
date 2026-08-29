@@ -140,6 +140,16 @@ public record GameInstance
     public IReadOnlyList<uint> UnlockedDlcIds { get; init; } = [];
 
     /// <summary>
+    /// Gets whether this instance was imported from a local Steam installation.
+    /// </summary>
+    public bool IsSteamGame => Origin == InstanceOrigin.Steam;
+
+    /// <summary>
+    /// Gets whether this instance was imported from a folder.
+    /// </summary>
+    public bool IsImportedFolder => Origin == InstanceOrigin.ImportedFolder;
+
+    /// <summary>
     /// Gets the Steam header image URL for this game instance.
     /// </summary>
     public string HeaderImageUrl => !string.IsNullOrWhiteSpace(Metadata?.HeaderImageUrl)

@@ -263,7 +263,7 @@
                             <controls:GameCategoryCarousel
                                 Category="{Binding}"
                                 IsExploreTab="True"
-                                AddToLibraryCommand="{Binding DataContext.CreateInstanceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                AddToLibraryCommand="{Binding DataContext.AddToLibraryCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                 OpenSteamDbCommand="{Binding DataContext.OpenSteamDbCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                 ViewMoreCommand="{Binding DataContext.ToggleCategoryExpandCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                 LoadMoreCommand="{Binding DataContext.LoadMoreCategoryItemsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>

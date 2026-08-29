@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -29,7 +29,10 @@ public class BackgroundTaskServiceTests
         taskId.Should().NotBeEmpty();
 
         // Wait for task completion
-        await Task.Delay(100);
+        for (int i = 0; i < 50 && (!executed || service.Tasks.FirstOrDefault(t => t.Id == taskId)?.Status != BackgroundTaskStatus.Completed); i++)
+        {
+            await Task.Delay(20);
+        }
 
         executed.Should().BeTrue();
         var task = service.Tasks.FirstOrDefault(t => t.Id == taskId);

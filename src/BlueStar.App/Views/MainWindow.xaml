@@ -437,55 +437,91 @@
             </Grid>
         </Border>
 
-        <!-- ═══ BACKGROUND TASKS FLYOUT / MODAL OVERLAY ═══ -->
+        <!-- ═══ BACKGROUND TASKS DROPDOWN FLYOUT (Anchored Bottom-Right above tasks button) ═══ -->
         <Grid Grid.Row="0" Grid.RowSpan="3"
               Visibility="{Binding IsTasksFlyoutOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Background="#80000000"
               Panel.ZIndex="1001">
-            <Border Width="560" MaxHeight="520"
+            <!-- Transparent backdrop click-outside to close -->
+            <Border Background="Transparent">
+                <Border.InputBindings>
+                    <MouseBinding Gesture="LeftClick" Command="{Binding CloseTasksFlyoutCommand}"/>
+                </Border.InputBindings>
+            </Border>
+
+            <!-- Dropdown Card anchored to bottom-right above the status bar -->
+            <Border Width="430" MaxHeight="460"
                     Background="{StaticResource SurfaceCardElevatedBrush}"
                     BorderBrush="{StaticResource StrongBorderBrush}"
                     BorderThickness="1"
                     CornerRadius="{StaticResource RadiusLg}"
-                    Padding="20"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center">
+                    Padding="16"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,16,42">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="20" ShadowDepth="4" Direction="270" Opacity="0.45" Color="#000000"/>
+                </Border.Effect>
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
                     <!-- Header -->
-                    <Grid Grid.Row="0" Margin="0,0,0,16">
+                    <Grid Grid.Row="0" Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0">
-                            <TextBlock Text="Background Tasks" Style="{StaticResource H2}"/>
-                            <TextBlock Text="Monitor emulator updates and long-running operations." Style="{StaticResource Caption}" Margin="0,2,0,0"/>
+                            <TextBlock Text="Active Tasks" Style="{StaticResource H3}"/>
+                            <TextBlock Text="{Binding BackgroundTaskStatusText}" Style="{StaticResource Caption}" Margin="0,2,0,0"/>
                         </StackPanel>
                         <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}"
+                                Padding="6,2"
                                 Command="{Binding CloseTasksFlyoutCommand}"/>
                     </Grid>
 
-                    <!-- Tasks List -->
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,16">
+                    <!-- Combined / Total Progress (Shown when multiple tasks active) -->
+                    <Border Grid.Row="1"
+                            Background="{StaticResource SurfaceInputBrush}"
+                            BorderBrush="{StaticResource AccentBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusMd}"
+                            Padding="12,10"
+                            Margin="0,0,0,12"
+                            Visibility="{Binding HasMultipleActiveTasks, Converter={StaticResource BoolToVisibilityConverter}}">
                         <StackPanel>
-                            <TextBlock Text="No active or recent background tasks."
-                                       Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,30"
-                                       Visibility="{Binding BackgroundTaskService.Tasks.Count, Converter={StaticResource ZeroToVisibilityConverter}}"/>
+                            <Grid Margin="0,0,0,6">
+                                <TextBlock Text="Total Progress" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource PrimaryTextBrush}"/>
+                                <TextBlock Text="{Binding TotalTasksProgressPercentage, StringFormat='{}{0:F0}%'}"
+                                           FontWeight="Bold" FontSize="12" Foreground="{StaticResource AccentBrush}"
+                                           HorizontalAlignment="Right"/>
+                            </Grid>
+                            <ProgressBar Value="{Binding TotalTasksProgressPercentage}" Height="6"
+                                         Foreground="{StaticResource AccentBrush}" Background="{StaticResource SurfaceCardBrush}"
+                                         BorderThickness="0" Margin="0,0,0,4"/>
+                            <TextBlock Text="{Binding ActiveTasksCount, StringFormat='{}{0} active operations running'}"
+                                       Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                        </StackPanel>
+                    </Border>
 
-                            <ItemsControl ItemsSource="{Binding BackgroundTaskService.Tasks}">
+                    <!-- Active Tasks List -->
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" MaxHeight="300">
+                        <StackPanel>
+                            <TextBlock Text="No active tasks in progress."
+                                       Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,20"
+                                       Visibility="{Binding ActiveBackgroundTasks.Count, Converter={StaticResource ZeroToVisibilityConverter}}"/>
+
+                            <ItemsControl ItemsSource="{Binding ActiveBackgroundTasks}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Border Background="{StaticResource SurfaceCardBrush}"
                                                 BorderBrush="{StaticResource SubtleBorderBrush}"
                                                 BorderThickness="1"
                                                 CornerRadius="{StaticResource RadiusMd}"
-                                                Padding="14,10"
+                                                Padding="12,10"
                                                 Margin="0,0,0,8">
                                             <Grid>
                                                 <Grid.RowDefinitions>
@@ -494,33 +530,32 @@
                                                     <RowDefinition Height="Auto"/>
                                                 </Grid.RowDefinitions>
 
-                                                <!-- Top Row: Title & Status Badge -->
+                                                <!-- Top Row: Title, Progress % and Cancel -->
                                                 <Grid Grid.Row="0" Margin="0,0,0,6">
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*"/>
                                                         <ColumnDefinition Width="Auto"/>
                                                         <ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
-                                                    <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis"/>
                                                     
-                                                    <Border Grid.Column="1" CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="8,0,0,0"
-                                                            Background="{Binding Status, Converter={StaticResource BackgroundTaskStatusToBrushConverter}}">
-                                                        <TextBlock Text="{Binding Status}" FontSize="10" FontWeight="Bold" Foreground="#FFFFFF"/>
-                                                    </Border>
+                                                    <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource PrimaryTextBrush}" TextTrimming="CharacterEllipsis"/>
+                                                    
+                                                    <TextBlock Grid.Column="1" Text="{Binding ProgressPercentage, StringFormat='{}{0:F0}%'}"
+                                                               FontWeight="Bold" FontSize="11" Foreground="{StaticResource AccentBrush}"
+                                                               Margin="8,0,0,0" VerticalAlignment="Center"/>
 
-                                                    <!-- Cancel button for active tasks -->
-                                                    <Button Grid.Column="2" Content="Cancel" Style="{StaticResource GhostButton}"
-                                                            Padding="6,2" Margin="8,0,0,0" FontSize="11" Foreground="{StaticResource DangerBrush}"
-                                                            Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                    <Button Grid.Column="2" Content="✕" Style="{StaticResource GhostButton}"
+                                                            Padding="4,1" Margin="8,0,0,0" FontSize="10" Foreground="{StaticResource DangerBrush}"
+                                                            ToolTip="Cancel task"
+                                                            Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisibilityConverter}}"
                                                             Command="{Binding DataContext.CancelBackgroundTaskCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                             CommandParameter="{Binding Id}"/>
                                                 </Grid>
 
-                                                <!-- Progress Bar -->
+                                                <!-- Individual Progress Bar -->
                                                 <ProgressBar Grid.Row="1" Value="{Binding ProgressPercentage}" Height="5" Margin="0,0,0,6"
                                                              Foreground="{StaticResource AccentBrush}" Background="{StaticResource SurfaceInputBrush}"
-                                                             BorderThickness="0"
-                                                             Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                             BorderThickness="0"/>
 
                                                 <!-- Step Message -->
                                                 <TextBlock Grid.Row="2" Text="{Binding CurrentStepMessage}" Style="{StaticResource Caption}"
@@ -532,14 +567,6 @@
                             </ItemsControl>
                         </StackPanel>
                     </ScrollViewer>
-
-                    <!-- Footer -->
-                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Content="Clear Completed" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"
-                                Command="{Binding ClearCompletedTasksCommand}"/>
-                        <Button Content="Close" Style="{StaticResource PrimaryButton}"
-                                Command="{Binding CloseTasksFlyoutCommand}"/>
-                    </StackPanel>
                 </Grid>
             </Border>
         </Grid>

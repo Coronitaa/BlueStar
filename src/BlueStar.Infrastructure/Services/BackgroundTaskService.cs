@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -93,6 +93,14 @@ public sealed class BackgroundTaskService : IBackgroundTaskService
                     taskItem.CurrentStepMessage = "Completed successfully.";
                     TasksChanged?.Invoke(this, EventArgs.Empty);
                 });
+
+                // Auto-remove completed task after brief delay so it disappears
+                await Task.Delay(1000).ConfigureAwait(false);
+                RunOnUI(() =>
+                {
+                    _tasks.Remove(taskItem);
+                    TasksChanged?.Invoke(this, EventArgs.Empty);
+                });
             }
             catch (OperationCanceledException)
             {
@@ -101,6 +109,13 @@ public sealed class BackgroundTaskService : IBackgroundTaskService
                     taskItem.Status = BackgroundTaskStatus.Cancelled;
                     taskItem.EndTime = DateTimeOffset.UtcNow;
                     taskItem.CurrentStepMessage = "Operation cancelled by user.";
+                    TasksChanged?.Invoke(this, EventArgs.Empty);
+                });
+
+                await Task.Delay(1500).ConfigureAwait(false);
+                RunOnUI(() =>
+                {
+                    _tasks.Remove(taskItem);
                     TasksChanged?.Invoke(this, EventArgs.Empty);
                 });
             }
@@ -113,6 +128,13 @@ public sealed class BackgroundTaskService : IBackgroundTaskService
                     taskItem.ErrorMessage = ex.Message;
                     taskItem.EndTime = DateTimeOffset.UtcNow;
                     taskItem.CurrentStepMessage = $"Failed: {ex.Message}";
+                    TasksChanged?.Invoke(this, EventArgs.Empty);
+                });
+
+                await Task.Delay(3000).ConfigureAwait(false);
+                RunOnUI(() =>
+                {
+                    _tasks.Remove(taskItem);
                     TasksChanged?.Invoke(this, EventArgs.Empty);
                 });
             }

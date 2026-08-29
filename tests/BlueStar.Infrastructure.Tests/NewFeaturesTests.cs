@@ -582,6 +582,7 @@ public class NewFeaturesTests
         prereqs.Should().Contain(p => p.Id == "vcredist_2015_2022_x64");
         prereqs.Should().Contain(p => p.Id == "directx_enduser");
         prereqs.Should().Contain(p => p.Id == "dotnet_desktop_8");
+        prereqs.Should().Contain(p => p.Id == "dotnet_runtime_9");
     }
 
     [Fact]
@@ -1004,6 +1005,92 @@ public class NewFeaturesTests
         // Case 3: NSFW=false, DRM=false -> Only Safe Game
         var strictFiltered = items.Where(i => !i.IsNsfw && !i.HasDrm).ToList();
         strictFiltered.Select(i => i.Name).Should().BeEquivalentTo(new[] { "Safe Game" });
+    }
+
+    [Fact]
+    public async Task SteamStoreApiClient_EnrichSearchResult_OnlyFlagsExplicitAdultContentAsNsfw()
+    {
+        // Arrange
+        var handlerMock = new Mock<HttpMessageHandler>();
+
+        // Response for App 1 (Cyberpunk / Mature game with descriptor 5 and age 18)
+        var matureResponseJson = """
+        {
+          "1091500": {
+            "success": true,
+            "data": {
+              "type": "game",
+              "required_age": 18,
+              "content_descriptors": {
+                "ids": [2, 5],
+                "notes": "Frequent Violence, Blood and Gore, Strong Language."
+              },
+              "genres": [
+                { "description": "Action" },
+                { "description": "RPG" }
+              ]
+            }
+          }
+        }
+        """;
+
+        // Response for App 2 (Adult Game with descriptor 3)
+        var adultResponseJson = """
+        {
+          "999999": {
+            "success": true,
+            "data": {
+              "type": "game",
+              "content_descriptors": {
+                "ids": [3],
+                "notes": "Explicit Sexual Content and Hentai."
+              },
+              "genres": [
+                { "description": "Sexual Content" },
+                { "description": "Adult Only" }
+              ]
+            }
+          }
+        }
+        """;
+
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req => req.RequestUri != null && req.RequestUri.ToString().Contains("1091500")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(matureResponseJson)
+            });
+
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req => req.RequestUri != null && req.RequestUri.ToString().Contains("999999")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(adultResponseJson)
+            });
+
+        var client = new HttpClient(handlerMock.Object);
+        var apiClient = new BlueStar.Infrastructure.Metadata.SteamStoreApiClient(client, NullLogger<BlueStar.Infrastructure.Metadata.SteamStoreApiClient>.Instance);
+
+        var matureGame = new SearchResult { AppId = 1091500, Name = "Cyberpunk 2077" };
+        var adultGame = new SearchResult { AppId = 999999, Name = "Adult Visual Novel" };
+
+        // Act
+        await apiClient.EnrichSearchResultAsync(matureGame, CancellationToken.None);
+        await apiClient.EnrichSearchResultAsync(adultGame, CancellationToken.None);
+
+        // Assert: Mature game with descriptor 5 / age 18 should NOT be flagged as NSFW
+        matureGame.IsNsfw.Should().BeFalse();
+
+        // Assert: Explicit adult game with descriptor 3 should be flagged as NSFW
+        adultGame.IsNsfw.Should().BeTrue();
     }
 }
 

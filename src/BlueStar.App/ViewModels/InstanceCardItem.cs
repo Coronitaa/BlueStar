@@ -24,8 +24,9 @@ public sealed class InstanceCardItem
     public bool IsDepotBoxBacked => Instance.Origin == InstanceOrigin.DepotBox || Instance.IsDepotBoxAssociated;
     public bool IsNotInstalled => Instance.Status == InstanceStatus.NotInstalled && Instance.Origin != InstanceOrigin.Steam;
     public bool IsSteamGame => Instance.Origin == InstanceOrigin.Steam;
-    public bool IsImported => Instance.Origin == InstanceOrigin.ImportedFolder && !Instance.IsDepotBoxAssociated;
+    public bool IsImportedFolder => Instance.Origin == InstanceOrigin.ImportedFolder;
     public bool HasUpdateAvailable => Instance.HasUpdateAvailable;
+    public string? UpdateDescription => Instance.UpdateDescription;
 
     public InstanceCardItem(GameInstance instance, IReadOnlyList<GameTag> tags)
     {

@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -342,7 +343,30 @@ public static class ShortcutHelper
     /// Downloads and installs Steam grid artwork (vertical capsule, hero, logo, header)
     /// into Steam's userdata/userId/config/grid/ folder for the given shortcut.
     /// </summary>
-    public static async Task InstallSteamGridArtworkAsync(
+    private static string? ExtractAssetRelPath(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.String) return element.GetString();
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            if (element.TryGetProperty("english", out var en) && en.ValueKind == JsonValueKind.String)
+                return en.GetString();
+            if (element.TryGetProperty("en", out var en2) && en2.ValueKind == JsonValueKind.String)
+                return en2.GetString();
+            foreach (var prop in element.EnumerateObject())
+            {
+                if (prop.Value.ValueKind == JsonValueKind.String)
+                    return prop.Value.GetString();
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Downloads and installs Steam grid artwork (vertical capsule, hero, logo, header, clienticon)
+    /// into Steam's userdata/userId/config/grid/ folder for the given shortcut.
+    /// Returns the path to the downloaded icon if available.
+    /// </summary>
+    public static async Task<string?> InstallSteamGridArtworkAsync(
         string userFolder,
         uint shortcutAppId32,
         uint originalGameAppId,
@@ -357,14 +381,18 @@ public static class ShortcutHelper
 
             ulong appId64 = ((ulong)shortcutAppId32 << 32) | 0x02000000;
             string id32 = shortcutAppId32.ToString();
+            string idSigned32 = unchecked((int)shortcutAppId32).ToString();
             string id64 = appId64.ToString();
 
             using var http = new HttpClient();
-            http.Timeout = TimeSpan.FromSeconds(8);
-
-            async Task DownloadAsset(IEnumerable<string?> sourceUrls, string[] destFileNames)
+            http.Timeout = TimeSpan.FromSeconds(10);
+            if (!http.DefaultRequestHeaders.Contains("User-Agent"))
             {
-                byte[]? data = null;
+                http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+            }
+
+            async Task<byte[]?> DownloadFirstAvailableAsset(IEnumerable<string?> sourceUrls)
+            {
                 foreach (var url in sourceUrls)
                 {
                     if (string.IsNullOrWhiteSpace(url)) continue;
@@ -373,77 +401,232 @@ public static class ShortcutHelper
                         var resp = await http.GetAsync(url, ct).ConfigureAwait(false);
                         if (resp.IsSuccessStatusCode)
                         {
-                            data = await resp.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
-                            if (data.Length > 0) break;
+                            var bytes = await resp.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+                            if (bytes != null && bytes.Length > 100)
+                            {
+                                return bytes;
+                            }
                         }
                     }
                     catch { }
                 }
+                return null;
+            }
 
-                if (data is not null && data.Length > 0)
+            async Task SaveAssetToGrid(byte[]? data, string[] destFileNames)
+            {
+                if (data is null || data.Length <= 100) return;
+                foreach (var destName in destFileNames)
                 {
-                    foreach (var destName in destFileNames)
+                    try
                     {
-                        try
-                        {
-                            var destPath = Path.Combine(gridDir, destName);
-                            await File.WriteAllBytesAsync(destPath, data, ct).ConfigureAwait(false);
-                        }
-                        catch { }
+                        var destPath = Path.Combine(gridDir, destName);
+                        await File.WriteAllBytesAsync(destPath, data, ct).ConfigureAwait(false);
                     }
+                    catch { }
                 }
             }
 
+            string? cmdCapsuleRel = null;
+            string? cmdHeroRel = null;
+            string? cmdLogoRel = null;
+            string? cmdHeaderRel = null;
+            string? cmdClientIcon = null;
+
+            // Query Steam PICS / SteamDB data for exact library_assets_full relative paths and clienticon
             if (originalGameAppId > 0)
             {
-                // 1. Vertical Library Poster (600x900)
-                var verticalUrls = new[]
+                try
                 {
-                    customCapsuleUrl,
-                    $"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{originalGameAppId}/library_600x900.jpg",
-                    $"https://cdn.akamai.steamstatic.com/steam/apps/{originalGameAppId}/library_600x900_2x.jpg",
-                    $"https://steamcdn-a.akamaihd.net/steam/apps/{originalGameAppId}/library_600x900.jpg"
-                }.Where(u => !string.IsNullOrEmpty(u)).ToArray()!;
+                    var cmdUrl = $"https://api.steamcmd.net/v1/info/{originalGameAppId}";
+                    var cmdJson = await http.GetStringAsync(cmdUrl, ct).ConfigureAwait(false);
+                    using var doc = JsonDocument.Parse(cmdJson);
+                    var appKey = originalGameAppId.ToString();
+                    if (doc.RootElement.TryGetProperty("data", out var dataEl) &&
+                        dataEl.TryGetProperty(appKey, out var appEntry))
+                    {
+                        JsonElement commonEl = default;
+                        if (appEntry.TryGetProperty("common", out var c1)) commonEl = c1;
+                        else if (appEntry.TryGetProperty("appinfo", out var ai) && ai.TryGetProperty("common", out var c2)) commonEl = c2;
 
-                await DownloadAsset(verticalUrls, [$"{id32}p.jpg", $"{id64}p.jpg"]).ConfigureAwait(false);
+                        if (commonEl.ValueKind == JsonValueKind.Object)
+                        {
+                            if (commonEl.TryGetProperty("library_assets_full", out var laf) && laf.ValueKind == JsonValueKind.Object)
+                            {
+                                if (laf.TryGetProperty("library_capsule", out var lc))
+                                {
+                                    if (lc.TryGetProperty("image2x", out var i2x)) cmdCapsuleRel = ExtractAssetRelPath(i2x);
+                                    if (string.IsNullOrWhiteSpace(cmdCapsuleRel) && lc.TryGetProperty("image", out var i1x)) cmdCapsuleRel = ExtractAssetRelPath(i1x);
+                                }
 
-                // 2. Library Hero Banner (1920x620)
-                var heroUrls = new[]
-                {
-                    $"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{originalGameAppId}/library_hero.jpg",
-                    $"https://cdn.akamai.steamstatic.com/steam/apps/{originalGameAppId}/library_hero.jpg",
-                    $"https://steamcdn-a.akamaihd.net/steam/apps/{originalGameAppId}/library_hero.jpg"
-                };
-                await DownloadAsset(heroUrls, [$"{id32}_hero.jpg", $"{id64}_hero.jpg"]).ConfigureAwait(false);
+                                if (laf.TryGetProperty("library_hero", out var lh))
+                                {
+                                    if (lh.TryGetProperty("image2x", out var i2x)) cmdHeroRel = ExtractAssetRelPath(i2x);
+                                    if (string.IsNullOrWhiteSpace(cmdHeroRel) && lh.TryGetProperty("image", out var i1x)) cmdHeroRel = ExtractAssetRelPath(i1x);
+                                }
 
-                // 3. Library Logo
-                var logoUrls = new[]
-                {
-                    $"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{originalGameAppId}/logo.png",
-                    $"https://cdn.akamai.steamstatic.com/steam/apps/{originalGameAppId}/logo.png"
-                };
-                await DownloadAsset(logoUrls, [$"{id32}_logo.png", $"{id64}_logo.png"]).ConfigureAwait(false);
+                                if (laf.TryGetProperty("library_logo", out var ll))
+                                {
+                                    if (ll.TryGetProperty("image2x", out var i2x)) cmdLogoRel = ExtractAssetRelPath(i2x);
+                                    if (string.IsNullOrWhiteSpace(cmdLogoRel) && ll.TryGetProperty("image", out var i1x)) cmdLogoRel = ExtractAssetRelPath(i1x);
+                                }
 
-                // 4. Horizontal Banner Header (460x215)
-                var headerUrls = new[]
-                {
-                    customHeaderUrl,
-                    $"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{originalGameAppId}/header.jpg",
-                    $"https://cdn.akamai.steamstatic.com/steam/apps/{originalGameAppId}/header.jpg",
-                    $"https://steamcdn-a.akamaihd.net/steam/apps/{originalGameAppId}/header.jpg"
-                }.Where(u => !string.IsNullOrEmpty(u)).ToArray()!;
+                                if (laf.TryGetProperty("library_header", out var lhd))
+                                {
+                                    if (lhd.TryGetProperty("image2x", out var i2x)) cmdHeaderRel = ExtractAssetRelPath(i2x);
+                                    if (string.IsNullOrWhiteSpace(cmdHeaderRel) && lhd.TryGetProperty("image", out var i1x)) cmdHeaderRel = ExtractAssetRelPath(i1x);
+                                }
+                            }
 
-                await DownloadAsset(headerUrls, [$"{id32}.jpg", $"{id64}.jpg", $"{id32}_header.jpg"]).ConfigureAwait(false);
+                            if (string.IsNullOrWhiteSpace(cmdHeaderRel) && commonEl.TryGetProperty("header_image", out var hi))
+                            {
+                                cmdHeaderRel = ExtractAssetRelPath(hi);
+                            }
+
+                            if (commonEl.TryGetProperty("clienticon", out var ci) && ci.ValueKind == JsonValueKind.String)
+                            {
+                                cmdClientIcon = ci.GetString();
+                            }
+                            else if (commonEl.TryGetProperty("icon", out var ico) && ico.ValueKind == JsonValueKind.String)
+                            {
+                                cmdClientIcon = ico.GetString();
+                            }
+                        }
+                    }
+                }
+                catch { }
             }
+
+            var cdns = originalGameAppId > 0
+                ? new[]
+                {
+                    $"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{originalGameAppId}",
+                    $"https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/{originalGameAppId}",
+                    $"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{originalGameAppId}",
+                    $"https://cdn.cloudflare.steamstatic.com/steam/apps/{originalGameAppId}",
+                    $"https://cdn.akamai.steamstatic.com/steam/apps/{originalGameAppId}"
+                }
+                : Array.Empty<string>();
+
+            // 1. Portada (library_capsule -> 600x900 vertical poster)
+            var verticalUrls = new List<string?>();
+            if (!string.IsNullOrWhiteSpace(cmdCapsuleRel))
+            {
+                foreach (var cdn in cdns) verticalUrls.Add($"{cdn}/{cmdCapsuleRel}");
+            }
+            foreach (var cdn in cdns)
+            {
+                verticalUrls.Add($"{cdn}/library_600x900_2x.jpg");
+                verticalUrls.Add($"{cdn}/library_600x900.jpg");
+                verticalUrls.Add($"{cdn}/library_capsule_2x.jpg");
+                verticalUrls.Add($"{cdn}/library_capsule.jpg");
+            }
+            if (!string.IsNullOrWhiteSpace(customCapsuleUrl)) verticalUrls.Add(customCapsuleUrl);
+
+            var verticalData = await DownloadFirstAvailableAsset(verticalUrls).ConfigureAwait(false);
+            await SaveAssetToGrid(verticalData, [
+                $"{id32}p.jpg", $"{id32}_p.jpg", $"{id32}p.png", $"{id32}_p.png",
+                $"{idSigned32}p.jpg", $"{idSigned32}_p.jpg", $"{idSigned32}p.png", $"{idSigned32}_p.png",
+                $"{id64}p.jpg", $"{id64}_p.jpg", $"{id64}p.png", $"{id64}_p.png"
+            ]).ConfigureAwait(false);
+
+            // 2. Fondo (library_hero -> 1920x620 hero banner)
+            var heroUrls = new List<string?>();
+            if (!string.IsNullOrWhiteSpace(cmdHeroRel))
+            {
+                foreach (var cdn in cdns) heroUrls.Add($"{cdn}/{cmdHeroRel}");
+            }
+            foreach (var cdn in cdns)
+            {
+                heroUrls.Add($"{cdn}/library_hero_2x.jpg");
+                heroUrls.Add($"{cdn}/library_hero.jpg");
+            }
+
+            var heroData = await DownloadFirstAvailableAsset(heroUrls).ConfigureAwait(false);
+            await SaveAssetToGrid(heroData, [
+                $"{id32}_hero.jpg", $"{id32}hero.jpg", $"{id32}_hero.png", $"{id32}hero.png",
+                $"{idSigned32}_hero.jpg", $"{idSigned32}hero.jpg", $"{idSigned32}_hero.png", $"{idSigned32}hero.png",
+                $"{id64}_hero.jpg", $"{id64}hero.jpg", $"{id64}_hero.png", $"{id64}hero.png"
+            ]).ConfigureAwait(false);
+
+            // 3. Logo (library_logo -> transparent logo.png)
+            var logoUrls = new List<string?>();
+            if (!string.IsNullOrWhiteSpace(cmdLogoRel))
+            {
+                foreach (var cdn in cdns) logoUrls.Add($"{cdn}/{cmdLogoRel}");
+            }
+            foreach (var cdn in cdns)
+            {
+                logoUrls.Add($"{cdn}/logo_2x.png");
+                logoUrls.Add($"{cdn}/logo.png");
+            }
+
+            var logoData = await DownloadFirstAvailableAsset(logoUrls).ConfigureAwait(false);
+            await SaveAssetToGrid(logoData, [
+                $"{id32}_logo.png", $"{id32}logo.png", $"{id32}_logo.jpg", $"{id32}logo.jpg",
+                $"{idSigned32}_logo.png", $"{idSigned32}logo.png", $"{idSigned32}_logo.jpg", $"{idSigned32}logo.jpg",
+                $"{id64}_logo.png", $"{id64}logo.png", $"{id64}_logo.jpg", $"{id64}logo.jpg"
+            ]).ConfigureAwait(false);
+
+            // 4. Portada Ancha (header from Assets section)
+            var headerUrls = new List<string?>();
+            if (!string.IsNullOrWhiteSpace(cmdHeaderRel))
+            {
+                foreach (var cdn in cdns) headerUrls.Add($"{cdn}/{cmdHeaderRel}");
+            }
+            foreach (var cdn in cdns)
+            {
+                headerUrls.Add($"{cdn}/header_2x.jpg");
+                headerUrls.Add($"{cdn}/header.jpg");
+                headerUrls.Add($"{cdn}/library_header_2x.jpg");
+                headerUrls.Add($"{cdn}/library_header.jpg");
+            }
+            if (!string.IsNullOrWhiteSpace(customHeaderUrl)) headerUrls.Add(customHeaderUrl);
+
+            var headerData = await DownloadFirstAvailableAsset(headerUrls).ConfigureAwait(false);
+            await SaveAssetToGrid(headerData, [
+                $"{id32}.jpg", $"{id32}.png", $"{id32}_header.jpg", $"{id32}_grid.jpg",
+                $"{idSigned32}.jpg", $"{idSigned32}.png", $"{idSigned32}_header.jpg", $"{idSigned32}_grid.jpg",
+                $"{id64}.jpg", $"{id64}.png", $"{id64}_header.jpg", $"{id64}_grid.jpg"
+            ]).ConfigureAwait(false);
+
+            // 5. Ícono (clienticon -> .ico)
+            string? resolvedIconPath = null;
+            var iconUrls = new List<string?>();
+            if (!string.IsNullOrWhiteSpace(cmdClientIcon))
+            {
+                iconUrls.Add($"https://cdn.cloudflare.steamstatic.com/steamcommunity/public/images/apps/{originalGameAppId}/{cmdClientIcon}.ico");
+                iconUrls.Add($"https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/{originalGameAppId}/{cmdClientIcon}.ico");
+                iconUrls.Add($"https://steamcdn-a.akamaihd.net/steamcommunity/public/images/apps/{originalGameAppId}/{cmdClientIcon}.ico");
+                iconUrls.Add($"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{originalGameAppId}/{cmdClientIcon}.ico");
+            }
+
+            var iconData = await DownloadFirstAvailableAsset(iconUrls).ConfigureAwait(false);
+            if (iconData != null && iconData.Length > 100)
+            {
+                await SaveAssetToGrid(iconData, [
+                    $"{id32}_icon.ico", $"{id32}.ico",
+                    $"{idSigned32}_icon.ico", $"{idSigned32}.ico",
+                    $"{id64}_icon.ico", $"{id64}.ico"
+                ]).ConfigureAwait(false);
+
+                var primaryIcon = Path.Combine(gridDir, $"{id32}_icon.ico");
+                if (File.Exists(primaryIcon))
+                {
+                    resolvedIconPath = primaryIcon;
+                }
+            }
+
+            return resolvedIconPath;
         }
         catch
         {
-            // Grid artwork download is non-fatal to shortcut creation
+            return null;
         }
     }
 
     /// <summary>
-    /// Adds a shortcut for the game executable across all local Steam user profiles, along with downloaded artwork.
+    /// Adds a shortcut for the game executable across all local Steam user profiles, along with downloaded artwork and icon.
     /// </summary>
     public static async Task<(bool Success, int UpdatedUsers, string Message)> AddSteamShortcutsAsync(
         string targetExePath,
@@ -483,21 +666,35 @@ public static class ShortcutHelper
         foreach (var userFolder in userFolders)
         {
             var vdfPath = Path.Combine(userFolder, "config", "shortcuts.vdf");
-            if (AddSteamShortcutToUser(vdfPath, shortcutName, targetExePath, startDir, iconPath, launchOptions))
+            string? effectiveIconPath = iconPath;
+
+            // 1. Download artwork & clienticon first if AppID is provided
+            if (originalGameAppId > 0)
+            {
+                var downloadedIcon = await InstallSteamGridArtworkAsync(
+                    userFolder,
+                    shortcutAppId32,
+                    originalGameAppId,
+                    customHeaderUrl,
+                    customCapsuleUrl,
+                    ct).ConfigureAwait(false);
+
+                if (!string.IsNullOrWhiteSpace(downloadedIcon) && File.Exists(downloadedIcon))
+                {
+                    effectiveIconPath = downloadedIcon;
+                }
+            }
+
+            // 2. If no clienticon downloaded and no custom icon provided, use the target .exe path
+            if (string.IsNullOrWhiteSpace(effectiveIconPath))
+            {
+                effectiveIconPath = targetExePath;
+            }
+
+            // 3. Add to shortcuts.vdf with effectiveIconPath
+            if (AddSteamShortcutToUser(vdfPath, shortcutName, targetExePath, startDir, effectiveIconPath, launchOptions))
             {
                 successCount++;
-
-                // Download & install full Steam grid artwork for this shortcut
-                if (originalGameAppId > 0)
-                {
-                    await InstallSteamGridArtworkAsync(
-                        userFolder,
-                        shortcutAppId32,
-                        originalGameAppId,
-                        customHeaderUrl,
-                        customCapsuleUrl,
-                        ct).ConfigureAwait(false);
-                }
             }
         }
 

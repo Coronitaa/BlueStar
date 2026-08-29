@@ -433,7 +433,7 @@ public partial class BrowseViewModel : ObservableObject
                     catch { }
                 }
 
-                // 3. If after enrichment this game is NSFW or DRM and user has disabled it in settings, remove it immediately
+                // 3. If after enrichment this game is NSFW or DRM and is part of a catalog category carousel, replenish it
                 if ((!allowNsfw && result.IsNsfw) || (!allowDrm && result.HasDrm))
                 {
                     App.Current?.Dispatcher?.Invoke(() =>
@@ -442,11 +442,6 @@ public partial class BrowseViewModel : ObservableObject
                         {
                             parentCategory.Items?.Remove(result);
                             _ = ReplenishCategoryAsync(parentCategory);
-                        }
-                        if (Results.Contains(result))
-                        {
-                            Results.Remove(result);
-                            ApplyFilter();
                         }
                     });
                 }
@@ -724,19 +719,6 @@ public partial class BrowseViewModel : ObservableObject
 
             var engine = await _engineDetector.DetectEngineAsync(installPath, CancellationToken.None).ConfigureAwait(true);
 
-            // Check if instance with this AppId already exists
-            var existing = await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
-            var found = existing.FirstOrDefault(i => i.AppId == result.AppId && result.AppId > 0);
-
-            if (found != null)
-            {
-                _notificationService?.ShowInfo("Existing Instance", $"{result.Name} is already in your library.");
-                result.IsCreating = false;
-                result.CreationStatus = null;
-                OnManageInstanceRequested?.Invoke(found);
-                return;
-            }
-
             // Attempt to download and parse DepotBox archive for this game
             string? archivePath = null;
             DepotBoxArchive? archive = null;
@@ -760,67 +742,68 @@ public partial class BrowseViewModel : ObservableObject
                 _logger.LogWarning(ex, "Could not pre-download DepotBox archive for {AppId}", result.AppId);
             }
 
-            GameInstance newInstance;
-            if (archive != null && archive.Games.Count > 0 && !string.IsNullOrWhiteSpace(archivePath))
+            // Verify if depots exist in DepotBox for this game
+            bool hasDepots = archive != null && archive.Games.Count > 0 && archive.Games.Any(g => g.Depots.Count > 0);
+            if (!hasDepots)
             {
-                var mainGame = archive.Games.FirstOrDefault(g => !g.IsDlc) ?? archive.Games[0];
-                var cleanMainName = CleanName(mainGame.Name) ?? result.Name;
+                _logger.LogWarning("No depots found in DepotBox for {Name} ({AppId})", result.Name, result.AppId);
+                ErrorMessage = $"No depots found for \"{result.Name}\" (AppID: {result.AppId}) in DepotBox.";
+                _notificationService?.ShowError("Depots Not Found", $"No depots were found for \"{result.Name}\" (AppID: {result.AppId}) in DepotBox.");
+                return;
+            }
 
-                newInstance = new GameInstance
+            // Generate unique instance name and non-colliding installation path
+            var allExisting = await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
+            var existingNames = allExisting.Select(i => i.Name).ToList();
+            var existingPaths = allExisting.Select(i => i.InstallPath).Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
+
+            var mainGame = archive!.Games.FirstOrDefault(g => !g.IsDlc) ?? archive.Games[0];
+            var rawName = CleanName(mainGame.Name) ?? result.Name;
+            var uniqueName = PathHelper.GenerateUniqueInstanceName(existingNames, rawName);
+            var uniqueInstallPath = PathHelper.GenerateUniqueInstallPath(defaultRoot, uniqueName, existingPaths);
+
+            var newInstance = new GameInstance
+            {
+                Name = uniqueName,
+                AppId = result.AppId,
+                InstallPath = uniqueInstallPath,
+                SourceArchivePath = archivePath,
+                Status = InstanceStatus.NotInstalled,
+                Metadata = meta,
+                Engine = engine,
+                Depots = archive.Games.SelectMany(g => g.Depots.Select(d => new DepotInfo
                 {
-                    Name = cleanMainName,
-                    AppId = result.AppId,
-                    InstallPath = PathHelper.EnsureGameSubfolder(defaultRoot, cleanMainName),
-                    SourceArchivePath = archivePath,
-                    Status = InstanceStatus.NotInstalled,
-                    Metadata = meta,
-                    Engine = engine,
-                    Depots = archive.Games.SelectMany(g => g.Depots.Select(d => new DepotInfo
+                    DepotId = d.DepotId,
+                    ManifestId = d.ManifestId,
+                    SizeBytes = d.SizeBytes,
+                    DepotKey = g.DepotKey,
+                    Name = d.Name ?? (g.IsDlc ? $"{CleanName(g.Name)} Depot" : "Base Game Content"),
+                    Category = d.Category,
+                    Platform = d.Platform,
+                    Architecture = d.Architecture,
+                    IsSharedDepot = false
+                })).DistinctBy(d => d.DepotId).ToList().AsReadOnly(),
+                Dlcs = archive.Games.Where(g => g.IsDlc).Select(dlc => new DlcInfo
+                {
+                    AppId = dlc.AppId,
+                    Name = CleanName(dlc.Name) ?? $"DLC {dlc.AppId}",
+                    Category = "DLC",
+                    Platform = dlc.Depots.FirstOrDefault(d => !string.IsNullOrWhiteSpace(d.Platform))?.Platform ?? "Universal",
+                    Depots = dlc.Depots.Select(d => new DepotInfo
                     {
                         DepotId = d.DepotId,
                         ManifestId = d.ManifestId,
                         SizeBytes = d.SizeBytes,
-                        DepotKey = g.DepotKey,
-                        Name = d.Name ?? (g.IsDlc ? $"{CleanName(g.Name)} Depot" : "Base Game Content"),
-                        Category = d.Category,
+                        DepotKey = dlc.DepotKey,
+                        Name = d.Name ?? $"{CleanName(dlc.Name)} Depot",
+                        Category = "DLC",
                         Platform = d.Platform,
                         Architecture = d.Architecture,
                         IsSharedDepot = false
-                    })).DistinctBy(d => d.DepotId).ToList().AsReadOnly(),
-                    Dlcs = archive.Games.Where(g => g.IsDlc).Select(dlc => new DlcInfo
-                    {
-                        AppId = dlc.AppId,
-                        Name = CleanName(dlc.Name) ?? $"DLC {dlc.AppId}",
-                        Category = "DLC",
-                        Platform = dlc.Depots.FirstOrDefault(d => !string.IsNullOrWhiteSpace(d.Platform))?.Platform ?? "Universal",
-                        Depots = dlc.Depots.Select(d => new DepotInfo
-                        {
-                            DepotId = d.DepotId,
-                            ManifestId = d.ManifestId,
-                            SizeBytes = d.SizeBytes,
-                            DepotKey = dlc.DepotKey,
-                            Name = d.Name ?? $"{CleanName(dlc.Name)} Depot",
-                            Category = "DLC",
-                            Platform = d.Platform,
-                            Architecture = d.Architecture,
-                            IsSharedDepot = false
-                        }).ToList().AsReadOnly(),
-                        IsInstalled = false
-                    }).ToList().AsReadOnly()
-                };
-            }
-            else
-            {
-                newInstance = new GameInstance
-                {
-                    Name = result.Name,
-                    AppId = result.AppId,
-                    InstallPath = installPath,
-                    Status = InstanceStatus.NotInstalled,
-                    Metadata = meta,
-                    Engine = engine
-                };
-            }
+                    }).ToList().AsReadOnly(),
+                    IsInstalled = false
+                }).ToList().AsReadOnly()
+            };
 
             var created = await _instanceManager.CreateAsync(newInstance, CancellationToken.None).ConfigureAwait(true);
             if (!string.IsNullOrWhiteSpace(archivePath) && File.Exists(archivePath))
@@ -828,7 +811,7 @@ public partial class BrowseViewModel : ObservableObject
                 ExtractManifestsToInstanceStorage(archivePath, created.Id);
             }
 
-            _logger.LogInformation("Created new instance: {Id}", created.Id);
+            _logger.LogInformation("Created new instance: {Id} ({Name})", created.Id, created.Name);
             _notificationService?.ShowSuccess("Instance Created", $"Configured {newInstance.Name} with {newInstance.Depots.Count} available depot(s).");
             _ = _statsService?.ReportInstanceAddedAsync(created.AppId, created.Name);
 

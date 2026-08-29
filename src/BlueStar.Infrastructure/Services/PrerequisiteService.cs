@@ -88,6 +88,17 @@ public sealed class PrerequisiteService : IPrerequisiteService
             IsEssential = false
         };
 
+        var dotnet9 = new PrerequisiteItem
+        {
+            Id = "dotnet_runtime_9",
+            Name = ".NET Runtime 9.0 (x64)",
+            Category = ".NET Runtime",
+            Description = "Required for DepotDownloader and multi-manifest game downloads.",
+            DownloadUrl = "https://aka.ms/dotnet/9.0/dotnet-runtime-win-x64.exe",
+            SilentArguments = "/install /quiet /norestart",
+            IsEssential = true
+        };
+
         var uePrereq = new PrerequisiteItem
         {
             Id = "ue_prereqs_x64",
@@ -104,6 +115,7 @@ public sealed class PrerequisiteService : IPrerequisiteService
         items.Add(directx);
         if (instance.Engine?.Type == EngineType.UnrealEngine) items.Add(uePrereq);
         items.Add(dotnet8);
+        items.Add(dotnet9);
 
         // 2. Check system installation status
         foreach (var item in items)
@@ -233,6 +245,12 @@ public sealed class PrerequisiteService : IPrerequisiteService
             {
                 var dotnetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "shared", "Microsoft.WindowsDesktop.App");
                 if (Directory.Exists(dotnetDir) && Directory.GetDirectories(dotnetDir, "8.*").Length > 0)
+                    return true;
+            }
+            else if (item.Id == "dotnet_runtime_9")
+            {
+                var dotnetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "shared", "Microsoft.NETCore.App");
+                if (Directory.Exists(dotnetDir) && Directory.GetDirectories(dotnetDir, "9.*").Length > 0)
                     return true;
             }
             else if (item.Id == "ue_prereqs_x64")

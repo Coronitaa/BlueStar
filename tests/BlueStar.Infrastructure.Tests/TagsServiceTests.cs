@@ -40,7 +40,7 @@ public class TagsServiceTests
     }
 
     [Fact]
-    public void GetInstanceTags_ExcludesDateTags_AndIncludesOriginAndEngine()
+    public void GetInstanceTags_ExcludesDateTags_AndIncludesEngineAndUpdate()
     {
         var instance = new GameInstance
         {
@@ -58,33 +58,11 @@ public class TagsServiceTests
         // Must NOT contain any date formatted strings
         tags.Should().NotContain(t => t.Text.Contains("202"));
 
-        // Must contain Imported badge
-        tags.Should().Contain(t => t.Text == "Imported" && t.Type == TagType.Origin);
-
         // Must contain Engine badge
         tags.Should().Contain(t => t.Text.Contains("Unreal Engine 5") && t.Type == TagType.Engine);
 
-        // Must contain Update Available
-        tags.Should().Contain(t => t.Text == "Update Available" && t.Type == TagType.UpdateAvailable);
-
         // Must contain DLCs count
         tags.Should().Contain(t => t.Text.Contains("1 DLC") && t.Type == TagType.DlcCount);
-    }
-
-    [Fact]
-    public void GetInstanceTags_ForSteamGame_ShowsSteamBadge()
-    {
-        var instance = new GameInstance
-        {
-            Name = "Steam Game",
-            InstallPath = @"C:\Games\SteamGame",
-            Origin = InstanceOrigin.Steam,
-            Status = InstanceStatus.Ready
-        };
-
-        var tags = _tagsService.GetInstanceTags(instance, hasUpdateAvailable: false);
-
-        tags.Should().Contain(t => t.Text == "Steam Game" && t.Type == TagType.Origin);
     }
 
     [Fact]

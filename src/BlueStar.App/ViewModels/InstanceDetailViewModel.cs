@@ -118,6 +118,15 @@ public partial class DepotUpdateItem : ObservableObject
     private long _sizeBytes;
 
     [ObservableProperty]
+    private string _category = "Base Game";
+
+    [ObservableProperty]
+    private string _platform = "Universal";
+
+    [ObservableProperty]
+    private string? _architecture;
+
+    [ObservableProperty]
     private bool _isSelected = true;
 
     public string FormattedSize => SizeBytes switch
@@ -126,6 +135,10 @@ public partial class DepotUpdateItem : ObservableObject
         > 1024 * 1024 => $"{SizeBytes / (1024.0 * 1024.0):F1} MB",
         _ => $"{SizeBytes / 1024.0:F0} KB"
     };
+
+    public string CategoryTag => string.IsNullOrWhiteSpace(Category) ? "Base Game" : Category;
+    public string PlatformTag => string.IsNullOrWhiteSpace(Platform) ? "Universal" : Platform;
+    public string? ArchitectureTag => Architecture;
 
     public string DisplayCurrentManifest => CurrentManifestId > 0 ? CurrentManifestId.ToString() : "Not downloaded";
     public string DisplayNewManifest => NewManifestId.ToString();
@@ -709,7 +722,7 @@ public partial class InstanceDetailViewModel : ObservableObject
     /// <summary>
     /// Loads details for the target game instance.
     /// </summary>
-    public async Task LoadInstanceAsync(GameInstance instance)
+    public async Task LoadInstanceAsync(GameInstance instance, bool autoCheckDepotUpdates = false)
     {
         try
         {
@@ -787,8 +800,8 @@ public partial class InstanceDetailViewModel : ObservableObject
             {
                 Name = cleanGameName,
                 InstallPath = installPath,
-                Dlcs = cleanDlcs,
                 Depots = depotList.AsReadOnly(),
+                Dlcs = cleanDlcs,
                 Engine = engine,
                 ExecutablePath = exe
             };
@@ -798,12 +811,14 @@ public partial class InstanceDetailViewModel : ObservableObject
             CustomLaunchArgs = Instance.LaunchArguments ?? string.Empty;
             IsUnityEngine = Instance.Engine?.Type == EngineType.Unity;
 
-            var selectableDepots = Instance.Depots.Select(d => new SelectableDepotItem
-            {
-                Depot = d,
-                IsSelected = IsDepotCompatibleWithCurrentOS(d),
-                OnSelectionChanged = RecalculateSelectedSize
-            }).ToList();
+            var selectableDepots = Instance.Depots
+                .Where(d => d.SizeBytes > 0 || !Instance.Depots.Any(other => other.SizeBytes > 0))
+                .Select(d => new SelectableDepotItem
+                {
+                    Depot = d,
+                    IsSelected = IsDepotCompatibleWithCurrentOS(d),
+                    OnSelectionChanged = RecalculateSelectedSize
+                }).ToList();
 
             var selectableDlcs = Instance.Dlcs.Select(d => new SelectableDlcItem
             {
@@ -816,6 +831,8 @@ public partial class InstanceDetailViewModel : ObservableObject
             Dlcs = new ObservableCollection<SelectableDlcItem>(selectableDlcs);
 
             RecalculateSelectedSize();
+
+            SelectedTab = "Overview";
 
             // Check capabilities: all instances support generic mods/workshop and emulators
             SupportsMods = true;
@@ -862,6 +879,11 @@ public partial class InstanceDetailViewModel : ObservableObject
             _ = CheckSteamVersionDateAsync();
             _ = LoadDlcsFromMetadataIfEmptyAsync();
 
+            if (autoCheckDepotUpdates)
+            {
+                _ = CheckAndOpenDepotUpdateModalAsync();
+            }
+
             OnPropertyChanged(nameof(IsModsTabVisible));
             if (!IsModsTabVisible && SelectedTab == "Mods")
             {
@@ -874,8 +896,8 @@ public partial class InstanceDetailViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error loading game instance details");
-            StatusMessage = $"❌ Error loading instance: {ex.Message}";
+            _logger.LogError(ex, "Failed to load instance details for {Name}", instance.Name);
+            _notificationService?.ShowError("Failed to Load Game", ex.Message);
         }
     }
 
@@ -970,71 +992,34 @@ public partial class InstanceDetailViewModel : ObservableObject
         {
             if (_metadataProvider is BlueStar.Infrastructure.Metadata.SteamStoreApiClient steamClient)
             {
-                var depotInfo = await steamClient.GetAppDepotInfoAsync(Instance.AppId, CancellationToken.None).ConfigureAwait(true);
-                var latestDate = depotInfo?.LatestBuildDate ?? await steamClient.GetLatestAppUpdateDateAsync(Instance.AppId, CancellationToken.None).ConfigureAwait(true);
+                var (hasUpdate, _, latestDate, latestDateText, installedDate, installedDateText) =
+                    await BlueStar.Infrastructure.Services.GameUpdateDetectionHelper.CheckInstanceUpdateDetailsAsync(Instance, steamClient, CancellationToken.None).ConfigureAwait(true);
 
                 if (latestDate.HasValue)
                 {
                     LatestVersionDate = latestDate.Value;
-                    LatestVersionText = $"{latestDate.Value:d MMM yyyy}";
+                    LatestVersionText = latestDateText;
                 }
-                else if (Instance.Metadata != null && !string.IsNullOrWhiteSpace(Instance.Metadata.ReleaseDate))
+                else if (!string.IsNullOrWhiteSpace(latestDateText))
                 {
-                    if (DateTimeOffset.TryParse(Instance.Metadata.ReleaseDate, out var relDate))
-                    {
-                        LatestVersionDate = relDate;
-                        LatestVersionText = Instance.Metadata.ReleaseDate;
-                    }
-                    else
-                    {
-                        LatestVersionText = Instance.Metadata.ReleaseDate;
-                    }
+                    LatestVersionText = latestDateText;
                 }
 
-                if (IsInstalled && depotInfo != null && Instance.Depots.Count > 0)
+                if (installedDate.HasValue)
                 {
-                    bool allDepotsMatch = true;
-                    bool hasCheckedDepot = false;
-
-                    foreach (var depot in Instance.Depots)
-                    {
-                        if (depotInfo.PublicManifests.TryGetValue(depot.DepotId, out var publicGid))
-                        {
-                            hasCheckedDepot = true;
-                            if (depot.ManifestId != publicGid)
-                            {
-                                allDepotsMatch = false;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (hasCheckedDepot && allDepotsMatch)
-                    {
-                        // Installed version matches the latest Steam public release!
-                        if (LatestVersionDate.HasValue)
-                        {
-                            InstalledVersionDate = LatestVersionDate.Value;
-                            InstalledVersionText = LatestVersionText;
-                        }
-                        HasGameUpdateAvailable = false;
-                    }
-                    else if (hasCheckedDepot && !allDepotsMatch)
-                    {
-                        // Installed depot is older than current public Steam branch
-                        HasGameUpdateAvailable = true;
-                    }
+                    InstalledVersionDate = installedDate.Value;
+                    InstalledVersionText = installedDateText;
                 }
-                else if (InstalledVersionDate.HasValue && LatestVersionDate.HasValue)
+                else if (!string.IsNullOrWhiteSpace(installedDateText))
                 {
-                    if (LatestVersionDate.Value > InstalledVersionDate.Value.AddDays(1))
-                    {
-                        HasGameUpdateAvailable = true;
-                    }
-                    else
-                    {
-                        HasGameUpdateAvailable = false;
-                    }
+                    InstalledVersionText = installedDateText;
+                }
+
+                HasGameUpdateAvailable = hasUpdate;
+                if (hasUpdate != Instance.HasUpdateAvailable)
+                {
+                    Instance = Instance with { HasUpdateAvailable = hasUpdate };
+                    await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
                 }
             }
         }
@@ -1057,9 +1042,20 @@ public partial class InstanceDetailViewModel : ObservableObject
             var manifests = await _apiClient.GetManifestsAsync(Instance.AppId, CancellationToken.None).ConfigureAwait(true);
             if (manifests.Count == 0)
             {
-                _notificationService?.ShowInfo(
-                    "Update not available on DepotBox",
-                    "A newer build was detected on Steam, but DepotBox does not have updated manifests uploaded for this game yet. Please check back later.");
+                if (HasGameUpdateAvailable)
+                {
+                    _notificationService?.ShowWarning(
+                        "Update Pending on DepotBox",
+                        $"A newer build was detected on Steam ({LatestVersionText ?? "latest release"}), but DepotBox contributors have not uploaded updated manifests for this game yet. Please check back later.",
+                        TimeSpan.FromSeconds(8));
+                }
+                else
+                {
+                    _notificationService?.ShowInfo(
+                        "Depots Up to Date",
+                        "No pending updates found on DepotBox.",
+                        TimeSpan.FromSeconds(5));
+                }
                 return;
             }
 
@@ -1067,15 +1063,21 @@ public partial class InstanceDetailViewModel : ObservableObject
             foreach (var man in manifests)
             {
                 var local = Instance.Depots.FirstOrDefault(d => d.DepotId == man.DepotId);
+                var size = man.SizeBytes > 0 ? man.SizeBytes : (local?.SizeBytes ?? 0);
+                if (size <= 0) continue; // Hide 0kb depots from update list
+
                 if (local == null || (local.ManifestId != man.ManifestId && man.ManifestId > 0))
                 {
                     outdatedDepots.Add(new DepotUpdateItem
                     {
                         DepotId = man.DepotId,
                         Name = local?.Name ?? $"Depot {man.DepotId}",
+                        Category = local?.Category ?? "Base Game",
+                        Platform = local?.Platform ?? "Universal",
+                        Architecture = local?.Architecture,
                         CurrentManifestId = local?.ManifestId ?? 0,
                         NewManifestId = man.ManifestId,
-                        SizeBytes = man.SizeBytes > 0 ? man.SizeBytes : (local?.SizeBytes ?? 0),
+                        SizeBytes = size,
                         IsSelected = true
                     });
                 }
@@ -1088,9 +1090,27 @@ public partial class InstanceDetailViewModel : ObservableObject
             }
             else
             {
-                _notificationService?.ShowInfo(
-                    "Depots Up to Date",
-                    "Depot manifests on DepotBox match the versions already installed on your instance. No new files pending download.");
+                if (HasGameUpdateAvailable)
+                {
+                    _notificationService?.ShowWarning(
+                        "Update Pending on DepotBox",
+                        $"Steam detected a newer build for {Instance.Name} ({LatestVersionText ?? "latest release"}), but the manifests currently hosted on DepotBox match your installed version. The new update has not been uploaded to DepotBox yet.",
+                        TimeSpan.FromSeconds(8));
+                }
+                else
+                {
+                    HasGameUpdateAvailable = false;
+                    if (Instance.HasUpdateAvailable)
+                    {
+                        Instance = Instance with { HasUpdateAvailable = false, UpdateDescription = null };
+                        _ = _instanceManager.UpdateAsync(Instance, CancellationToken.None);
+                    }
+
+                    _notificationService?.ShowInfo(
+                        "Depots Up to Date",
+                        "Depot manifests on DepotBox match the versions already installed on your instance. No new files pending download.",
+                        TimeSpan.FromSeconds(5));
+                }
             }
         }
         catch (Exception ex)
@@ -2983,7 +3003,7 @@ public partial class InstanceDetailViewModel : ObservableObject
             CreateStartMenuShortcut,
             CreateSteamShortcut,
             originalGameAppId: Instance?.AppId ?? 0,
-            customHeaderUrl: Instance?.Metadata?.HeaderImageUrl,
+            customHeaderUrl: Instance?.HeaderImageUrl ?? Instance?.Metadata?.HeaderImageUrl,
             customCapsuleUrl: Instance?.Metadata?.CapsuleImageUrl);
 
         ShortcutStatusMessage = result.Message;

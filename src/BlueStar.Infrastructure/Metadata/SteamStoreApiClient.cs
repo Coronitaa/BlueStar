@@ -169,6 +169,16 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                     appElement.TryGetProperty("success", out var s) && s.GetBoolean() &&
                     appElement.TryGetProperty("data", out var data))
                 {
+                    // 1.0 Official Game Name
+                    if (data.TryGetProperty("name", out var nameProp) && nameProp.ValueKind == JsonValueKind.String)
+                    {
+                        var officialName = nameProp.GetString();
+                        if (!string.IsNullOrWhiteSpace(officialName))
+                        {
+                            result.Name = System.Net.WebUtility.HtmlDecode(officialName.Trim());
+                        }
+                    }
+
                     // 1.1 DLC Count
                     if (data.TryGetProperty("dlc", out var dlcArray) && dlcArray.ValueKind == JsonValueKind.Array)
                     {
@@ -242,21 +252,20 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                         if (!string.IsNullOrWhiteSpace(img))
                             result.HeaderImageUrl = img;
                     }
-
-                    // 1.5 NSFW / Adult Content Detection
+                    // 1.5 NSFW / Adult Content Detection (Explicit sexual content / Hentai / Adults Only)
                     bool isNsfw = false;
-                    if (data.TryGetProperty("required_age", out var ageProp))
-                    {
-                        if (ageProp.ValueKind == JsonValueKind.Number && ageProp.GetInt32() >= 18) isNsfw = true;
-                        else if (ageProp.ValueKind == JsonValueKind.String && int.TryParse(ageProp.GetString(), out var age) && age >= 18) isNsfw = true;
-                    }
                     if (data.TryGetProperty("content_descriptors", out var cdProp))
                     {
                         if (cdProp.TryGetProperty("ids", out var idsProp) && idsProp.ValueKind == JsonValueKind.Array)
                         {
                             foreach (var id in idsProp.EnumerateArray())
                             {
-                                if (id.TryGetInt32(out var descriptorId) && descriptorId is 1 or 3 or 4 or 5)
+                                // Steam Content Descriptors:
+                                // 1 = Some Nudity or Sexual Content
+                                // 3 = Adult Only Sexual Content
+                                // 4 = Frequent Nudity or Sexual Content
+                                // 5 = General Mature Content (Violence, Language - NOT NSFW)
+                                if (id.TryGetInt32(out var descriptorId) && descriptorId is 3 or 4)
                                 {
                                     isNsfw = true;
                                     break;
@@ -266,11 +275,11 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                         if (cdProp.TryGetProperty("notes", out var cdNotes) && cdNotes.ValueKind == JsonValueKind.String)
                         {
                             var notes = cdNotes.GetString() ?? "";
-                            if (notes.Contains("sexual", StringComparison.OrdinalIgnoreCase) ||
-                                notes.Contains("nudity", StringComparison.OrdinalIgnoreCase) ||
-                                notes.Contains("adult", StringComparison.OrdinalIgnoreCase) ||
+                            if (notes.Contains("sexual content", StringComparison.OrdinalIgnoreCase) ||
+                                notes.Contains("explicit sexual", StringComparison.OrdinalIgnoreCase) ||
                                 notes.Contains("erotic", StringComparison.OrdinalIgnoreCase) ||
-                                notes.Contains("hentai", StringComparison.OrdinalIgnoreCase))
+                                notes.Contains("hentai", StringComparison.OrdinalIgnoreCase) ||
+                                notes.Contains("porn", StringComparison.OrdinalIgnoreCase))
                             {
                                 isNsfw = true;
                             }
@@ -283,29 +292,10 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                             if (g.TryGetProperty("description", out var gDescProp))
                             {
                                 var desc = gDescProp.GetString() ?? "";
-                                if (desc.Equals("Nudity", StringComparison.OrdinalIgnoreCase) ||
-                                    desc.Equals("Sexual Content", StringComparison.OrdinalIgnoreCase) ||
-                                    desc.Equals("Hentai", StringComparison.OrdinalIgnoreCase) ||
+                                if (desc.Equals("Hentai", StringComparison.OrdinalIgnoreCase) ||
                                     desc.Equals("Adult Only", StringComparison.OrdinalIgnoreCase) ||
-                                    desc.Equals("Mature", StringComparison.OrdinalIgnoreCase) ||
+                                    desc.Equals("Sexual Content", StringComparison.OrdinalIgnoreCase) ||
                                     desc.Equals("Erotic", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    isNsfw = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    if (data.TryGetProperty("categories", out var allCats) && allCats.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var c in allCats.EnumerateArray())
-                        {
-                            if (c.TryGetProperty("description", out var cDescProp))
-                            {
-                                var desc = cDescProp.GetString() ?? "";
-                                if (desc.Contains("Sexual", StringComparison.OrdinalIgnoreCase) ||
-                                    desc.Contains("Nudity", StringComparison.OrdinalIgnoreCase) ||
-                                    desc.Contains("Adult", StringComparison.OrdinalIgnoreCase))
                                 {
                                     isNsfw = true;
                                     break;
@@ -317,13 +307,9 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                     {
                         var n = result.Name;
                         if (n.Contains("Hentai", StringComparison.OrdinalIgnoreCase) ||
-                            n.Contains("Sex ", StringComparison.OrdinalIgnoreCase) ||
                             n.Contains("Porn", StringComparison.OrdinalIgnoreCase) ||
-                            n.Contains("Nude", StringComparison.OrdinalIgnoreCase) ||
                             n.Contains("Erotic", StringComparison.OrdinalIgnoreCase) ||
-                            n.Contains("Lewd", StringComparison.OrdinalIgnoreCase) ||
                             n.Contains("Adult Only", StringComparison.OrdinalIgnoreCase) ||
-                            n.Contains("18+", StringComparison.OrdinalIgnoreCase) ||
                             n.EndsWith(" Sex", StringComparison.OrdinalIgnoreCase))
                         {
                             isNsfw = true;

@@ -243,6 +243,7 @@ public partial class LibraryViewModel : ObservableObject
     private GameInstance? _pendingLaunchInstance;
 
     public Action<GameInstance>? OnManageInstanceRequested { get; set; }
+    public Action<GameInstance, bool>? OnManageInstanceRequestedWithUpdate { get; set; }
 
     public LibraryViewModel(
         IInstanceManager instanceManager,
@@ -777,9 +778,13 @@ public partial class LibraryViewModel : ObservableObject
                 catch { }
             }
 
+            var allExisting = await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
+            var existingNames = allExisting.Select(i => i.Name).ToList();
+            var uniqueName = PathHelper.GenerateUniqueInstanceName(existingNames, steamGame.Name);
+
             var instance = new GameInstance
             {
-                Name = steamGame.Name,
+                Name = uniqueName,
                 AppId = steamGame.AppId,
                 InstallPath = steamGame.FullPath,
                 ExecutablePath = exe,
@@ -882,7 +887,13 @@ public partial class LibraryViewModel : ObservableObject
             var mainGame = archive.Games.FirstOrDefault(g => !g.IsDlc) ?? archive.Games[0];
             var cleanMainName = CleanName(mainGame.Name) ?? $"App {mainGame.AppId}";
             var baseDir = Path.GetDirectoryName(zipPath) ?? string.Empty;
-            var installPath = PathHelper.EnsureGameSubfolder(baseDir, cleanMainName);
+
+            var allExisting = await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
+            var existingNames = allExisting.Select(i => i.Name).ToList();
+            var existingPaths = allExisting.Select(i => i.InstallPath).Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
+
+            var uniqueName = PathHelper.GenerateUniqueInstanceName(existingNames, cleanMainName);
+            var installPath = PathHelper.GenerateUniqueInstallPath(baseDir, uniqueName, existingPaths);
 
             var engine = await _engineDetector.DetectEngineAsync(installPath, CancellationToken.None).ConfigureAwait(true);
 
@@ -906,7 +917,7 @@ public partial class LibraryViewModel : ObservableObject
 
             _pendingArchive = archive;
             PendingZipPath = zipPath;
-            PreviewGameName = cleanMainName;
+            PreviewGameName = uniqueName;
             PreviewAppId = mainGame.AppId;
             PreviewEngine = engine;
             PreviewManifestDateFormatted = manifestDate.HasValue
@@ -1211,6 +1222,19 @@ public partial class LibraryViewModel : ObservableObject
         IsLoading = true;
         try
         {
+            var allExisting = await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
+            var colliding = allExisting.FirstOrDefault(i => string.Equals(i.InstallPath?.TrimEnd('\\', '/'), FolderPath.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase));
+            if (colliding != null)
+            {
+                FolderErrorMessage = $"Location collision: The selected folder is already in use by instance \"{colliding.Name}\".";
+                _notificationService?.ShowError("Folder Collision", $"The folder is already used by instance \"{colliding.Name}\". Please select a different folder.");
+                return;
+            }
+
+            var existingNames = allExisting.Select(i => i.Name).ToList();
+            var rawName = string.IsNullOrWhiteSpace(FolderGameName) ? Path.GetFileName(FolderPath) : FolderGameName.Trim();
+            var uniqueName = PathHelper.GenerateUniqueInstanceName(existingNames, rawName);
+
             GameMetadata? meta = null;
             IReadOnlyList<DlcInfo> dlcs = [];
             if (_metadataProvider != null && FolderAppId > 0 && FolderAppId != 480)
@@ -1225,7 +1249,7 @@ public partial class LibraryViewModel : ObservableObject
 
             var instance = new GameInstance
             {
-                Name = string.IsNullOrWhiteSpace(FolderGameName) ? Path.GetFileName(FolderPath) : FolderGameName.Trim(),
+                Name = uniqueName,
                 AppId = FolderAppId,
                 InstallPath = FolderPath,
                 ExecutablePath = File.Exists(FolderExecutablePath) ? FolderExecutablePath : null,
@@ -1451,41 +1475,19 @@ public partial class LibraryViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task CheckDepotBoxUpdatesAsync(object? item)
+    private void CheckDepotBoxUpdates(object? item)
     {
         var instance = item is InstanceCardItem card ? card.Instance : item as GameInstance;
         if (instance == null) return;
-
-        // Skip for Steam origin
         if (instance.Origin == InstanceOrigin.Steam) return;
 
-        _logger.LogInformation("Checking DepotBox updates for {Name}", instance.Name);
-        _notificationService?.ShowInfo("Checking for Updates", $"Checking DepotBox for newer builds of {instance.Name}...", TimeSpan.FromSeconds(4));
-
-        try
+        if (OnManageInstanceRequestedWithUpdate != null)
         {
-            if (_depotBoxApiClient != null && instance.AppId > 0)
-            {
-                var search = await _depotBoxApiClient.SearchGamesAsync(instance.AppId.ToString(), CancellationToken.None).ConfigureAwait(true);
-                var match = search.FirstOrDefault(s => s.AppId == instance.AppId);
-                if (match != null && match.IsAvailable)
-                {
-                    _notificationService?.ShowSuccess("DepotBox Check Complete", $"DepotBox build verified for {instance.Name}.", TimeSpan.FromSeconds(5));
-                }
-                else
-                {
-                    _notificationService?.ShowInfo("Up to Date", $"{instance.Name} is up to date on DepotBox.", TimeSpan.FromSeconds(5));
-                }
-            }
-            else
-            {
-                _notificationService?.ShowInfo("Up to Date", $"{instance.Name} is up to date.", TimeSpan.FromSeconds(4));
-            }
+            OnManageInstanceRequestedWithUpdate.Invoke(instance, true);
         }
-        catch (Exception ex)
+        else
         {
-            _logger.LogWarning(ex, "Failed to check DepotBox updates for {Name}", instance.Name);
-            _notificationService?.ShowWarning("Check Failed", $"Could not check DepotBox updates: {ex.Message}", TimeSpan.FromSeconds(6));
+            ManageInstance(instance);
         }
     }
 

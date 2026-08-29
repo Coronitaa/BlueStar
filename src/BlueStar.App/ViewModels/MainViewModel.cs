@@ -39,6 +39,15 @@ public partial class MainViewModel : ObservableObject
     private string _backgroundTaskStatusText = string.Empty;
 
     [ObservableProperty]
+    private double _totalTasksProgressPercentage;
+
+    [ObservableProperty]
+    private bool _hasMultipleActiveTasks;
+
+    [ObservableProperty]
+    private System.Collections.ObjectModel.ObservableCollection<BackgroundTaskItem> _activeBackgroundTasks = new();
+
+    [ObservableProperty]
     private bool _isTasksFlyoutOpen;
 
     public System.Collections.ObjectModel.ReadOnlyObservableCollection<NotificationItem> Notifications => _notificationService.Notifications;
@@ -92,6 +101,8 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string _steamTooltipText = "Steam client status";
 
+    private readonly IMetadataProvider? _metadataProvider;
+
     public MainViewModel(
         DownloadQueueManager downloadQueueManager,
         ISteamStatusService steamStatusService,
@@ -100,7 +111,8 @@ public partial class MainViewModel : ObservableObject
         IInstanceManager instanceManager,
         IBackgroundTaskService backgroundTaskService,
         IGameLauncher? gameLauncher = null,
-        IDepotBoxApiClient? apiClient = null)
+        IDepotBoxApiClient? apiClient = null,
+        IMetadataProvider? metadataProvider = null)
     {
         _downloadQueueManager = downloadQueueManager;
         _steamStatusService = steamStatusService;
@@ -110,6 +122,7 @@ public partial class MainViewModel : ObservableObject
         _backgroundTaskService = backgroundTaskService;
         _gameLauncher = gameLauncher;
         _apiClient = apiClient;
+        _metadataProvider = metadataProvider;
         _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
         _downloadQueueManager.Queue.CollectionChanged += (_, _) => _uiContext.Post(_ => UpdateDownloadStats(), null);
@@ -143,12 +156,7 @@ public partial class MainViewModel : ObservableObject
             await Task.Delay(150).ConfigureAwait(true);
 
             StartupStatusText = "Loading local instances and manifests...";
-            try
-            {
-                // Ensure instance manager and stored instances are fully resolved locally
-                _ = await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
-            }
-            catch { }
+            await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
 
             StartupStatusText = "Syncing Steam status...";
             await Task.Delay(150).ConfigureAwait(true);
@@ -159,6 +167,9 @@ public partial class MainViewModel : ObservableObject
             // Trigger smooth exit transition
             IsLoading = false;
             await RefreshRecentShortcutsAsync().ConfigureAwait(false);
+
+            // Queue background game updates check in bottom-right task bar
+            QueueGameUpdatesCheckBackgroundTask();
         }
         catch
         {
@@ -227,6 +238,58 @@ public partial class MainViewModel : ObservableObject
         {
             _notificationService.ShowError("Failed to Download Update", ex.Message);
         }
+    }
+
+    private void QueueGameUpdatesCheckBackgroundTask()
+    {
+        if (_metadataProvider is not BlueStar.Infrastructure.Metadata.SteamStoreApiClient steamClient)
+            return;
+
+        _backgroundTaskService.QueueTask(
+            "Game Updates Check",
+            "Library Instances",
+            async (progress, ct) =>
+            {
+                var instances = (await _instanceManager.GetAllAsync(ct).ConfigureAwait(false)).ToList();
+                if (instances.Count == 0)
+                {
+                    progress.Report(new BlueStar.Core.Models.BackgroundTaskProgress(100, "No installed games to scan.", "Complete"));
+                    return;
+                }
+
+                int checkedCount = 0;
+                int updatesFound = 0;
+                for (int i = 0; i < instances.Count; i++)
+                {
+                    if (ct.IsCancellationRequested) break;
+                    var inst = instances[i];
+                    var pct = (double)i / instances.Count * 100.0;
+                    progress.Report(new BlueStar.Core.Models.BackgroundTaskProgress(pct, $"Checking {inst.Name} ({i + 1}/{instances.Count})...", "Analyzing"));
+
+                    try
+                    {
+                        var (hasUpdate, desc) = await BlueStar.Infrastructure.Services.GameUpdateDetectionHelper.CheckInstanceUpdateAsync(inst, steamClient, ct).ConfigureAwait(false);
+                        if (hasUpdate != inst.HasUpdateAvailable || desc != inst.UpdateDescription)
+                        {
+                            var updated = inst with
+                            {
+                                HasUpdateAvailable = hasUpdate,
+                                UpdateDescription = desc
+                            };
+                            await _instanceManager.UpdateAsync(updated, ct).ConfigureAwait(false);
+                        }
+                        if (hasUpdate) updatesFound++;
+                    }
+                    catch { }
+
+                    checkedCount++;
+                }
+
+                var finalMessage = updatesFound > 0
+                    ? $"Scan complete: {updatesFound} update(s) detected across {checkedCount} games."
+                    : $"Scan complete: All {checkedCount} games are up to date.";
+                progress.Report(new BlueStar.Core.Models.BackgroundTaskProgress(100, finalMessage, "Complete"));
+            });
     }
 
     private void OnSteamStatusChanged(object? sender, SteamStatus status)
@@ -339,6 +402,7 @@ public partial class MainViewModel : ObservableObject
             vm.OnNavigateRequested = Navigate;
             vm.OnNavigateToCategoryRequested = NavigateToExploreCategory;
             vm.OnManageInstanceRequested = OpenInstanceDetail;
+            vm.OnManageInstanceRequestedWithUpdate = (inst, autoCheck) => OpenInstanceDetail(inst, autoCheckUpdates: autoCheck);
             view.DataContext = vm;
             CurrentView = view;
             return;
@@ -349,6 +413,7 @@ public partial class MainViewModel : ObservableObject
             var view = new LibraryView();
             var vm = App.Services.GetRequiredService<LibraryViewModel>();
             vm.OnManageInstanceRequested = OpenInstanceDetail;
+            vm.OnManageInstanceRequestedWithUpdate = (inst, autoCheck) => OpenInstanceDetail(inst, autoCheckUpdates: autoCheck);
             vm.OnNavigateRequested = Navigate;
             view.DataContext = vm;
             CurrentView = view;
@@ -377,13 +442,18 @@ public partial class MainViewModel : ObservableObject
     /// <summary>
     /// Opens the instance dashboard for a specific game instance.
     /// </summary>
-    public void OpenInstanceDetail(GameInstance instance)
+    public void OpenInstanceDetail(GameInstance instance) => OpenInstanceDetail(instance, autoCheckUpdates: false);
+
+    /// <summary>
+    /// Opens the instance dashboard for a specific game instance, optionally auto-checking DepotBox for updates.
+    /// </summary>
+    public void OpenInstanceDetail(GameInstance instance, bool autoCheckUpdates)
     {
         var view = new InstanceDetailView();
         var vm = App.Services.GetRequiredService<InstanceDetailViewModel>();
         vm.OnNavigateBack = () => Navigate("Library");
         view.DataContext = vm;
-        _ = vm.LoadInstanceAsync(instance);
+        _ = vm.LoadInstanceAsync(instance, autoCheckDepotUpdates: autoCheckUpdates);
         CurrentView = view;
     }
 
@@ -452,9 +522,41 @@ public partial class MainViewModel : ObservableObject
 
     private void UpdateBackgroundTaskStats()
     {
-        HasActiveTasks = _backgroundTaskService.HasActiveTasks;
-        ActiveTasksCount = _backgroundTaskService.ActiveTasksCount;
-        BackgroundTaskStatusText = ActiveTasksCount == 1 ? "1 background task active" : $"{ActiveTasksCount} background tasks active";
+        var active = _backgroundTaskService.Tasks.Where(t => t.IsActive).ToList();
+        ActiveTasksCount = active.Count;
+        HasActiveTasks = active.Count > 0;
+        HasMultipleActiveTasks = active.Count > 1;
+
+        if (active.Count == 0)
+        {
+            BackgroundTaskStatusText = "No active tasks";
+            TotalTasksProgressPercentage = 0;
+            ActiveBackgroundTasks.Clear();
+            if (IsTasksFlyoutOpen)
+            {
+                IsTasksFlyoutOpen = false;
+            }
+        }
+        else
+        {
+            var avg = active.Average(t => t.ProgressPercentage);
+            TotalTasksProgressPercentage = Math.Clamp(avg, 0, 100);
+            BackgroundTaskStatusText = active.Count == 1
+                ? $"{active[0].Title} ({active[0].ProgressPercentage:F0}%)"
+                : $"{active.Count} tasks ({TotalTasksProgressPercentage:F0}%)";
+
+            // Sync ActiveBackgroundTasks collection so UI updates cleanly
+            var toRemove = ActiveBackgroundTasks.Where(t => !active.Contains(t)).ToList();
+            foreach (var rem in toRemove) ActiveBackgroundTasks.Remove(rem);
+
+            foreach (var act in active)
+            {
+                if (!ActiveBackgroundTasks.Contains(act))
+                {
+                    ActiveBackgroundTasks.Add(act);
+                }
+            }
+        }
     }
 
     [RelayCommand]

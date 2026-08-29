@@ -546,6 +546,12 @@ public partial class DepotDownloaderProvider : IDownloadProvider
 
             if (process.ExitCode != 0)
             {
+                if (process.ExitCode == -2147450749 || process.ExitCode == unchecked((int)0x80008083))
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to download {depot.Name ?? depot.DepotId.ToString()}: DepotDownloader requires the .NET 9.0 Runtime (x64) which is not installed. Please install it from Settings -> Prerequisites or https://aka.ms/dotnet/9.0/dotnet-runtime-win-x64.exe (exit code {process.ExitCode}).");
+                }
+
                 throw new InvalidOperationException(
                     $"DepotDownloader exited with code {process.ExitCode} for depot {depot.DepotId}. Args: {args}");
             }
