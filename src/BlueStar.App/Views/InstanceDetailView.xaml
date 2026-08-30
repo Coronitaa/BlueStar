@@ -155,15 +155,31 @@
                     </Grid>
                 </Border>
 
-                <!-- ═══ STATUS FEEDBACK MESSAGE ═══ -->
+                <!-- ═══ STATUS FEEDBACK MESSAGE / PROGRESS ═══ -->
                 <Border Background="{StaticResource SurfaceCardBrush}"
                         BorderBrush="{StaticResource AccentBrush}"
                         BorderThickness="1"
                         CornerRadius="{StaticResource RadiusMd}"
                         Padding="14,10" Margin="0,0,0,16"
                         Visibility="{Binding StatusMessage, Converter={StaticResource NullToVisibilityConverter}}">
-                    <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource BodyMedium}"
-                               TextWrapping="Wrap" Foreground="{StaticResource PrimaryTextBrush}"/>
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" Style="{StaticResource BodyMedium}"
+                                       TextWrapping="Wrap" Foreground="{StaticResource PrimaryTextBrush}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding GameFixDeployProgress, StringFormat='{}{0:F0}%'}"
+                                       Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}" FontSize="13"
+                                       Visibility="{Binding IsGameFixDeployProgressVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                        </Grid>
+                        <ProgressBar Margin="0,8,0,0" Value="{Binding GameFixDeployProgress}" Maximum="100" Height="6"
+                                     Foreground="{StaticResource AccentBrush}"
+                                     Background="{StaticResource SurfaceInputBrush}"
+                                     BorderThickness="0"
+                                     Visibility="{Binding IsGameFixDeployProgressVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    </StackPanel>
                 </Border>
 
                 <!-- ═══ MODRINTH-STYLE DYNAMIC TAB BAR ═══ -->
@@ -1000,31 +1016,7 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- ═══ 4. GAME FIX DEPLOYMENT PROGRESS BAR ═══ -->
-                    <Border Margin="0,18,0,0" CornerRadius="{StaticResource RadiusMd}"
-                            Background="{StaticResource SurfaceCardElevatedBrush}"
-                            BorderBrush="{StaticResource AccentBrush}"
-                            BorderThickness="1.5"
-                            Padding="18,14"
-                            Visibility="{Binding IsGameFixDeployProgressVisible, Converter={StaticResource BoolToVisibilityConverter}}">
-                        <StackPanel>
-                            <Grid Margin="0,0,0,8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="⚙ " FontSize="13"/>
-                                    <TextBlock Text="{Binding GameFixDeployProgressMessage}" Style="{StaticResource BodyMedium}" FontWeight="SemiBold"/>
-                                </StackPanel>
-                                <TextBlock Grid.Column="1" Text="{Binding GameFixDeployProgress, StringFormat='{}{0:F0}%'}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}" FontSize="13"/>
-                            </Grid>
-                            <ProgressBar Value="{Binding GameFixDeployProgress}" Maximum="100" Height="8"
-                                         Foreground="{StaticResource AccentBrush}"
-                                         Background="{StaticResource SurfaceInputBrush}"
-                                         BorderThickness="0"/>
-                        </StackPanel>
-                    </Border>
+
 
                     <!-- ═══ 5. ACTIVE INSTALLED FIX LAYERS STACK ═══ -->
                     <Border Style="{StaticResource Card}" Margin="0,18,0,0"
@@ -1090,21 +1082,11 @@
                             Visibility="{Binding IsSpecificFixesSectionVisible, Converter={StaticResource BoolToVisibilityConverter}}">
                         <StackPanel>
                             <Grid Margin="0,0,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0">
+                                <StackPanel>
                                     <TextBlock Text="Game-Specific Emulators" Style="{StaticResource H2}"/>
                                     <TextBlock Text="Tested emulators and fixes for this game."
                                                Style="{StaticResource Caption}" Margin="0,2,0,0"/>
                                 </StackPanel>
-                                <Button Grid.Column="1"
-                                        Content="🔄 Refresh"
-                                        Style="{StaticResource GhostButton}"
-                                        Padding="12,6"
-                                        Command="{Binding LoadGameFixesCommand}"
-                                        IsEnabled="{Binding IsLoadingGameFixes, Converter={StaticResource InverseBoolConverter}}"/>
                             </Grid>
 
                             <Separator Margin="0,12,0,16" Background="{StaticResource SubtleBorderBrush}"/>

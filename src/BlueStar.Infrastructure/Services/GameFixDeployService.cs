@@ -120,7 +120,8 @@ public sealed class GameFixDeployService : IGameFixDeployService
                 });
             });
 
-            var zipPath = await _apiClient.DownloadGameFixAsync(fix.Id, cacheDir, downloadProgress, ct).ConfigureAwait(false);
+            var identifier = !string.IsNullOrWhiteSpace(fix.DownloadName) ? fix.DownloadName : fix.Id;
+            var zipPath = await _apiClient.DownloadGameFixAsync(identifier, cacheDir, downloadProgress, ct).ConfigureAwait(false);
 
             if (!File.Exists(zipPath))
             {
@@ -157,15 +158,21 @@ public sealed class GameFixDeployService : IGameFixDeployService
                 ? Path.GetDirectoryName(instance.ExecutablePath)!
                 : targetBaseDir;
 
-            // Determine if staging folder has directory structure or is flat
-            var stagedEntries = Directory.GetFileSystemEntries(stagingDir, "*", SafeEnumOptions);
+            // Determine effective staging directory (unwrap single top-level directory if present)
+            var rootSubDirs = Directory.GetDirectories(stagingDir);
+            var rootFiles = Directory.GetFiles(stagingDir);
+            string effectiveStagingDir = (rootSubDirs.Length == 1 && rootFiles.Length == 0)
+                ? rootSubDirs[0]
+                : stagingDir;
+
+            var stagedEntries = Directory.GetFileSystemEntries(effectiveStagingDir, "*", SafeEnumOptions);
             if (stagedEntries.Length == 0)
             {
                 throw new InvalidOperationException("The downloaded fix archive is empty.");
             }
 
-            var stagingFiles = Directory.GetFiles(stagingDir, "*", SafeEnumOptions);
-            bool isFlatArchive = !Directory.GetDirectories(stagingDir).Any();
+            var stagingFiles = Directory.GetFiles(effectiveStagingDir, "*", SafeEnumOptions);
+            bool isFlatArchive = !Directory.GetDirectories(effectiveStagingDir).Any();
 
             // Destination directory decision:
             // If the archive is flat (no subdirectories) and the game's executable is inside a subfolder (e.g. Binaries/Win64)
@@ -196,7 +203,7 @@ public sealed class GameFixDeployService : IGameFixDeployService
 
             foreach (var srcFile in stagingFiles)
             {
-                var relPath = Path.GetRelativePath(stagingDir, srcFile);
+                var relPath = Path.GetRelativePath(effectiveStagingDir, srcFile);
                 var destFile = Path.Combine(deploymentTargetDir, relPath);
                 var destParent = Path.GetDirectoryName(destFile);
 

@@ -357,70 +357,124 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
 
         _logger.LogInformation("Starting download for GameFix={Fix}", fixIdOrFilename);
 
-        string param = fixIdOrFilename.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
-            ? $"file={Uri.EscapeDataString(fixIdOrFilename)}"
-            : $"id={Uri.EscapeDataString(fixIdOrFilename)}";
-
-        using var request = await CreateRequestAsync(HttpMethod.Get, $"/api/game-fixes/download?{param}", ct).ConfigureAwait(false);
-
-        using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-        await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
-
-        var totalBytes = response.Content.Headers.ContentLength ?? -1;
-
-        // Determine destination file name
-        var filename = fixIdOrFilename.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
-            ? fixIdOrFilename
-            : $"{fixIdOrFilename}.zip";
-
-        if (response.Content.Headers.ContentDisposition?.FileName != null)
+        HttpResponseMessage response;
+        if (fixIdOrFilename.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            fixIdOrFilename.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
-            var serverFileName = response.Content.Headers.ContentDisposition.FileName.Trim('\"', '\'');
-            if (!string.IsNullOrWhiteSpace(serverFileName))
+            var directReq = new HttpRequestMessage(HttpMethod.Get, fixIdOrFilename);
+            response = await _http.SendAsync(directReq, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+        }
+        else
+        {
+            var cleanFilename = fixIdOrFilename.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+                ? fixIdOrFilename
+                : $"{fixIdOrFilename}.zip";
+
+            var cleanId = fixIdOrFilename.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+                ? Path.GetFileNameWithoutExtension(fixIdOrFilename)
+                : fixIdOrFilename;
+
+            // Try file= query first as documented in DepotBox API, then id= as fallback
+            var primaryUrl = $"/api/game-fixes/download?file={Uri.EscapeDataString(cleanFilename)}";
+            var fallbackUrl = $"/api/game-fixes/download?id={Uri.EscapeDataString(cleanId)}";
+
+            using var primaryReq = await CreateRequestAsync(HttpMethod.Get, primaryUrl, ct).ConfigureAwait(false);
+            var primaryResp = await _http.SendAsync(primaryReq, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+
+            if (primaryResp.IsSuccessStatusCode || (int)primaryResp.StatusCode is 301 or 302 or 307 or 308)
             {
-                filename = serverFileName;
+                response = primaryResp;
+            }
+            else
+            {
+                primaryResp.Dispose();
+                _logger.LogWarning("DepotBox primary game-fix download {Url} failed, trying fallback {Fallback}", primaryUrl, fallbackUrl);
+                using var fallbackReq = await CreateRequestAsync(HttpMethod.Get, fallbackUrl, ct).ConfigureAwait(false);
+                response = await _http.SendAsync(fallbackReq, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+                await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
             }
         }
 
-        var filePath = Path.HasExtension(targetPath) && targetPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
-            ? targetPath
-            : Path.Combine(targetPath, filename);
-
-        var dir = Path.GetDirectoryName(filePath);
-        if (!string.IsNullOrEmpty(dir))
+        // Handle possible 3xx redirects if not auto-followed
+        if ((int)response.StatusCode is 301 or 302 or 303 or 307 or 308 && response.Headers.Location != null)
         {
-            Directory.CreateDirectory(dir);
+            var redirectUri = response.Headers.Location.IsAbsoluteUri
+                ? response.Headers.Location
+                : new Uri(new Uri(_appSettings?.DefaultApiUrl ?? "https://depotbox.org"), response.Headers.Location);
+
+            response.Dispose();
+            using var redirectReq = new HttpRequestMessage(HttpMethod.Get, redirectUri);
+            response = await _http.SendAsync(redirectReq, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
         }
 
-        await using var contentStream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        await using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, DownloadBufferSize, useAsync: true);
-
-        var buffer = new byte[DownloadBufferSize];
-        long totalRead = 0;
-        int bytesRead;
-        var lastReport = DateTimeOffset.MinValue;
-
-        while ((bytesRead = await contentStream.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+        using (response)
         {
-            await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct).ConfigureAwait(false);
-            totalRead += bytesRead;
+            var totalBytes = response.Content.Headers.ContentLength ?? -1;
 
-            if (progress is not null && DateTimeOffset.UtcNow - lastReport > TimeSpan.FromMilliseconds(250))
+            // Determine destination file name
+            var filename = fixIdOrFilename.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+                ? fixIdOrFilename
+                : $"{fixIdOrFilename}.zip";
+
+            if (response.Content.Headers.ContentDisposition?.FileName != null)
             {
-                var pct = totalBytes > 0 ? (double)totalRead / totalBytes * 100.0 : 0;
-                progress.Report(new DownloadProgress
+                var serverFileName = response.Content.Headers.ContentDisposition.FileName.Trim('\"', '\'');
+                if (!string.IsNullOrWhiteSpace(serverFileName))
                 {
-                    TotalBytes = totalBytes,
-                    DownloadedBytes = totalRead,
-                    Percentage = pct,
-                    CurrentFile = Path.GetFileName(filePath)
-                });
-                lastReport = DateTimeOffset.UtcNow;
+                    filename = serverFileName;
+                }
+            }
+
+            var filePath = Path.HasExtension(targetPath) && targetPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+                ? targetPath
+                : Path.Combine(targetPath, filename);
+
+            var dir = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            try
+            {
+                await using var contentStream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+                await using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, DownloadBufferSize, useAsync: true);
+
+                var buffer = new byte[DownloadBufferSize];
+                long totalRead = 0;
+                int bytesRead;
+                var lastReport = DateTimeOffset.MinValue;
+
+                while ((bytesRead = await contentStream.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+                {
+                    await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct).ConfigureAwait(false);
+                    totalRead += bytesRead;
+
+                    if (progress is not null && DateTimeOffset.UtcNow - lastReport > TimeSpan.FromMilliseconds(250))
+                    {
+                        var pct = totalBytes > 0 ? (double)totalRead / totalBytes * 100.0 : 0;
+                        progress.Report(new DownloadProgress
+                        {
+                            TotalBytes = totalBytes,
+                            DownloadedBytes = totalRead,
+                            Percentage = pct,
+                            CurrentFile = Path.GetFileName(filePath)
+                        });
+                        lastReport = DateTimeOffset.UtcNow;
+                    }
+                }
+
+                _logger.LogInformation("GameFix download complete: {Path} ({Bytes} bytes)", filePath, totalRead);
+                return filePath;
+            }
+            catch
+            {
+                try { if (File.Exists(filePath)) File.Delete(filePath); } catch { }
+                throw;
             }
         }
-
-        _logger.LogInformation("GameFix download complete: {Path} ({Bytes} bytes)", filePath, totalRead);
-        return filePath;
     }
 
     public static IReadOnlyList<GameFixInfo> ParseGameFixes(string json)
