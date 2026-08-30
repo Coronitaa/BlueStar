@@ -357,69 +357,118 @@
                 <StackPanel Visibility="{Binding SelectedTab, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Files}">
                     
                     <!-- ═══ GAME BUILD & VERSION SELECTOR ═══ -->
-                    <Border Style="{StaticResource Card}" Margin="0,0,0,16" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1">
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,16" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1"
+                            AllowDrop="True" Drop="DepotDropZone_Drop" DragOver="DepotDropZone_DragOver">
                         <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="20"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
 
-                            <StackPanel Grid.Column="0">
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                    <TextBlock Text="🎮 Game Build &amp; Branch Version" Style="{StaticResource H3}" Margin="0,0,8,0"/>
-                                    <Border Background="{StaticResource AccentBgBrush}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,2"
-                                            Visibility="{Binding ActiveBuildBadgeText, Converter={StaticResource NullToVisibilityConverter}}">
-                                        <TextBlock Text="{Binding ActiveBuildBadgeText}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
-                                    </Border>
+                            <Grid Grid.Row="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="20"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                        <TextBlock Text="🎮 Game Build &amp; Branch Version" Style="{StaticResource H3}" Margin="0,0,8,0"/>
+                                        <Border Background="{StaticResource AccentBgBrush}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,2"
+                                                Visibility="{Binding ActiveBuildBadgeText, Converter={StaticResource NullToVisibilityConverter}}">
+                                            <TextBlock Text="{Binding ActiveBuildBadgeText}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="Select target build or drag &amp; drop a Depots ZIP archive from cs.rin.ru / DepotBox. DLCs and fixes maintain full intercompatibility."
+                                               Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                                    <ComboBox ItemsSource="{Binding AvailableBuilds}"
+                                              SelectedItem="{Binding SelectedBuild, Mode=TwoWay}"
+                                              Style="{StaticResource DarkComboBox}"
+                                              HorizontalAlignment="Stretch">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,3">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}"/>
+                                                        <TextBlock Text="{Binding Description, FallbackValue=''}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}"/>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+                                                        <TextBlock Text="{Binding FormattedDate}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,8,0"/>
+                                                        <Border Background="{StaticResource SurfaceCardBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="6,1">
+                                                            <TextBlock Text="{Binding Source}" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                        </Border>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
                                 </StackPanel>
-                                <TextBlock Text="Select which build or branch version to target for download and installation. DLCs, mods, and emulator layers will maintain intercompatibility."
-                                           Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,10"/>
 
-                                <ComboBox ItemsSource="{Binding AvailableBuilds}"
-                                          SelectedItem="{Binding SelectedBuild, Mode=TwoWay}"
-                                          Style="{StaticResource DarkComboBox}"
-                                          HorizontalAlignment="Stretch">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid Margin="0,3">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <StackPanel Grid.Column="0">
-                                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}"/>
-                                                    <TextBlock Text="{Binding Description, FallbackValue=''}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}"/>
-                                                </StackPanel>
-                                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
-                                                    <TextBlock Text="{Binding FormattedDate}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,8,0"/>
-                                                    <Border Background="{StaticResource SurfaceCardBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="6,1">
-                                                        <TextBlock Text="{Binding Source}" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
-                                                    </Border>
-                                                </StackPanel>
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
-                            </StackPanel>
-
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                <Button Content="🔄 Scan Builds"
-                                        Style="{StaticResource SecondaryButton}"
-                                        Padding="14,8" Margin="0,0,0,6"
-                                        Command="{Binding LoadAvailableBuildsCommand}"
-                                        IsEnabled="{Binding IsLoadingBuilds, Converter={StaticResource InverseBoolConverter}}"/>
-                                <StackPanel Orientation="Horizontal">
-                                    <Button Content="➕ Custom Build"
-                                            Style="{StaticResource SecondaryButton}"
-                                            Padding="10,6" Margin="0,0,6,0" FontSize="11"
-                                            Command="{Binding OpenAddCustomBuildModalCommand}"/>
-                                    <Button Content="📁 Import .manifest"
-                                            Style="{StaticResource GhostButton}"
-                                            Padding="8,6" FontSize="11"
-                                            Command="{Binding ImportManifestFilesDirectlyCommand}"/>
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                    <Button Content="📦 Import ZIP Package..."
+                                            Style="{StaticResource PrimaryButton}"
+                                            Padding="14,8" Margin="0,0,0,6"
+                                            Command="{Binding ImportDepotZipPackageCommand}"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Content="🔄 Scan"
+                                                Style="{StaticResource SecondaryButton}"
+                                                Padding="8,6" Margin="0,0,6,0" FontSize="11"
+                                                Command="{Binding LoadAvailableBuildsCommand}"
+                                                IsEnabled="{Binding IsLoadingBuilds, Converter={StaticResource InverseBoolConverter}}"/>
+                                        <Button Content="➕ Custom"
+                                                Style="{StaticResource SecondaryButton}"
+                                                Padding="8,6" Margin="0,0,6,0" FontSize="11"
+                                                Command="{Binding OpenAddCustomBuildModalCommand}"/>
+                                        <Button Content="🌐 Sources ▾"
+                                                Style="{StaticResource GhostButton}"
+                                                Padding="8,6" FontSize="11"
+                                                Command="{Binding ToggleCommunityLinksMenuCommand}"/>
+                                    </StackPanel>
                                 </StackPanel>
-                            </StackPanel>
+                            </Grid>
+
+                            <!-- Community Manifest Sources Menu Popup / Card -->
+                            <Border Grid.Row="1" Background="{StaticResource SurfaceInputBrush}"
+                                    BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                                    CornerRadius="{StaticResource RadiusMd}"
+                                    Padding="14,10" Margin="0,12,0,0"
+                                    Visibility="{Binding IsCommunityLinksMenuOpen, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,8">
+                                        <TextBlock Text="🌐 Find Manifests, Builds &amp; Depots for this Game:" Style="{StaticResource CaptionBold}"/>
+                                        <Button Content="✕" Style="{StaticResource GhostButton}" HorizontalAlignment="Right"
+                                                Padding="4,0" FontSize="11" Command="{Binding CloseCommunityLinksMenuCommand}"/>
+                                    </Grid>
+                                    <WrapPanel Orientation="Horizontal">
+                                        <Button Content="🔍 SteamDB Depots &amp; Manifests"
+                                                Style="{StaticResource SecondaryButton}"
+                                                Padding="10,5" Margin="0,0,8,6" FontSize="11"
+                                                Command="{Binding OpenCommunityLinkCommand}" CommandParameter="steamdb_depots"/>
+                                        <Button Content="📜 SteamDB Patch &amp; Build History"
+                                                Style="{StaticResource SecondaryButton}"
+                                                Padding="10,5" Margin="0,0,8,6" FontSize="11"
+                                                Command="{Binding OpenCommunityLinkCommand}" CommandParameter="steamdb_patches"/>
+                                        <Button Content="💬 cs.rin.ru Thread &amp; Depots Search"
+                                                Style="{StaticResource SecondaryButton}"
+                                                Padding="10,5" Margin="0,0,8,6" FontSize="11"
+                                                Command="{Binding OpenCommunityLinkCommand}" CommandParameter="csrinru"/>
+                                        <Button Content="⚡ DepotBox Hub"
+                                                Style="{StaticResource SecondaryButton}"
+                                                Padding="10,5" Margin="0,0,8,6" FontSize="11"
+                                                Command="{Binding OpenCommunityLinkCommand}" CommandParameter="depotbox"/>
+                                        <Button Content="📂 Open Instance Manifests Folder"
+                                                Style="{StaticResource GhostButton}"
+                                                Padding="10,5" Margin="0,0,0,6" FontSize="11"
+                                                Command="{Binding OpenCommunityLinkCommand}" CommandParameter="manifest_dir"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
                         </Grid>
                     </Border>
 

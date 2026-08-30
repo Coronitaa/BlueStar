@@ -578,6 +578,9 @@ public partial class InstanceDetailViewModel : ObservableObject
     [ObservableProperty]
     private ObservableCollection<CustomDepotManifestItem> _customBuildDepots = [];
 
+    [ObservableProperty]
+    private bool _isCommunityLinksMenuOpen;
+
     // ── Download progress exposed to UI ──
     [ObservableProperty]
     private DownloadJobItem? _activeJob;
@@ -3778,6 +3781,192 @@ public partial class InstanceDetailViewModel : ObservableObject
                 "Manifests Imported",
                 $"Imported {importedDepots.Count} manifest file(s) for {Instance.Name}. Ready to download or switch.");
             StatusMessage = $"📁 Imported {importedDepots.Count} manifest file(s).";
+        }
+    }
+
+    [RelayCommand]
+    public void ToggleCommunityLinksMenu()
+    {
+        IsCommunityLinksMenuOpen = !IsCommunityLinksMenuOpen;
+    }
+
+    [RelayCommand]
+    public void CloseCommunityLinksMenu()
+    {
+        IsCommunityLinksMenuOpen = false;
+    }
+
+    [RelayCommand]
+    public void OpenCommunityLink(string? linkType)
+    {
+        IsCommunityLinksMenuOpen = false;
+        if (Instance == null) return;
+
+        try
+        {
+            switch (linkType?.ToLowerInvariant())
+            {
+                case "steamdb_depots":
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo($"https://steamdb.info/app/{Instance.AppId}/depots/") { UseShellExecute = true });
+                    break;
+                case "steamdb_patches":
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo($"https://steamdb.info/app/{Instance.AppId}/patchnotes/") { UseShellExecute = true });
+                    break;
+                case "csrinru":
+                    var query = Uri.EscapeDataString($"{Instance.Name} manifest");
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo($"https://cs.rin.ru/forum/search.php?keywords={query}&terms=all&author=&sc=1&sf=all&sk=t&sd=d&sr=topics&st=0&ch=300&t=0&submit=Search") { UseShellExecute = true });
+                    break;
+                case "depotbox":
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://depotbox.org/dashboard") { UseShellExecute = true });
+                    break;
+                case "manifest_dir":
+                    var manifestDir = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                        "BlueStar", "instances", Instance.Id.ToString(), "manifests");
+                    Directory.CreateDirectory(manifestDir);
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(manifestDir) { UseShellExecute = true });
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to open link: {LinkType}", linkType);
+        }
+    }
+
+    [RelayCommand]
+    public async Task ImportDepotZipPackageAsync(string? zipPath = null)
+    {
+        if (Instance == null) return;
+
+        if (string.IsNullOrWhiteSpace(zipPath))
+        {
+            var ofd = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Import Depots / Manifests ZIP Package",
+                Filter = "Depot ZIP Archive (*.zip)|*.zip|Steam Manifest (*.manifest)|*.manifest|All Files (*.*)|*.*",
+                Multiselect = false
+            };
+
+            if (ofd.ShowDialog() != true || string.IsNullOrWhiteSpace(ofd.FileName)) return;
+            zipPath = ofd.FileName;
+        }
+
+        var instanceManifestDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "BlueStar", "instances", Instance.Id.ToString(), "manifests");
+        Directory.CreateDirectory(instanceManifestDir);
+
+        if (zipPath.EndsWith(".manifest", StringComparison.OrdinalIgnoreCase))
+        {
+            // Single manifest file drop/selection
+            var fileName = Path.GetFileName(zipPath);
+            var dest = Path.Combine(instanceManifestDir, fileName);
+            try { File.Copy(zipPath, dest, overwrite: true); } catch { }
+
+            var match = System.Text.RegularExpressions.Regex.Match(fileName, @"^(\d+)_(\d+)\.manifest$");
+            if (match.Success &&
+                uint.TryParse(match.Groups[1].Value, out var dId) &&
+                ulong.TryParse(match.Groups[2].Value, out var mId))
+            {
+                HandleDepotManifestUpdated(dId, mId);
+                _notificationService?.ShowSuccess(
+                    "Manifest Imported",
+                    $"Manifest for Depot {dId} imported ({mId}).");
+            }
+            return;
+        }
+
+        IsLoadingBuilds = true;
+        StatusMessage = "⏳ Extracting and analyzing depot package...";
+
+        try
+        {
+            var result = await BlueStar.Infrastructure.Services.DepotPackageZipImporter.ImportZipAsync(
+                zipPath, instanceManifestDir, CancellationToken.None).ConfigureAwait(true);
+
+            if (!result.Success)
+            {
+                _notificationService?.ShowWarning(
+                    "Import Failed",
+                    result.ErrorMessage ?? "No manifests or depot information found inside the ZIP package.");
+                StatusMessage = "⚠️ Could not find manifests in ZIP package.";
+                return;
+            }
+
+            // Update Instance Depots with manifests and keys
+            var updatedDepots = Instance.Depots.Select(d =>
+            {
+                ulong newMId = d.ManifestId;
+                string? newKey = d.DepotKey;
+                bool changed = false;
+
+                if (result.ManifestMap.TryGetValue(d.DepotId, out var parsedMId) && parsedMId > 0)
+                {
+                    newMId = parsedMId;
+                    changed = true;
+                }
+                if (result.DepotKeys.TryGetValue(d.DepotId, out var parsedKey) && !string.IsNullOrWhiteSpace(parsedKey))
+                {
+                    newKey = parsedKey;
+                    changed = true;
+                }
+
+                return changed ? d with { ManifestId = newMId, DepotKey = newKey, IsDownloaded = false } : d;
+            }).ToList();
+
+            // Also check for any new depots in result not in current list
+            foreach (var (mDepotId, mId) in result.ManifestMap)
+            {
+                if (!updatedDepots.Any(d => d.DepotId == mDepotId))
+                {
+                    result.DepotKeys.TryGetValue(mDepotId, out var dKey);
+                    updatedDepots.Add(new DepotInfo
+                    {
+                        DepotId = mDepotId,
+                        ManifestId = mId,
+                        Name = $"Depot {mDepotId}",
+                        DepotKey = dKey,
+                        IsDownloaded = false
+                    });
+                }
+            }
+
+            Instance = Instance with { Depots = updatedDepots.AsReadOnly() };
+            await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+
+            // Create and activate build
+            var newBuild = new GameBuildInfo
+            {
+                BuildId = result.BuildId ?? "Custom",
+                BranchName = "imported_zip",
+                DisplayName = $"📦 {result.BuildName}",
+                UpdatedAt = DateTimeOffset.UtcNow,
+                Description = $"{result.ExtractedManifestFiles.Count} manifests extracted from {Path.GetFileName(zipPath)}",
+                Source = "Imported ZIP",
+                DepotManifests = result.ManifestMap
+            };
+
+            AvailableBuilds.Insert(0, newBuild);
+            SelectedBuild = newBuild;
+            UpdateBuildBadge();
+
+            await LoadInstanceAsync(Instance).ConfigureAwait(true);
+
+            _notificationService?.ShowSuccess(
+                "Package Imported Successfully",
+                $"Imported {result.ExtractedManifestFiles.Count} manifests and {result.DepotKeys.Count} keys from {Path.GetFileName(zipPath)}. Target Build: {result.BuildId}");
+            StatusMessage = $"📦 Ready to download {result.BuildName} ({result.ExtractedManifestFiles.Count} manifests).";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to import depot zip package {Path}", zipPath);
+            _notificationService?.ShowError("Import Error", $"Failed to import ZIP: {ex.Message}");
+            StatusMessage = $"❌ Error importing ZIP: {ex.Message}";
+        }
+        finally
+        {
+            IsLoadingBuilds = false;
         }
     }
 

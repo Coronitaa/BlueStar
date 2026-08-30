@@ -1345,6 +1345,60 @@ public class NewFeaturesTests
         uint.Parse(match.Groups[1].Value).Should().Be(3357651);
         ulong.Parse(match.Groups[2].Value).Should().Be(6330832861176696160);
     }
+
+    [Fact]
+    public async Task DepotPackageZipImporter_ImportsManifestsKeysAndBuildIdFromZip()
+    {
+        // Arrange
+        var tempZip = Path.Combine(Path.GetTempPath(), $"PRAGMATA_build_22357085_{Guid.NewGuid():N}.zip");
+        var tempTargetDir = Path.Combine(Path.GetTempPath(), $"manifest_target_{Guid.NewGuid():N}");
+
+        try
+        {
+            using (var fs = new FileStream(tempZip, FileMode.Create))
+            using (var archive = new System.IO.Compression.ZipArchive(fs, System.IO.Compression.ZipArchiveMode.Create))
+            {
+                // Add manifest entry
+                var manifestEntry = archive.CreateEntry("3357651_6330832861176696160.manifest");
+                using (var writer = new StreamWriter(manifestEntry.Open()))
+                {
+                    writer.Write("DUMMY_MANIFEST_BINARY_DATA");
+                }
+
+                // Add depotkeys.txt entry
+                var keysEntry = archive.CreateEntry("depotkeys.txt");
+                using (var writer = new StreamWriter(keysEntry.Open()))
+                {
+                    writer.WriteLine("3357651;AABBCCDDEEFF00112233445566778899");
+                }
+
+                // Add build.txt entry
+                var buildEntry = archive.CreateEntry("build_id.txt");
+                using (var writer = new StreamWriter(buildEntry.Open()))
+                {
+                    writer.WriteLine("22357085");
+                }
+            }
+
+            // Act
+            var result = await BlueStar.Infrastructure.Services.DepotPackageZipImporter.ImportZipAsync(tempZip, tempTargetDir);
+
+            // Assert
+            result.Success.Should().BeTrue();
+            result.BuildId.Should().Be("22357085");
+            result.ManifestMap.Should().ContainKey(3357651);
+            result.ManifestMap[3357651].Should().Be(6330832861176696160);
+            result.DepotKeys.Should().ContainKey(3357651);
+            result.DepotKeys[3357651].Should().Be("AABBCCDDEEFF00112233445566778899");
+            result.ExtractedManifestFiles.Should().HaveCount(1);
+            File.Exists(result.ExtractedManifestFiles[0]).Should().BeTrue();
+        }
+        finally
+        {
+            try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
+            try { if (Directory.Exists(tempTargetDir)) Directory.Delete(tempTargetDir, true); } catch { }
+        }
+    }
 }
 
 
