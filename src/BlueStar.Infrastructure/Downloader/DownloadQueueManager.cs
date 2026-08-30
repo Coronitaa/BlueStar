@@ -161,6 +161,7 @@ public class DownloadQueueManager
     private readonly DownloadStateManager? _stateManager;
     private readonly ILogger<DownloadQueueManager> _logger;
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _ctsMap = new();
+    private readonly ConcurrentDictionary<Guid, Task> _runningTasks = new();
     private readonly SynchronizationContext? _uiContext;
 
     /// <summary>All jobs (active + finished) — the UI binds to this for the active card list.</summary>
@@ -293,13 +294,17 @@ public class DownloadQueueManager
         }
         else
         {
-            // Reset existing job metrics and instance for a fresh / reinstall run
+            var isResume = existing.JobStatus == DownloadJobStatus.Paused;
             existing.Instance = instance;
             existing.ErrorDetail = null;
-            existing.Percentage = 0;
-            existing.DownloadedBytes = 0;
             existing.SpeedBytesPerSec = 0;
+            existing.WriteBytesPerSec = 0;
             existing.CompletedAt = null;
+            if (!isResume && existing.JobStatus != DownloadJobStatus.Downloading)
+            {
+                existing.Percentage = 0;
+                existing.DownloadedBytes = 0;
+            }
             existing.NotifyMetricsChanged();
         }
 
@@ -465,14 +470,26 @@ public class DownloadQueueManager
 
     private async Task RunDownloadAsync(DownloadJobItem job, GameInstance instance)
     {
+        // If an earlier task for this instance is still cancelling or closing handles, wait for it cleanly
+        if (_runningTasks.TryGetValue(instance.Id, out var prevTask) && !prevTask.IsCompleted)
+        {
+            try
+            {
+                await prevTask.ConfigureAwait(false);
+            }
+            catch { }
+        }
+
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _runningTasks[instance.Id] = tcs.Task;
+
         var cts = new CancellationTokenSource();
         _ctsMap[instance.Id] = cts;
 
         RunOnUi(() =>
         {
-            job.Percentage = 0;
-            job.DownloadedBytes = 0;
             job.SpeedBytesPerSec = 0;
+            job.WriteBytesPerSec = 0;
             job.CompletedAt = null;
             job.JobStatus = DownloadJobStatus.Downloading;
             job.StatusMessage = "Downloading...";
@@ -620,6 +637,9 @@ public class DownloadQueueManager
         finally
         {
             _ctsMap.TryRemove(instance.Id, out _);
+            _runningTasks.TryRemove(instance.Id, out _);
+            tcs.TrySetResult();
+
             if (!Queue.Any(q => q.IsDownloading))
             {
                 RunOnUi(() => UpdateTelemetry(0, 0));
