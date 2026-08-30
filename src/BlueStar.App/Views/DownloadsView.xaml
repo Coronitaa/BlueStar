@@ -177,6 +177,9 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
 
                                     <TextBlock Grid.Column="0" Text="{Binding Instance.InstallPath, StringFormat='📁 {0}'}"
@@ -184,7 +187,15 @@
 
                                     <TextBlock Grid.Column="1" Text="{Binding FormattedTotalSize}" Style="{StaticResource Caption}" Margin="16,0,0,0"/>
 
-                                    <TextBlock Grid.Column="2" Text="{Binding FormattedSpeed}" Style="{StaticResource CaptionBold}"
+                                    <TextBlock Grid.Column="2" Text="{Binding FormattedDepotProgress}" Style="{StaticResource Caption}" Margin="16,0,0,0"
+                                               Foreground="{StaticResource SecondaryTextBrush}"/>
+
+                                    <TextBlock Grid.Column="3" Text="{Binding FormattedEta, StringFormat='⏱ {0}'}" Style="{StaticResource Caption}" Margin="16,0,0,0"
+                                               Foreground="{StaticResource SecondaryTextBrush}"/>
+
+                                    <TextBlock Grid.Column="4" Text="{Binding FormattedWriteSpeed, StringFormat='💾 {0}'}" Style="{StaticResource Caption}" Margin="16,0,0,0"/>
+
+                                    <TextBlock Grid.Column="5" Text="{Binding FormattedSpeed, StringFormat='⬇ {0}'}" Style="{StaticResource CaptionBold}"
                                                Margin="16,0,0,0" Foreground="{StaticResource AccentBrush}"/>
                                 </Grid>
 

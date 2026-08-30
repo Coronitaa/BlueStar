@@ -119,9 +119,9 @@ public partial class App : Application
         services.AddSingleton<IDepotBoxArchiveParser, DepotBoxArchiveParser>();
         services.AddSingleton<IDlcInstaller, BlueStar.Infrastructure.Dlc.CreamInstallerService>();
         services.AddSingleton<IDownloadProvider>(sp => new BlueStar.Infrastructure.Downloader.DepotDownloaderProvider(
-            Path.Combine(AppContext.BaseDirectory, "tools", "DepotDownloader.exe"),
             sp.GetRequiredService<ILogger<BlueStar.Infrastructure.Downloader.DepotDownloaderProvider>>(),
             sp.GetRequiredService<BlueStar.Infrastructure.Storage.AppSettingsService>()));
+        services.AddSingleton<BlueStar.Infrastructure.Downloader.DownloadStateManager>();
         services.AddSingleton<IUpdateService, BlueStar.Infrastructure.Update.GitHubUpdateService>();
         services.AddHttpClient<ICommunityStatsService, BlueStar.Infrastructure.Services.CommunityStatsService>(client =>
         {
