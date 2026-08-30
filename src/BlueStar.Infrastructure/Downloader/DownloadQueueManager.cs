@@ -551,6 +551,7 @@ public class DownloadQueueManager
                         Status = InstanceStatus.Ready,
                         Depots = updatedDepots.AsReadOnly(),
                         Dlcs = updatedDlcs.AsReadOnly(),
+                        UpdatedAt = DateTimeOffset.UtcNow,
                         SourceArchivePath = (anyDepotNotDownloaded && !string.IsNullOrWhiteSpace(existing.SourceArchivePath))
                             ? existing.SourceArchivePath
                             : null

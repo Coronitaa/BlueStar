@@ -1252,8 +1252,7 @@ public partial class InstanceDetailViewModel : ObservableObject
             var updatedInstance = Instance with
             {
                 Depots = updatedDepots.AsReadOnly(),
-                SourceArchivePath = archivePath ?? Instance.SourceArchivePath,
-                UpdatedAt = DateTimeOffset.UtcNow
+                SourceArchivePath = archivePath ?? Instance.SourceArchivePath
             };
 
             await _instanceManager.UpdateAsync(updatedInstance, CancellationToken.None).ConfigureAwait(true);

@@ -76,15 +76,15 @@
                     <!-- Network Legend Pill -->
                     <Border Background="#1000D2FF" BorderBrush="#3300D2FF" BorderThickness="1" CornerRadius="6" Padding="8,4" Margin="0,0,10,0">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Ellipse Width="8" Height="8" Fill="#00D2FF" Margin="0,0,6,0"/>
+                            <Line X1="0" Y1="0" X2="12" Y2="0" Stroke="#00D2FF" StrokeThickness="2.5" Margin="0,0,6,0" VerticalAlignment="Center"/>
                             <TextBlock Text="Download" FontSize="11" FontWeight="SemiBold" Foreground="#00D2FF"/>
                         </StackPanel>
                     </Border>
 
-                    <!-- Disk Write Legend Pill -->
+                    <!-- Disk Write Legend Pill (Dashed line) -->
                     <Border Background="#105CD65C" BorderBrush="#335CD65C" BorderThickness="1" CornerRadius="6" Padding="8,4">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Ellipse Width="8" Height="8" Fill="#5CD65C" Margin="0,0,6,0"/>
+                            <Line X1="0" Y1="0" X2="12" Y2="0" Stroke="#5CD65C" StrokeThickness="2.5" StrokeDashArray="2 1.5" Margin="0,0,6,0" VerticalAlignment="Center"/>
                             <TextBlock Text="Disk Write" FontSize="11" FontWeight="SemiBold" Foreground="#5CD65C"/>
                         </StackPanel>
                     </Border>
@@ -119,18 +119,17 @@
 
                     <!-- Waveform Canvas -->
                     <Canvas x:Name="WaveformCanvas" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="0,8,0,0">
-                        <!-- Disk Area & Line -->
+                        <!-- 1. Disk Area Fill (Base Layer) -->
                         <Path x:Name="DiskAreaPath">
                             <Path.Fill>
                                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                                    <GradientStop Color="#285CD65C" Offset="0"/>
+                                    <GradientStop Color="#205CD65C" Offset="0"/>
                                     <GradientStop Color="#025CD65C" Offset="1"/>
                                 </LinearGradientBrush>
                             </Path.Fill>
                         </Path>
-                        <Path x:Name="DiskLinePath" Stroke="#5CD65C" StrokeThickness="1.8" StrokeLineJoin="Round"/>
 
-                        <!-- Network Area & Line -->
+                        <!-- 2. Network Area Fill (Middle Layer) -->
                         <Path x:Name="NetAreaPath">
                             <Path.Fill>
                                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
@@ -139,7 +138,12 @@
                                 </LinearGradientBrush>
                             </Path.Fill>
                         </Path>
-                        <Path x:Name="NetLinePath" Stroke="#00D2FF" StrokeThickness="2.2" StrokeLineJoin="Round"/>
+
+                        <!-- 3. Network Solid Line (Cyan) -->
+                        <Path x:Name="NetLinePath" Stroke="#00D2FF" StrokeThickness="2.4" StrokeLineJoin="Round"/>
+
+                        <!-- 4. Disk Dashed Line (Green - rendered on top with dashes so overlapping lines show both) -->
+                        <Path x:Name="DiskLinePath" Stroke="#5CD65C" StrokeThickness="2.2" StrokeDashArray="3 2" StrokeDashCap="Round" StrokeLineJoin="Round"/>
                     </Canvas>
                 </Grid>
             </Border>

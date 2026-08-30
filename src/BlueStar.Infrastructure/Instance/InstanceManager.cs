@@ -396,7 +396,9 @@ public sealed class InstanceManager : IInstanceManager
             if (!Directory.Exists(instanceDir))
                 throw new InvalidOperationException($"Instance {instance.Id} not found.");
 
-            var updatedInstance = instance with { UpdatedAt = DateTimeOffset.UtcNow };
+            var updatedInstance = instance.UpdatedAt > DateTimeOffset.MinValue 
+                ? instance 
+                : instance with { UpdatedAt = DateTimeOffset.UtcNow };
             var json = JsonSerializer.Serialize(updatedInstance, JsonOptions);
             await File.WriteAllTextAsync(
                 Path.Combine(instanceDir, "instance.json"), json, ct).ConfigureAwait(false);

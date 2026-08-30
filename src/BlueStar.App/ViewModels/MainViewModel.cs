@@ -430,9 +430,18 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
+        if (page == "Downloads")
+        {
+            var view = new DownloadsView();
+            var vm = App.Services.GetRequiredService<DownloadsViewModel>();
+            vm.OnOpenInstanceRequested = OpenInstanceDetail;
+            view.DataContext = vm;
+            CurrentView = view;
+            return;
+        }
+
         CurrentView = page switch
         {
-            "Downloads" => CreateView<DownloadsView, DownloadsViewModel>(),
             "Settings" => CreateView<SettingsView, SettingsViewModel>(),
             "About" => CreateView<AboutView, AboutViewModel>(),
             _ => CurrentView

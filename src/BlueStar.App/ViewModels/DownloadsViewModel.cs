@@ -22,12 +22,24 @@ public partial class DownloadsViewModel : ObservableObject
     /// <summary>Completed / failed / canceled history (shown in log section below).</summary>
     public ObservableCollection<DownloadLogEntry> HistoryLog => _queueManager.HistoryLog;
 
+    /// <summary>Callback to navigate to an instance detail view.</summary>
+    public Action<BlueStar.Core.Models.GameInstance>? OnOpenInstanceRequested { get; set; }
+
     public DownloadsViewModel(DownloadQueueManager queueManager)
     {
         _queueManager = queueManager;
     }
 
     // ── Commands ──────────────────────────────────────────────────────────────
+
+    [RelayCommand]
+    private void OpenInstance(BlueStar.Core.Models.GameInstance? instance)
+    {
+        if (instance != null)
+        {
+            OnOpenInstanceRequested?.Invoke(instance);
+        }
+    }
 
     [RelayCommand]
     private void PauseDownload(Guid instanceId) =>
