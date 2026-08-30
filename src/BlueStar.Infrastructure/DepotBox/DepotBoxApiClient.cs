@@ -409,7 +409,30 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
                         break;
                     }
 
+                    var statusCode = (int)candidateResp.StatusCode;
+                    var reason = candidateResp.ReasonPhrase;
                     candidateResp.Dispose();
+
+                    if (statusCode is 500 or 502 or 503 or 504)
+                    {
+                        lastEx = new HttpRequestException($"DepotBox Server Error ({statusCode} {reason}): The upstream DepotBox server timed out or failed to stream '{cleanFixFilename}'. The archive on DepotBox is very large and their server is failing to deliver it.");
+                    }
+                    else if (statusCode == 401)
+                    {
+                        lastEx = new HttpRequestException("DepotBox Authentication Error (401 Unauthorized): API Key is invalid or expired.");
+                    }
+                    else if (statusCode == 404)
+                    {
+                        lastEx = new HttpRequestException($"Fix archive '{cleanFixFilename}' was not found on DepotBox (404 Not Found).");
+                    }
+                    else
+                    {
+                        lastEx = new HttpRequestException($"DepotBox returned HTTP {statusCode} ({reason}) for '{cleanFixFilename}'.");
+                    }
+                }
+                catch (HttpRequestException)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -420,7 +443,7 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
 
             if (response is null)
             {
-                throw lastEx ?? new HttpRequestException($"Could not download game fix from any candidate endpoints: {string.Join(", ", uniqueEndpoints)}");
+                throw lastEx ?? new HttpRequestException($"Could not download game fix '{cleanFixFilename}' from DepotBox.");
             }
         }
 
