@@ -86,6 +86,14 @@ public partial class SettingsViewModel : ObservableObject
         _ = _appSettings.SetShowDrmContentAsync(value);
     }
 
+    [ObservableProperty]
+    private bool _enableAdvancedBuildOptions;
+
+    partial void OnEnableAdvancedBuildOptionsChanged(bool value)
+    {
+        _ = _appSettings.SetEnableAdvancedBuildOptionsAsync(value);
+    }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SettingsViewModel"/> class.
     /// </summary>
@@ -107,6 +115,7 @@ public partial class SettingsViewModel : ObservableObject
         DeleteDepotsAfterInstall = _appSettings.DeleteDepotsAfterInstall;
         ShowNsfwContent = _appSettings.ShowNsfwContent;
         ShowDrmContent = _appSettings.ShowDrmContent;
+        EnableAdvancedBuildOptions = _appSettings.EnableAdvancedBuildOptions;
         DefaultApiUrl = _appSettings.DefaultApiUrl;
         DefaultApiKey = _appSettings.DefaultApiKey ?? string.Empty;
         DefaultDownloadDirectory = _appSettings.DefaultDownloadDirectory;

@@ -1399,6 +1399,32 @@ public class NewFeaturesTests
             try { if (Directory.Exists(tempTargetDir)) Directory.Delete(tempTargetDir, true); } catch { }
         }
     }
+
+    [Fact]
+    public async Task AppSettingsService_EnableAdvancedBuildOptions_DefaultsToFalseAndPersists()
+    {
+        var tempSettingsFile = Path.Combine(Path.GetTempPath(), $"settings_{Guid.NewGuid():N}.json");
+        try
+        {
+            var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<BlueStar.Infrastructure.Storage.AppSettingsService>.Instance;
+            var settings = new BlueStar.Infrastructure.Storage.AppSettingsService(logger, tempSettingsFile);
+
+            // Default must be false for normal users
+            settings.EnableAdvancedBuildOptions.Should().BeFalse();
+
+            // Toggle to true
+            await settings.SetEnableAdvancedBuildOptionsAsync(true);
+            settings.EnableAdvancedBuildOptions.Should().BeTrue();
+
+            // Reload and verify persistence
+            var reloaded = new BlueStar.Infrastructure.Storage.AppSettingsService(logger, tempSettingsFile);
+            reloaded.EnableAdvancedBuildOptions.Should().BeTrue();
+        }
+        finally
+        {
+            try { if (File.Exists(tempSettingsFile)) File.Delete(tempSettingsFile); } catch { }
+        }
+    }
 }
 
 

@@ -208,6 +208,33 @@
                 </StackPanel>
             </Border>
 
+            <!-- ═══ ADVANCED FEATURES & BUILDS SECTION ═══ -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,20">
+                <StackPanel>
+                    <TextBlock Text="Advanced Features &amp; Game Builds" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                    <TextBlock Text="Enable advanced tools for historical game builds, depot manifests management, and package imports."
+                               Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,16"/>
+
+                    <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,10">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                                <TextBlock Text="🛠 Enable Advanced Builds &amp; Depots Management" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
+                                <TextBlock Text="Shows build and branch version selectors, custom manifest editing per depot, and community ZIP package importer in the Files &amp; Depots tab."
+                                           Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1"
+                                      IsChecked="{Binding EnableAdvancedBuildOptions, Mode=TwoWay}"
+                                      Style="{StaticResource DarkCheckBox}"
+                                      VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </Border>
+
             <!-- ═══ ENGINES & ECOSYSTEM REGISTRY SECTION ═══ -->
             <Border Style="{StaticResource Card}" Margin="0,0,0,20">
                 <StackPanel>

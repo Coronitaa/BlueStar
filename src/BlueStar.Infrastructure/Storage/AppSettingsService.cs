@@ -96,6 +96,16 @@ public sealed class AppSettingsService
         await SaveAsync().ConfigureAwait(false);
     }
 
+    /// <summary>Whether to show advanced build, depot manifests, and package import tools in game files tab (default false).</summary>
+    public bool EnableAdvancedBuildOptions => _current.EnableAdvancedBuildOptions;
+
+    /// <summary>Persists the advanced build options setting.</summary>
+    public async Task SetEnableAdvancedBuildOptionsAsync(bool enable)
+    {
+        _current = _current with { EnableAdvancedBuildOptions = enable };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
     /// <summary>Persists the default API base URL.</summary>
     public async Task SetDefaultApiUrlAsync(string url)
     {
@@ -156,6 +166,7 @@ public sealed class AppSettingsService
         public bool DeleteDepotsAfterInstall { get; init; } = true;
         public bool ShowNsfwContent { get; init; } = false;
         public bool ShowDrmContent { get; init; } = true;
+        public bool EnableAdvancedBuildOptions { get; init; } = false;
         public string? DefaultApiUrl { get; init; } = "https://depotbox.org";
         public string? DefaultApiKey { get; init; }
     }

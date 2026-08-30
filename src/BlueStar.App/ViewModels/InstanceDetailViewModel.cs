@@ -82,7 +82,7 @@ public partial class SelectableDepotItem : ObservableObject
     [RelayCommand]
     public void SaveEditManifest()
     {
-        if (ulong.TryParse(EditingManifestId?.Trim(), out var parsedId) && parsedId != Depot.ManifestId)
+        if (ulong.TryParse(EditingManifestId?.Trim(), out var parsedId) && parsedId > 0 && parsedId != Depot.ManifestId)
         {
             Depot = Depot with { ManifestId = parsedId, IsDownloaded = false };
             NotifyDownloadedChanged();
@@ -581,6 +581,9 @@ public partial class InstanceDetailViewModel : ObservableObject
     [ObservableProperty]
     private bool _isCommunityLinksMenuOpen;
 
+    [ObservableProperty]
+    private bool _enableAdvancedBuildOptions;
+
     // ── Download progress exposed to UI ──
     [ObservableProperty]
     private DownloadJobItem? _activeJob;
@@ -740,6 +743,15 @@ public partial class InstanceDetailViewModel : ObservableObject
         _downloadQueueManager.Queue.CollectionChanged += OnQueueChanged;
         _gameLauncher.RunningStateChanged += OnGameRunningStateChanged;
         _gameLauncher.LogReceived += OnGameLogReceived;
+
+        EnableAdvancedBuildOptions = _appSettings.EnableAdvancedBuildOptions;
+        _appSettings.SettingsChanged += (_, _) =>
+        {
+            App.Current?.Dispatcher?.Invoke(() =>
+            {
+                EnableAdvancedBuildOptions = _appSettings.EnableAdvancedBuildOptions;
+            });
+        };
     }
 
     private void OnQueueChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -3597,8 +3609,42 @@ public partial class InstanceDetailViewModel : ObservableObject
 
             RecalculateSelectedSize();
             NotifyDownloadProps();
-            StatusMessage = $"🎮 Build selected: {newValue.DisplayName}. Ready to download or switch.";
+
+            if (oldValue != null && !IsLoadingBuilds)
+            {
+                SetTransientStatusMessage($"🎮 Build changed: {newValue.DisplayName}.", 3500);
+            }
         }
+    }
+
+    private CancellationTokenSource? _statusMessageCts;
+
+    private void SetTransientStatusMessage(string message, int durationMs = 3500)
+    {
+        _statusMessageCts?.Cancel();
+        _statusMessageCts = new CancellationTokenSource();
+        var token = _statusMessageCts.Token;
+
+        StatusMessage = message;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(durationMs, token);
+                if (!token.IsCancellationRequested)
+                {
+                    App.Current?.Dispatcher?.Invoke(() =>
+                    {
+                        if (StatusMessage == message)
+                        {
+                            StatusMessage = null;
+                        }
+                    });
+                }
+            }
+            catch (TaskCanceledException) { }
+        });
     }
 
     private void HandleDepotManifestUpdated(uint depotId, ulong newManifestId)
@@ -3609,7 +3655,7 @@ public partial class InstanceDetailViewModel : ObservableObject
         _ = _instanceManager.UpdateAsync(Instance, CancellationToken.None);
         RecalculateSelectedSize();
         NotifyDownloadProps();
-        StatusMessage = $"✏ Updated Manifest ID for Depot {depotId} to {newManifestId}.";
+        SetTransientStatusMessage($"✏ Updated Manifest ID for Depot {depotId} to {newManifestId}.", 3500);
     }
 
     [RelayCommand]
@@ -3817,7 +3863,7 @@ public partial class InstanceDetailViewModel : ObservableObject
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo($"https://cs.rin.ru/forum/search.php?keywords={query}&terms=all&author=&sc=1&sf=all&sk=t&sd=d&sr=topics&st=0&ch=300&t=0&submit=Search") { UseShellExecute = true });
                     break;
                 case "depotbox":
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://depotbox.org/dashboard") { UseShellExecute = true });
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://depotbox.org") { UseShellExecute = true });
                     break;
                 case "manifest_dir":
                     var manifestDir = Path.Combine(

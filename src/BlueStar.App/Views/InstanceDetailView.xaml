@@ -356,9 +356,138 @@
                 <!-- ── 2. FILES & DEPOTS TAB ── -->
                 <StackPanel Visibility="{Binding SelectedTab, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Files}">
                     
-                    <!-- ═══ GAME BUILD & VERSION SELECTOR ═══ -->
+                    <!-- ═══ SELECT GAME DEPOTS TO DOWNLOAD CARD ═══ -->
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Select Game Depots to Download" Style="{StaticResource H2}"/>
+                                    <TextBlock Text="DepotDownloaderMod will retrieve and install the checked manifests." Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Content="Select All" Style="{StaticResource GhostButton}" Margin="0,0,8,0" Command="{Binding SelectAllDepotsCommand}"/>
+                                    <Button Content="Deselect All" Style="{StaticResource GhostButton}" Command="{Binding DeselectAllDepotsCommand}"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Depots List -->
+                            <ItemsControl ItemsSource="{Binding Depots}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusMd}"
+                                                Padding="14,10" Margin="0,0,0,8">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding DisplayName}" Style="{StaticResource BodyMedium}"/>
+
+                                                    <!-- Regular User Mode (Simple) -->
+                                                    <TextBlock Text="{Binding Depot.DepotId, StringFormat='Depot ID: {0}'}" Style="{StaticResource Caption}"
+                                                               Visibility="{Binding DataContext.EnableAdvancedBuildOptions, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+
+                                                    <!-- Advanced User Mode (Manifest details & inline edit) -->
+                                                    <StackPanel Visibility="{Binding DataContext.EnableAdvancedBuildOptions, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                        <!-- Normal Manifest View -->
+                                                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0"
+                                                                    Visibility="{Binding IsEditingManifest, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                                                            <TextBlock Text="{Binding Depot.DepotId, StringFormat='Depot: {0}'}" Style="{StaticResource Caption}"/>
+                                                            <TextBlock Text=" • Manifest: " Style="{StaticResource Caption}" Margin="4,0,0,0"/>
+                                                            <TextBlock Text="{Binding ManifestIdText}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}"/>
+                                                            <Button Content="✏" ToolTip="Edit target Manifest ID for this depot"
+                                                                    Style="{StaticResource GhostButton}"
+                                                                    Padding="5,0" Margin="6,0,0,0" FontSize="11"
+                                                                    Command="{Binding StartEditManifestCommand}"/>
+                                                        </StackPanel>
+
+                                                        <!-- Inline Edit Mode -->
+                                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0"
+                                                                    Visibility="{Binding IsEditingManifest, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                            <TextBlock Text="Manifest ID:" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                            <TextBox Text="{Binding EditingManifestId, UpdateSourceTrigger=PropertyChanged}"
+                                                                     Style="{StaticResource DarkTextBox}"
+                                                                     Width="180" Height="24" Padding="4,2" FontSize="12"/>
+                                                            <Button Content="✓" Style="{StaticResource PrimaryButton}"
+                                                                    Padding="8,2" Margin="6,0,2,0" Height="24"
+                                                                    Command="{Binding SaveEditManifestCommand}"/>
+                                                            <Button Content="✕" Style="{StaticResource GhostButton}"
+                                                                    Padding="6,2" Height="24"
+                                                                    Command="{Binding CancelEditManifestCommand}"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </StackPanel>
+
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,14,0">
+                                                    <Border Background="{StaticResource SuccessBgBrush}" BorderBrush="{StaticResource SuccessBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,2" Margin="0,0,6,0"
+                                                            Visibility="{Binding IsDownloaded, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                        <TextBlock Text="✓ Installed" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource SuccessBrush}"/>
+                                                    </Border>
+                                                    <Border Background="{StaticResource SurfaceCardBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,2" Margin="0,0,6,0">
+                                                        <TextBlock Text="{Binding CategoryTag}" Style="{StaticResource CaptionBold}"/>
+                                                    </Border>
+                                                    <Border Background="{StaticResource InfoBgBrush}" BorderBrush="{StaticResource InfoBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,2" Margin="0,0,6,0">
+                                                        <TextBlock Text="{Binding PlatformTag}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource InfoBrush}"/>
+                                                    </Border>
+                                                    <Border Background="{StaticResource PurpleBgBrush}" BorderBrush="{StaticResource PurpleBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="6,2"
+                                                            Visibility="{Binding ArchitectureTag, Converter={StaticResource NullToVisibilityConverter}}">
+                                                        <TextBlock Text="{Binding ArchitectureTag}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource PurpleBrush}"/>
+                                                    </Border>
+                                                </StackPanel>
+
+                                                <TextBlock Grid.Column="3" Text="{Binding FormattedSize}" Style="{StaticResource CaptionBold}" VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Download Bottom Summary & Trigger -->
+                            <Border Height="1" Background="{StaticResource SubtleBorderBrush}" Margin="0,16,0,16"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource BodyMedium}">
+                                        <Run Text="{Binding SelectedDepotsCount, Mode=OneWay}"/>
+                                        <Run Text=" depots selected ("/>
+                                        <Run Text="{Binding SelectedDepotsSize, Mode=OneWay}"/>
+                                        <Run Text=")"/>
+                                    </TextBlock>
+                                    <TextBlock Text="Requires network connection and active Steam session or anonymous depot access." Style="{StaticResource Caption}" Margin="0,2,0,0"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Content="⬇ Download Selected"
+                                            Style="{StaticResource PrimaryButton}"
+                                            Padding="16,10"
+                                            Command="{Binding DownloadSelectedDepotsCommand}"
+                                            IsEnabled="{Binding CanStartDownload}"/>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- ═══ GAME BUILD & VERSION SELECTOR (ADVANCED OPTIONS ENABLED) ═══ -->
                     <Border Style="{StaticResource Card}" Margin="0,0,0,16" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1"
-                            AllowDrop="True" Drop="DepotDropZone_Drop" DragOver="DepotDropZone_DragOver">
+                            AllowDrop="True" Drop="DepotDropZone_Drop" DragOver="DepotDropZone_DragOver"
+                            Visibility="{Binding EnableAdvancedBuildOptions, Converter={StaticResource BoolToVisibilityConverter}}">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
@@ -374,7 +503,7 @@
 
                                 <StackPanel Grid.Column="0">
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                        <TextBlock Text="🎮 Game Build &amp; Branch Version" Style="{StaticResource H3}" Margin="0,0,8,0"/>
+                                        <TextBlock Text="🎮 Game Build &amp; Branch Version (Advanced)" Style="{StaticResource H3}" Margin="0,0,8,0"/>
                                         <Border Background="{StaticResource AccentBgBrush}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,2"
                                                 Visibility="{Binding ActiveBuildBadgeText, Converter={StaticResource NullToVisibilityConverter}}">
                                             <TextBlock Text="{Binding ActiveBuildBadgeText}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
@@ -470,118 +599,6 @@
                                 </StackPanel>
                             </Border>
                         </Grid>
-                    </Border>
-
-                    <Border Style="{StaticResource Card}">
-                        <StackPanel>
-                            <Grid Margin="0,0,0,16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-
-                                <StackPanel Grid.Column="0">
-                                    <TextBlock Text="Select Game Depots to Download" Style="{StaticResource H2}"/>
-                                    <TextBlock Text="DepotDownloaderMod will retrieve and install the checked manifests." Style="{StaticResource Caption}" Margin="0,4,0,0"/>
-                                </StackPanel>
-
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Button Content="Select All" Style="{StaticResource GhostButton}" Margin="0,0,8,0" Command="{Binding SelectAllDepotsCommand}"/>
-                                    <Button Content="Deselect All" Style="{StaticResource GhostButton}" Command="{Binding DeselectAllDepotsCommand}"/>
-                                </StackPanel>
-                            </Grid>
-
-                            <!-- Depots List -->
-                            <ItemsControl ItemsSource="{Binding Depots}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusMd}"
-                                                Padding="14,10" Margin="0,0,0,8">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-
-                                                <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" VerticalAlignment="Center" Margin="0,0,12,0"/>
-
-                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding DisplayName}" Style="{StaticResource BodyMedium}"/>
-
-                                                    <!-- Normal View Mode -->
-                                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0"
-                                                                Visibility="{Binding IsEditingManifest, Converter={StaticResource InverseBoolToVisibilityConverter}}">
-                                                        <TextBlock Text="{Binding Depot.DepotId, StringFormat='Depot: {0}'}" Style="{StaticResource Caption}"/>
-                                                        <TextBlock Text=" • Manifest: " Style="{StaticResource Caption}" Margin="4,0,0,0"/>
-                                                        <TextBlock Text="{Binding ManifestIdText}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}"/>
-                                                        <Button Content="✏" ToolTip="Edit target Manifest ID for this depot"
-                                                                Style="{StaticResource GhostButton}"
-                                                                Padding="5,0" Margin="6,0,0,0" FontSize="11"
-                                                                Command="{Binding StartEditManifestCommand}"/>
-                                                    </StackPanel>
-
-                                                    <!-- Inline Edit Mode -->
-                                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0"
-                                                                Visibility="{Binding IsEditingManifest, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                        <TextBlock Text="Manifest ID:" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                        <TextBox Text="{Binding EditingManifestId, UpdateSourceTrigger=PropertyChanged}"
-                                                                 Style="{StaticResource DarkTextBox}"
-                                                                 Width="180" Height="24" Padding="4,2" FontSize="12"/>
-                                                        <Button Content="✓" Style="{StaticResource PrimaryButton}"
-                                                                Padding="8,2" Margin="6,0,2,0" Height="24"
-                                                                Command="{Binding SaveEditManifestCommand}"/>
-                                                        <Button Content="✕" Style="{StaticResource GhostButton}"
-                                                                Padding="6,2" Height="24"
-                                                                Command="{Binding CancelEditManifestCommand}"/>
-                                                    </StackPanel>
-                                                </StackPanel>
-
-                                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,14,0">
-                                                    <Border Background="{StaticResource SuccessBgBrush}" BorderBrush="{StaticResource SuccessBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,2" Margin="0,0,6,0"
-                                                            Visibility="{Binding IsDownloaded, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                        <TextBlock Text="✓ Installed" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource SuccessBrush}"/>
-                                                    </Border>
-                                                    <Border Background="{StaticResource SurfaceCardBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,2" Margin="0,0,6,0">
-                                                        <TextBlock Text="{Binding CategoryTag}" Style="{StaticResource CaptionBold}"/>
-                                                    </Border>
-                                                    <Border Background="{StaticResource InfoBgBrush}" BorderBrush="{StaticResource InfoBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,2" Margin="0,0,6,0">
-                                                        <TextBlock Text="{Binding PlatformTag}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource InfoBrush}"/>
-                                                    </Border>
-                                                    <Border Background="{StaticResource PurpleBgBrush}" BorderBrush="{StaticResource PurpleBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="6,2"
-                                                            Visibility="{Binding ArchitectureTag, Converter={StaticResource NullToVisibilityConverter}}">
-                                                        <TextBlock Text="{Binding ArchitectureTag}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource PurpleBrush}"/>
-                                                    </Border>
-                                                </StackPanel>
-
-                                                <TextBlock Grid.Column="3" Text="{Binding FormattedSize}" Style="{StaticResource CaptionBold}" VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}"/>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-
-                            <!-- Download Bottom Summary & Trigger -->
-                            <Border Height="1" Background="{StaticResource SubtleBorderBrush}" Margin="0,16,0,16"/>
-
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding TotalSelectedSizeFormatted, StringFormat='Total Selected Size: {0}'}" Style="{StaticResource H3}"/>
-                                    <TextBlock Text="Downloaded files are automatically verified and staged." Style="{StaticResource Caption}"/>
-                                </StackPanel>
-
-                                <Button Grid.Column="1" Content="{Binding DownloadButtonText}"
-                                        Style="{StaticResource PrimaryButton}"
-                                        Padding="22,12"
-                                        Command="{Binding StartDownloadCommand}"/>
-                            </Grid>
-                        </StackPanel>
                     </Border>
                 </StackPanel>
 
