@@ -172,6 +172,14 @@ public class DownloadQueueManager
     /// <summary>Raised whenever a job is added, removed, or its execution status changes.</summary>
     public event EventHandler? QueueChanged;
 
+    /// <summary>Fired on every speed sample update for real-time chart rendering.</summary>
+    public event Action<double, double>? SpeedSampleReceived;
+
+    public double TotalDownloadSpeed { get; private set; }
+    public double TotalWriteSpeed { get; private set; }
+    public double PeakDownloadSpeed { get; private set; }
+    public double PeakWriteSpeed { get; private set; }
+
     public DownloadQueueManager(
         IDownloadProvider downloadProvider,
         ILogger<DownloadQueueManager> logger,
@@ -185,6 +193,16 @@ public class DownloadQueueManager
         _notificationService = notificationService;
         _stateManager = stateManager;
         _uiContext = SynchronizationContext.Current;
+    }
+
+    private void UpdateTelemetry(double netSpeed, double writeSpeed)
+    {
+        TotalDownloadSpeed = Math.Max(0, netSpeed);
+        TotalWriteSpeed = Math.Max(0, writeSpeed);
+        if (netSpeed > PeakDownloadSpeed) PeakDownloadSpeed = netSpeed;
+        if (writeSpeed > PeakWriteSpeed) PeakWriteSpeed = writeSpeed;
+
+        SpeedSampleReceived?.Invoke(TotalDownloadSpeed, TotalWriteSpeed);
     }
 
     /// <summary>
@@ -295,21 +313,36 @@ public class DownloadQueueManager
         await RunDownloadAsync(existing, instance).ConfigureAwait(false);
     }
 
-    /// <summary>Pauses an active download (cancels + marks as paused; resumes later with RetryAsync).</summary>
-    public async Task PauseAsync(Guid instanceId)
+    /// <summary>Pauses an active download instantly (cancels + marks as paused; resumes later with ResumeAsync).</summary>
+    public Task PauseAsync(Guid instanceId)
     {
         var item = Queue.FirstOrDefault(q => q.Instance.Id == instanceId);
-        if (item is null || !item.CanPause) return;
+        if (item is null || !item.CanPause) return Task.CompletedTask;
 
         if (_ctsMap.TryGetValue(instanceId, out var cts))
-            cts.Cancel();
-
-        await _downloadProvider.CancelAsync(instanceId).ConfigureAwait(false);
+        {
+            try { cts.Cancel(); } catch { }
+        }
 
         item.JobStatus = DownloadJobStatus.Paused;
         item.StatusMessage = "Paused — click Resume to continue";
+        item.SpeedBytesPerSec = 0;
+        item.WriteBytesPerSec = 0;
+        item.NotifyMetricsChanged();
+        UpdateTelemetry(0, 0);
         NotifyQueueChanged();
         _logger.LogInformation("Paused download for {Game}", item.Instance.Name);
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _downloadProvider.CancelAsync(instanceId).ConfigureAwait(false);
+            }
+            catch { }
+        });
+
+        return Task.CompletedTask;
     }
 
     /// <summary>Resumes a paused download.</summary>
@@ -333,12 +366,23 @@ public class DownloadQueueManager
     }
 
     /// <summary>Cancels an active download.</summary>
-    public async Task CancelAsync(Guid instanceId)
+    public Task CancelAsync(Guid instanceId)
     {
         if (_ctsMap.TryGetValue(instanceId, out var cts))
-            cts.Cancel();
+        {
+            try { cts.Cancel(); } catch { }
+        }
 
-        await _downloadProvider.CancelAsync(instanceId).ConfigureAwait(false);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _downloadProvider.CancelAsync(instanceId).ConfigureAwait(false);
+            }
+            catch { }
+        });
+
+        return Task.CompletedTask;
     }
 
     /// <summary>Cancels if active, then removes the job from the queue.</summary>
@@ -457,6 +501,7 @@ public class DownloadQueueManager
                 if (!string.IsNullOrWhiteSpace(p.CurrentFile))
                     job.StatusMessage = p.CurrentFile;
                 job.NotifyMetricsChanged();
+                UpdateTelemetry(p.Speed, p.WriteBytesPerSec);
             });
         });
 
@@ -574,6 +619,10 @@ public class DownloadQueueManager
         finally
         {
             _ctsMap.TryRemove(instance.Id, out _);
+            if (!Queue.Any(q => q.IsDownloading))
+            {
+                RunOnUi(() => UpdateTelemetry(0, 0));
+            }
         }
     }
 

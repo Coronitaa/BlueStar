@@ -53,7 +53,12 @@ public class BackgroundTaskServiceTests
 
         await Task.Delay(20);
         service.CancelTask(taskId);
-        await Task.Delay(50);
+
+        // Wait for background cancellation to take effect
+        for (int i = 0; i < 20 && service.Tasks.FirstOrDefault(t => t.Id == taskId)?.Status == BackgroundTaskStatus.Running; i++)
+        {
+            await Task.Delay(50);
+        }
 
         var task = service.Tasks.FirstOrDefault(t => t.Id == taskId);
         task.Should().NotBeNull();

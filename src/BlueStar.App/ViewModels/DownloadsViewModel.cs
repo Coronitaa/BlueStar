@@ -13,6 +13,9 @@ public partial class DownloadsViewModel : ObservableObject
 {
     private readonly DownloadQueueManager _queueManager;
 
+    /// <summary>Access to the queue manager for controls and telemetry.</summary>
+    public DownloadQueueManager QueueManager => _queueManager;
+
     /// <summary>Active + paused download jobs (shown as cards at top).</summary>
     public ObservableCollection<DownloadJobItem> DownloadQueue => _queueManager.Queue;
 
@@ -27,20 +30,20 @@ public partial class DownloadsViewModel : ObservableObject
     // ── Commands ──────────────────────────────────────────────────────────────
 
     [RelayCommand]
-    private async Task PauseDownloadAsync(Guid instanceId) =>
-        await _queueManager.PauseAsync(instanceId).ConfigureAwait(true);
+    private void PauseDownload(Guid instanceId) =>
+        _ = _queueManager.PauseAsync(instanceId);
 
     [RelayCommand]
-    private async Task ResumeDownloadAsync(Guid instanceId) =>
-        await _queueManager.ResumeAsync(instanceId).ConfigureAwait(true);
+    private void ResumeDownload(Guid instanceId) =>
+        _ = _queueManager.ResumeAsync(instanceId);
 
     [RelayCommand]
-    private async Task RetryDownloadAsync(Guid instanceId) =>
-        await _queueManager.RetryAsync(instanceId).ConfigureAwait(true);
+    private void RetryDownload(Guid instanceId) =>
+        _ = _queueManager.RetryAsync(instanceId);
 
     [RelayCommand]
-    private async Task CancelDownloadAsync(Guid instanceId) =>
-        await _queueManager.CancelOrRemoveJobAsync(instanceId).ConfigureAwait(true);
+    private void CancelDownload(Guid instanceId) =>
+        _ = _queueManager.CancelOrRemoveJobAsync(instanceId);
 
     [RelayCommand]
     private void RemoveJob(Guid instanceId) =>
