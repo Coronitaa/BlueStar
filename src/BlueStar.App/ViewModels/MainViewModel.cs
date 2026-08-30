@@ -389,17 +389,13 @@ public partial class MainViewModel : ObservableObject
         }
         else if (pausedCount > 0)
         {
-            var singleJob = pausedJobs[0];
-            var gameName = singleJob.Instance?.Name ?? "Game";
-            DownloadsButtonText = pausedCount == 1 ? $"Downloads: {gameName} (Paused)" : $"Downloads: {pausedCount} Paused";
-            StatusText = $"{pausedCount} downloads paused in queue";
+            DownloadsButtonText = "Downloads: Paused";
+            StatusText = pausedCount == 1 ? "1 download paused in queue" : $"{pausedCount} downloads paused in queue";
         }
         else
         {
-            var singleJob = queuedJobs.FirstOrDefault();
-            var gameName = singleJob?.Instance?.Name ?? "Game";
-            DownloadsButtonText = queuedJobs.Count == 1 ? $"Downloads: {gameName} (Queued)" : $"Downloads: {queuedJobs.Count} Queued";
-            StatusText = $"{queuedJobs.Count} downloads queued";
+            DownloadsButtonText = "Downloads: Queued";
+            StatusText = queuedJobs.Count == 1 ? "1 download queued" : $"{queuedJobs.Count} downloads queued";
         }
     }
 

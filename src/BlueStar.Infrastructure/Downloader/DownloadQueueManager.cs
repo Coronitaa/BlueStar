@@ -77,7 +77,8 @@ public partial class DownloadJobItem : ObservableObject
     public bool CanPause      => JobStatus == DownloadJobStatus.Downloading;
     public bool CanResume     => JobStatus == DownloadJobStatus.Paused;
     public bool CanRetry      => JobStatus is DownloadJobStatus.Failed or DownloadJobStatus.Canceled;
-    public bool CanRemove     => JobStatus is DownloadJobStatus.Completed or DownloadJobStatus.Failed or DownloadJobStatus.Canceled;
+    public bool CanCancel     => JobStatus is DownloadJobStatus.Downloading or DownloadJobStatus.Queued or DownloadJobStatus.Paused;
+    public bool CanRemove     => JobStatus is DownloadJobStatus.Completed or DownloadJobStatus.Failed or DownloadJobStatus.Canceled or DownloadJobStatus.Paused;
 
     partial void OnJobStatusChanged(DownloadJobStatus value)
     {
@@ -90,6 +91,7 @@ public partial class DownloadJobItem : ObservableObject
         OnPropertyChanged(nameof(CanPause));
         OnPropertyChanged(nameof(CanResume));
         OnPropertyChanged(nameof(CanRetry));
+        OnPropertyChanged(nameof(CanCancel));
         OnPropertyChanged(nameof(CanRemove));
     }
 
@@ -162,6 +164,7 @@ public class DownloadQueueManager
     private readonly ILogger<DownloadQueueManager> _logger;
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _ctsMap = new();
     private readonly ConcurrentDictionary<Guid, Task> _runningTasks = new();
+    private readonly ConcurrentDictionary<Guid, bool> _pausedInstances = new();
     private readonly SynchronizationContext? _uiContext;
 
     /// <summary>All jobs (active + finished) — the UI binds to this for the active card list.</summary>
@@ -324,18 +327,24 @@ public class DownloadQueueManager
         var item = Queue.FirstOrDefault(q => q.Instance.Id == instanceId);
         if (item is null || !item.CanPause) return Task.CompletedTask;
 
+        _pausedInstances[instanceId] = true;
+
         if (_ctsMap.TryGetValue(instanceId, out var cts))
         {
             try { cts.Cancel(); } catch { }
         }
 
-        item.JobStatus = DownloadJobStatus.Paused;
-        item.StatusMessage = "Paused — click Resume to continue";
-        item.SpeedBytesPerSec = 0;
-        item.WriteBytesPerSec = 0;
-        item.NotifyMetricsChanged();
-        UpdateTelemetry(0, 0);
-        NotifyQueueChanged();
+        RunOnUi(() =>
+        {
+            item.JobStatus = DownloadJobStatus.Paused;
+            item.StatusMessage = "Paused — click Resume to continue";
+            item.SpeedBytesPerSec = 0;
+            item.WriteBytesPerSec = 0;
+            item.NotifyMetricsChanged();
+            UpdateTelemetry(0, 0);
+            NotifyQueueChanged();
+        });
+
         _logger.LogInformation("Paused download for {Game}", item.Instance.Name);
 
         _ = Task.Run(async () =>
@@ -370,9 +379,34 @@ public class DownloadQueueManager
         return StartDownloadAsync(item.Instance);
     }
 
-    /// <summary>Cancels an active download.</summary>
+    /// <summary>Cancels an active or paused download.</summary>
     public Task CancelAsync(Guid instanceId)
     {
+        _pausedInstances.TryRemove(instanceId, out _);
+
+        var item = Queue.FirstOrDefault(q => q.Instance.Id == instanceId);
+        if (item is not null && (item.IsPaused || item.JobStatus == DownloadJobStatus.Queued))
+        {
+            RunOnUi(() =>
+            {
+                item.JobStatus = DownloadJobStatus.Canceled;
+                item.StatusMessage = "Canceled";
+                item.SpeedBytesPerSec = 0;
+                item.WriteBytesPerSec = 0;
+                item.CompletedAt = DateTimeOffset.Now;
+                item.NotifyMetricsChanged();
+                NotifyQueueChanged();
+            });
+
+            AddToLog(new DownloadLogEntry
+            {
+                GameName = item.Instance.Name,
+                Status = DownloadJobStatus.Canceled,
+                Message = "Download canceled by user",
+                Instance = item.Instance
+            });
+        }
+
         if (_ctsMap.TryGetValue(instanceId, out var cts))
         {
             try { cts.Cancel(); } catch { }
@@ -594,26 +628,50 @@ public class DownloadQueueManager
             _logger.LogInformation("Download finished for {Game}", instance.Name);
             _notificationService?.ShowSuccess("Download Completed", $"{instance.Name} downloaded and installed successfully.");
         }
-        catch (OperationCanceledException) when (job.IsPaused)
-        {
-            // Already marked Paused by PauseAsync — don't log as canceled
-        }
         catch (OperationCanceledException)
         {
-            job.JobStatus = DownloadJobStatus.Canceled;
-            job.StatusMessage = "Canceled";
-            job.CompletedAt = DateTimeOffset.Now;
-            NotifyQueueChanged();
-
-            AddToLog(new DownloadLogEntry
+            bool wasPaused = _pausedInstances.TryRemove(instance.Id, out _) || job.IsPaused;
+            if (wasPaused)
             {
-                GameName = instance.Name,
-                Status = DownloadJobStatus.Canceled,
-                Message = "Download canceled by user",
-                Instance = instance
-            });
+                // Download was paused by user — do NOT log as canceled in Recent Activity!
+                RunOnUi(() =>
+                {
+                    if (job.JobStatus != DownloadJobStatus.Downloading && job.JobStatus != DownloadJobStatus.Queued)
+                    {
+                        job.JobStatus = DownloadJobStatus.Paused;
+                        job.StatusMessage = "Paused — click Resume to continue";
+                        job.SpeedBytesPerSec = 0;
+                        job.WriteBytesPerSec = 0;
+                        job.NotifyMetricsChanged();
+                        NotifyQueueChanged();
+                    }
+                });
+                _logger.LogInformation("Download paused for {Game}", instance.Name);
+            }
+            else
+            {
+                // Explicitly canceled by user
+                RunOnUi(() =>
+                {
+                    job.JobStatus = DownloadJobStatus.Canceled;
+                    job.StatusMessage = "Canceled";
+                    job.SpeedBytesPerSec = 0;
+                    job.WriteBytesPerSec = 0;
+                    job.CompletedAt = DateTimeOffset.Now;
+                    job.NotifyMetricsChanged();
+                    NotifyQueueChanged();
+                });
 
-            _logger.LogInformation("Download canceled for {Game}", instance.Name);
+                AddToLog(new DownloadLogEntry
+                {
+                    GameName = instance.Name,
+                    Status = DownloadJobStatus.Canceled,
+                    Message = "Download canceled by user",
+                    Instance = instance
+                });
+
+                _logger.LogInformation("Download canceled for {Game}", instance.Name);
+            }
         }
         catch (Exception ex)
         {

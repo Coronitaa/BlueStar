@@ -55,7 +55,7 @@ public partial class DownloadsViewModel : ObservableObject
 
     [RelayCommand]
     private void CancelDownload(Guid instanceId) =>
-        _ = _queueManager.CancelOrRemoveJobAsync(instanceId);
+        _ = _queueManager.CancelAsync(instanceId);
 
     [RelayCommand]
     private void RemoveJob(Guid instanceId) =>
