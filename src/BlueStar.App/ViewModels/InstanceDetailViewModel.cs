@@ -776,7 +776,7 @@ public partial class InstanceDetailViewModel : ObservableObject
             var depotList = (instance.Depots ?? []).Select(d => d with
             {
                 Name = CleanName(d.Name) ?? d.Name,
-                IsDownloaded = d.IsDownloaded || (isInstanceInstalled && string.Equals(d.Category, "Base Game", StringComparison.OrdinalIgnoreCase))
+                IsDownloaded = d.IsDownloaded
             }).ToList();
 
             if (depotList.Count == 0)
@@ -2149,6 +2149,7 @@ public partial class InstanceDetailViewModel : ObservableObject
         GameFixDeployProgressMessage = $"Starting deployment of {fix.Name}...";
         StatusMessage = $"⏳ Deploying {fix.Name}...";
 
+        string? lastReportMessage = null;
         try
         {
             var progressReporter = new Progress<DeployProgress>(p =>
@@ -2156,6 +2157,7 @@ public partial class InstanceDetailViewModel : ObservableObject
                 GameFixDeployProgress = p.Percentage;
                 GameFixDeployProgressMessage = p.Message;
                 StatusMessage = $"⏳ {p.Message}";
+                lastReportMessage = p.Message;
             });
 
             if (_gameFixDeployService == null)
@@ -2183,8 +2185,11 @@ public partial class InstanceDetailViewModel : ObservableObject
             }
             else
             {
-                StatusMessage = $"❌ Failed to deploy {fix.Name}.";
-                _notificationService?.ShowError("Deployment Error", $"Could not deploy {fix.Name} in {Instance.Name}.");
+                var failureDetail = !string.IsNullOrWhiteSpace(lastReportMessage) && !lastReportMessage.StartsWith("Starting", StringComparison.OrdinalIgnoreCase)
+                    ? lastReportMessage
+                    : $"Could not deploy {fix.Name}.";
+                StatusMessage = $"❌ {failureDetail}";
+                _notificationService?.ShowError("Deployment Error", failureDetail);
             }
 
             await LoadEmulatorsCoreAsync(forceReload: true).ConfigureAwait(true);

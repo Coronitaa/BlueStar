@@ -350,14 +350,15 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
         string fixIdOrFilename,
         string targetPath,
         IProgress<DownloadProgress>? progress = null,
+        string? downloadName = null,
         CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(fixIdOrFilename);
         ArgumentException.ThrowIfNullOrWhiteSpace(targetPath);
 
-        _logger.LogInformation("Starting download for GameFix={Fix}", fixIdOrFilename);
+        _logger.LogInformation("Starting download for GameFix={Fix} (DownloadName={DownloadName})", fixIdOrFilename, downloadName);
 
-        HttpResponseMessage response;
+        HttpResponseMessage? response = null;
         if (fixIdOrFilename.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
             fixIdOrFilename.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
@@ -367,32 +368,59 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
         }
         else
         {
-            var cleanFilename = fixIdOrFilename.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+            var candidateUrls = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(downloadName))
+            {
+                var cleanDl = downloadName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+                    ? downloadName
+                    : $"{downloadName}.zip";
+                candidateUrls.Add($"/api/game-fixes/download?file={Uri.EscapeDataString(cleanDl)}");
+
+                var cleanDlId = downloadName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+                    ? Path.GetFileNameWithoutExtension(downloadName)
+                    : downloadName;
+                candidateUrls.Add($"/api/game-fixes/download?id={Uri.EscapeDataString(cleanDlId)}");
+            }
+
+            var cleanFixFilename = fixIdOrFilename.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
                 ? fixIdOrFilename
                 : $"{fixIdOrFilename}.zip";
-
-            var cleanId = fixIdOrFilename.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+            var cleanFixId = fixIdOrFilename.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
                 ? Path.GetFileNameWithoutExtension(fixIdOrFilename)
                 : fixIdOrFilename;
 
-            // Try file= query first as documented in DepotBox API, then id= as fallback
-            var primaryUrl = $"/api/game-fixes/download?file={Uri.EscapeDataString(cleanFilename)}";
-            var fallbackUrl = $"/api/game-fixes/download?id={Uri.EscapeDataString(cleanId)}";
+            candidateUrls.Add($"/api/game-fixes/download?file={Uri.EscapeDataString(cleanFixFilename)}");
+            candidateUrls.Add($"/api/game-fixes/download?id={Uri.EscapeDataString(cleanFixId)}");
 
-            using var primaryReq = await CreateRequestAsync(HttpMethod.Get, primaryUrl, ct).ConfigureAwait(false);
-            var primaryResp = await _http.SendAsync(primaryReq, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            var uniqueEndpoints = candidateUrls.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            Exception? lastEx = null;
 
-            if (primaryResp.IsSuccessStatusCode || (int)primaryResp.StatusCode is 301 or 302 or 307 or 308)
+            foreach (var ep in uniqueEndpoints)
             {
-                response = primaryResp;
+                try
+                {
+                    using var req = await CreateRequestAsync(HttpMethod.Get, ep, ct).ConfigureAwait(false);
+                    var candidateResp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+
+                    if (candidateResp.IsSuccessStatusCode || (int)candidateResp.StatusCode is 301 or 302 or 303 or 307 or 308)
+                    {
+                        response = candidateResp;
+                        break;
+                    }
+
+                    candidateResp.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    lastEx = ex;
+                    _logger.LogWarning(ex, "Failed attempting game fix download endpoint {Endpoint}", ep);
+                }
             }
-            else
+
+            if (response is null)
             {
-                primaryResp.Dispose();
-                _logger.LogWarning("DepotBox primary game-fix download {Url} failed, trying fallback {Fallback}", primaryUrl, fallbackUrl);
-                using var fallbackReq = await CreateRequestAsync(HttpMethod.Get, fallbackUrl, ct).ConfigureAwait(false);
-                response = await _http.SendAsync(fallbackReq, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-                await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+                throw lastEx ?? new HttpRequestException($"Could not download game fix from any candidate endpoints: {string.Join(", ", uniqueEndpoints)}");
             }
         }
 

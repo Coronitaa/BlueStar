@@ -120,8 +120,7 @@ public sealed class GameFixDeployService : IGameFixDeployService
                 });
             });
 
-            var identifier = !string.IsNullOrWhiteSpace(fix.DownloadName) ? fix.DownloadName : fix.Id;
-            var zipPath = await _apiClient.DownloadGameFixAsync(identifier, cacheDir, downloadProgress, ct).ConfigureAwait(false);
+            var zipPath = await _apiClient.DownloadGameFixAsync(fix.Id, cacheDir, downloadProgress, fix.DownloadName, ct).ConfigureAwait(false);
 
             if (!File.Exists(zipPath))
             {
@@ -141,7 +140,15 @@ public sealed class GameFixDeployService : IGameFixDeployService
             stagingDir = Path.Combine(Path.GetTempPath(), "BlueStar_FixDeploy", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(stagingDir);
 
-            ZipFile.ExtractToDirectory(zipPath, stagingDir, overwriteFiles: true);
+            try
+            {
+                ZipFile.ExtractToDirectory(zipPath, stagingDir, overwriteFiles: true);
+            }
+            catch (Exception ex)
+            {
+                try { if (File.Exists(zipPath)) File.Delete(zipPath); } catch { }
+                throw new InvalidOperationException($"Failed to extract fix archive ({ex.Message}). The file may be corrupt or in an unsupported format.", ex);
+            }
 
             // ─────────────────────────────────────────────────────────────
             // STAGE 4: Analyze Target Directories & Prepare Backups
@@ -222,11 +229,11 @@ public sealed class GameFixDeployService : IGameFixDeployService
                         Directory.CreateDirectory(backupParent);
                     }
 
-                    File.Copy(destFile, backupFile, overwrite: true);
+                    SafeCopy(destFile, backupFile);
                 }
 
                 // Copy staged file to destination
-                File.Copy(srcFile, destFile, overwrite: true);
+                SafeCopy(srcFile, destFile);
                 deployedRelPaths.Add(relPath);
             }
 
@@ -556,5 +563,39 @@ public sealed class GameFixDeployService : IGameFixDeployService
         var invalid = Path.GetInvalidFileNameChars();
         var chars = id.Select(c => invalid.Contains(c) ? '_' : c).ToArray();
         return new string(chars).Replace(' ', '_');
+    }
+
+    private static void SafeCopy(string src, string dest)
+    {
+        if (File.Exists(dest))
+        {
+            try
+            {
+                var attrs = File.GetAttributes(dest);
+                if ((attrs & FileAttributes.ReadOnly) != 0)
+                {
+                    File.SetAttributes(dest, attrs & ~FileAttributes.ReadOnly);
+                }
+            }
+            catch { }
+        }
+
+        for (int i = 0; i < 5; i++)
+        {
+            try
+            {
+                File.Copy(src, dest, overwrite: true);
+                return;
+            }
+            catch (IOException) when (i < 4)
+            {
+                Thread.Sleep(150);
+            }
+            catch (UnauthorizedAccessException) when (i < 4)
+            {
+                Thread.Sleep(150);
+            }
+        }
+        File.Copy(src, dest, overwrite: true);
     }
 }

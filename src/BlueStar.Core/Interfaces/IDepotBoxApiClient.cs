@@ -101,7 +101,8 @@ public interface IDepotBoxApiClient
     /// <param name="fixIdOrFilename">The fix ID or clean filename (e.g. "007_First_Light_bypass.zip").</param>
     /// <param name="targetPath">The local path where the fix ZIP archive should be saved.</param>
     /// <param name="progress">Optional progress reporter.</param>
+    /// <param name="downloadName">Optional explicit download filename from metadata.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     /// <returns>The path to the downloaded archive file.</returns>
-    Task<string> DownloadGameFixAsync(string fixIdOrFilename, string targetPath, IProgress<DownloadProgress>? progress = null, CancellationToken ct = default);
+    Task<string> DownloadGameFixAsync(string fixIdOrFilename, string targetPath, IProgress<DownloadProgress>? progress = null, string? downloadName = null, CancellationToken ct = default);
 }

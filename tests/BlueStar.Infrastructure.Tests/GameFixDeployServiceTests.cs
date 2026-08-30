@@ -306,7 +306,7 @@ public class GameFixDeployServiceTests : IDisposable
 
         public void SetZipPath(string zipPath) => _zipPath = zipPath;
 
-        public Task<string> DownloadGameFixAsync(string fixIdOrFilename, string targetPath, IProgress<DownloadProgress>? progress = null, CancellationToken ct = default)
+        public Task<string> DownloadGameFixAsync(string fixIdOrFilename, string targetPath, IProgress<DownloadProgress>? progress = null, string? downloadName = null, CancellationToken ct = default)
         {
             var dest = Path.Combine(targetPath, Path.GetFileName(_zipPath));
             File.Copy(_zipPath, dest, overwrite: true);
