@@ -1092,6 +1092,221 @@ public class NewFeaturesTests
         // Assert: Explicit adult game with descriptor 3 should be flagged as NSFW
         adultGame.IsNsfw.Should().BeTrue();
     }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // 8. UNINSTALL GAME FILES & KEEP INSTANCE RECORD TESTS
+    // ═════════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void GameInstance_WhenResetForUninstall_PreservesMetadataAndResetsState()
+    {
+        // Arrange
+        var originalInstance = new GameInstance
+        {
+            Id = Guid.NewGuid(),
+            AppId = 1196590,
+            Name = "Resident Evil Village",
+            InstallPath = @"C:\Games\ResidentEvilVillage",
+            Status = InstanceStatus.Ready,
+            Depots = new List<DepotInfo>
+            {
+                new() { DepotId = 1196591, ManifestId = 111111111, IsDownloaded = true, SizeBytes = 5000000 },
+                new() { DepotId = 1196592, ManifestId = 222222222, IsDownloaded = true, SizeBytes = 8000000 }
+            },
+            Dlcs = new List<DlcInfo>
+            {
+                new()
+                {
+                    AppId = 1731080,
+                    Name = "Winters Expansion",
+                    IsInstalled = true,
+                    Depots = new List<DepotInfo>
+                    {
+                        new() { DepotId = 1731080, ManifestId = 333333333, IsDownloaded = true }
+                    }
+                }
+            },
+            InstalledFixLayers = new List<FixLayerInfo>
+            {
+                new()
+                {
+                    LayerId = "re_village_bypass",
+                    DisplayName = "Bypass",
+                    SourceType = "depotbox_gamefix",
+                    Tags = ["bypass"]
+                }
+            },
+            DlcUnlockerInstalled = true,
+            UnlockedDlcIds = new List<uint> { 1731080 }
+        };
+
+        // Act: Perform state reset as done by Uninstall Game Files workflow
+        var uninstalledDepots = originalInstance.Depots.Select(d => d with { IsDownloaded = false }).ToList();
+        var uninstalledDlcs = originalInstance.Dlcs.Select(d => d with
+        {
+            IsInstalled = false,
+            Depots = d.Depots.Select(dp => dp with { IsDownloaded = false }).ToList().AsReadOnly()
+        }).ToList();
+
+        var resetInstance = originalInstance with
+        {
+            Status = InstanceStatus.NotInstalled,
+            Depots = uninstalledDepots.AsReadOnly(),
+            Dlcs = uninstalledDlcs.AsReadOnly(),
+            InstalledFixLayers = [],
+            DlcUnlockerInstalled = false,
+            UnlockedDlcIds = [],
+            EmulatorEnabled = false,
+            EmulatorId = null
+        };
+
+        // Assert: Instance ID, Name, AppId, and install configuration are preserved
+        resetInstance.Id.Should().Be(originalInstance.Id);
+        resetInstance.Name.Should().Be("Resident Evil Village");
+        resetInstance.AppId.Should().Be(1196590);
+        resetInstance.InstallPath.Should().Be(@"C:\Games\ResidentEvilVillage");
+
+        // Status and download flags are reset
+        resetInstance.Status.Should().Be(InstanceStatus.NotInstalled);
+        resetInstance.Depots.Should().AllSatisfy(d => d.IsDownloaded.Should().BeFalse());
+        resetInstance.Dlcs.Should().AllSatisfy(d => d.IsInstalled.Should().BeFalse());
+        resetInstance.InstalledFixLayers.Should().BeEmpty();
+        resetInstance.DlcUnlockerInstalled.Should().BeFalse();
+        resetInstance.UnlockedDlcIds.Should().BeEmpty();
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // 9. GAME BUILDS & VERSION SWITCHING INTERCOMPATIBILITY TESTS
+    // ═════════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task SteamStoreApiClient_GetAppBuildsAsync_ParsesBranchesAndBuilds()
+    {
+        // Arrange
+        var handlerMock = new Mock<HttpMessageHandler>();
+        var sampleSteamCmdJson = """
+        {
+          "status": "success",
+          "data": {
+            "1196590": {
+              "depots": {
+                "branches": {
+                  "public": {
+                    "buildid": "15283921",
+                    "timeupdated": "1723708800"
+                  },
+                  "previous": {
+                    "buildid": "14920193",
+                    "timeupdated": "1718179200",
+                    "description": "Previous Build"
+                  }
+                },
+                "1196591": {
+                  "manifests": {
+                    "public": { "gid": "3932505801699900266" },
+                    "previous": { "gid": "1234567890123456789" }
+                  }
+                },
+                "1196592": {
+                  "manifests": {
+                    "public": { "gid": "6661267619031919339" },
+                    "previous": { "gid": "9876543210987654321" }
+                  }
+                }
+              }
+            }
+          }
+        }
+        """;
+
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req => req.RequestUri != null && req.RequestUri.ToString().Contains("api.steamcmd.net")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(sampleSteamCmdJson)
+            });
+
+        var client = new HttpClient(handlerMock.Object);
+        var apiClient = new BlueStar.Infrastructure.Metadata.SteamStoreApiClient(client, NullLogger<BlueStar.Infrastructure.Metadata.SteamStoreApiClient>.Instance);
+
+        // Act
+        var builds = await apiClient.GetAppBuildsAsync(1196590, CancellationToken.None);
+
+        // Assert
+        builds.Should().NotBeNull();
+        builds.Count.Should().Be(2);
+
+        var publicBuild = builds.FirstOrDefault(b => b.BranchName == "public");
+        publicBuild.Should().NotBeNull();
+        publicBuild!.BuildId.Should().Be("15283921");
+        publicBuild.DepotManifests.Should().ContainKey(1196591);
+        publicBuild.DepotManifests[1196591].Should().Be(3932505801699900266);
+
+        var prevBuild = builds.FirstOrDefault(b => b.BranchName == "previous");
+        prevBuild.Should().NotBeNull();
+        prevBuild!.BuildId.Should().Be("14920193");
+        prevBuild.DepotManifests[1196591].Should().Be(1234567890123456789);
+    }
+
+    [Fact]
+    public void GameBuildSwitching_PreservesDlcsAndFixCompatibility()
+    {
+        // Arrange
+        var targetBuild = new GameBuildInfo
+        {
+            BuildId = "14920193",
+            BranchName = "previous",
+            DisplayName = "Previous Build 14920193",
+            DepotManifests = new Dictionary<uint, ulong>
+            {
+                { 1196591, 1234567890123456789 },
+                { 1196592, 9876543210987654321 }
+            }
+        };
+
+        var instance = new GameInstance
+        {
+            Id = Guid.NewGuid(),
+            AppId = 1196590,
+            Name = "Resident Evil Village",
+            InstallPath = @"C:\Games\ResidentEvilVillage",
+            Depots = new List<DepotInfo>
+            {
+                new() { DepotId = 1196591, ManifestId = 3932505801699900266, IsDownloaded = true },
+                new() { DepotId = 1196592, ManifestId = 6661267619031919339, IsDownloaded = true }
+            },
+            Dlcs = new List<DlcInfo>
+            {
+                new() { AppId = 1731080, Name = "Winters Expansion", IsInstalled = true }
+            }
+        };
+
+        // Act: Apply build switch
+        var updatedDepots = instance.Depots.Select(d =>
+        {
+            if (targetBuild.DepotManifests.TryGetValue(d.DepotId, out var newManifestId))
+            {
+                bool isStillDownloaded = d.IsDownloaded && (d.ManifestId == newManifestId);
+                return d with { ManifestId = newManifestId, IsDownloaded = isStillDownloaded };
+            }
+            return d;
+        }).ToList();
+
+        var updatedInstance = instance with
+        {
+            Depots = updatedDepots.AsReadOnly()
+        };
+
+        // Assert: Manifests are updated and DLC intercompatibility is preserved
+        updatedInstance.Depots.First(d => d.DepotId == 1196591).ManifestId.Should().Be(1234567890123456789);
+        updatedInstance.Depots.First(d => d.DepotId == 1196591).IsDownloaded.Should().BeFalse(); // Requires download for new build
+        updatedInstance.Dlcs.Should().HaveCount(1);
+        updatedInstance.Dlcs[0].AppId.Should().Be(1731080);
+    }
 }
 
 

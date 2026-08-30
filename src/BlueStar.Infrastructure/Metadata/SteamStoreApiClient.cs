@@ -552,6 +552,122 @@ public sealed class SteamStoreApiClient : IMetadataProvider
     }
 
     /// <summary>
+    /// Gets all available game branches and builds from SteamCMD / Steam app info.
+    /// </summary>
+    public async Task<IReadOnlyList<GameBuildInfo>> GetAppBuildsAsync(uint appId, CancellationToken ct = default)
+    {
+        if (appId == 0) return [];
+
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.steamcmd.net/v1/info/{appId}");
+            if (!_http.DefaultRequestHeaders.Contains("User-Agent"))
+            {
+                request.Headers.UserAgent.ParseAdd("BlueStar/1.1.2");
+            }
+
+            var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode) return [];
+
+            var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("data", out var dataEl) ||
+                !dataEl.TryGetProperty(appId.ToString(), out var appEl) ||
+                !appEl.TryGetProperty("depots", out var depotsEl))
+            {
+                return [];
+            }
+
+            var builds = new List<GameBuildInfo>();
+
+            if (depotsEl.TryGetProperty("branches", out var branchesEl))
+            {
+                foreach (var branchProp in branchesEl.EnumerateObject())
+                {
+                    var branchName = branchProp.Name;
+                    var branchObj = branchProp.Value;
+
+                    string buildId = string.Empty;
+                    if (branchObj.TryGetProperty("buildid", out var bIdProp))
+                    {
+                        buildId = bIdProp.GetString() ?? string.Empty;
+                    }
+
+                    string? desc = null;
+                    if (branchObj.TryGetProperty("description", out var descProp))
+                    {
+                        desc = descProp.GetString();
+                    }
+
+                    DateTimeOffset? updateDate = null;
+                    long unix = 0;
+                    if (branchObj.TryGetProperty("timeupdated", out var tuProp))
+                    {
+                        if (tuProp.ValueKind == JsonValueKind.Number) tuProp.TryGetInt64(out unix);
+                        else if (tuProp.ValueKind == JsonValueKind.String) long.TryParse(tuProp.GetString(), out unix);
+                    }
+                    if (unix == 0 && branchObj.TryGetProperty("timebuildupdated", out var tbuProp))
+                    {
+                        if (tbuProp.ValueKind == JsonValueKind.Number) tbuProp.TryGetInt64(out unix);
+                        else if (tbuProp.ValueKind == JsonValueKind.String) long.TryParse(tbuProp.GetString(), out unix);
+                    }
+                    if (unix > 0)
+                    {
+                        updateDate = DateTimeOffset.FromUnixTimeSeconds(unix);
+                    }
+
+                    // Extract depot manifests for this specific branch
+                    var depotManifests = new Dictionary<uint, ulong>();
+                    foreach (var depotProp in depotsEl.EnumerateObject())
+                    {
+                        if (uint.TryParse(depotProp.Name, out var depotId) &&
+                            depotProp.Value.TryGetProperty("manifests", out var mEl) &&
+                            mEl.TryGetProperty(branchName, out var pManEl) &&
+                            pManEl.TryGetProperty("gid", out var gidProp))
+                        {
+                            var gidStr = gidProp.GetString();
+                            if (ulong.TryParse(gidStr, out var gid))
+                            {
+                                depotManifests[depotId] = gid;
+                            }
+                        }
+                    }
+
+                    var displayName = branchName.Equals("public", StringComparison.OrdinalIgnoreCase)
+                        ? (string.IsNullOrWhiteSpace(buildId) ? "Latest Public Release" : $"Latest Build {buildId} (public)")
+                        : $"{branchName} (Build {buildId})";
+
+                    if (!string.IsNullOrWhiteSpace(desc))
+                    {
+                        displayName += $" - {desc}";
+                    }
+
+                    builds.Add(new GameBuildInfo
+                    {
+                        BuildId = buildId,
+                        BranchName = branchName,
+                        DisplayName = displayName,
+                        UpdatedAt = updateDate,
+                        Description = desc,
+                        IsCurrentBuild = false,
+                        Source = "Steam",
+                        DepotManifests = depotManifests
+                    });
+                }
+            }
+
+            return builds.OrderByDescending(b => b.BranchName == "public")
+                         .ThenByDescending(b => b.UpdatedAt ?? DateTimeOffset.MinValue)
+                         .ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to get SteamCMD branches and builds for AppId={AppId}", appId);
+            return [];
+        }
+    }
+
+    /// <summary>
     /// Gets the date of the latest patch or update from Steam depot history or Steam news API.
     /// </summary>
     public async Task<DateTimeOffset?> GetLatestAppUpdateDateAsync(uint appId, CancellationToken ct = default)

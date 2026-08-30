@@ -355,6 +355,64 @@
 
                 <!-- ── 2. FILES & DEPOTS TAB ── -->
                 <StackPanel Visibility="{Binding SelectedTab, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Files}">
+                    
+                    <!-- ═══ GAME BUILD & VERSION SELECTOR ═══ -->
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,16" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="20"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <TextBlock Text="🎮 Game Build &amp; Branch Version" Style="{StaticResource H3}" Margin="0,0,8,0"/>
+                                    <Border Background="{StaticResource AccentBgBrush}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,2"
+                                            Visibility="{Binding ActiveBuildBadgeText, Converter={StaticResource NullToVisibilityConverter}}">
+                                        <TextBlock Text="{Binding ActiveBuildBadgeText}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
+                                    </Border>
+                                </StackPanel>
+                                <TextBlock Text="Select which build or branch version to target for download and installation. DLCs, mods, and emulator layers will maintain intercompatibility."
+                                           Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                                <ComboBox ItemsSource="{Binding AvailableBuilds}"
+                                          SelectedItem="{Binding SelectedBuild, Mode=TwoWay}"
+                                          Style="{StaticResource DarkComboBox}"
+                                          HorizontalAlignment="Stretch">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,3">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0">
+                                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}"/>
+                                                    <TextBlock Text="{Binding Description, FallbackValue=''}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+                                                    <TextBlock Text="{Binding FormattedDate}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,8,0"/>
+                                                    <Border Background="{StaticResource SurfaceCardBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="6,1">
+                                                        <TextBlock Text="{Binding Source}" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                    </Border>
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                <Button Content="🔄 Scan Builds"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Padding="14,9"
+                                        Command="{Binding LoadAvailableBuildsCommand}"
+                                        IsEnabled="{Binding IsLoadingBuilds, Converter={StaticResource InverseBoolConverter}}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <Grid Margin="0,0,0,16">
@@ -1193,18 +1251,30 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Danger Zone -->
+                    <!-- Danger Zone & Storage Management -->
                     <Border Style="{StaticResource Card}" Margin="0,20,0,0" BorderBrush="{StaticResource DangerBorderBrush}" BorderThickness="1">
                         <StackPanel>
-                            <TextBlock Text="Danger Zone" Style="{StaticResource H2}" Foreground="{StaticResource DangerBrush}" Margin="0,0,0,8"/>
-                            <TextBlock Text="Removes this instance from your BlueStar library. You can choose to unlink the library entry or permanently delete all game files on disk."
+                            <TextBlock Text="Danger Zone &amp; Storage Management" Style="{StaticResource H2}" Foreground="{StaticResource DangerBrush}" Margin="0,0,0,8"/>
+                            <TextBlock Text="Manage installed game files or remove this instance entirely from your BlueStar library."
                                        Style="{StaticResource BodySmall}" Margin="0,0,0,16"/>
 
-                            <Button Content="🗑 Delete Instance..."
-                                     Style="{StaticResource DangerButton}"
-                                     Padding="18,10"
-                                     HorizontalAlignment="Left"
-                                     Command="{Binding OpenDeleteModalCommand}"/>
+                            <WrapPanel Orientation="Horizontal">
+                                <!-- Uninstall Game Files (Keeps instance in BlueStar) -->
+                                <Button Content="🗑 Uninstall Game Files..."
+                                        Style="{StaticResource SecondaryButton}"
+                                        BorderBrush="{StaticResource DangerBrush}"
+                                        Foreground="{StaticResource DangerBrush}"
+                                        Padding="18,10"
+                                        Margin="0,0,12,8"
+                                        Command="{Binding OpenUninstallModalCommand}"/>
+
+                                <!-- Delete Instance Entirely -->
+                                <Button Content="💥 Delete Instance..."
+                                        Style="{StaticResource DangerButton}"
+                                        Padding="18,10"
+                                        Margin="0,0,0,8"
+                                        Command="{Binding OpenDeleteModalCommand}"/>
+                            </WrapPanel>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -1669,6 +1739,64 @@
                             Padding="18,8"
                             Command="{Binding CloseDeleteModalCommand}"
                             IsEnabled="{Binding IsDeletingInstance, Converter={StaticResource InverseBoolConverter}}"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ══════════════════════════════════════════════════════════════
+             UNINSTALL GAME FILES MODAL (Keeps instance in BlueStar)
+             ══════════════════════════════════════════════════════════════ -->
+        <Grid Visibility="{Binding IsUninstallModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
+              Background="{StaticResource ModalOverlayBrush}"
+              HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+              Panel.ZIndex="110">
+            <Border Background="{StaticResource SurfaceCardBrush}"
+                    BorderBrush="{StaticResource SubtleBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="28"
+                    MaxWidth="520"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <StackPanel>
+                    <TextBlock Text="🗑 Uninstall Game Files" Style="{StaticResource H1}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{Binding Instance.Name, StringFormat='{}Are you sure you want to uninstall game files for {0}?'}"
+                               Style="{StaticResource Body}" TextWrapping="Wrap" Margin="0,0,0,16"/>
+
+                    <Border Background="{StaticResource SurfaceInputBrush}"
+                            BorderBrush="{StaticResource SubtleBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusMd}"
+                            Padding="14" Margin="0,0,0,20">
+                        <StackPanel>
+                            <TextBlock Text="ℹ️ What will happen:" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,6"/>
+                            <TextBlock Text="• All installed game files will be permanently deleted from disk." Style="{StaticResource BodySmall}" Margin="0,0,0,3"/>
+                            <TextBlock Text="• Active emulator and DLC unlocker files will be cleanly removed." Style="{StaticResource BodySmall}" Margin="0,0,0,3"/>
+                            <TextBlock Text="• This instance record, its configurations, notes, and depot manifests remain saved in your BlueStar library." Style="{StaticResource BodySmall}" Margin="0,0,0,3"/>
+                            <TextBlock Text="• You can reinstall or re-download the game at any time." Style="{StaticResource BodySmall}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="10"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="1" Content="Cancel"
+                                Style="{StaticResource GhostButton}"
+                                Padding="18,9"
+                                Command="{Binding CloseUninstallModalCommand}"
+                                IsEnabled="{Binding IsUninstallingGameFiles, Converter={StaticResource InverseBoolConverter}}"/>
+
+                        <Button Grid.Column="3" Content="🗑 Uninstall Game Files"
+                                Style="{StaticResource DangerButton}"
+                                Padding="20,9"
+                                Command="{Binding ConfirmUninstallGameFilesCommand}"
+                                IsEnabled="{Binding IsUninstallingGameFiles, Converter={StaticResource InverseBoolConverter}}"/>
+                    </Grid>
                 </StackPanel>
             </Border>
         </Grid>

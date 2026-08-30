@@ -489,12 +489,31 @@ public partial class InstanceDetailViewModel : ObservableObject
     [ObservableProperty]
     private bool _isDuplicatingInstance;
 
-    // ── Instance Deletion State ──
+    // ── Instance Deletion & Uninstall State ──
     [ObservableProperty]
     private bool _isDeleteModalOpen;
 
     [ObservableProperty]
     private bool _isDeletingInstance;
+
+    [ObservableProperty]
+    private bool _isUninstallModalOpen;
+
+    [ObservableProperty]
+    private bool _isUninstallingGameFiles;
+
+    // ── Game Builds & Version Switching State ──
+    [ObservableProperty]
+    private ObservableCollection<GameBuildInfo> _availableBuilds = [];
+
+    [ObservableProperty]
+    private GameBuildInfo? _selectedBuild;
+
+    [ObservableProperty]
+    private bool _isLoadingBuilds;
+
+    [ObservableProperty]
+    private string? _activeBuildBadgeText;
 
     // ── Download progress exposed to UI ──
     [ObservableProperty]
@@ -921,6 +940,7 @@ public partial class InstanceDetailViewModel : ObservableObject
 
             _ = CheckSteamVersionDateAsync();
             _ = LoadDlcsFromMetadataIfEmptyAsync();
+            _ = LoadAvailableBuildsAsync();
 
             if (autoCheckDepotUpdates)
             {
@@ -3353,6 +3373,255 @@ public partial class InstanceDetailViewModel : ObservableObject
             IsDeletingInstance = false;
         }
     }
+
+    // ── Instance Game Files Uninstall Commands ──
+    [RelayCommand]
+    public void OpenUninstallModal() => IsUninstallModalOpen = true;
+
+    [RelayCommand]
+    public void CloseUninstallModal() => IsUninstallModalOpen = false;
+
+    [RelayCommand]
+    public async Task ConfirmUninstallGameFilesAsync()
+    {
+        if (Instance == null) return;
+
+        IsUninstallingGameFiles = true;
+        StatusMessage = "🗑 Uninstalling game files...";
+
+        try
+        {
+            // 1. Cancel running download job for this instance
+            _ = _downloadQueueManager.CancelAsync(Instance.Id);
+
+            // 2. Remove all deployed fix layers
+            if (_gameFixDeployService != null)
+            {
+                try
+                {
+                    await _gameFixDeployService.UninstallAllFixLayersAsync(Instance, null, CancellationToken.None).ConfigureAwait(true);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to uninstall fix layers during game uninstall for {Name}", Instance.Name);
+                }
+            }
+
+            // 3. Remove DLC unlockers
+            if (_dlcInstaller != null && Instance.Dlcs.Count > 0)
+            {
+                try
+                {
+                    await _dlcInstaller.UninstallDlcAsync(Instance, Instance.Dlcs[0], CancellationToken.None).ConfigureAwait(true);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to uninstall DLC unlocker during game uninstall for {Name}", Instance.Name);
+                }
+            }
+
+            // 4. Delete game files on disk
+            if (!string.IsNullOrWhiteSpace(Instance.InstallPath) && Directory.Exists(Instance.InstallPath))
+            {
+                var fullPath = Path.GetFullPath(Instance.InstallPath);
+                var root = Path.GetPathRoot(fullPath);
+
+                if (!string.Equals(fullPath, root, StringComparison.OrdinalIgnoreCase) && fullPath.Length > 4)
+                {
+                    _logger.LogInformation("Clearing game install directory on disk: {Path}", fullPath);
+                    var di = new DirectoryInfo(fullPath);
+                    foreach (var file in di.GetFiles("*", SearchOption.AllDirectories))
+                    {
+                        try
+                        {
+                            if ((file.Attributes & FileAttributes.ReadOnly) != 0)
+                                file.Attributes &= ~FileAttributes.ReadOnly;
+                            file.Delete();
+                        }
+                        catch { }
+                    }
+                    foreach (var subDir in di.GetDirectories())
+                    {
+                        try { subDir.Delete(recursive: true); } catch { }
+                    }
+                }
+            }
+
+            // 5. Reset downloaded status on instance depots and DLCs while preserving instance metadata
+            var uninstalledDepots = (Instance.Depots ?? []).Select(d => d with { IsDownloaded = false }).ToList();
+            var uninstalledDlcs = (Instance.Dlcs ?? []).Select(d => d with
+            {
+                IsInstalled = false,
+                Depots = (d.Depots ?? []).Select(dp => dp with { IsDownloaded = false }).ToList().AsReadOnly()
+            }).ToList();
+
+            var updatedInstance = Instance with
+            {
+                Status = InstanceStatus.NotInstalled,
+                Depots = uninstalledDepots.AsReadOnly(),
+                Dlcs = uninstalledDlcs.AsReadOnly(),
+                InstalledFixLayers = [],
+                DlcUnlockerInstalled = false,
+                UnlockedDlcIds = [],
+                EmulatorEnabled = false,
+                EmulatorId = null,
+                UpdatedAt = DateTimeOffset.UtcNow
+            };
+
+            await _instanceManager.UpdateAsync(updatedInstance, CancellationToken.None).ConfigureAwait(true);
+            await LoadInstanceAsync(updatedInstance).ConfigureAwait(true);
+
+            IsUninstallModalOpen = false;
+            _notificationService?.ShowSuccess(
+                "Game Files Uninstalled",
+                $"{Instance.Name} files deleted from disk. Instance remains configured in your BlueStar library.");
+            StatusMessage = "🗑 Game files uninstalled successfully. Instance is ready for reinstallation.";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to uninstall game files for {Name}", Instance.Name);
+            StatusMessage = $"❌ Failed to uninstall game files: {ex.Message}";
+            _notificationService?.ShowError("Uninstall Error", ex.Message);
+        }
+        finally
+        {
+            IsUninstallingGameFiles = false;
+        }
+    }
+
+    #region Builds and Branches Management
+
+    partial void OnSelectedBuildChanged(GameBuildInfo? oldValue, GameBuildInfo? newValue)
+    {
+        if (newValue == null || Instance == null) return;
+        UpdateBuildBadge();
+
+        if (newValue.DepotManifests.Count > 0)
+        {
+            var updated = (Instance.Depots ?? []).Select(d =>
+            {
+                if (newValue.DepotManifests.TryGetValue(d.DepotId, out var newManifestId) && newManifestId > 0)
+                {
+                    bool isStillDownloaded = d.IsDownloaded && (d.ManifestId == newManifestId);
+                    return d with
+                    {
+                        ManifestId = newManifestId,
+                        IsDownloaded = isStillDownloaded
+                    };
+                }
+                return d;
+            }).ToList();
+
+            Instance = Instance with
+            {
+                Depots = updated.AsReadOnly()
+            };
+
+            for (int i = 0; i < Depots.Count; i++)
+            {
+                var dItem = Depots[i];
+                var u = updated.FirstOrDefault(x => x.DepotId == dItem.Depot.DepotId);
+                if (u != null)
+                {
+                    dItem.Depot = u;
+                    dItem.NotifyDownloadedChanged();
+                }
+            }
+
+            RecalculateSelectedSize();
+            NotifyDownloadProps();
+            StatusMessage = $"🎮 Build selected: {newValue.DisplayName}. Ready to download or switch.";
+        }
+    }
+
+    private void UpdateBuildBadge()
+    {
+        if (SelectedBuild != null)
+        {
+            ActiveBuildBadgeText = string.IsNullOrWhiteSpace(SelectedBuild.BuildId)
+                ? SelectedBuild.BranchName
+                : $"Build {SelectedBuild.BuildId} ({SelectedBuild.BranchName})";
+        }
+        else
+        {
+            ActiveBuildBadgeText = null;
+        }
+    }
+
+    [RelayCommand]
+    public async Task LoadAvailableBuildsAsync()
+    {
+        if (Instance == null || Instance.AppId == 0) return;
+
+        IsLoadingBuilds = true;
+        try
+        {
+            var list = new List<GameBuildInfo>();
+
+            // 1. Fetch steam branches/builds from SteamStoreApiClient
+            if (_metadataProvider is BlueStar.Infrastructure.Metadata.SteamStoreApiClient steamClient)
+            {
+                var steamBuilds = await steamClient.GetAppBuildsAsync(Instance.AppId, CancellationToken.None).ConfigureAwait(true);
+                list.AddRange(steamBuilds);
+            }
+
+            // 2. Fetch DepotBox manifests build
+            if (_apiClient != null)
+            {
+                try
+                {
+                    var depotBoxManifests = await _apiClient.GetManifestsAsync(Instance.AppId, CancellationToken.None).ConfigureAwait(true);
+                    if (depotBoxManifests.Count > 0)
+                    {
+                        var map = depotBoxManifests.ToDictionary(m => m.DepotId, m => m.ManifestId);
+                        list.Add(new GameBuildInfo
+                        {
+                            BuildId = "DepotBox",
+                            BranchName = "depotbox",
+                            DisplayName = "DepotBox Archive Build (Verified)",
+                            UpdatedAt = DateTimeOffset.UtcNow,
+                            Description = $"{depotBoxManifests.Count} verified manifests hosted on DepotBox",
+                            Source = "DepotBox",
+                            DepotManifests = map
+                        });
+                    }
+                }
+                catch { }
+            }
+
+            // 3. Fallback: Add current instance configuration as a build if list is empty
+            if (list.Count == 0 && Instance.Depots.Count > 0)
+            {
+                var map = Instance.Depots.ToDictionary(d => d.DepotId, d => d.ManifestId);
+                list.Add(new GameBuildInfo
+                {
+                    BuildId = "Current",
+                    BranchName = "public",
+                    DisplayName = "Installed / Configured Build",
+                    UpdatedAt = BlueStar.Infrastructure.Services.GameUpdateDetectionHelper.GetInstalledManifestDate(Instance),
+                    Source = "Local",
+                    DepotManifests = map
+                });
+            }
+
+            AvailableBuilds = new ObservableCollection<GameBuildInfo>(list);
+
+            // Select current build or first
+            var current = list.FirstOrDefault(b => b.BranchName == "public") ?? list.FirstOrDefault();
+            SelectedBuild = current;
+            UpdateBuildBadge();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load available builds for {AppId}", Instance.AppId);
+        }
+        finally
+        {
+            IsLoadingBuilds = false;
+        }
+    }
+
+    #endregion
 
     #region Prerequisites Management
 
