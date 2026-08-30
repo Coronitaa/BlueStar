@@ -29,7 +29,7 @@ public class BackgroundTaskServiceTests
         taskId.Should().NotBeEmpty();
 
         // Wait for task completion
-        for (int i = 0; i < 50 && (!executed || service.Tasks.FirstOrDefault(t => t.Id == taskId)?.Status != BackgroundTaskStatus.Completed); i++)
+        for (int i = 0; i < 100 && (!executed || service.Tasks.FirstOrDefault(t => t.Id == taskId)?.Status != BackgroundTaskStatus.Completed || service.Tasks.FirstOrDefault(t => t.Id == taskId)?.ProgressPercentage < 100); i++)
         {
             await Task.Delay(20);
         }

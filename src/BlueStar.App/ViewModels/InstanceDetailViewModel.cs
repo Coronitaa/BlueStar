@@ -410,6 +410,46 @@ public partial class InstanceDetailViewModel : ObservableObject
     [ObservableProperty]
     private string _instanceReFixVersion = "1.0";
 
+    // ── DepotBox Game Fixes / Emulators State ──
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSpecificFixesSectionVisible))]
+    private ObservableCollection<GameFixInfo> _availableGameFixes = [];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSpecificFixesSectionVisible))]
+    private bool _hasAvailableGameFixes;
+
+    public bool IsSpecificFixesSectionVisible => HasAvailableGameFixes || IsLoadingGameFixes;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSpecificFixesSectionVisible))]
+    private bool _isLoadingGameFixes;
+
+    [ObservableProperty]
+    private bool _hasGameFixesError;
+
+    [ObservableProperty]
+    private string? _gameFixesErrorMessage;
+
+    [ObservableProperty]
+    private ObservableCollection<FixLayerInfo> _installedFixLayers = [];
+
+    [ObservableProperty]
+    private bool _hasInstalledFixLayers;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanDeployEmulator))]
+    private bool _isDeployingGameFix;
+
+    [ObservableProperty]
+    private double _gameFixDeployProgress;
+
+    [ObservableProperty]
+    private string _gameFixDeployProgressMessage = string.Empty;
+
+    [ObservableProperty]
+    private bool _isGameFixDeployProgressVisible;
+
     [ObservableProperty]
     private ObservableCollection<IEmulator> _availableEmulators = [];
 
@@ -556,6 +596,7 @@ public partial class InstanceDetailViewModel : ObservableObject
     private readonly IPrerequisiteService? _prerequisiteService;
     private readonly ITagsService? _tagsService;
     private readonly IEmulatorLifecycleService? _emulatorLifecycleService;
+    private readonly IGameFixDeployService? _gameFixDeployService;
     private readonly IBackgroundTaskService? _backgroundTaskService;
     private readonly ISteamStatusService? _steamStatusService;
 
@@ -582,6 +623,7 @@ public partial class InstanceDetailViewModel : ObservableObject
         IMetadataProvider? metadataProvider = null,
         ITagsService? tagsService = null,
         IEmulatorLifecycleService? emulatorLifecycleService = null,
+        IGameFixDeployService? gameFixDeployService = null,
         IBackgroundTaskService? backgroundTaskService = null,
         ISteamStatusService? steamStatusService = null)
     {
@@ -605,6 +647,7 @@ public partial class InstanceDetailViewModel : ObservableObject
         _metadataProvider = metadataProvider;
         _tagsService = tagsService;
         _emulatorLifecycleService = emulatorLifecycleService;
+        _gameFixDeployService = gameFixDeployService;
         _backgroundTaskService = backgroundTaskService;
         _steamStatusService = steamStatusService;
         _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
@@ -998,7 +1041,7 @@ public partial class InstanceDetailViewModel : ObservableObject
                 if (latestDate.HasValue)
                 {
                     LatestVersionDate = latestDate.Value;
-                    LatestVersionText = latestDateText;
+                    LatestVersionText = latestDateText ?? "Unknown";
                 }
                 else if (!string.IsNullOrWhiteSpace(latestDateText))
                 {
@@ -1008,7 +1051,7 @@ public partial class InstanceDetailViewModel : ObservableObject
                 if (installedDate.HasValue)
                 {
                     InstalledVersionDate = installedDate.Value;
-                    InstalledVersionText = installedDateText;
+                    InstalledVersionText = installedDateText ?? "Unknown";
                 }
                 else if (!string.IsNullOrWhiteSpace(installedDateText))
                 {
@@ -1995,10 +2038,185 @@ public partial class InstanceDetailViewModel : ObservableObject
             {
                 EmulatorStatus = await SelectedEmulator.GetStatusAsync(Instance, CancellationToken.None).ConfigureAwait(true);
             }
+
+            InstalledFixLayers = new ObservableCollection<FixLayerInfo>(Instance.InstalledFixLayers ?? []);
+            HasInstalledFixLayers = InstalledFixLayers.Count > 0;
+
+            _ = LoadGameFixesAsync();
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Error loading emulator options for {Name}", Instance.Name);
+        }
+    }
+
+    [RelayCommand]
+    public async Task LoadGameFixesAsync()
+    {
+        if (Instance == null || _apiClient == null) return;
+
+        try
+        {
+            IsLoadingGameFixes = true;
+            HasGameFixesError = false;
+            GameFixesErrorMessage = null;
+
+            var cleanName = CleanName(Instance.Name) ?? Instance.Name;
+            var fixes = await _apiClient.GetGameFixesAsync(query: cleanName, ct: CancellationToken.None).ConfigureAwait(true);
+
+            // If empty and AppId is known, try searching by AppId as fallback
+            if ((fixes == null || fixes.Count == 0) && Instance.AppId > 0)
+            {
+                fixes = await _apiClient.GetGameFixesAsync(query: Instance.AppId.ToString(), ct: CancellationToken.None).ConfigureAwait(true);
+            }
+
+            AvailableGameFixes = new ObservableCollection<GameFixInfo>(fixes ?? []);
+            HasAvailableGameFixes = AvailableGameFixes.Count > 0;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load DepotBox game fixes for {Game}", Instance.Name);
+            HasGameFixesError = true;
+            GameFixesErrorMessage = ex.Message;
+            HasAvailableGameFixes = false;
+        }
+        finally
+        {
+            IsLoadingGameFixes = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task DeployGameFixAsync(GameFixInfo? fix)
+    {
+        if (Instance == null || fix == null || IsDeployingGameFix || IsDeployingEmulator) return;
+
+        if (!IsInstalled)
+        {
+            StatusMessage = "⚠ You must install or download the game before configuring a fix.";
+            _notificationService?.ShowWarning("Game Not Installed", "You must install or download the game before configuring a fix.");
+            return;
+        }
+
+        IsDeployingGameFix = true;
+        IsGameFixDeployProgressVisible = true;
+        GameFixDeployProgress = 0;
+        GameFixDeployProgressMessage = $"Starting deployment of {fix.Name}...";
+        StatusMessage = $"⏳ Deploying {fix.Name}...";
+
+        try
+        {
+            var progressReporter = new Progress<DeployProgress>(p =>
+            {
+                GameFixDeployProgress = p.Percentage;
+                GameFixDeployProgressMessage = p.Message;
+                StatusMessage = $"⏳ {p.Message}";
+            });
+
+            if (_gameFixDeployService == null)
+            {
+                StatusMessage = "❌ Game fix deploy service is not available.";
+                _notificationService?.ShowError("Service Error", "Game fix deploy service is not registered.");
+                return;
+            }
+
+            var success = await _gameFixDeployService.DeployFixAsync(Instance, fix, progressReporter, CancellationToken.None).ConfigureAwait(true);
+
+            if (success)
+            {
+                var refreshed = await _instanceManager.GetByIdAsync(Instance.Id, CancellationToken.None).ConfigureAwait(true);
+                if (refreshed != null)
+                {
+                    Instance = refreshed;
+                }
+
+                InstalledFixLayers = new ObservableCollection<FixLayerInfo>(Instance.InstalledFixLayers ?? []);
+                HasInstalledFixLayers = InstalledFixLayers.Count > 0;
+
+                StatusMessage = $"✅ {fix.Name} installed successfully.";
+                _notificationService?.ShowSuccess("Fix Installed", $"{fix.Name} ({fix.TagsSummary}) deployed to {Instance.Name}.");
+            }
+            else
+            {
+                StatusMessage = $"❌ Failed to deploy {fix.Name}.";
+                _notificationService?.ShowError("Deployment Error", $"Could not deploy {fix.Name} in {Instance.Name}.");
+            }
+
+            await LoadEmulatorsAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deploying game fix {Fix}", fix.Id);
+            StatusMessage = $"❌ Error deploying fix: {ex.Message}";
+            _notificationService?.ShowError("Fix Error", ex.Message);
+        }
+        finally
+        {
+            IsDeployingGameFix = false;
+            await Task.Delay(1200).ConfigureAwait(true);
+            IsGameFixDeployProgressVisible = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task UninstallFixLayerAsync(FixLayerInfo? layer)
+    {
+        if (Instance == null || layer == null || IsDeployingGameFix) return;
+
+        IsDeployingGameFix = true;
+        IsGameFixDeployProgressVisible = true;
+        GameFixDeployProgress = 0;
+        GameFixDeployProgressMessage = $"Removing {layer.DisplayName}...";
+        StatusMessage = $"⏳ Removing {layer.DisplayName}...";
+
+        try
+        {
+            var progressReporter = new Progress<DeployProgress>(p =>
+            {
+                GameFixDeployProgress = p.Percentage;
+                GameFixDeployProgressMessage = p.Message;
+                StatusMessage = $"⏳ {p.Message}";
+            });
+
+            if (_gameFixDeployService == null)
+            {
+                StatusMessage = "❌ Game fix deploy service is not available.";
+                return;
+            }
+
+            var success = await _gameFixDeployService.UninstallFixLayerAsync(Instance, layer, progressReporter, CancellationToken.None).ConfigureAwait(true);
+
+            if (success)
+            {
+                var refreshed = await _instanceManager.GetByIdAsync(Instance.Id, CancellationToken.None).ConfigureAwait(true);
+                if (refreshed != null)
+                {
+                    Instance = refreshed;
+                }
+
+                InstalledFixLayers = new ObservableCollection<FixLayerInfo>(Instance.InstalledFixLayers ?? []);
+                HasInstalledFixLayers = InstalledFixLayers.Count > 0;
+
+                StatusMessage = $"✅ {layer.DisplayName} removed.";
+                _notificationService?.ShowInfo("Fix Removed", $"{layer.DisplayName} uninstalled and original files restored.");
+            }
+            else
+            {
+                StatusMessage = $"❌ Failed to remove {layer.DisplayName}.";
+            }
+
+            await LoadEmulatorsAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error removing fix layer {LayerId}", layer.LayerId);
+            StatusMessage = $"❌ Error removing fix: {ex.Message}";
+        }
+        finally
+        {
+            IsDeployingGameFix = false;
+            await Task.Delay(800).ConfigureAwait(true);
+            IsGameFixDeployProgressVisible = false;
         }
     }
 

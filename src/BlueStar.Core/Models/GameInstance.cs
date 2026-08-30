@@ -140,6 +140,12 @@ public record GameInstance
     public IReadOnlyList<uint> UnlockedDlcIds { get; init; } = [];
 
     /// <summary>
+    /// Gets or sets the active fix and emulator layers installed on this instance.
+    /// Supports multi-layer composition (e.g. BYPASS + HYPERVISOR + ONLINEFIX).
+    /// </summary>
+    public IReadOnlyList<FixLayerInfo> InstalledFixLayers { get; init; } = [];
+
+    /// <summary>
     /// Gets whether this instance was imported from a local Steam installation.
     /// </summary>
     public bool IsSteamGame => Origin == InstanceOrigin.Steam;

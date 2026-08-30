@@ -36,4 +36,44 @@ public record DownloadProgress
     /// Gets or sets the estimated time remaining for the download to complete.
     /// </summary>
     public TimeSpan? EstimatedTimeRemaining { get; init; }
+
+    /// <summary>
+    /// Gets or sets the current disk write speed in bytes per second.
+    /// </summary>
+    public double WriteBytesPerSec { get; init; }
+
+    /// <summary>
+    /// Gets or sets the number of active CDN connections.
+    /// </summary>
+    public int ActiveConnections { get; init; }
+
+    /// <summary>
+    /// Gets or sets the total number of chunks to download.
+    /// </summary>
+    public int TotalChunks { get; init; }
+
+    /// <summary>
+    /// Gets or sets the number of chunks completed.
+    /// </summary>
+    public int CompletedChunks { get; init; }
+
+    /// <summary>
+    /// Gets or sets the current phase of the download.
+    /// </summary>
+    public string? Phase { get; init; }
+
+    /// <summary>
+    /// Gets or sets the current depot ID being downloaded.
+    /// </summary>
+    public uint CurrentDepotId { get; init; }
+
+    /// <summary>
+    /// Gets or sets the index of the current depot (0-based).
+    /// </summary>
+    public int CurrentDepotIndex { get; init; }
+
+    /// <summary>
+    /// Gets or sets the total number of depots in the download.
+    /// </summary>
+    public int TotalDepots { get; init; }
 }

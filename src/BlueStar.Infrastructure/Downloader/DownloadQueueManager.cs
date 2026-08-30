@@ -57,6 +57,15 @@ public partial class DownloadJobItem : ObservableObject
     [ObservableProperty] private string? _errorDetail;
     [ObservableProperty] private DateTimeOffset _startedAt = DateTimeOffset.Now;
     [ObservableProperty] private DateTimeOffset? _completedAt;
+    [ObservableProperty] private double _writeBytesPerSec;
+    [ObservableProperty] private int _activeConnections;
+    [ObservableProperty] private TimeSpan? _estimatedTimeRemaining;
+    [ObservableProperty] private string? _phase;
+    [ObservableProperty] private int _totalChunks;
+    [ObservableProperty] private int _completedChunks;
+    [ObservableProperty] private uint _currentDepotId;
+    [ObservableProperty] private int _currentDepotIndex;
+    [ObservableProperty] private int _totalDepots;
 
     // ── Computed state flags ─────────────────────────────────────────────────
     public bool IsDownloading => JobStatus == DownloadJobStatus.Downloading;
@@ -93,6 +102,22 @@ public partial class DownloadJobItem : ObservableObject
         _                    => $"{SpeedBytesPerSec:F0} B/s"
     };
 
+    public string FormattedWriteSpeed => WriteBytesPerSec switch
+    {
+        > 1024 * 1024 * 1024 => $"{WriteBytesPerSec / (1024.0 * 1024.0 * 1024.0):F1} GB/s",
+        > 1024 * 1024        => $"{WriteBytesPerSec / (1024.0 * 1024.0):F1} MB/s",
+        > 1024               => $"{WriteBytesPerSec / 1024.0:F1} KB/s",
+        _                    => $"{WriteBytesPerSec:F0} B/s"
+    };
+
+    public string FormattedEta => EstimatedTimeRemaining switch
+    {
+        null => "—",
+        { TotalHours: >= 1 } eta => $"{(int)eta.TotalHours}h {eta.Minutes}m",
+        { TotalMinutes: >= 1 } eta => $"{(int)eta.TotalMinutes}m {eta.Seconds}s",
+        { } eta => $"{eta.Seconds}s",
+    };
+
     public string FormattedProgress =>
         TotalBytes > 0
             ? $"{FormatBytes(DownloadedBytes)} / {FormatBytes(TotalBytes)}  ({Percentage:F1}%)"
@@ -101,11 +126,17 @@ public partial class DownloadJobItem : ObservableObject
     public string FormattedTotalSize =>
         TotalBytes > 0 ? FormatBytes(TotalBytes) : "—";
 
+    public string FormattedDepotProgress =>
+        TotalDepots > 0 ? $"Depot {CurrentDepotIndex + 1}/{TotalDepots}" : "";
+
     public void NotifyMetricsChanged()
     {
         OnPropertyChanged(nameof(FormattedSpeed));
+        OnPropertyChanged(nameof(FormattedWriteSpeed));
+        OnPropertyChanged(nameof(FormattedEta));
         OnPropertyChanged(nameof(FormattedProgress));
         OnPropertyChanged(nameof(FormattedTotalSize));
+        OnPropertyChanged(nameof(FormattedDepotProgress));
     }
 
     private static string FormatBytes(long bytes) => bytes switch
@@ -359,6 +390,15 @@ public class DownloadQueueManager
                 job.TotalBytes = p.TotalBytes;
                 job.SpeedBytesPerSec = p.Speed;
                 job.Percentage = p.Percentage;
+                job.WriteBytesPerSec = p.WriteBytesPerSec;
+                job.ActiveConnections = p.ActiveConnections;
+                job.EstimatedTimeRemaining = p.EstimatedTimeRemaining;
+                job.Phase = p.Phase;
+                job.TotalChunks = p.TotalChunks;
+                job.CompletedChunks = p.CompletedChunks;
+                job.CurrentDepotId = p.CurrentDepotId;
+                job.CurrentDepotIndex = p.CurrentDepotIndex;
+                job.TotalDepots = p.TotalDepots;
                 if (!string.IsNullOrWhiteSpace(p.CurrentFile))
                     job.StatusMessage = p.CurrentFile;
                 job.NotifyMetricsChanged();

@@ -288,6 +288,229 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
         return filePath;
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<GameFixInfo>> GetGameFixesAsync(string? query = null, string? tags = null, CancellationToken ct = default)
+    {
+        var queryParams = new List<string>();
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            queryParams.Add($"q={Uri.EscapeDataString(query.Trim())}");
+        }
+        if (!string.IsNullOrWhiteSpace(tags))
+        {
+            queryParams.Add($"tag={Uri.EscapeDataString(tags.Trim())}");
+        }
+
+        var endpoint = "/api/game-fixes" + (queryParams.Count > 0 ? "?" + string.Join("&", queryParams) : "");
+        using var request = await CreateRequestAsync(HttpMethod.Get, endpoint, ct).ConfigureAwait(false);
+
+        using var response = await SendWithErrorHandlingAsync(request, ct).ConfigureAwait(false);
+        var jsonString = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+        _logger.LogDebug("DepotBox game fixes response: {Json}", jsonString);
+        return ParseGameFixes(jsonString);
+    }
+
+    /// <inheritdoc />
+    public async Task<string> DownloadGameFixAsync(
+        string fixIdOrFilename,
+        string targetPath,
+        IProgress<DownloadProgress>? progress = null,
+        CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(fixIdOrFilename);
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetPath);
+
+        _logger.LogInformation("Starting download for GameFix={Fix}", fixIdOrFilename);
+
+        string param = fixIdOrFilename.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+            ? $"file={Uri.EscapeDataString(fixIdOrFilename)}"
+            : $"id={Uri.EscapeDataString(fixIdOrFilename)}";
+
+        using var request = await CreateRequestAsync(HttpMethod.Get, $"/api/game-fixes/download?{param}", ct).ConfigureAwait(false);
+
+        using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+
+        var totalBytes = response.Content.Headers.ContentLength ?? -1;
+
+        // Determine destination file name
+        var filename = fixIdOrFilename.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+            ? fixIdOrFilename
+            : $"{fixIdOrFilename}.zip";
+
+        if (response.Content.Headers.ContentDisposition?.FileName != null)
+        {
+            var serverFileName = response.Content.Headers.ContentDisposition.FileName.Trim('\"', '\'');
+            if (!string.IsNullOrWhiteSpace(serverFileName))
+            {
+                filename = serverFileName;
+            }
+        }
+
+        var filePath = Path.HasExtension(targetPath) && targetPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+            ? targetPath
+            : Path.Combine(targetPath, filename);
+
+        var dir = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrEmpty(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+
+        await using var contentStream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        await using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, DownloadBufferSize, useAsync: true);
+
+        var buffer = new byte[DownloadBufferSize];
+        long totalRead = 0;
+        int bytesRead;
+        var lastReport = DateTimeOffset.MinValue;
+
+        while ((bytesRead = await contentStream.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+        {
+            await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct).ConfigureAwait(false);
+            totalRead += bytesRead;
+
+            if (progress is not null && DateTimeOffset.UtcNow - lastReport > TimeSpan.FromMilliseconds(250))
+            {
+                var pct = totalBytes > 0 ? (double)totalRead / totalBytes * 100.0 : 0;
+                progress.Report(new DownloadProgress
+                {
+                    TotalBytes = totalBytes,
+                    DownloadedBytes = totalRead,
+                    Percentage = pct,
+                    CurrentFile = Path.GetFileName(filePath)
+                });
+                lastReport = DateTimeOffset.UtcNow;
+            }
+        }
+
+        _logger.LogInformation("GameFix download complete: {Path} ({Bytes} bytes)", filePath, totalRead);
+        return filePath;
+    }
+
+    public static IReadOnlyList<GameFixInfo> ParseGameFixes(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return [];
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            var list = new List<GameFixInfo>();
+
+            if (root.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var el in root.EnumerateArray())
+                {
+                    var fix = ParseGameFixElement(el);
+                    if (fix != null) list.Add(fix);
+                }
+            }
+            else if (root.ValueKind == JsonValueKind.Object)
+            {
+                // Check if array is under "fixes", "data", "results", "items", "games"
+                bool found = false;
+                foreach (var prop in new[] { "fixes", "data", "results", "items", "gameFixes", "games", "result" })
+                {
+                    if (root.TryGetProperty(prop, out var arr) && arr.ValueKind == JsonValueKind.Array)
+                    {
+                        found = true;
+                        foreach (var el in arr.EnumerateArray())
+                        {
+                            var fix = ParseGameFixElement(el);
+                            if (fix != null) list.Add(fix);
+                        }
+                        break;
+                    }
+                }
+
+                if (!found)
+                {
+                    // Check if root itself is a single fix
+                    var single = ParseGameFixElement(root);
+                    if (single != null) list.Add(single);
+                }
+            }
+
+            return list.AsReadOnly();
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static GameFixInfo? ParseGameFixElement(JsonElement el)
+    {
+        if (el.ValueKind != JsonValueKind.Object) return null;
+
+        var id = TryGetString(el, "id", "fixId", "fix_id", "slug", "filename", "file", "downloadName");
+        var name = TryGetString(el, "name", "gameName", "game_name", "title") ?? id;
+        var downloadName = TryGetString(el, "downloadName", "download_name", "filename", "file", "downloadFilename") ?? id;
+
+        if (string.IsNullOrWhiteSpace(id) && string.IsNullOrWhiteSpace(downloadName)) return null;
+
+        id ??= downloadName!;
+        name ??= id;
+        downloadName ??= $"{id}.zip";
+
+        if (!downloadName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            downloadName += ".zip";
+        }
+
+        // Parse tags
+        var tagsList = new List<string>();
+        if (el.TryGetProperty("tags", out var tagsEl))
+        {
+            if (tagsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var t in tagsEl.EnumerateArray())
+                {
+                    if (t.ValueKind == JsonValueKind.String && t.GetString() is string s && !string.IsNullOrWhiteSpace(s))
+                    {
+                        tagsList.Add(s.Trim().ToLowerInvariant());
+                    }
+                }
+            }
+            else if (tagsEl.ValueKind == JsonValueKind.String && tagsEl.GetString() is string s)
+            {
+                tagsList.AddRange(s.Split(new[] { ',', ';', '|', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(t => t.ToLowerInvariant()));
+            }
+        }
+        else
+        {
+            // Infer tags from filename / name / type if not explicitly listed
+            var combined = $"{id} {name} {downloadName}".ToLowerInvariant();
+            if (combined.Contains("bypass")) tagsList.Add("bypass");
+            if (combined.Contains("hypervisor")) tagsList.Add("hypervisor");
+            if (combined.Contains("online") || combined.Contains("onlinefix")) tagsList.Add("online");
+            if (combined.Contains("refix")) tagsList.Add("refix");
+            if (combined.Contains("goldberg")) tagsList.Add("goldberg");
+        }
+
+        long? sizeBytes = null;
+        if (TryGetLong(el, out var size, "size", "sizeBytes", "size_bytes", "fileSize", "file_size"))
+        {
+            sizeBytes = size;
+        }
+
+        var description = TryGetString(el, "description", "notes", "summary", "info");
+        var downloadUrl = TryGetString(el, "url", "downloadUrl", "download_url", "link");
+
+        return new GameFixInfo
+        {
+            Id = id,
+            Name = name,
+            DownloadName = downloadName,
+            Tags = tagsList.Distinct().ToList().AsReadOnly(),
+            SizeBytes = sizeBytes,
+            Description = description,
+            DownloadUrl = downloadUrl
+        };
+    }
+
     // --- Private helpers & Flexible Parsers ---
 
     public static IReadOnlyList<SearchResult> ParseSearchResults(string jsonString)

@@ -170,6 +170,7 @@ public partial class App : Application
         services.AddHttpClient<IEmulatorRatingService, BlueStar.Infrastructure.Emulators.EmulatorRatingService>();
         services.AddHttpClient<IReFixUpdateService, BlueStar.Infrastructure.Emulators.ReFixUpdateService>();
         services.AddHttpClient<IPrerequisiteService, BlueStar.Infrastructure.Services.PrerequisiteService>();
+        services.AddSingleton<IGameFixDeployService, BlueStar.Infrastructure.Services.GameFixDeployService>();
         services.AddSingleton<IGameLauncher, BlueStar.Infrastructure.Launcher.GameLauncherService>();
 
         // ViewModels

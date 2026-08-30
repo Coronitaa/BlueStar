@@ -1,0 +1,3 @@
+[submodule "src/BlueStar.DepotDownloader"]
+	path = src/BlueStar.DepotDownloader
+	url = https://github.com/Coronitaa/DepotDownloaderMod.git

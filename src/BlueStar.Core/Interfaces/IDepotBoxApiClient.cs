@@ -85,4 +85,23 @@ public interface IDepotBoxApiClient
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the asynchronous operation. The task result is the file path of the downloaded archive.</returns>
     Task<string> DownloadCompletedArchiveAsync(string downloadToken, string targetPath, CancellationToken ct);
+
+    /// <summary>
+    /// Retrieves a list of game fixes (emulators, bypasses, hypervisors) from DepotBox API.
+    /// </summary>
+    /// <param name="query">Optional search query by game name or AppId.</param>
+    /// <param name="tags">Optional comma-separated tags filter (e.g., "online,bypass,hypervisor").</param>
+    /// <param name="ct">A token to monitor for cancellation requests.</param>
+    /// <returns>A read-only list of available game fixes matching the criteria.</returns>
+    Task<IReadOnlyList<GameFixInfo>> GetGameFixesAsync(string? query = null, string? tags = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Downloads a game fix archive by its ID or download filename.
+    /// </summary>
+    /// <param name="fixIdOrFilename">The fix ID or clean filename (e.g. "007_First_Light_bypass.zip").</param>
+    /// <param name="targetPath">The local path where the fix ZIP archive should be saved.</param>
+    /// <param name="progress">Optional progress reporter.</param>
+    /// <param name="ct">A token to monitor for cancellation requests.</param>
+    /// <returns>The path to the downloaded archive file.</returns>
+    Task<string> DownloadGameFixAsync(string fixIdOrFilename, string targetPath, IProgress<DownloadProgress>? progress = null, CancellationToken ct = default);
 }
