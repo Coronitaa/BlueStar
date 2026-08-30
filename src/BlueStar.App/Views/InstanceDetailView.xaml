@@ -406,9 +406,19 @@
                             <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                 <Button Content="🔄 Scan Builds"
                                         Style="{StaticResource SecondaryButton}"
-                                        Padding="14,9"
+                                        Padding="14,8" Margin="0,0,0,6"
                                         Command="{Binding LoadAvailableBuildsCommand}"
                                         IsEnabled="{Binding IsLoadingBuilds, Converter={StaticResource InverseBoolConverter}}"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="➕ Custom Build"
+                                            Style="{StaticResource SecondaryButton}"
+                                            Padding="10,6" Margin="0,0,6,0" FontSize="11"
+                                            Command="{Binding OpenAddCustomBuildModalCommand}"/>
+                                    <Button Content="📁 Import .manifest"
+                                            Style="{StaticResource GhostButton}"
+                                            Padding="8,6" FontSize="11"
+                                            Command="{Binding ImportManifestFilesDirectlyCommand}"/>
+                                </StackPanel>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -450,7 +460,33 @@
 
                                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                     <TextBlock Text="{Binding DisplayName}" Style="{StaticResource BodyMedium}"/>
-                                                    <TextBlock Text="{Binding Depot.DepotId, StringFormat='Depot ID: {0}'}" Style="{StaticResource Caption}"/>
+
+                                                    <!-- Normal View Mode -->
+                                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0"
+                                                                Visibility="{Binding IsEditingManifest, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                                                        <TextBlock Text="{Binding Depot.DepotId, StringFormat='Depot: {0}'}" Style="{StaticResource Caption}"/>
+                                                        <TextBlock Text=" • Manifest: " Style="{StaticResource Caption}" Margin="4,0,0,0"/>
+                                                        <TextBlock Text="{Binding ManifestIdText}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}"/>
+                                                        <Button Content="✏" ToolTip="Edit target Manifest ID for this depot"
+                                                                Style="{StaticResource GhostButton}"
+                                                                Padding="5,0" Margin="6,0,0,0" FontSize="11"
+                                                                Command="{Binding StartEditManifestCommand}"/>
+                                                    </StackPanel>
+
+                                                    <!-- Inline Edit Mode -->
+                                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0"
+                                                                Visibility="{Binding IsEditingManifest, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                        <TextBlock Text="Manifest ID:" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                        <TextBox Text="{Binding EditingManifestId, UpdateSourceTrigger=PropertyChanged}"
+                                                                 Style="{StaticResource DarkTextBox}"
+                                                                 Width="180" Height="24" Padding="4,2" FontSize="12"/>
+                                                        <Button Content="✓" Style="{StaticResource PrimaryButton}"
+                                                                Padding="8,2" Margin="6,0,2,0" Height="24"
+                                                                Command="{Binding SaveEditManifestCommand}"/>
+                                                        <Button Content="✕" Style="{StaticResource GhostButton}"
+                                                                Padding="6,2" Height="24"
+                                                                Command="{Binding CancelEditManifestCommand}"/>
+                                                    </StackPanel>
                                                 </StackPanel>
 
                                                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,14,0">
@@ -1798,6 +1834,126 @@
                                 IsEnabled="{Binding IsUninstallingGameFiles, Converter={StaticResource InverseBoolConverter}}"/>
                     </Grid>
                 </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ══════════════════════════════════════════════════════════════
+             CUSTOM BUILD & MANIFEST CONFIGURATION MODAL
+             ══════════════════════════════════════════════════════════════ -->
+        <Grid Visibility="{Binding IsCustomBuildModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
+              Background="{StaticResource ModalOverlayBrush}"
+              HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+              Panel.ZIndex="115">
+            <Border Background="{StaticResource SurfaceCardBrush}"
+                    BorderBrush="{StaticResource SubtleBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="26"
+                    MaxWidth="580"
+                    MaxHeight="620"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0">
+                        <Grid Margin="0,0,0,12">
+                            <TextBlock Text="🎮 Configure Custom Build" Style="{StaticResource H2}"/>
+                            <Button Style="{StaticResource GhostButton}" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                    Command="{Binding CloseAddCustomBuildModalCommand}" Padding="8,4">
+                                <TextBlock Text="✕" FontSize="14" Foreground="{StaticResource MutedTextBrush}"/>
+                            </Button>
+                        </Grid>
+                        <TextBlock Text="Target a specific historical build version or crack-compatible build (e.g. Build 22357085) by specifying Build ID and depot Manifest IDs."
+                                   Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,16"/>
+
+                        <!-- Target Build ID & Name Inputs -->
+                        <Grid Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="140"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Target Build ID:" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding CustomBuildIdInput, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource DarkTextBox}"
+                                         Height="32" Padding="8,4"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Build Name / Note:" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding CustomBuildNameInput, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource DarkTextBox}"
+                                         Height="32" Padding="8,4"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,8">
+                            <TextBlock Text="Depot Manifest IDs for this Build:" Style="{StaticResource CaptionBold}"/>
+                            <Button Content="📁 Import from .manifest files..."
+                                    Style="{StaticResource GhostButton}"
+                                    HorizontalAlignment="Right"
+                                    FontSize="11" Padding="6,2"
+                                    Command="{Binding ImportManifestFilesForCustomBuildCommand}"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Scrollable Depots List -->
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,16">
+                        <ItemsControl ItemsSource="{Binding CustomBuildDepots}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}"
+                                            Padding="12,8" Margin="0,0,0,6">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="180"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0">
+                                                <TextBlock Text="{Binding DepotName}" Style="{StaticResource BodySmall}" FontWeight="SemiBold"/>
+                                                <TextBlock Text="{Binding DepotId, StringFormat='Depot ID: {0}'}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}"/>
+                                                <TextBlock Text="{Binding StatusText}" Style="{StaticResource Caption}" Foreground="{StaticResource SuccessBrush}"
+                                                           Visibility="{Binding StatusText, Converter={StaticResource NullToVisibilityConverter}}"/>
+                                            </StackPanel>
+
+                                            <TextBox Grid.Column="1" Text="{Binding ManifestIdText, UpdateSourceTrigger=PropertyChanged}"
+                                                     Style="{StaticResource DarkTextBox}"
+                                                     VerticalAlignment="Center" Height="28" Padding="6,2" FontSize="12"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <!-- Action Buttons -->
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="10"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="1" Content="Cancel"
+                                Style="{StaticResource GhostButton}"
+                                Padding="16,8"
+                                Command="{Binding CloseAddCustomBuildModalCommand}"/>
+
+                        <Button Grid.Column="3" Content="💾 Save &amp; Switch Build"
+                                Style="{StaticResource PrimaryButton}"
+                                Padding="18,8"
+                                Command="{Binding SaveCustomBuildCommand}"/>
+                    </Grid>
+                </Grid>
             </Border>
         </Grid>
 

@@ -23,11 +23,28 @@ using Microsoft.Win32;
 namespace BlueStar.App.ViewModels;
 
 /// <summary>
+/// Model for editing a depot manifest in custom build configurations.
+/// </summary>
+public partial class CustomDepotManifestItem : ObservableObject
+{
+    public uint DepotId { get; init; }
+    public string DepotName { get; init; } = string.Empty;
+    public ulong CurrentManifestId { get; init; }
+
+    [ObservableProperty]
+    private string _manifestIdText = string.Empty;
+
+    [ObservableProperty]
+    private string? _statusText;
+}
+
+/// <summary>
 /// Model for a depot item with selection state in the UI.
 /// </summary>
 public partial class SelectableDepotItem : ObservableObject
 {
     public Action? OnSelectionChanged { get; set; }
+    public Action<uint, ulong>? OnManifestUpdated { get; set; }
 
     [ObservableProperty]
     private DepotInfo _depot = null!;
@@ -35,11 +52,45 @@ public partial class SelectableDepotItem : ObservableObject
     [ObservableProperty]
     private bool _isSelected = true;
 
+    [ObservableProperty]
+    private bool _isEditingManifest;
+
+    [ObservableProperty]
+    private string _editingManifestId = string.Empty;
+
     partial void OnIsSelectedChanged(bool value) => OnSelectionChanged?.Invoke();
 
     public bool IsDownloaded => Depot?.IsDownloaded ?? false;
 
     public void NotifyDownloadedChanged() => OnPropertyChanged(nameof(IsDownloaded));
+
+    public string ManifestIdText => Depot?.ManifestId > 0 ? Depot.ManifestId.ToString() : "Latest";
+
+    [RelayCommand]
+    public void StartEditManifest()
+    {
+        EditingManifestId = Depot?.ManifestId > 0 ? Depot.ManifestId.ToString() : string.Empty;
+        IsEditingManifest = true;
+    }
+
+    [RelayCommand]
+    public void CancelEditManifest()
+    {
+        IsEditingManifest = false;
+    }
+
+    [RelayCommand]
+    public void SaveEditManifest()
+    {
+        if (ulong.TryParse(EditingManifestId?.Trim(), out var parsedId) && parsedId != Depot.ManifestId)
+        {
+            Depot = Depot with { ManifestId = parsedId, IsDownloaded = false };
+            NotifyDownloadedChanged();
+            OnPropertyChanged(nameof(ManifestIdText));
+            OnManifestUpdated?.Invoke(Depot.DepotId, parsedId);
+        }
+        IsEditingManifest = false;
+    }
 
     public string FormattedSize => Depot.SizeBytes switch
     {
@@ -515,6 +566,18 @@ public partial class InstanceDetailViewModel : ObservableObject
     [ObservableProperty]
     private string? _activeBuildBadgeText;
 
+    [ObservableProperty]
+    private bool _isCustomBuildModalOpen;
+
+    [ObservableProperty]
+    private string _customBuildIdInput = string.Empty;
+
+    [ObservableProperty]
+    private string _customBuildNameInput = string.Empty;
+
+    [ObservableProperty]
+    private ObservableCollection<CustomDepotManifestItem> _customBuildDepots = [];
+
     // ── Download progress exposed to UI ──
     [ObservableProperty]
     private DownloadJobItem? _activeJob;
@@ -879,7 +942,8 @@ public partial class InstanceDetailViewModel : ObservableObject
                 {
                     Depot = d,
                     IsSelected = IsDepotCompatibleWithCurrentOS(d),
-                    OnSelectionChanged = RecalculateSelectedSize
+                    OnSelectionChanged = RecalculateSelectedSize,
+                    OnManifestUpdated = HandleDepotManifestUpdated
                 }).ToList();
 
             var selectableDlcs = Instance.Dlcs.Select(d => new SelectableDlcItem
@@ -3534,6 +3598,189 @@ public partial class InstanceDetailViewModel : ObservableObject
         }
     }
 
+    private void HandleDepotManifestUpdated(uint depotId, ulong newManifestId)
+    {
+        if (Instance == null) return;
+        var updated = Instance.Depots.Select(d => d.DepotId == depotId ? d with { ManifestId = newManifestId, IsDownloaded = false } : d).ToList();
+        Instance = Instance with { Depots = updated.AsReadOnly() };
+        _ = _instanceManager.UpdateAsync(Instance, CancellationToken.None);
+        RecalculateSelectedSize();
+        NotifyDownloadProps();
+        StatusMessage = $"✏ Updated Manifest ID for Depot {depotId} to {newManifestId}.";
+    }
+
+    [RelayCommand]
+    public void OpenAddCustomBuildModal()
+    {
+        if (Instance == null) return;
+
+        CustomBuildIdInput = string.Empty;
+        CustomBuildNameInput = string.Empty;
+
+        var items = Instance.Depots.Select(d => new CustomDepotManifestItem
+        {
+            DepotId = d.DepotId,
+            DepotName = !string.IsNullOrWhiteSpace(d.Name) ? d.Name : $"Depot {d.DepotId}",
+            CurrentManifestId = d.ManifestId,
+            ManifestIdText = d.ManifestId > 0 ? d.ManifestId.ToString() : string.Empty
+        }).ToList();
+
+        CustomBuildDepots = new ObservableCollection<CustomDepotManifestItem>(items);
+        IsCustomBuildModalOpen = true;
+    }
+
+    [RelayCommand]
+    public void CloseAddCustomBuildModal()
+    {
+        IsCustomBuildModalOpen = false;
+    }
+
+    [RelayCommand]
+    public void ImportManifestFilesForCustomBuild()
+    {
+        if (Instance == null) return;
+
+        var ofd = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Import Steam .manifest Files for Custom Build",
+            Filter = "Steam Manifest Files (*.manifest)|*.manifest|All Files (*.*)|*.*",
+            Multiselect = true
+        };
+
+        if (ofd.ShowDialog() != true || ofd.FileNames.Length == 0) return;
+
+        var instanceManifestDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "BlueStar", "instances", Instance.Id.ToString(), "manifests");
+        Directory.CreateDirectory(instanceManifestDir);
+
+        foreach (var file in ofd.FileNames)
+        {
+            var fileName = Path.GetFileName(file);
+            var dest = Path.Combine(instanceManifestDir, fileName);
+            try
+            {
+                File.Copy(file, dest, overwrite: true);
+            }
+            catch { }
+
+            var match = System.Text.RegularExpressions.Regex.Match(fileName, @"^(\d+)_(\d+)\.manifest$");
+            if (match.Success &&
+                uint.TryParse(match.Groups[1].Value, out var dId) &&
+                ulong.TryParse(match.Groups[2].Value, out var mId))
+            {
+                var target = CustomBuildDepots.FirstOrDefault(x => x.DepotId == dId);
+                if (target != null)
+                {
+                    target.ManifestIdText = mId.ToString();
+                    target.StatusText = "✓ Imported from file";
+                }
+            }
+        }
+    }
+
+    [RelayCommand]
+    public void SaveCustomBuild()
+    {
+        if (Instance == null) return;
+
+        var map = new Dictionary<uint, ulong>();
+        foreach (var d in CustomBuildDepots)
+        {
+            if (ulong.TryParse(d.ManifestIdText?.Trim(), out var mid) && mid > 0)
+            {
+                map[d.DepotId] = mid;
+            }
+            else if (d.CurrentManifestId > 0)
+            {
+                map[d.DepotId] = d.CurrentManifestId;
+            }
+        }
+
+        var buildId = !string.IsNullOrWhiteSpace(CustomBuildIdInput) ? CustomBuildIdInput.Trim() : "Custom";
+        var displayName = !string.IsNullOrWhiteSpace(CustomBuildNameInput)
+            ? CustomBuildNameInput.Trim()
+            : $"Build {buildId} (Custom)";
+
+        var newBuild = new GameBuildInfo
+        {
+            BuildId = buildId,
+            BranchName = "custom",
+            DisplayName = displayName,
+            UpdatedAt = DateTimeOffset.UtcNow,
+            Description = "User configured build version & manifests",
+            Source = "Custom",
+            DepotManifests = map
+        };
+
+        AvailableBuilds.Insert(0, newBuild);
+        SelectedBuild = newBuild;
+        IsCustomBuildModalOpen = false;
+        StatusMessage = $"✅ Switched to custom build: {newBuild.DisplayName}.";
+    }
+
+    [RelayCommand]
+    public async Task ImportManifestFilesDirectlyAsync()
+    {
+        if (Instance == null) return;
+
+        var ofd = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Import Steam .manifest Files",
+            Filter = "Steam Manifest Files (*.manifest)|*.manifest|All Files (*.*)|*.*",
+            Multiselect = true
+        };
+
+        if (ofd.ShowDialog() != true || ofd.FileNames.Length == 0) return;
+
+        var instanceManifestDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "BlueStar", "instances", Instance.Id.ToString(), "manifests");
+        Directory.CreateDirectory(instanceManifestDir);
+
+        var importedDepots = new Dictionary<uint, ulong>();
+
+        foreach (var file in ofd.FileNames)
+        {
+            var fileName = Path.GetFileName(file);
+            var dest = Path.Combine(instanceManifestDir, fileName);
+            try
+            {
+                File.Copy(file, dest, overwrite: true);
+            }
+            catch { }
+
+            var match = System.Text.RegularExpressions.Regex.Match(fileName, @"^(\d+)_(\d+)\.manifest$");
+            if (match.Success &&
+                uint.TryParse(match.Groups[1].Value, out var dId) &&
+                ulong.TryParse(match.Groups[2].Value, out var mId))
+            {
+                importedDepots[dId] = mId;
+            }
+        }
+
+        if (importedDepots.Count > 0)
+        {
+            var updatedDepots = Instance.Depots.Select(d =>
+            {
+                if (importedDepots.TryGetValue(d.DepotId, out var newMId))
+                {
+                    return d with { ManifestId = newMId, IsDownloaded = false };
+                }
+                return d;
+            }).ToList();
+
+            Instance = Instance with { Depots = updatedDepots.AsReadOnly() };
+            await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+            await LoadInstanceAsync(Instance).ConfigureAwait(true);
+
+            _notificationService?.ShowSuccess(
+                "Manifests Imported",
+                $"Imported {importedDepots.Count} manifest file(s) for {Instance.Name}. Ready to download or switch.");
+            StatusMessage = $"📁 Imported {importedDepots.Count} manifest file(s).";
+        }
+    }
+
     private void UpdateBuildBadge()
     {
         if (SelectedBuild != null)
@@ -3589,7 +3836,42 @@ public partial class InstanceDetailViewModel : ObservableObject
                 catch { }
             }
 
-            // 3. Fallback: Add current instance configuration as a build if list is empty
+            // 3. Scan local instance manifests directory
+            var instanceManifestDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "BlueStar", "instances", Instance.Id.ToString(), "manifests");
+
+            if (Directory.Exists(instanceManifestDir))
+            {
+                var files = Directory.GetFiles(instanceManifestDir, "*.manifest");
+                var localManifestMap = new Dictionary<uint, ulong>();
+                foreach (var f in files)
+                {
+                    var match = System.Text.RegularExpressions.Regex.Match(Path.GetFileName(f), @"^(\d+)_(\d+)\.manifest$");
+                    if (match.Success &&
+                        uint.TryParse(match.Groups[1].Value, out var dId) &&
+                        ulong.TryParse(match.Groups[2].Value, out var mId))
+                    {
+                        localManifestMap[dId] = mId;
+                    }
+                }
+
+                if (localManifestMap.Count > 0 && !list.Any(b => b.BranchName == "local_archive"))
+                {
+                    list.Add(new GameBuildInfo
+                    {
+                        BuildId = "Archive",
+                        BranchName = "local_archive",
+                        DisplayName = "Local Imported Manifests Archive",
+                        UpdatedAt = DateTimeOffset.UtcNow,
+                        Description = $"{localManifestMap.Count} local .manifest files present in instance storage",
+                        Source = "Local Storage",
+                        DepotManifests = localManifestMap
+                    });
+                }
+            }
+
+            // 4. Fallback: Add current instance configuration as a build if list is empty
             if (list.Count == 0 && Instance.Depots.Count > 0)
             {
                 var map = Instance.Depots.ToDictionary(d => d.DepotId, d => d.ManifestId);

@@ -1307,6 +1307,44 @@ public class NewFeaturesTests
         updatedInstance.Dlcs.Should().HaveCount(1);
         updatedInstance.Dlcs[0].AppId.Should().Be(1731080);
     }
+
+    [Fact]
+    public void CustomBuild_CreationAndDepotMapping_CorrectlyTargetsBypassBuild()
+    {
+        // Scenario: User specifies Build 22357085 with custom manifests for a bypass/crack
+        var customManifests = new Dictionary<uint, ulong>
+        {
+            [3357651] = 6330832861176696160,
+            [3357652] = 5639705324720691310
+        };
+
+        var customBuild = new GameBuildInfo
+        {
+            BuildId = "22357085",
+            BranchName = "custom",
+            DisplayName = "PRAGMATA Build 22357085 (Bypass Compatible)",
+            Description = "Custom build configured for PRAGMATA bypass",
+            Source = "Custom",
+            UpdatedAt = DateTimeOffset.UtcNow,
+            DepotManifests = customManifests
+        };
+
+        customBuild.BuildId.Should().Be("22357085");
+        customBuild.BranchName.Should().Be("custom");
+        customBuild.DepotManifests.Should().ContainKey(3357651);
+        customBuild.DepotManifests[3357651].Should().Be(6330832861176696160);
+    }
+
+    [Fact]
+    public void ManifestFilenameRegex_CorrectlyExtractsDepotAndManifestIds()
+    {
+        var filename = "3357651_6330832861176696160.manifest";
+        var match = System.Text.RegularExpressions.Regex.Match(filename, @"^(\d+)_(\d+)\.manifest$");
+
+        match.Success.Should().BeTrue();
+        uint.Parse(match.Groups[1].Value).Should().Be(3357651);
+        ulong.Parse(match.Groups[2].Value).Should().Be(6330832861176696160);
+    }
 }
 
 
