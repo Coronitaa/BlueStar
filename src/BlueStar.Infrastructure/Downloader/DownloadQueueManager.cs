@@ -158,6 +158,7 @@ public class DownloadQueueManager
     private readonly IDownloadProvider _downloadProvider;
     private readonly IInstanceManager? _instanceManager;
     private readonly INotificationService? _notificationService;
+    private readonly DownloadStateManager? _stateManager;
     private readonly ILogger<DownloadQueueManager> _logger;
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _ctsMap = new();
     private readonly SynchronizationContext? _uiContext;
@@ -175,13 +176,67 @@ public class DownloadQueueManager
         IDownloadProvider downloadProvider,
         ILogger<DownloadQueueManager> logger,
         IInstanceManager? instanceManager = null,
-        INotificationService? notificationService = null)
+        INotificationService? notificationService = null,
+        DownloadStateManager? stateManager = null)
     {
         _downloadProvider = downloadProvider;
         _logger = logger;
         _instanceManager = instanceManager;
         _notificationService = notificationService;
+        _stateManager = stateManager;
         _uiContext = SynchronizationContext.Current;
+    }
+
+    /// <summary>
+    /// Scans for interrupted downloads from previous sessions and restores them to the queue in a Paused state.
+    /// </summary>
+    public async Task RestorePendingDownloadsAsync(CancellationToken ct = default)
+    {
+        if (_stateManager == null || _instanceManager == null) return;
+
+        try
+        {
+            var pending = _stateManager.GetAllPendingDownloads();
+            foreach (var (instanceId, state) in pending)
+            {
+                if (ct.IsCancellationRequested) break;
+
+                // Check if already in queue
+                if (Queue.Any(q => q.Instance.Id == instanceId)) continue;
+
+                var instance = await _instanceManager.GetByIdAsync(instanceId, ct).ConfigureAwait(false);
+                if (instance == null) continue;
+
+                var pct = state.TotalBytes > 0
+                    ? Math.Min(99.0, (double)state.DownloadedBytes / state.TotalBytes * 100.0)
+                    : 0.0;
+
+                var item = new DownloadJobItem
+                {
+                    Instance = instance,
+                    JobStatus = DownloadJobStatus.Paused,
+                    StatusMessage = "Paused (interrupted) — click Resume to continue",
+                    TotalBytes = state.TotalBytes,
+                    DownloadedBytes = state.DownloadedBytes,
+                    Percentage = pct,
+                    StartedAt = state.StartedAt
+                };
+
+                item.NotifyMetricsChanged();
+
+                RunOnUi(() =>
+                {
+                    Queue.Add(item);
+                    NotifyQueueChanged();
+                });
+
+                _logger.LogInformation("Restored pending download for {GameName} ({Pct:F1}%)", instance.Name, pct);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to restore pending downloads");
+        }
     }
 
     private void RunOnUi(Action action)

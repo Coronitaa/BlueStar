@@ -118,10 +118,8 @@ public partial class App : Application
         services.AddSingleton<DepotBoxLuaParser>();
         services.AddSingleton<IDepotBoxArchiveParser, DepotBoxArchiveParser>();
         services.AddSingleton<IDlcInstaller, BlueStar.Infrastructure.Dlc.CreamInstallerService>();
-        services.AddSingleton<IDownloadProvider>(sp => new BlueStar.Infrastructure.Downloader.DepotDownloaderProvider(
-            sp.GetRequiredService<ILogger<BlueStar.Infrastructure.Downloader.DepotDownloaderProvider>>(),
-            sp.GetRequiredService<BlueStar.Infrastructure.Storage.AppSettingsService>()));
-        services.AddSingleton<BlueStar.Infrastructure.Downloader.DownloadStateManager>();
+        services.AddSingleton<DownloadStateManager>();
+        services.AddSingleton<IDownloadProvider, BlueStar.Infrastructure.Downloader.DepotDownloaderProvider>();
         services.AddSingleton<IUpdateService, BlueStar.Infrastructure.Update.GitHubUpdateService>();
         services.AddHttpClient<ICommunityStatsService, BlueStar.Infrastructure.Services.CommunityStatsService>(client =>
         {
@@ -185,6 +183,21 @@ public partial class App : Application
         services.AddTransient<ViewModels.AboutViewModel>();
 
         Services = services.BuildServiceProvider();
+
+        // Restore pending downloads from previous interrupted sessions
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(1000).ConfigureAwait(false);
+                var queueManager = Services.GetRequiredService<DownloadQueueManager>();
+                await queueManager.RestorePendingDownloadsAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to restore pending downloads on startup");
+            }
+        });
 
         // Trigger background ReFix update check
         _ = Task.Run(async () =>
