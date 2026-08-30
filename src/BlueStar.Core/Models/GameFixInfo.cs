@@ -69,6 +69,38 @@ public record GameFixInfo
         string.Equals(t, "onlinefix", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
+    /// Community positive upvotes count.
+    /// </summary>
+    public int PositiveVotes { get; init; }
+
+    /// <summary>
+    /// Community negative downvotes count.
+    /// </summary>
+    public int NegativeVotes { get; init; }
+
+    /// <summary>
+    /// Total community votes recorded.
+    /// </summary>
+    public int TotalVotes => PositiveVotes + NegativeVotes;
+
+    /// <summary>
+    /// Indicates whether there are enough community votes to display a percentage score.
+    /// </summary>
+    public bool HasEnoughVotesForScore => TotalVotes >= 5;
+
+    /// <summary>
+    /// Positive score percentage (0 - 100%).
+    /// </summary>
+    public double ScorePercentage => TotalVotes > 0
+        ? (double)PositiveVotes / TotalVotes * 100.0
+        : 0.0;
+
+    /// <summary>
+    /// Indicates whether the local user has already cast a vote for this fix.
+    /// </summary>
+    public bool HasUserVoted { get; init; }
+
+    /// <summary>
     /// Formatted human-readable file size.
     /// </summary>
     public string FormattedSize => SizeBytes switch

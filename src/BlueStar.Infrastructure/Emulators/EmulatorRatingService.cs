@@ -261,18 +261,60 @@ public sealed class EmulatorRatingService : IEmulatorRatingService
     }
 
     /// <inheritdoc />
-    public bool HasUserVoted(Guid instanceId, string optionId)
+    public bool HasUserVoted(GameInstance instance, string optionId, string? emulatorVersion = null)
     {
-        var voteKey = $"{instanceId}_{optionId}";
+        if (instance == null || string.IsNullOrWhiteSpace(optionId)) return false;
+        var gameVer = GetGameVersionString(instance);
+        var emuVer = emulatorVersion ?? instance.InstalledEmulatorVersion ?? "1.0";
+        var voteKey = $"{instance.AppId}_{gameVer}_{optionId}_{emuVer}";
         return _userVotes.ContainsKey(voteKey);
     }
 
     /// <inheritdoc />
-    public async Task RecordUserVoteFlagAsync(Guid instanceId, string optionId, CancellationToken ct = default)
+    public async Task RecordUserVoteFlagAsync(GameInstance instance, string optionId, string? emulatorVersion = null, CancellationToken ct = default)
     {
-        var voteKey = $"{instanceId}_{optionId}";
+        if (instance == null || string.IsNullOrWhiteSpace(optionId)) return;
+        var gameVer = GetGameVersionString(instance);
+        var emuVer = emulatorVersion ?? instance.InstalledEmulatorVersion ?? "1.0";
+        var voteKey = $"{instance.AppId}_{gameVer}_{optionId}_{emuVer}";
         _userVotes[voteKey] = true;
         await SaveDataAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Computes a unique version identifier for a game instance based on its ManifestIds or updated timestamp.
+    /// </summary>
+    public static string GetGameVersionString(GameInstance instance)
+    {
+        if (instance == null) return "v1";
+
+        if (instance.Depots != null && instance.Depots.Count > 0)
+        {
+            var manifests = string.Join("_", instance.Depots.Select(d => d.ManifestId).Where(m => m > 0).OrderBy(m => m));
+            if (!string.IsNullOrWhiteSpace(manifests))
+            {
+                return manifests;
+            }
+        }
+
+        if (instance.UpdatedAt > DateTimeOffset.MinValue)
+        {
+            return instance.UpdatedAt.ToUnixTimeSeconds().ToString();
+        }
+
+        return instance.CreatedAt.ToUnixTimeSeconds().ToString();
+    }
+
+    /// <inheritdoc />
+    public (int Positive, int Negative) GetRatings(uint appId, string optionId)
+    {
+        if (string.IsNullOrWhiteSpace(optionId)) return (0, 0);
+        var key = $"{appId}_{optionId}";
+        if (_ratings.TryGetValue(key, out var data))
+        {
+            return (data.Positive, data.Negative);
+        }
+        return (0, 0);
     }
 
     /// <inheritdoc />
@@ -303,6 +345,61 @@ public sealed class EmulatorRatingService : IEmulatorRatingService
         foreach (var voteKey in userVoteKeysToRemove)
         {
             _userVotes.TryRemove(voteKey, out _);
+        }
+
+        await SaveDataAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task ResetRatingsForGameAsync(uint appId, CancellationToken ct = default)
+    {
+        if (appId == 0) return;
+
+        _logger.LogInformation("Resetting all emulator ratings and community votes to 0 for game AppId {AppId} due to game update...", appId);
+
+        var prefix = $"{appId}_";
+
+        var ratingsToReset = _ratings.Keys
+            .Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var key in ratingsToReset)
+        {
+            _ratings[key] = new RatingData { Positive = 0, Negative = 0 };
+        }
+
+        var votesToRemove = _userVotes.Keys
+            .Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var key in votesToRemove)
+        {
+            _userVotes.TryRemove(key, out _);
+        }
+
+        await SaveDataAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task ResetRatingsForFixAsync(uint appId, string fixId, CancellationToken ct = default)
+    {
+        if (appId == 0 || string.IsNullOrWhiteSpace(fixId)) return;
+
+        _logger.LogInformation("Resetting ratings for specific fix {FixId} on AppId {AppId}...", fixId, appId);
+
+        var key = $"{appId}_{fixId}";
+        if (_ratings.ContainsKey(key))
+        {
+            _ratings[key] = new RatingData { Positive = 0, Negative = 0 };
+        }
+
+        var votesToRemove = _userVotes.Keys
+            .Where(k => k.StartsWith($"{appId}_", StringComparison.OrdinalIgnoreCase) && k.Contains(fixId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var vKey in votesToRemove)
+        {
+            _userVotes.TryRemove(vKey, out _);
         }
 
         await SaveDataAsync(ct).ConfigureAwait(false);

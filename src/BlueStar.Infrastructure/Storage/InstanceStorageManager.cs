@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -117,14 +117,8 @@ public sealed class InstanceStorageManager : IInstanceStorageManager
                 Directory.CreateDirectory(targetSubDir);
             }
 
-            // Also ensure all configured isolated directories exist locally
-            foreach (var isoDir in options.IsolatedFolderNames)
-            {
-                var targetIso = Path.Combine(fullInstance, isoDir.Replace('/', Path.DirectorySeparatorChar));
-                Directory.CreateDirectory(targetIso);
-            }
-
             // 2. Link or copy files
+
             var allFiles = depotDi.GetFiles("*", SearchOption.AllDirectories);
             foreach (var file in allFiles)
             {

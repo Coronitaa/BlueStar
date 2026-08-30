@@ -33,5 +33,6 @@
     <conv:TagTypeToBgBrushConverter x:Key="TagTypeToBgBrushConverter"/>
     <conv:TagTypeToBorderBrushConverter x:Key="TagTypeToBorderBrushConverter"/>
     <conv:BackgroundTaskStatusToBrushConverter x:Key="BackgroundTaskStatusToBrushConverter"/>
+    <conv:CachedImageConverter x:Key="CachedImageConverter"/>
 
 </ResourceDictionary>

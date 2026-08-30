@@ -39,95 +39,97 @@ public sealed class PrerequisiteService : IPrerequisiteService
     }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<PrerequisiteItem>> DetectPrerequisitesAsync(GameInstance instance, CancellationToken ct = default)
+    public Task<IReadOnlyList<PrerequisiteItem>> DetectSystemPrerequisitesAsync(CancellationToken ct = default)
     {
-        var items = new List<PrerequisiteItem>();
-
-        // 1. Standard Essential Game Runtimes
-        var vc2015_2022_x64 = new PrerequisiteItem
+        var items = new List<PrerequisiteItem>
         {
-            Id = "vcredist_2015_2022_x64",
-            Name = "Visual C++ 2015-2022 Redistributable (x64)",
-            Category = "Visual C++",
-            Description = "Required by almost all modern 64-bit Windows games (C++ standard libraries & MSVCP140.dll).",
-            DownloadUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe",
-            SilentArguments = "/install /quiet /norestart",
-            IsEssential = true
+            new()
+            {
+                Id = "vcredist_2015_2022_x64",
+                Name = "Visual C++ 2015-2022 Redistributable (x64)",
+                Category = "Visual C++",
+                Description = "Required by almost all modern 64-bit Windows games and injectors (C++ standard libraries & MSVCP140.dll).",
+                DownloadUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe",
+                SilentArguments = "/install /quiet /norestart",
+                IsEssential = true
+            },
+            new()
+            {
+                Id = "vcredist_2015_2022_x86",
+                Name = "Visual C++ 2015-2022 Redistributable (x86)",
+                Category = "Visual C++",
+                Description = "Required by 32-bit components, launchers, and Steam overlay hooks.",
+                DownloadUrl = "https://aka.ms/vs/17/release/vc_redist.x86.exe",
+                SilentArguments = "/install /quiet /norestart",
+                IsEssential = true
+            },
+            new()
+            {
+                Id = "directx_enduser",
+                Name = "DirectX End-User Runtime (Legacy D3DX/XAudio2)",
+                Category = "DirectX",
+                Description = "Provides legacy DirectX 9.0c, D3DX9, D3DCompiler, and XAudio2 DLLs essential for games.",
+                DownloadUrl = "https://download.microsoft.com/download/1/7/1/1718CCC4-6315-4D8E-9543-8E28A4E18C4C/dxwebsetup.exe",
+                SilentArguments = "/Q",
+                IsEssential = true
+            },
+            new()
+            {
+                Id = "dotnet_desktop_8",
+                Name = ".NET Desktop Runtime 8.0 (x64)",
+                Category = ".NET Runtime",
+                Description = "Required for C# and modern Unity/.NET game frameworks and mods.",
+                DownloadUrl = "https://aka.ms/dotnet/8.0/windowsdesktop-runtime-win-x64.exe",
+                SilentArguments = "/install /quiet /norestart",
+                IsEssential = false
+            },
+            new()
+            {
+                Id = "dotnet_runtime_9",
+                Name = ".NET Runtime 9.0 (x64)",
+                Category = ".NET Runtime",
+                Description = "Required for DepotDownloader and multi-manifest game downloads.",
+                DownloadUrl = "https://aka.ms/dotnet/9.0/dotnet-runtime-win-x64.exe",
+                SilentArguments = "/install /quiet /norestart",
+                IsEssential = true
+            }
         };
 
-        var vc2015_2022_x86 = new PrerequisiteItem
-        {
-            Id = "vcredist_2015_2022_x86",
-            Name = "Visual C++ 2015-2022 Redistributable (x86)",
-            Category = "Visual C++",
-            Description = "Required by 32-bit components, launchers, and Steam overlay hooks.",
-            DownloadUrl = "https://aka.ms/vs/17/release/vc_redist.x86.exe",
-            SilentArguments = "/install /quiet /norestart",
-            IsEssential = true
-        };
-
-        var directx = new PrerequisiteItem
-        {
-            Id = "directx_enduser",
-            Name = "DirectX End-User Runtime (Legacy D3DX/XAudio2)",
-            Category = "DirectX",
-            Description = "Provides legacy DirectX 9.0c, D3DX9, D3DCompiler, and XAudio2 DLLs essential for games.",
-            DownloadUrl = "https://download.microsoft.com/download/1/7/1/1718CCC4-6315-4D8E-9543-8E28A4E18C4C/dxwebsetup.exe",
-            SilentArguments = "/Q",
-            IsEssential = true
-        };
-
-        var dotnet8 = new PrerequisiteItem
-        {
-            Id = "dotnet_desktop_8",
-            Name = ".NET Desktop Runtime 8.0 (x64)",
-            Category = ".NET Runtime",
-            Description = "Required for C# and modern Unity/.NET game frameworks and mods.",
-            DownloadUrl = "https://aka.ms/dotnet/8.0/windowsdesktop-runtime-win-x64.exe",
-            SilentArguments = "/install /quiet /norestart",
-            IsEssential = false
-        };
-
-        var dotnet9 = new PrerequisiteItem
-        {
-            Id = "dotnet_runtime_9",
-            Name = ".NET Runtime 9.0 (x64)",
-            Category = ".NET Runtime",
-            Description = "Required for DepotDownloader and multi-manifest game downloads.",
-            DownloadUrl = "https://aka.ms/dotnet/9.0/dotnet-runtime-win-x64.exe",
-            SilentArguments = "/install /quiet /norestart",
-            IsEssential = true
-        };
-
-        var uePrereq = new PrerequisiteItem
-        {
-            Id = "ue_prereqs_x64",
-            Name = "Unreal Engine Prerequisites (x64)",
-            Category = "Unreal Engine",
-            Description = "Includes DirectX, Visual C++, and Epic Games runtime components for Unreal Engine titles.",
-            DownloadUrl = null,
-            SilentArguments = "/quiet /norestart",
-            IsEssential = instance.Engine?.Type == EngineType.UnrealEngine
-        };
-
-        items.Add(vc2015_2022_x64);
-        items.Add(vc2015_2022_x86);
-        items.Add(directx);
-        if (instance.Engine?.Type == EngineType.UnrealEngine) items.Add(uePrereq);
-        items.Add(dotnet8);
-        items.Add(dotnet9);
-
-        // 2. Check system installation status
         foreach (var item in items)
         {
-            if (IsSystemInstalled(item))
+            item.Status = IsSystemInstalled(item)
+                ? PrerequisiteStatus.InstalledInSystem
+                : PrerequisiteStatus.NeedsDownload;
+        }
+
+        return Task.FromResult<IReadOnlyList<PrerequisiteItem>>(items);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<PrerequisiteItem>> DetectPrerequisitesAsync(GameInstance instance, CancellationToken ct = default)
+    {
+        var systemItems = await DetectSystemPrerequisitesAsync(ct).ConfigureAwait(false);
+        var items = new List<PrerequisiteItem>(systemItems);
+
+        var vc2015_2022_x64 = items.FirstOrDefault(i => i.Id == "vcredist_2015_2022_x64");
+        var vc2015_2022_x86 = items.FirstOrDefault(i => i.Id == "vcredist_2015_2022_x86");
+        var directx = items.FirstOrDefault(i => i.Id == "directx_enduser");
+
+        PrerequisiteItem? uePrereq = null;
+        if (instance.Engine?.Type == EngineType.UnrealEngine)
+        {
+            uePrereq = new PrerequisiteItem
             {
-                item.Status = PrerequisiteStatus.InstalledInSystem;
-            }
-            else
-            {
-                item.Status = PrerequisiteStatus.NeedsDownload;
-            }
+                Id = "ue_prereqs_x64",
+                Name = "Unreal Engine Prerequisites (x64)",
+                Category = "Unreal Engine",
+                Description = "Includes DirectX, Visual C++, and Epic Games runtime components for Unreal Engine titles.",
+                DownloadUrl = null,
+                SilentArguments = "/quiet /norestart",
+                IsEssential = true,
+                Status = IsSystemInstalled(new PrerequisiteItem { Id = "ue_prereqs_x64", Name = "UE Prereqs" }) ? PrerequisiteStatus.InstalledInSystem : PrerequisiteStatus.NeedsDownload
+            };
+            items.Add(uePrereq);
         }
 
         // 3. Scan local game directory for embedded installers
@@ -146,28 +148,40 @@ public sealed class PrerequisiteService : IPrerequisiteService
                     {
                         if (fileName.Contains("x64") || fileName.Contains("64"))
                         {
-                            vc2015_2022_x64.LocalInstallerPath = file;
-                            if (vc2015_2022_x64.Status != PrerequisiteStatus.InstalledInSystem)
-                                vc2015_2022_x64.Status = PrerequisiteStatus.AvailableInGame;
+                            if (vc2015_2022_x64 != null)
+                            {
+                                vc2015_2022_x64.LocalInstallerPath = file;
+                                if (vc2015_2022_x64.Status != PrerequisiteStatus.InstalledInSystem)
+                                    vc2015_2022_x64.Status = PrerequisiteStatus.AvailableInGame;
+                            }
                         }
                         else if (fileName.Contains("x86") || fileName.Contains("32"))
                         {
-                            vc2015_2022_x86.LocalInstallerPath = file;
-                            if (vc2015_2022_x86.Status != PrerequisiteStatus.InstalledInSystem)
-                                vc2015_2022_x86.Status = PrerequisiteStatus.AvailableInGame;
+                            if (vc2015_2022_x86 != null)
+                            {
+                                vc2015_2022_x86.LocalInstallerPath = file;
+                                if (vc2015_2022_x86.Status != PrerequisiteStatus.InstalledInSystem)
+                                    vc2015_2022_x86.Status = PrerequisiteStatus.AvailableInGame;
+                            }
                         }
                     }
                     else if (fileName.Equals("dxsetup.exe") || fileName.Contains("dxsetup") || fileName.Contains("dxwebsetup"))
                     {
-                        directx.LocalInstallerPath = file;
-                        if (directx.Status != PrerequisiteStatus.InstalledInSystem)
-                            directx.Status = PrerequisiteStatus.AvailableInGame;
+                        if (directx != null)
+                        {
+                            directx.LocalInstallerPath = file;
+                            if (directx.Status != PrerequisiteStatus.InstalledInSystem)
+                                directx.Status = PrerequisiteStatus.AvailableInGame;
+                        }
                     }
                     else if (fileName.Contains("ue4prereq") || fileName.Contains("ue5prereq") || fileName.Contains("ueprereq"))
                     {
-                        uePrereq.LocalInstallerPath = file;
-                        if (uePrereq.Status != PrerequisiteStatus.InstalledInSystem)
-                            uePrereq.Status = PrerequisiteStatus.AvailableInGame;
+                        if (uePrereq != null)
+                        {
+                            uePrereq.LocalInstallerPath = file;
+                            if (uePrereq.Status != PrerequisiteStatus.InstalledInSystem)
+                                uePrereq.Status = PrerequisiteStatus.AvailableInGame;
+                        }
                     }
                     else if (fileName.Contains("physx"))
                     {
@@ -205,7 +219,7 @@ public sealed class PrerequisiteService : IPrerequisiteService
             }
         }
 
-        return Task.FromResult<IReadOnlyList<PrerequisiteItem>>(items);
+        return items;
     }
 
     /// <inheritdoc />
@@ -267,7 +281,11 @@ public sealed class PrerequisiteService : IPrerequisiteService
     }
 
     /// <inheritdoc />
-    public async Task<bool> InstallPrerequisiteAsync(GameInstance instance, PrerequisiteItem item, IProgress<string>? progress = null, CancellationToken ct = default)
+    public Task<bool> InstallPrerequisiteAsync(GameInstance instance, PrerequisiteItem item, IProgress<string>? progress = null, CancellationToken ct = default)
+        => InstallPrerequisiteAsync(item, progress, ct);
+
+    /// <inheritdoc />
+    public async Task<bool> InstallPrerequisiteAsync(PrerequisiteItem item, IProgress<string>? progress = null, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(item);
 
@@ -371,22 +389,27 @@ public sealed class PrerequisiteService : IPrerequisiteService
     }
 
     /// <inheritdoc />
-    public async Task<int> InstallAllPrerequisitesAsync(GameInstance instance, IProgress<string>? progress = null, CancellationToken ct = default)
+    public async Task<int> InstallAllPrerequisitesAsync(IEnumerable<PrerequisiteItem> items, IProgress<string>? progress = null, CancellationToken ct = default)
     {
-        var prereqs = await DetectPrerequisitesAsync(instance, ct).ConfigureAwait(false);
         int installedCount = 0;
 
-        foreach (var p in prereqs)
+        foreach (var p in items)
         {
-            // Install if missing, available in game, or needs download
             if (p.Status != PrerequisiteStatus.InstalledInSystem && p.Status != PrerequisiteStatus.InstalledSuccess)
             {
-                var success = await InstallPrerequisiteAsync(instance, p, progress, ct).ConfigureAwait(false);
+                var success = await InstallPrerequisiteAsync(p, progress, ct).ConfigureAwait(false);
                 if (success) installedCount++;
             }
         }
 
         progress?.Report($"🎉 Prerequisite installation completed ({installedCount} component(s) configured).");
         return installedCount;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> InstallAllPrerequisitesAsync(GameInstance instance, IProgress<string>? progress = null, CancellationToken ct = default)
+    {
+        var prereqs = await DetectPrerequisitesAsync(instance, ct).ConfigureAwait(false);
+        return await InstallAllPrerequisitesAsync(prereqs, progress, ct).ConfigureAwait(false);
     }
 }

@@ -54,5 +54,17 @@ public record DepotInfo
     /// Gets or sets a value indicating whether this depot is currently downloaded/installed.
     /// </summary>
     public bool IsDownloaded { get; init; } = false;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether Steam would automatically install this depot
+    /// for the current OS (i.e. it is part of the base install, not optional).
+    /// </summary>
+    public bool IsRecommended { get; init; } = false;
+
+    /// <summary>
+    /// Gets or sets the official depot name as returned by the SteamDB/SteamCMD API.
+    /// When non-null this takes precedence over <see cref="Name"/> in the UI.
+    /// </summary>
+    public string? SteamDbName { get; init; }
 }
 

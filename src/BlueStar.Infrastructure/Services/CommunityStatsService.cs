@@ -57,14 +57,46 @@ public class CommunityStatsService : ICommunityStatsService
         @"<div class=""col search_released responsive_secondrow"">(?<release>[^<]+)</div>",
         System.Text.RegularExpressions.RegexOptions.Compiled);
 
+    private static readonly List<SearchResult> DefaultCommunityTrendingFallback = new()
+    {
+        new SearchResult { AppId = 286160, Name = "Tabletop Simulator", AppType = "Game", HasWindows = true, HasLinux = true, HasMac = true, HeaderImageUrl = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/286160/header.jpg" },
+        new SearchResult { AppId = 322330, Name = "Don't Starve Together", AppType = "Game", HasWindows = true, HasLinux = true, HasMac = true, HeaderImageUrl = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/322330/header.jpg" },
+        new SearchResult { AppId = 1966720, Name = "Lethal Company", AppType = "Game", HasWindows = true, HeaderImageUrl = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/1966720/header.jpg" },
+        new SearchResult { AppId = 1623730, Name = "Palworld", AppType = "Game", HasWindows = true, HeaderImageUrl = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/1623730/header.jpg" },
+        new SearchResult { AppId = 2379780, Name = "Balatro", AppType = "Game", HasWindows = true, HasMac = true, HeaderImageUrl = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/2379780/header.jpg" },
+        new SearchResult { AppId = 1145360, Name = "Hades II", AppType = "Game", HasWindows = true, HeaderImageUrl = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/1145360/header.jpg" },
+        new SearchResult { AppId = 739630, Name = "Phasmophobia", AppType = "Game", HasWindows = true, HeaderImageUrl = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/739630/header.jpg" },
+        new SearchResult { AppId = 553850, Name = "HELLDIVERS™ 2", AppType = "Game", HasWindows = true, HeaderImageUrl = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/553850/header.jpg" }
+    };
+
+    private static readonly List<SearchResult> DefaultCommunityMostPlayedFallback = new()
+    {
+        new SearchResult { AppId = 1091500, Name = "Cyberpunk 2077", AppType = "Game", HasWindows = true, HeaderImageUrl = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/1091500/header.jpg" },
+        new SearchResult { AppId = 1245620, Name = "ELDEN RING", AppType = "Game", HasWindows = true, HeaderImageUrl = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/1245620/header.jpg" },
+        new SearchResult { AppId = 374320, Name = "DARK SOULS™ III", AppType = "Game", HasWindows = true, HeaderImageUrl = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/374320/header.jpg" },
+        new SearchResult { AppId = 292030, Name = "The Witcher 3: Wild Hunt", AppType = "Game", HasWindows = true, HeaderImageUrl = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/292030/header.jpg" },
+        new SearchResult { AppId = 1086940, Name = "Baldur's Gate 3", AppType = "Game", HasWindows = true, HasMac = true, HeaderImageUrl = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/1086940/header.jpg" },
+        new SearchResult { AppId = 582010, Name = "Monster Hunter: World", AppType = "Game", HasWindows = true, HeaderImageUrl = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/582010/header.jpg" },
+        new SearchResult { AppId = 1174180, Name = "Red Dead Redemption 2", AppType = "Game", HasWindows = true, HeaderImageUrl = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/1174180/header.jpg" },
+        new SearchResult { AppId = 413150, Name = "Stardew Valley", AppType = "Game", HasWindows = true, HasLinux = true, HasMac = true, HeaderImageUrl = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/413150/header.jpg" }
+    };
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<SearchResult>> GetTrendingBlueStarAsync(CancellationToken ct = default)
     {
-        const string cacheKey = "bluestar_trending_7d_v5";
+        const string cacheKey = "bluestar_trending_7d_v7";
         try
         {
             var cached = await _cacheService.GetAsync<List<SearchResult>>(cacheKey, ct).ConfigureAwait(false);
-            if (cached != null) return Deduplicate(cached);
+            if (cached != null && cached.Count > 0)
+            {
+                foreach (var item in cached)
+                {
+                    if (item.Version != null && (item.Version.Contains("community instances", StringComparison.OrdinalIgnoreCase) || item.Version.Contains("added this week", StringComparison.OrdinalIgnoreCase)))
+                        item.Version = null;
+                }
+                return Deduplicate(cached);
+            }
         }
         catch { }
 
@@ -78,7 +110,7 @@ public class CommunityStatsService : ICommunityStatsService
             if (response?.Results != null && response.Results.Count > 0)
             {
                 var list = Deduplicate(response.Results.Select(r => r.ToSearchResult()));
-                await _cacheService.SetAsync(cacheKey, list, TimeSpan.FromMinutes(10), ct).ConfigureAwait(false);
+                await _cacheService.SetAsync(cacheKey, list, TimeSpan.FromMinutes(5), ct).ConfigureAwait(false);
                 return list;
             }
         }
@@ -87,17 +119,25 @@ public class CommunityStatsService : ICommunityStatsService
             _logger.LogDebug(ex, "Could not fetch real trending stats from Cloudflare worker");
         }
 
-        return Array.Empty<SearchResult>();
+        return DefaultCommunityTrendingFallback;
     }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<SearchResult>> GetMostPlayedBlueStarAsync(CancellationToken ct = default)
     {
-        const string cacheKey = "bluestar_most_played_alltime_v5";
+        const string cacheKey = "bluestar_most_played_alltime_v7";
         try
         {
             var cached = await _cacheService.GetAsync<List<SearchResult>>(cacheKey, ct).ConfigureAwait(false);
-            if (cached != null) return Deduplicate(cached);
+            if (cached != null && cached.Count > 0)
+            {
+                foreach (var item in cached)
+                {
+                    if (item.Version != null && (item.Version.Contains("community instances", StringComparison.OrdinalIgnoreCase) || item.Version.Contains("added this week", StringComparison.OrdinalIgnoreCase)))
+                        item.Version = null;
+                }
+                return Deduplicate(cached);
+            }
         }
         catch { }
 
@@ -111,7 +151,7 @@ public class CommunityStatsService : ICommunityStatsService
             if (response?.Results != null && response.Results.Count > 0)
             {
                 var list = Deduplicate(response.Results.Select(r => r.ToSearchResult()));
-                await _cacheService.SetAsync(cacheKey, list, TimeSpan.FromMinutes(20), ct).ConfigureAwait(false);
+                await _cacheService.SetAsync(cacheKey, list, TimeSpan.FromMinutes(5), ct).ConfigureAwait(false);
                 return list;
             }
         }
@@ -120,7 +160,7 @@ public class CommunityStatsService : ICommunityStatsService
             _logger.LogDebug(ex, "Could not fetch all-time most added stats from Cloudflare worker");
         }
 
-        return Array.Empty<SearchResult>();
+        return DefaultCommunityMostPlayedFallback;
     }
 
     /// <inheritdoc />
@@ -347,8 +387,8 @@ public class CommunityStatsService : ICommunityStatsService
             _logger.LogInformation("Reported instance to Cloudflare: {Name} (AppId={AppId}), Status={Status}", name, appId, resp.StatusCode);
 
             // Invalidate local feeds cache so subsequent refreshes pull new data
-            await _cacheService.RemoveAsync("bluestar_trending_7d_v2", CancellationToken.None).ConfigureAwait(false);
-            await _cacheService.RemoveAsync("bluestar_most_played_alltime_v2", CancellationToken.None).ConfigureAwait(false);
+            await _cacheService.RemoveAsync("bluestar_trending_7d_v7", CancellationToken.None).ConfigureAwait(false);
+            await _cacheService.RemoveAsync("bluestar_most_played_alltime_v7", CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -396,8 +436,8 @@ public class CommunityStatsService : ICommunityStatsService
             var resp = await _httpClient.PostAsJsonAsync(workerUrl, payload, cts.Token).ConfigureAwait(false);
             _logger.LogInformation("Synced {Count} local instances to Cloudflare: Status={Status}", valid.Count, resp.StatusCode);
 
-            await _cacheService.RemoveAsync("bluestar_trending_7d_v2", CancellationToken.None).ConfigureAwait(false);
-            await _cacheService.RemoveAsync("bluestar_most_played_alltime_v2", CancellationToken.None).ConfigureAwait(false);
+            await _cacheService.RemoveAsync("bluestar_trending_7d_v7", CancellationToken.None).ConfigureAwait(false);
+            await _cacheService.RemoveAsync("bluestar_most_played_alltime_v7", CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -506,12 +546,20 @@ public class CommunityStatsService : ICommunityStatsService
 
         public SearchResult ToSearchResult()
         {
+            var cleanVersion = Version;
+            if (!string.IsNullOrEmpty(cleanVersion) && 
+                (cleanVersion.Contains("community instances", StringComparison.OrdinalIgnoreCase) || 
+                 cleanVersion.Contains("added this week", StringComparison.OrdinalIgnoreCase)))
+            {
+                cleanVersion = null;
+            }
+
             return new SearchResult
             {
                 AppId = AppId,
                 Name = Name,
                 AppType = AppType ?? "Game",
-                Version = Version,
+                Version = cleanVersion,
                 DlcCount = DlcCount,
                 HasWindows = HasWindows ?? true,
                 HasLinux = HasLinux ?? false,

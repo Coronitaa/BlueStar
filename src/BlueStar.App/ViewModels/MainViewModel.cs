@@ -114,6 +114,41 @@ public partial class MainViewModel : ObservableObject
     private string _steamTooltipText = "Steam client status";
 
     private readonly IMetadataProvider? _metadataProvider;
+    private readonly IPrerequisiteService? _prerequisiteService;
+    private readonly BlueStar.Infrastructure.Storage.AppSettingsService? _appSettings;
+
+    // ── System Requirements State ──
+    [ObservableProperty]
+    private bool _isSystemRequirementsModalOpen;
+
+    [ObservableProperty]
+    private System.Collections.ObjectModel.ObservableCollection<PrerequisiteItem> _systemPrerequisites = [];
+
+    [ObservableProperty]
+    private bool _isScanningSystemPrerequisites;
+
+    [ObservableProperty]
+    private bool _isInstallingSystemPrerequisites;
+
+    [ObservableProperty]
+    private string _systemPrerequisitesInstallStatusText = string.Empty;
+
+    [ObservableProperty]
+    private bool _checkRequirementsOnStartup = true;
+
+    [ObservableProperty]
+    private int _missingPrerequisitesCount;
+
+    [ObservableProperty]
+    private bool _hasMissingRequirements;
+
+    partial void OnCheckRequirementsOnStartupChanged(bool value)
+    {
+        if (_appSettings != null)
+        {
+            _ = _appSettings.SetCheckSystemRequirementsOnStartupAsync(value);
+        }
+    }
 
     public MainViewModel(
         DownloadQueueManager downloadQueueManager,
@@ -124,7 +159,9 @@ public partial class MainViewModel : ObservableObject
         IBackgroundTaskService backgroundTaskService,
         IGameLauncher? gameLauncher = null,
         IDepotBoxApiClient? apiClient = null,
-        IMetadataProvider? metadataProvider = null)
+        IMetadataProvider? metadataProvider = null,
+        IPrerequisiteService? prerequisiteService = null,
+        BlueStar.Infrastructure.Storage.AppSettingsService? appSettings = null)
     {
         _downloadQueueManager = downloadQueueManager;
         _steamStatusService = steamStatusService;
@@ -135,7 +172,14 @@ public partial class MainViewModel : ObservableObject
         _gameLauncher = gameLauncher;
         _apiClient = apiClient;
         _metadataProvider = metadataProvider;
+        _prerequisiteService = prerequisiteService;
+        _appSettings = appSettings;
         _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
+
+        if (_appSettings != null)
+        {
+            CheckRequirementsOnStartup = _appSettings.CheckSystemRequirementsOnStartup;
+        }
 
         _downloadQueueManager.Queue.CollectionChanged += (_, _) => _uiContext.Post(_ => UpdateDownloadStats(), null);
         _downloadQueueManager.QueueChanged += (_, _) => _uiContext.Post(_ => UpdateDownloadStats(), null);
@@ -172,6 +216,9 @@ public partial class MainViewModel : ObservableObject
 
             StartupStatusText = "Syncing Steam status...";
             await Task.Delay(150).ConfigureAwait(true);
+
+            StartupStatusText = "Analyzing system requirements...";
+            await ScanSystemRequirementsAsync(autoPromptModal: true).ConfigureAwait(true);
 
             StartupStatusText = "Ready!";
             await Task.Delay(100).ConfigureAwait(true);
@@ -648,6 +695,145 @@ public partial class MainViewModel : ObservableObject
         }
         catch { }
     }
+
+    #region System Requirements Management
+
+    /// <summary>
+    /// Scans the host system to verify if all essential and recommended BlueStar requirements are installed.
+    /// </summary>
+    [RelayCommand]
+    public async Task ScanSystemRequirementsAsync() => await ScanSystemRequirementsAsync(autoPromptModal: false).ConfigureAwait(true);
+
+    /// <summary>
+    /// Scans the host system for prerequisites, optionally auto-opening the modal if missing items are found.
+    /// </summary>
+    public async Task ScanSystemRequirementsAsync(bool autoPromptModal = false)
+    {
+        if (_prerequisiteService == null) return;
+
+        IsScanningSystemPrerequisites = true;
+        try
+        {
+            var items = await _prerequisiteService.DetectSystemPrerequisitesAsync(CancellationToken.None).ConfigureAwait(true);
+            
+            _uiContext.Post(_ =>
+            {
+                SystemPrerequisites.Clear();
+                foreach (var item in items)
+                {
+                    SystemPrerequisites.Add(item);
+                }
+
+                var missing = items.Where(i => i.Status != PrerequisiteStatus.InstalledInSystem && i.Status != PrerequisiteStatus.InstalledSuccess).ToList();
+                MissingPrerequisitesCount = missing.Count;
+                HasMissingRequirements = missing.Count > 0;
+
+                if (HasMissingRequirements && autoPromptModal && (_appSettings?.CheckSystemRequirementsOnStartup ?? true))
+                {
+                    IsSystemRequirementsModalOpen = true;
+                }
+            }, null);
+        }
+        catch { }
+        finally
+        {
+            _uiContext.Post(_ => IsScanningSystemPrerequisites = false, null);
+        }
+    }
+
+    /// <summary>
+    /// Opens the System Requirements modal dialog.
+    /// </summary>
+    [RelayCommand]
+    public void OpenSystemRequirementsModal()
+    {
+        _ = ScanSystemRequirementsAsync(autoPromptModal: false);
+        IsSystemRequirementsModalOpen = true;
+    }
+
+    /// <summary>
+    /// Closes the System Requirements modal dialog.
+    /// </summary>
+    [RelayCommand]
+    public void CloseSystemRequirementsModal()
+    {
+        IsSystemRequirementsModalOpen = false;
+    }
+
+    /// <summary>
+    /// Installs a specific system prerequisite item.
+    /// </summary>
+    [RelayCommand]
+    public async Task InstallSystemPrerequisiteAsync(PrerequisiteItem? item)
+    {
+        if (item == null || _prerequisiteService == null || IsInstallingSystemPrerequisites) return;
+
+        IsInstallingSystemPrerequisites = true;
+        SystemPrerequisitesInstallStatusText = $"Installing {item.Name}...";
+        try
+        {
+            var progress = new Progress<string>(msg => SystemPrerequisitesInstallStatusText = msg);
+            var success = await _prerequisiteService.InstallPrerequisiteAsync(item, progress, CancellationToken.None).ConfigureAwait(true);
+            if (success)
+            {
+                _notificationService.ShowSuccess("Prerequisite Installed", $"{item.Name} was installed successfully.");
+            }
+            else
+            {
+                _notificationService.ShowError("Installation Incomplete", $"Could not complete installation of {item.Name}.");
+            }
+            await ScanSystemRequirementsAsync(autoPromptModal: false).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _notificationService.ShowError("Installation Error", ex.Message);
+        }
+        finally
+        {
+            IsInstallingSystemPrerequisites = false;
+            SystemPrerequisitesInstallStatusText = string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Installs all missing system prerequisites in 1-click.
+    /// </summary>
+    [RelayCommand]
+    public async Task InstallAllSystemPrerequisitesAsync()
+    {
+        if (_prerequisiteService == null || IsInstallingSystemPrerequisites || SystemPrerequisites.Count == 0) return;
+
+        var missing = SystemPrerequisites.Where(i => i.Status != PrerequisiteStatus.InstalledInSystem && i.Status != PrerequisiteStatus.InstalledSuccess).ToList();
+        if (missing.Count == 0)
+        {
+            _notificationService.ShowInfo("System Up to Date", "All essential system requirements are already installed.");
+            return;
+        }
+
+        IsInstallingSystemPrerequisites = true;
+        try
+        {
+            var progress = new Progress<string>(msg => SystemPrerequisitesInstallStatusText = msg);
+            int installed = await _prerequisiteService.InstallAllPrerequisitesAsync(missing, progress, CancellationToken.None).ConfigureAwait(true);
+            _notificationService.ShowSuccess("System Requirements Updated", $"{installed} requirement(s) configured successfully.");
+            await ScanSystemRequirementsAsync(autoPromptModal: false).ConfigureAwait(true);
+
+            if (!HasMissingRequirements)
+            {
+                SystemPrerequisitesInstallStatusText = "All requirements verified successfully!";
+            }
+        }
+        catch (Exception ex)
+        {
+            _notificationService.ShowError("Installation Error", ex.Message);
+        }
+        finally
+        {
+            IsInstallingSystemPrerequisites = false;
+        }
+    }
+
+    #endregion
 
     private static TView CreateView<TView, TViewModel>()
         where TView : UserControl, new()

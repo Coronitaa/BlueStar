@@ -7,7 +7,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
+using BlueStar.Infrastructure.Common;
 using Microsoft.Extensions.Logging;
+
 
 namespace BlueStar.Infrastructure.Services;
 
@@ -137,18 +139,31 @@ public sealed class GameFixDeployService : IGameFixDeployService
                 CurrentStep = "Extracting"
             });
 
-            stagingDir = Path.Combine(Path.GetTempPath(), "BlueStar_FixDeploy", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(stagingDir);
+            // Prefer extracting within the instance's folder so it inherits the exclusion rule, or temp as fallback
+            var stagingInInstance = Path.Combine(instance.InstallPath, ".bluestar_staging", Guid.NewGuid().ToString("N"));
+            var stagingInTemp = Path.Combine(Path.GetTempPath(), "BlueStar_FixDeploy", Guid.NewGuid().ToString("N"));
 
             try
             {
-                ZipFile.ExtractToDirectory(zipPath, stagingDir, overwriteFiles: true);
+                Directory.CreateDirectory(stagingInInstance);
+                stagingDir = stagingInInstance;
+            }
+            catch
+            {
+                Directory.CreateDirectory(stagingInTemp);
+                stagingDir = stagingInTemp;
+            }
+
+            try
+            {
+                ArchiveExtractor.ExtractToDirectory(zipPath, stagingDir, overwrite: true);
             }
             catch (Exception ex)
             {
                 try { if (File.Exists(zipPath)) File.Delete(zipPath); } catch { }
                 throw new InvalidOperationException($"Failed to extract fix archive ({ex.Message}). The file may be corrupt or in an unsupported format.", ex);
             }
+
 
             // ─────────────────────────────────────────────────────────────
             // STAGE 4: Analyze Target Directories & Prepare Backups
@@ -252,7 +267,7 @@ public sealed class GameFixDeployService : IGameFixDeployService
                 LayerId = layerId,
                 FixId = fix.Id,
                 SourceType = "depotbox_gamefix",
-                DisplayName = fix.Name,
+                DisplayName = DepotBox.DepotBoxApiClient.CleanGameFixName(fix.Name, instance.Name),
                 Tags = fix.Tags,
                 DeployedFiles = deployedRelPaths.AsReadOnly(),
                 BackupDirectory = backupDir,
@@ -322,6 +337,15 @@ public sealed class GameFixDeployService : IGameFixDeployService
                     Directory.Delete(stagingDir, recursive: true);
                 }
                 catch { }
+            }
+
+            if (!string.IsNullOrWhiteSpace(instance?.InstallPath))
+            {
+                var stagingRoot = Path.Combine(instance.InstallPath, ".bluestar_staging");
+                if (Directory.Exists(stagingRoot))
+                {
+                    try { Directory.Delete(stagingRoot, recursive: true); } catch { }
+                }
             }
         }
     }

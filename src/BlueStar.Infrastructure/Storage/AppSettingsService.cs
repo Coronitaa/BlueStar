@@ -106,10 +106,31 @@ public sealed class AppSettingsService
         await SaveAsync().ConfigureAwait(false);
     }
 
+    /// <summary>Whether experimental mod management and the Mods tab are enabled (default false).</summary>
+    public bool EnableExperimentalMods => _current.EnableExperimentalMods;
+
+    /// <summary>Persists the experimental mod management setting.</summary>
+    public async Task SetEnableExperimentalModsAsync(bool enable)
+    {
+        _current = _current with { EnableExperimentalMods = enable };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
     /// <summary>Persists the default API base URL.</summary>
+
     public async Task SetDefaultApiUrlAsync(string url)
     {
         _current = _current with { DefaultApiUrl = string.IsNullOrWhiteSpace(url) ? "https://depotbox.org" : url.Trim().TrimEnd('/') };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Whether to automatically analyze and verify system requirements upon application startup (default true).</summary>
+    public bool CheckSystemRequirementsOnStartup => _current.CheckSystemRequirementsOnStartup;
+
+    /// <summary>Persists the check system requirements on startup setting.</summary>
+    public async Task SetCheckSystemRequirementsOnStartupAsync(bool check)
+    {
+        _current = _current with { CheckSystemRequirementsOnStartup = check };
         await SaveAsync().ConfigureAwait(false);
     }
 
@@ -167,6 +188,9 @@ public sealed class AppSettingsService
         public bool ShowNsfwContent { get; init; } = false;
         public bool ShowDrmContent { get; init; } = true;
         public bool EnableAdvancedBuildOptions { get; init; } = false;
+        public bool EnableExperimentalMods { get; init; } = false;
+        public bool CheckSystemRequirementsOnStartup { get; init; } = true;
+
         public string? DefaultApiUrl { get; init; } = "https://depotbox.org";
         public string? DefaultApiKey { get; init; }
     }

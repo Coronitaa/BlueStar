@@ -149,26 +149,25 @@ public class EmulatorRatingServiceTests : IDisposable
         var service = CreateService();
         uint appId = 777777;
         string optionId = "refix_valve";
-        var instanceId = Guid.NewGuid();
+        var instance = new GameInstance
+        {
+            Id = Guid.NewGuid(),
+            AppId = appId,
+            Name = "Reset Game",
+            InstallPath = @"C:\Games\ResetGame",
+            InstalledEmulatorVersion = "1.0"
+        };
 
         for (int i = 0; i < 12; i++)
         {
             await service.SubmitVoteAsync(appId, optionId, isPositive: true);
         }
-        await service.RecordUserVoteFlagAsync(instanceId, optionId);
+        await service.RecordUserVoteFlagAsync(instance, optionId);
 
-        service.HasUserVoted(instanceId, optionId).Should().BeTrue();
+        service.HasUserVoted(instance, optionId).Should().BeTrue();
 
-        // Reset ratings after update
+        // Reset ratings after update of refix
         await service.ResetRatingsForEmulatorAsync("refix");
-
-        var instance = new GameInstance
-        {
-            Id = instanceId,
-            AppId = appId,
-            Name = "Reset Game",
-            InstallPath = @"C:\Games\ResetGame"
-        };
 
         var options = await service.GetOptionsForInstanceAsync(instance);
         var valve = options.First(o => o.Id == optionId);
@@ -177,20 +176,74 @@ public class EmulatorRatingServiceTests : IDisposable
         valve.PositiveVotes.Should().Be(0);
         valve.HasEnoughVotesForScore.Should().BeFalse();
         valve.IsRecommended.Should().BeFalse();
-        service.HasUserVoted(instanceId, optionId).Should().BeFalse();
+        service.HasUserVoted(instance, optionId).Should().BeFalse();
     }
 
     [Fact]
-    public async Task UserVoteFlag_TracksVotedState()
+    public async Task UserVoteFlag_TracksVotedState_PerGameAndEmulatorVersion()
     {
         var service = CreateService();
-        var instanceId = Guid.NewGuid();
+        var instanceV1 = new GameInstance
+        {
+            Id = Guid.NewGuid(),
+            AppId = 112233,
+            Name = "Versioned Game",
+            InstallPath = @"C:\Games\VersionedGame",
+            InstalledEmulatorVersion = "1.0",
+            Depots = [new DepotInfo { DepotId = 1, ManifestId = 1001001 }]
+        };
         string optionId = "refix_valve";
 
-        service.HasUserVoted(instanceId, optionId).Should().BeFalse();
+        service.HasUserVoted(instanceV1, optionId).Should().BeFalse();
 
-        await service.RecordUserVoteFlagAsync(instanceId, optionId);
+        await service.RecordUserVoteFlagAsync(instanceV1, optionId);
 
-        service.HasUserVoted(instanceId, optionId).Should().BeTrue();
+        // Voted for v1
+        service.HasUserVoted(instanceV1, optionId).Should().BeTrue();
+
+        // If game is updated to new manifest 2002002, user can vote again!
+        var instanceV2 = instanceV1 with
+        {
+            Depots = [new DepotInfo { DepotId = 1, ManifestId = 2002002 }]
+        };
+        service.HasUserVoted(instanceV2, optionId).Should().BeFalse();
+
+        // If emulator is updated to 1.1 on original game version, user can vote again!
+        var instanceWithNewEmu = instanceV1 with
+        {
+            InstalledEmulatorVersion = "1.1"
+        };
+        service.HasUserVoted(instanceWithNewEmu, optionId).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ResetRatingsForGame_ResetsAllOptionsForThatGameOnly()
+    {
+        var service = CreateService();
+        uint gameAppId = 55555;
+        uint otherAppId = 66666;
+
+        await service.SubmitVoteAsync(gameAppId, "refix_valve", true);
+        await service.SubmitVoteAsync(gameAppId, "refix_goldberg", true);
+        await service.SubmitVoteAsync(gameAppId, "fix_123", true);
+        await service.SubmitVoteAsync(otherAppId, "refix_valve", true);
+
+        var (gameValvePos, _) = service.GetRatings(gameAppId, "refix_valve");
+        var (otherValvePos, _) = service.GetRatings(otherAppId, "refix_valve");
+        gameValvePos.Should().Be(1);
+        otherValvePos.Should().Be(1);
+
+        // Reset game on update
+        await service.ResetRatingsForGameAsync(gameAppId);
+
+        var (resetValvePos, _) = service.GetRatings(gameAppId, "refix_valve");
+        var (resetGoldbergPos, _) = service.GetRatings(gameAppId, "refix_goldberg");
+        var (resetFixPos, _) = service.GetRatings(gameAppId, "fix_123");
+        var (intactOtherPos, _) = service.GetRatings(otherAppId, "refix_valve");
+
+        resetValvePos.Should().Be(0);
+        resetGoldbergPos.Should().Be(0);
+        resetFixPos.Should().Be(0);
+        intactOtherPos.Should().Be(1);
     }
 }

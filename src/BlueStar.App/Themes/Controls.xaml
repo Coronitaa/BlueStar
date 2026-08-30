@@ -1413,9 +1413,12 @@
         <Setter Property="Foreground" Value="{StaticResource PrimaryTextBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource StrongBorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="Padding" Value="10,6"/>
+        <Setter Property="Padding" Value="12,8"/>
         <Setter Property="FontFamily" Value="{StaticResource MainFontFamily}"/>
         <Setter Property="FontSize" Value="12"/>
+        <Setter Property="MaxWidth" Value="380"/>
+        <Setter Property="HasDropShadow" Value="True"/>
+        <Setter Property="TextBlock.TextWrapping" Value="Wrap"/>
     </Style>
 
     <!-- ── 8. SKELETON LOADING SHIMMER COMPONENTS ── -->

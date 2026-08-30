@@ -44,17 +44,33 @@ public interface IEmulatorRatingService
     Task<bool> SubmitVoteAsync(uint appId, string optionId, bool isPositive, CancellationToken ct = default);
 
     /// <summary>
-    /// Checks whether the user has already submitted a feedback vote for this instance and option.
+    /// Checks whether the user has already submitted a feedback vote for this instance, option, and specific version.
     /// </summary>
-    bool HasUserVoted(Guid instanceId, string optionId);
+    bool HasUserVoted(GameInstance instance, string optionId, string? emulatorVersion = null);
 
     /// <summary>
-    /// Records that the user has voted or dismissed the feedback prompt for this instance and option.
+    /// Records that the user has voted or dismissed the feedback prompt for this specific game version and emulator version.
     /// </summary>
-    Task RecordUserVoteFlagAsync(Guid instanceId, string optionId, CancellationToken ct = default);
+    Task RecordUserVoteFlagAsync(GameInstance instance, string optionId, string? emulatorVersion = null, CancellationToken ct = default);
 
     /// <summary>
-    /// Resets all community votes and user voting flags to 0 for a given emulator (e.g. after an emulator version update).
+    /// Gets current positive and negative community ratings for a specific option or fix.
+    /// </summary>
+    (int Positive, int Negative) GetRatings(uint appId, string optionId);
+
+    /// <summary>
+    /// Resets all community votes and user voting flags to 0 for a given emulator (called when an emulator version updates).
     /// </summary>
     Task ResetRatingsForEmulatorAsync(string emulatorId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Resets all community votes and user voting flags to 0 for all emulator options on a given game AppID
+    /// (called when the game receives a new update/build).
+    /// </summary>
+    Task ResetRatingsForGameAsync(uint appId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Resets community votes and user voting flags for a specific game fix (called when that fix is updated).
+    /// </summary>
+    Task ResetRatingsForFixAsync(uint appId, string fixId, CancellationToken ct = default);
 }

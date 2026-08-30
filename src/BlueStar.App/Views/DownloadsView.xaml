@@ -125,7 +125,7 @@
                                             Command="{Binding DataContext.OpenInstanceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                             CommandParameter="{Binding Instance}" ToolTip="View Game Details">
                                         <Border CornerRadius="6" Height="36" ClipToBounds="True" Background="{StaticResource SurfaceInputBrush}">
-                                            <Image Source="{Binding Instance.HeaderImageUrl}" Stretch="UniformToFill"/>
+                                            <Image Source="{Binding Instance.HeaderImageUrl, Converter={StaticResource CachedImageConverter}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                                         </Border>
                                     </Button>
 

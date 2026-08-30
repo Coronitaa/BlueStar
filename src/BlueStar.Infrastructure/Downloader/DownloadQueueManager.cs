@@ -279,12 +279,13 @@ public class DownloadQueueManager
     // ── Public API ────────────────────────────────────────────────────────────
 
     /// <summary>Enqueues a new download or re-starts an existing one.</summary>
-    public async Task StartDownloadAsync(GameInstance instance)
+    public Task StartDownloadAsync(GameInstance instance)
     {
         // If already in queue and active, skip
         var existing = Queue.FirstOrDefault(q => q.Instance.Id == instance.Id);
-        if (existing is not null && existing.IsActive) return;
+        if (existing is not null && existing.IsActive) return Task.CompletedTask;
 
+        bool isResume = false;
         if (existing is null)
         {
             existing = new DownloadJobItem { Instance = instance, StatusMessage = "Queued..." };
@@ -297,7 +298,7 @@ public class DownloadQueueManager
         }
         else
         {
-            var isResume = existing.JobStatus == DownloadJobStatus.Paused;
+            isResume = existing.JobStatus == DownloadJobStatus.Paused;
             existing.Instance = instance;
             existing.ErrorDetail = null;
             existing.SpeedBytesPerSec = 0;
@@ -312,14 +313,23 @@ public class DownloadQueueManager
         }
 
         existing.JobStatus = DownloadJobStatus.Queued;
-        existing.StatusMessage = "Starting download...";
+        existing.StatusMessage = isResume ? "Resuming download..." : "Starting download...";
         existing.StartedAt = DateTimeOffset.Now;
         NotifyQueueChanged();
 
-        _notificationService?.ShowInfo("Download Started", $"{instance.Name} added to the download queue.");
+        if (!isResume)
+        {
+            _notificationService?.ShowInfo("Download Started", $"{instance.Name} added to the download queue.");
+        }
+        else
+        {
+            _notificationService?.ShowInfo("Download Resumed", $"Resuming download for {instance.Name}.");
+        }
 
-        await RunDownloadAsync(existing, instance).ConfigureAwait(false);
+        _ = RunDownloadAsync(existing, instance);
+        return Task.CompletedTask;
     }
+
 
     /// <summary>Pauses an active download instantly (cancels + marks as paused; resumes later with ResumeAsync).</summary>
     public Task PauseAsync(Guid instanceId)
@@ -365,9 +375,12 @@ public class DownloadQueueManager
         var item = Queue.FirstOrDefault(q => q.Instance.Id == instanceId);
         if (item is null || !item.CanResume) return Task.CompletedTask;
 
+        _pausedInstances.TryRemove(instanceId, out _);
+
         _logger.LogInformation("Resuming download for {Game}", item.Instance.Name);
         return StartDownloadAsync(item.Instance);
     }
+
 
     /// <summary>Retries a failed or canceled download.</summary>
     public Task RetryAsync(Guid instanceId)

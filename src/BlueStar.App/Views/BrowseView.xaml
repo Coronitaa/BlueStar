@@ -330,7 +330,7 @@
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="14"/>
+                                            <RowDefinition Height="*" MinHeight="14"/>
                                             <RowDefinition Height="Auto"/>
                                         </Grid.RowDefinitions>
 
@@ -343,7 +343,7 @@
                                                 <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}"
                                                       Stretch="Uniform" Width="36" Height="36"
                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                <Image Source="{Binding HeaderImageUrl}"
+                                                <Image Source="{Binding HeaderImageUrl, Converter={StaticResource CachedImageConverter}}"
                                                        Stretch="UniformToFill"
                                                        RenderOptions.BitmapScalingMode="HighQuality"/>
                                             </Grid>

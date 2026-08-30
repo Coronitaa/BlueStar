@@ -12,6 +12,21 @@ namespace BlueStar.Core.Interfaces;
 public interface IPrerequisiteService
 {
     /// <summary>
+    /// Detects all system-wide prerequisites required by BlueStar and modern games (Visual C++ 2015-2022 x64/x86, DirectX, .NET 8, .NET 9).
+    /// </summary>
+    Task<IReadOnlyList<PrerequisiteItem>> DetectSystemPrerequisitesAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Installs a specific prerequisite item directly from official sources or local cache.
+    /// </summary>
+    Task<bool> InstallPrerequisiteAsync(PrerequisiteItem item, IProgress<string>? progress = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Automatically installs a collection of missing prerequisites.
+    /// </summary>
+    Task<int> InstallAllPrerequisitesAsync(IEnumerable<PrerequisiteItem> items, IProgress<string>? progress = null, CancellationToken ct = default);
+
+    /// <summary>
     /// Detects all relevant prerequisites for the specified game instance (both from game folders and standard requirements).
     /// </summary>
     Task<IReadOnlyList<PrerequisiteItem>> DetectPrerequisitesAsync(GameInstance instance, CancellationToken ct = default);

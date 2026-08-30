@@ -426,6 +426,17 @@ public sealed class ReFixUpdateService : IReFixUpdateService
     {
         if (instance == null || string.IsNullOrWhiteSpace(instance.InstallPath)) return false;
 
+        // If the instance has a game-specific online fix or another non-ReFix emulator, it is NOT ReFix
+        if (instance.EmulatorId == "gamefix_online" || instance.InstalledFixLayers?.Any(l => l.IsOnline) == true)
+        {
+            return false;
+        }
+
+        if (instance.EmulatorId != null && !instance.EmulatorId.StartsWith("refix", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
         // Check if emulator is installed on disk or enabled
         bool isInstalled = ReFixEmulator.IsEmulatorInstalled(instance.InstallPath) || instance.EmulatorEnabled;
         if (!isInstalled) return false;

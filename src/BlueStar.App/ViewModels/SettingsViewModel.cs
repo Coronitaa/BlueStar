@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using BlueStar.Core.Interfaces;
+using BlueStar.Core.Models;
 using BlueStar.Infrastructure.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -94,6 +95,43 @@ public partial class SettingsViewModel : ObservableObject
         _ = _appSettings.SetEnableAdvancedBuildOptionsAsync(value);
     }
 
+    [ObservableProperty]
+    private bool _enableExperimentalMods;
+
+    partial void OnEnableExperimentalModsChanged(bool value)
+    {
+        _ = _appSettings.SetEnableExperimentalModsAsync(value);
+    }
+
+    [ObservableProperty]
+    private bool _checkSystemRequirementsOnStartup = true;
+
+    partial void OnCheckSystemRequirementsOnStartupChanged(bool value)
+    {
+        _ = _appSettings.SetCheckSystemRequirementsOnStartupAsync(value);
+    }
+
+    // ── System Prerequisites in Settings ──
+    private readonly IPrerequisiteService? _prerequisiteService;
+
+    [ObservableProperty]
+    private System.Collections.ObjectModel.ObservableCollection<PrerequisiteItem> _systemPrerequisites = [];
+
+    [ObservableProperty]
+    private bool _isScanningRequirements;
+
+    [ObservableProperty]
+    private bool _isInstallingRequirements;
+
+    [ObservableProperty]
+    private string _installRequirementsStatusText = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasMissingRequirements;
+
+    [ObservableProperty]
+    private int _missingRequirementsCount;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SettingsViewModel"/> class.
     /// </summary>
@@ -103,7 +141,8 @@ public partial class SettingsViewModel : ObservableObject
         ILicenseService licenseService,
         INotificationService notificationService,
         AppSettingsService appSettings,
-        ILogger<SettingsViewModel> logger)
+        ILogger<SettingsViewModel> logger,
+        IPrerequisiteService? prerequisiteService = null)
     {
         _authService = authService ?? throw new ArgumentNullException(nameof(authService));
         _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
@@ -111,11 +150,15 @@ public partial class SettingsViewModel : ObservableObject
         _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
         _appSettings = appSettings ?? throw new ArgumentNullException(nameof(appSettings));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _prerequisiteService = prerequisiteService;
 
         DeleteDepotsAfterInstall = _appSettings.DeleteDepotsAfterInstall;
         ShowNsfwContent = _appSettings.ShowNsfwContent;
         ShowDrmContent = _appSettings.ShowDrmContent;
         EnableAdvancedBuildOptions = _appSettings.EnableAdvancedBuildOptions;
+        EnableExperimentalMods = _appSettings.EnableExperimentalMods;
+        CheckSystemRequirementsOnStartup = _appSettings.CheckSystemRequirementsOnStartup;
+
         DefaultApiUrl = _appSettings.DefaultApiUrl;
         DefaultApiKey = _appSettings.DefaultApiKey ?? string.Empty;
         DefaultDownloadDirectory = _appSettings.DefaultDownloadDirectory;
@@ -125,6 +168,7 @@ public partial class SettingsViewModel : ObservableObject
             "BlueStar", "instances");
 
         _ = LoadSettingsAsync();
+        _ = ScanRequirementsAsync();
     }
 
     private async Task LoadSettingsAsync()
@@ -315,6 +359,100 @@ public partial class SettingsViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to open download directory in Explorer");
+        }
+    }
+
+    /// <summary>
+    /// Scans the system requirements.
+    /// </summary>
+    [RelayCommand]
+    public async Task ScanRequirementsAsync()
+    {
+        if (_prerequisiteService == null) return;
+
+        IsScanningRequirements = true;
+        try
+        {
+            var items = await _prerequisiteService.DetectSystemPrerequisitesAsync(CancellationToken.None).ConfigureAwait(true);
+            SystemPrerequisites = new System.Collections.ObjectModel.ObservableCollection<PrerequisiteItem>(items);
+
+            var missing = items.Where(i => i.Status != PrerequisiteStatus.InstalledInSystem && i.Status != PrerequisiteStatus.InstalledSuccess).ToList();
+            MissingRequirementsCount = missing.Count;
+            HasMissingRequirements = missing.Count > 0;
+        }
+        catch { }
+        finally
+        {
+            IsScanningRequirements = false;
+        }
+    }
+
+    /// <summary>
+    /// Installs a specific prerequisite from Settings.
+    /// </summary>
+    [RelayCommand]
+    public async Task InstallPrerequisiteAsync(PrerequisiteItem? item)
+    {
+        if (item == null || _prerequisiteService == null || IsInstallingRequirements) return;
+
+        IsInstallingRequirements = true;
+        InstallRequirementsStatusText = $"Installing {item.Name}...";
+        try
+        {
+            var progress = new Progress<string>(msg => InstallRequirementsStatusText = msg);
+            var success = await _prerequisiteService.InstallPrerequisiteAsync(item, progress, CancellationToken.None).ConfigureAwait(true);
+            if (success)
+            {
+                _notificationService.ShowSuccess("Prerequisite Installed", $"{item.Name} installed successfully.");
+            }
+            else
+            {
+                _notificationService.ShowError("Installation Incomplete", $"Could not install {item.Name}.");
+            }
+            await ScanRequirementsAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _notificationService.ShowError("Installation Error", ex.Message);
+        }
+        finally
+        {
+            IsInstallingRequirements = false;
+            InstallRequirementsStatusText = string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Installs all missing prerequisites from Settings.
+    /// </summary>
+    [RelayCommand]
+    public async Task InstallAllRequirementsAsync()
+    {
+        if (_prerequisiteService == null || IsInstallingRequirements || SystemPrerequisites.Count == 0) return;
+
+        var missing = SystemPrerequisites.Where(i => i.Status != PrerequisiteStatus.InstalledInSystem && i.Status != PrerequisiteStatus.InstalledSuccess).ToList();
+        if (missing.Count == 0)
+        {
+            _notificationService.ShowInfo("System Up to Date", "All essential requirements are already installed.");
+            return;
+        }
+
+        IsInstallingRequirements = true;
+        try
+        {
+            var progress = new Progress<string>(msg => InstallRequirementsStatusText = msg);
+            int installed = await _prerequisiteService.InstallAllPrerequisitesAsync(missing, progress, CancellationToken.None).ConfigureAwait(true);
+            _notificationService.ShowSuccess("System Requirements Updated", $"{installed} requirement(s) configured successfully.");
+            await ScanRequirementsAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _notificationService.ShowError("Installation Error", ex.Message);
+        }
+        finally
+        {
+            IsInstallingRequirements = false;
+            InstallRequirementsStatusText = string.Empty;
         }
     }
 

@@ -48,7 +48,6 @@ public sealed class UnrealModManager : IModManager
         var resolution = GameModPathResolver.ResolveModPaths(instance);
         if (!string.IsNullOrWhiteSpace(resolution.PrimaryDirectory))
         {
-            Directory.CreateDirectory(resolution.PrimaryDirectory);
             return resolution.PrimaryDirectory;
         }
 
@@ -56,15 +55,12 @@ public sealed class UnrealModManager : IModManager
         var paksDirs = Directory.GetDirectories(instance.InstallPath, "Paks", SearchOption.AllDirectories);
         if (paksDirs.Length > 0)
         {
-            var modsDir = Path.Combine(paksDirs[0], "~mods");
-            Directory.CreateDirectory(modsDir);
-            return modsDir;
+            return Path.Combine(paksDirs[0], "~mods");
         }
 
-        var fallback = Path.Combine(instance.InstallPath, "Mods");
-        Directory.CreateDirectory(fallback);
-        return fallback;
+        return Path.Combine(instance.InstallPath, "Mods");
     }
+
 
     public Task<IReadOnlyList<ModItem>> GetInstalledModsAsync(GameInstance instance, CancellationToken ct = default)
     {
@@ -247,6 +243,8 @@ public sealed class UnrealModManager : IModManager
         {
             try
             {
+                Directory.CreateDirectory(modsDir);
+
                 var ext = Path.GetExtension(sourceFilePath).ToLowerInvariant();
                 if (ext == ".zip")
                 {

@@ -44,12 +44,13 @@ export default {
         const appId = Number(body.appId);
         const rawName = body.name || `App ${appId}`;
         const name = cleanGameName(rawName);
+        let writeResult = null;
 
         if (appId > 0 && env.STATS_KV) {
-          await recordInstanceEvent(env.STATS_KV, appId, name);
+          writeResult = await recordInstanceEvent(env.STATS_KV, appId, name);
         }
 
-        return new Response(JSON.stringify({ success: true, appId, name }), { headers: corsHeaders });
+        return new Response(JSON.stringify({ success: true, appId, name, writeResult }), { headers: corsHeaders });
       }
 
       // Webhook: DepotBox API Usage Logs
@@ -132,14 +133,27 @@ export default {
       }
 
       // Admin endpoints to clear test data
-      if (url.pathname === "/api/admin/clear-stats" && method === "POST") {
-        if (env.STATS_KV) {
-          const list = await env.STATS_KV.list({ prefix: "instance_" });
-          for (const key of list.keys) {
-            await env.STATS_KV.delete(key.name);
-          }
+      if (url.pathname === "/api/admin/clear-game" && method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const appId = Number(body.appId || url.searchParams.get("appId"));
+        MEMORY_STATS.delete(`instance_${appId}`);
+        if (appId > 0 && env.STATS_KV) {
+          try { await env.STATS_KV.delete(`instance_${appId}`); } catch {}
         }
-        return new Response(JSON.stringify({ success: true, message: "Cleared stats in KV" }), { headers: corsHeaders });
+        return new Response(JSON.stringify({ success: true, appId, message: `Cleared instance stats for appId ${appId}` }), { headers: corsHeaders });
+      }
+
+      if (url.pathname === "/api/admin/clear-stats" && method === "POST") {
+        MEMORY_STATS.clear();
+        if (env.STATS_KV) {
+          try {
+            const list = await env.STATS_KV.list({ prefix: "instance_" });
+            for (const key of list.keys) {
+              await env.STATS_KV.delete(key.name);
+            }
+          } catch {}
+        }
+        return new Response(JSON.stringify({ success: true, message: "Cleared stats in KV and Memory" }), { headers: corsHeaders });
       }
 
       if (url.pathname === "/api/admin/clear-feed" && method === "POST") {
@@ -162,6 +176,17 @@ export default {
       if (url.pathname === "/api/feed/depotbox/updated") {
         const results = await getFeed(env.DEPOTBOX_KV, "feed_depotbox_updated");
         return new Response(JSON.stringify({ count: results.length, results }), { headers: corsHeaders });
+      }
+
+      if (url.pathname === "/api/debug/kv") {
+        if (!env.STATS_KV) return new Response(JSON.stringify({ error: "No STATS_KV binding" }), { headers: corsHeaders });
+        const list = await env.STATS_KV.list();
+        const records = [];
+        for (const k of list.keys) {
+          const v = await env.STATS_KV.get(k.name);
+          records.push({ key: k.name, value: v ? JSON.parse(v) : null });
+        }
+        return new Response(JSON.stringify({ count: list.keys.length, keys: list.keys, records }), { headers: corsHeaders });
       }
 
       // ═════════════════════════════════════════════════════════════════════
@@ -201,86 +226,118 @@ export default {
   }
 };
 
-// ── TELEMETRY & KV PERSISTENCE ───────────────────────────────────────────────
+// ── IN-MEMORY TELEMETRY CACHE (Resilient fallback when KV daily put quota is reached) ──
+const MEMORY_STATS = new Map();
 
 async function recordInstanceEvent(kv, appId, name) {
-  if (!appId || appId <= 0) return;
+  if (!appId || appId <= 0) return { error: "invalid appId" };
   const now = Date.now();
   const key = `instance_${appId}`;
 
-  try {
-    const raw = await kv.get(key);
-    let record = raw ? JSON.parse(raw) : { appId, name, timestamps: [], totalCount: 0 };
+  // 1. Get or create from memory or KV
+  let record = MEMORY_STATS.get(key);
+  if (!record && kv) {
+    try {
+      const raw = await kv.get(key);
+      if (raw) record = JSON.parse(raw);
+    } catch {}
+  }
 
-    if (name) record.name = cleanGameName(name);
-    record.totalCount = (record.totalCount || 0) + 1;
-    record.timestamps = [...(record.timestamps || []), now];
+  if (!record) {
+    record = { appId, name: cleanGameName(name) || `App ${appId}`, timestamps: [], totalCount: 0 };
+  }
 
-    // Keep timestamps from the last 14 days
-    const fourteenDaysAgo = now - (14 * 24 * 60 * 60 * 1000);
-    record.timestamps = record.timestamps.filter(ts => ts >= fourteenDaysAgo);
+  if (name) record.name = cleanGameName(name);
+  record.totalCount = (record.totalCount || 0) + 1;
+  record.timestamps = [...(record.timestamps || []), now];
 
-    await kv.put(key, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 90 });
-  } catch {}
+  // Keep timestamps from the last 14 days
+  const fourteenDaysAgo = now - (14 * 24 * 60 * 60 * 1000);
+  record.timestamps = record.timestamps.filter(ts => ts >= fourteenDaysAgo);
+
+  // Always store in memory cache
+  MEMORY_STATS.set(key, record);
+
+  // Best-effort persist to KV (gracefully ignores KV quota errors)
+  if (kv) {
+    try {
+      await kv.put(key, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 90 });
+    } catch (err) {
+      // KV quota reached or read-only mode — memory cache ensures uninterrupted service
+    }
+  }
+
+  return { success: true, key, totalCount: record.totalCount };
 }
 
 async function getTrendingStats(kv) {
-  if (!kv) return [];
   const now = Date.now();
   const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);
-  const items = [];
+  const recordsMap = new Map(MEMORY_STATS);
 
-  try {
-    const listResult = await kv.list({ prefix: "instance_" });
-    for (const key of listResult.keys.slice(0, 100)) {
-      const raw = await kv.get(key.name);
-      if (raw) {
-        const record = JSON.parse(raw);
-        const weeklyEvents = (record.timestamps || []).filter(ts => ts >= sevenDaysAgo);
-        if (weeklyEvents.length > 0) {
-          items.push({
-            appId: record.appId,
-            name: cleanGameName(record.name) || `App ${record.appId}`,
-            appType: "Game",
-            hasWindows: true,
-            version: `${weeklyEvents.length} added this week`,
-            weeklyScore: weeklyEvents.length,
-            totalCount: record.totalCount || weeklyEvents.length,
-            headerImageUrl: `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${record.appId}/header.jpg`
-          });
+  // Merge with KV if available
+  if (kv) {
+    try {
+      const listResult = await kv.list({ prefix: "instance_" });
+      for (const key of listResult.keys.slice(0, 100)) {
+        if (!recordsMap.has(key.name)) {
+          const raw = await kv.get(key.name);
+          if (raw) recordsMap.set(key.name, JSON.parse(raw));
         }
       }
+    } catch {}
+  }
+
+  const items = [];
+  for (const record of recordsMap.values()) {
+    const weeklyEvents = (record.timestamps || []).filter(ts => ts >= sevenDaysAgo);
+    if (weeklyEvents.length > 0 || (record.totalCount || 0) > 0) {
+      const score = weeklyEvents.length > 0 ? weeklyEvents.length : record.totalCount;
+      items.push({
+        appId: record.appId,
+        name: cleanGameName(record.name) || `App ${record.appId}`,
+        appType: "Game",
+        hasWindows: true,
+        weeklyScore: score,
+        totalCount: record.totalCount || score,
+        headerImageUrl: `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${record.appId}/header.jpg`
+      });
     }
-  } catch {}
+  }
 
   items.sort((a, b) => b.weeklyScore - a.weeklyScore);
   return deduplicate(items);
 }
 
 async function getMostAddedStats(kv) {
-  if (!kv) return [];
-  const items = [];
+  const recordsMap = new Map(MEMORY_STATS);
 
-  try {
-    const listResult = await kv.list({ prefix: "instance_" });
-    for (const key of listResult.keys.slice(0, 100)) {
-      const raw = await kv.get(key.name);
-      if (raw) {
-        const record = JSON.parse(raw);
-        if ((record.totalCount || 0) > 0) {
-          items.push({
-            appId: record.appId,
-            name: cleanGameName(record.name) || `App ${record.appId}`,
-            appType: "Game",
-            hasWindows: true,
-            version: `${record.totalCount} community instances`,
-            totalCount: record.totalCount,
-            headerImageUrl: `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${record.appId}/header.jpg`
-          });
+  // Merge with KV if available
+  if (kv) {
+    try {
+      const listResult = await kv.list({ prefix: "instance_" });
+      for (const key of listResult.keys.slice(0, 100)) {
+        if (!recordsMap.has(key.name)) {
+          const raw = await kv.get(key.name);
+          if (raw) recordsMap.set(key.name, JSON.parse(raw));
         }
       }
+    } catch {}
+  }
+
+  const items = [];
+  for (const record of recordsMap.values()) {
+    if ((record.totalCount || 0) > 0) {
+      items.push({
+        appId: record.appId,
+        name: cleanGameName(record.name) || `App ${record.appId}`,
+        appType: "Game",
+        hasWindows: true,
+        totalCount: record.totalCount,
+        headerImageUrl: `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${record.appId}/header.jpg`
+      });
     }
-  } catch {}
+  }
 
   items.sort((a, b) => b.totalCount - a.totalCount);
   return deduplicate(items);
@@ -312,7 +369,13 @@ function extractSingleGameWebhook(body, defaultVersion) {
     let name = "";
     let buildId = "";
 
-    // 2.1 Check embed.fields
+    // 2.1 Check embed.url or thumbnail first (most reliable: store.steampowered.com/app/12345 or depotbox.org/games/12345)
+    if (embed.url) {
+      const match = embed.url.match(/apps?\/(\d{3,9})/i) || embed.url.match(/games?\/(\d{3,9})/i);
+      if (match) appId = parseInt(match[1], 10);
+    }
+
+    // 2.2 Check embed.fields
     if (Array.isArray(embed.fields)) {
       for (const field of embed.fields) {
         const fieldName = (field.name || "").toLowerCase();
@@ -332,27 +395,26 @@ function extractSingleGameWebhook(body, defaultVersion) {
       }
     }
 
-    // 2.2 Check embed.title
-    const title = embed.title || "";
-    if (!appId) {
-      const match = title.match(/(\d{3,9})/);
+    // 2.3 Check embed.description for explicit App ID indicators like [123456], (123456), AppID: 123456
+    const desc = embed.description || "";
+    if (!appId && desc) {
+      const match = desc.match(/app[^\d]{0,8}(\d{3,9})/i) ||
+                    desc.match(/\[(\d{3,9})\]/) ||
+                    desc.match(/\((\d{3,9})\)/);
       if (match) appId = parseInt(match[1], 10);
     }
+
+    // 2.4 Check embed.title for explicit App ID indicators like [123456] or (123456)
+    const title = embed.title || "";
+    if (!appId && title) {
+      const match = title.match(/\[(\d{3,9})\]/) ||
+                    title.match(/\((\d{3,9})\)/) ||
+                    title.match(/app[^\d]{0,8}(\d{3,9})/i);
+      if (match) appId = parseInt(match[1], 10);
+    }
+
     if (!name && title) {
       name = cleanGameName(title);
-    }
-
-    // 2.3 Check embed.description
-    const desc = embed.description || "";
-    if (!appId) {
-      const match = desc.match(/app[^\d]{0,5}(\d{3,9})/i) || desc.match(/(\d{3,9})/);
-      if (match) appId = parseInt(match[1], 10);
-    }
-
-    // 2.4 Check embed.url or thumbnail
-    if (!appId && embed.url) {
-      const match = embed.url.match(/apps?\/(\d{3,9})/i);
-      if (match) appId = parseInt(match[1], 10);
     }
 
     if (appId > 0) {
@@ -368,6 +430,7 @@ function extractSingleGameWebhook(body, defaultVersion) {
   }
 
   return null;
+
 }
 
 function extractGamesFromLog(body) {

@@ -773,5 +773,237 @@
                            HorizontalAlignment="Center"/>
             </StackPanel>
         </Grid>
+
+        <!-- ═══ SYSTEM REQUIREMENTS MODAL OVERLAY ═══ -->
+        <Grid Background="{StaticResource ModalOverlayBrush}"
+              Grid.Row="0"
+              Grid.RowSpan="3"
+              Visibility="{Binding IsSystemRequirementsModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
+              Panel.ZIndex="1005"
+              SnapsToDevicePixels="True"
+              UseLayoutRounding="True">
+
+            <Border Background="#161822"
+                    BorderBrush="#2E3748"
+                    BorderThickness="1"
+                    CornerRadius="14"
+                    Padding="24"
+                    Width="720" MaxHeight="660"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" BlurRadius="30" ShadowDepth="6" Opacity="0.7"/>
+                </Border.Effect>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/> <!-- Header -->
+                        <RowDefinition Height="14"/>   <!-- Spacing -->
+                        <RowDefinition Height="Auto"/> <!-- Status / Alert Banner -->
+                        <RowDefinition Height="14"/>   <!-- Spacing -->
+                        <RowDefinition Height="*"/>    <!-- Requirements Cards List -->
+                        <RowDefinition Height="16"/>   <!-- Spacing -->
+                        <RowDefinition Height="Auto"/> <!-- Bottom Actions / Checkbox -->
+                    </Grid.RowDefinitions>
+
+                    <!-- Header -->
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                <TextBlock Text="🛠️" FontSize="20" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Requisitos del Sistema / System Requirements" Style="{StaticResource H2}" Foreground="{StaticResource WhiteBrush}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="Verificación de componentes esenciales para la ejecución de BlueStar, inyección de emuladores y lanzamiento de juegos."
+                                       Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}"
+                                Command="{Binding CloseSystemRequirementsModalCommand}"
+                                ToolTip="Continuar al lanzador"/>
+                    </Grid>
+
+                    <!-- Status Alert Banner -->
+                    <Border Grid.Row="2" CornerRadius="{StaticResource RadiusMd}" Padding="14,10" BorderThickness="1">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="#1a10B981"/>
+                                <Setter Property="BorderBrush" Value="#3010B981"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasMissingRequirements}" Value="True">
+                                        <Setter Property="Background" Value="#1aF59E0B"/>
+                                        <Setter Property="BorderBrush" Value="#40F59E0B"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" FontSize="16" Margin="0,0,10,0" VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="✅"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasMissingRequirements}" Value="True">
+                                                <Setter Property="Text" Value="⚠️"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock FontWeight="SemiBold" FontSize="13">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="¡Todos los requisitos del sistema están instalados y verificados!"/>
+                                            <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasMissingRequirements}" Value="True">
+                                                    <Setter Property="Text" Value="{Binding MissingPrerequisitesCount, StringFormat='{}Se detectaron {0} componente(s) faltante(s) en tu sistema.'}"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource WarningBrush}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock Margin="0,2,0,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource Caption}">
+                                            <Setter Property="Foreground" Value="{StaticResource SecondaryTextBrush}"/>
+                                            <Setter Property="Text" Value="Tu equipo cuenta con todos los runtimes de C++, DirectX y .NET necesarios para una compatibilidad perfecta."/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasMissingRequirements}" Value="True">
+                                                    <Setter Property="Text" Value="Instala los componentes faltantes para prevenir errores de DLLs ausentes (MSVCP140, D3DX9) o fallos al abrir juegos."/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Requirements List ScrollViewer -->
+                    <ScrollViewer Grid.Row="4" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <ItemsControl ItemsSource="{Binding SystemPrerequisites}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{StaticResource SurfaceCardBrush}"
+                                            BorderBrush="{StaticResource SubtleBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="{StaticResource RadiusMd}"
+                                            Padding="14,10"
+                                            Margin="0,0,0,8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="14"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Left details -->
+                                            <StackPanel Grid.Column="0">
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                    <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,10,0"/>
+                                                    <Border CornerRadius="{StaticResource RadiusSm}"
+                                                            Padding="8,2"
+                                                            Background="{Binding Status, Converter={StaticResource PrerequisiteStatusToBgBrushConverter}}">
+                                                        <TextBlock Text="{Binding Status, Converter={StaticResource PrerequisiteStatusToTextConverter}}"
+                                                                   FontSize="10" FontWeight="SemiBold"
+                                                                   Foreground="{Binding Status, Converter={StaticResource PrerequisiteStatusToBrushConverter}}"/>
+                                                    </Border>
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding Description}" Style="{StaticResource BodySmall}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="Categoría: " Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}"/>
+                                                    <TextBlock Text="{Binding Category}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                </StackPanel>
+                                            </StackPanel>
+
+                                            <!-- Right Install action -->
+                                            <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                                <Button Content="Instalar"
+                                                        Style="{StaticResource SecondaryButton}"
+                                                        Padding="14,6" FontSize="11"
+                                                        Command="{Binding DataContext.InstallSystemPrerequisiteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        IsEnabled="{Binding DataContext.IsInstallingSystemPrerequisites, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource InverseBoolConverter}}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <!-- Bottom Bar (Progress + Actions) -->
+                    <Grid Grid.Row="6">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Active Install Progress & Status Text -->
+                        <Border Grid.Row="0" Margin="0,0,0,12"
+                                Background="{StaticResource SurfaceInputBrush}"
+                                CornerRadius="{StaticResource RadiusSm}"
+                                Padding="12,8"
+                                Visibility="{Binding IsInstallingSystemPrerequisites, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <StackPanel>
+                                <ProgressBar Height="4" IsIndeterminate="True"
+                                             Foreground="{StaticResource AccentBrush}"
+                                             Background="{StaticResource SurfaceCardBrush}"
+                                             BorderThickness="0" Margin="0,0,0,6"/>
+                                <TextBlock Text="{Binding SystemPrerequisitesInstallStatusText, FallbackValue='Instalando componente...'}"
+                                           Style="{StaticResource Caption}" Foreground="{StaticResource AccentBrush}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Bottom Controls -->
+                        <Grid Grid.Row="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Checkbox: Check on startup -->
+                            <CheckBox Grid.Column="0"
+                                      Content="Verificar automáticamente al iniciar BlueStar"
+                                      IsChecked="{Binding CheckRequirementsOnStartup, Mode=TwoWay}"
+                                      Style="{StaticResource DarkCheckBox}"
+                                      VerticalAlignment="Center"/>
+
+                            <!-- Buttons -->
+                            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                <Button Content="🔄 Re-escanear"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Padding="12,7" FontSize="12"
+                                        Margin="0,0,8,0"
+                                        Command="{Binding ScanSystemRequirementsCommand}"
+                                        IsEnabled="{Binding IsInstallingSystemPrerequisites, Converter={StaticResource InverseBoolConverter}}"/>
+
+                                <Button Content="⚡ Instalar Faltantes"
+                                        Style="{StaticResource PrimaryButton}"
+                                        Padding="16,7" FontSize="12"
+                                        Margin="0,0,8,0"
+                                        Visibility="{Binding HasMissingRequirements, Converter={StaticResource BoolToVisibilityConverter}}"
+                                        Command="{Binding InstallAllSystemPrerequisitesCommand}"
+                                        IsEnabled="{Binding IsInstallingSystemPrerequisites, Converter={StaticResource InverseBoolConverter}}"/>
+
+                                <Button Content="Continuar a BlueStar"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Padding="14,7" FontSize="12"
+                                        Command="{Binding CloseSystemRequirementsModalCommand}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

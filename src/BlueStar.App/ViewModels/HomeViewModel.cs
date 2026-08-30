@@ -270,9 +270,6 @@ public partial class HomeViewModel : ObservableObject
         var catSteamDbTrending = new CatalogCategory("steamdb_trending", "Trending Games", "Titles with highest recent activity growth", "IconTrending", "#F59E0B", "STEAM");
         var catSteamDbTopSellers = new CatalogCategory("steamdb_top_sellers", "Top Sellers & Popular", "Top selling releases and deals worldwide", "IconTag", "#EC4899", "STEAM");
         var catSteamDbTopRated = new CatalogCategory("steamdb_top_rated", "Top Rated & Anticipated", "Top rated by community and critics", "IconStar", "#6366F1", "STEAM");
-        var catDepotBoxNew = new CatalogCategory("depotbox_new_games", "New Games in DepotBox", "Recently added packages via DepotBox", "IconSparkles", "#06B6D4", "DEPOTBOX");
-        var catDepotBoxUpdated = new CatalogCategory("depotbox_updated_games", "Updated Games in DepotBox", "Recently updated manifests and game builds", "IconRefresh", "#14B8A6", "DEPOTBOX");
-
         Categories = new ObservableCollection<CatalogCategory>
         {
             catTrending,
@@ -280,9 +277,7 @@ public partial class HomeViewModel : ObservableObject
             catSteamDbMostPlayed,
             catSteamDbTrending,
             catSteamDbTopSellers,
-            catSteamDbTopRated,
-            catDepotBoxNew,
-            catDepotBoxUpdated
+            catSteamDbTopRated
         };
 
         // Fallback default suggestions if empty
@@ -348,39 +343,8 @@ public partial class HomeViewModel : ObservableObject
         _ = Task.Run(() => LoadSteamCategoryFeedAsync(catSteamDbTrending, "trending"));
         _ = Task.Run(() => LoadSteamCategoryFeedAsync(catSteamDbTopSellers, "top_sellers"));
         _ = Task.Run(() => LoadSteamCategoryFeedAsync(catSteamDbTopRated, "top_rated"));
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                var items = await _statsService.GetDepotBoxFeedAsync("added").ConfigureAwait(false);
-                catDepotBoxNew.PoolItems = items.ToList();
-                var filtered = FilterBySettings(catDepotBoxNew.PoolItems);
-                var initial = filtered.Take(catDepotBoxNew.DisplayLimit).ToList();
-                catDepotBoxNew.Items = new ObservableCollection<SearchResult>(initial);
-                catDepotBoxNew.IsLoading = false;
-                catDepotBoxNew.HasMoreItems = filtered.Count > initial.Count;
-                _ = EnrichResultsAsync(initial, catDepotBoxNew);
-            }
-            catch { catDepotBoxNew.IsLoading = false; }
-        });
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                var items = await _statsService.GetDepotBoxFeedAsync("updated").ConfigureAwait(false);
-                catDepotBoxUpdated.PoolItems = items.ToList();
-                var filtered = FilterBySettings(catDepotBoxUpdated.PoolItems);
-                var initial = filtered.Take(catDepotBoxUpdated.DisplayLimit).ToList();
-                catDepotBoxUpdated.Items = new ObservableCollection<SearchResult>(initial);
-                catDepotBoxUpdated.IsLoading = false;
-                catDepotBoxUpdated.HasMoreItems = filtered.Count > initial.Count;
-                _ = EnrichResultsAsync(initial, catDepotBoxUpdated);
-            }
-            catch { catDepotBoxUpdated.IsLoading = false; }
-        });
     }
+
 
     private async Task LoadSteamCategoryFeedAsync(CatalogCategory cat, string type)
     {
@@ -407,10 +371,10 @@ public partial class HomeViewModel : ObservableObject
             cat.Items = new ObservableCollection<SearchResult>(initial);
             cat.IsLoading = false;
             cat.HasMoreItems = cat.PoolItems.Count > 0;
-            _ = EnrichResultsAsync(initial, cat);
         }
         catch { cat.IsLoading = false; }
     }
+
 
     private void SetTimeBasedGreeting()
     {
@@ -533,7 +497,8 @@ public partial class HomeViewModel : ObservableObject
         var allowNsfw = _settingsService?.ShowNsfwContent ?? false;
         var allowDrm = _settingsService?.ShowDrmContent ?? true;
 
-        await Parallel.ForEachAsync(items, new ParallelOptions { MaxDegreeOfParallelism = 4 }, async (result, ct) =>
+        await Parallel.ForEachAsync(items, new ParallelOptions { MaxDegreeOfParallelism = 1 }, async (result, ct) =>
+
         {
             try
             {
@@ -723,20 +688,6 @@ public partial class HomeViewModel : ObservableObject
 
             if (candidates.Count > 0)
             {
-                // Pre-enrich all candidates in background BEFORE adding them to UI, to prevent layout thrashing
-                await Parallel.ForEachAsync(candidates, new ParallelOptions { MaxDegreeOfParallelism = 4 }, async (candidate, ct) =>
-                {
-                    try
-                    {
-                        if (_metadataProvider != null && candidate.AppId > 0)
-                        {
-                            await _metadataProvider.EnrichSearchResultAsync(candidate, ct).ConfigureAwait(false);
-                        }
-                    }
-                    catch { }
-                }).ConfigureAwait(false);
-
-                // Filter out any candidates that are detected as NSFW or DRM post-enrichment
                 var cleanCandidates = candidates
                     .Where(i => (allowNsfw || !i.IsNsfw) && (allowDrm || !i.HasDrm))
                     .ToList();
@@ -754,12 +705,9 @@ public partial class HomeViewModel : ObservableObject
                             }
                         }
                     });
-                }
 
-                // If some items were filtered out post-enrichment, replenish from pool/Steam
-                if (cleanCandidates.Count < candidates.Count)
-                {
-                    _ = ReplenishCategoryAsync(category);
+                    // Non-blocking background metadata enrichment (DLCs, tags) without holding up UI
+                    _ = EnrichResultsAsync(cleanCandidates, category);
                 }
             }
             else if (IsSteamCategory(category.Id))

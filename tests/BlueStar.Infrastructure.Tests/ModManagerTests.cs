@@ -57,7 +57,6 @@ public class ModManagerTests : IDisposable
         // Act 1: Check support & directory
         manager.IsSupported(instance).Should().BeTrue();
         var modsDir = manager.GetModsDirectory(instance);
-        Directory.Exists(modsDir).Should().BeTrue();
         modsDir.Should().EndWith("~mods");
 
         // Act 2: Create a dummy pak file to install

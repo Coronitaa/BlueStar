@@ -114,17 +114,21 @@ public partial class App : Application
         services.AddSingleton<IDepotBoxAuthService, BlueStar.Infrastructure.Services.DepotBoxAuthService>();
         services.AddSingleton<ICacheService, FileCacheService>();
         services.AddSingleton<IInstanceManager, InstanceManager>();
-        services.AddSingleton<IMetadataProvider, SteamStoreApiClient>();
         services.AddSingleton<DepotBoxLuaParser>();
+
         services.AddSingleton<IDepotBoxArchiveParser, DepotBoxArchiveParser>();
         services.AddSingleton<IDlcInstaller, BlueStar.Infrastructure.Dlc.CreamInstallerService>();
         services.AddSingleton<DownloadStateManager>();
         services.AddSingleton<IDownloadProvider, BlueStar.Infrastructure.Downloader.DepotDownloaderProvider>();
         services.AddSingleton<IUpdateService, BlueStar.Infrastructure.Update.GitHubUpdateService>();
+        const string BrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
         services.AddHttpClient<ICommunityStatsService, BlueStar.Infrastructure.Services.CommunityStatsService>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(10);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar/1.1.2");
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(BrowserUserAgent);
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/json, text/html, */*");
+            client.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en-US,en;q=0.9,es;q=0.8");
         });
 
         // HTTP clients
@@ -138,8 +142,13 @@ public partial class App : Application
         services.AddHttpClient<SteamStoreApiClient>(client =>
         {
             client.BaseAddress = new Uri("https://store.steampowered.com");
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar/1.1.2");
+            client.Timeout = TimeSpan.FromSeconds(15);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(BrowserUserAgent);
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/json, text/javascript, */*; q=0.01");
+            client.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en-US,en;q=0.9,es;q=0.8");
         });
+        services.AddSingleton<IMetadataProvider>(sp => sp.GetRequiredService<SteamStoreApiClient>());
+
 
         // General HTTP Client
         services.AddHttpClient();

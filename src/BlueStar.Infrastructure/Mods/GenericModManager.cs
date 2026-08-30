@@ -35,13 +35,10 @@ public sealed class GenericModManager : IModManager
         var resolution = GameModPathResolver.ResolveModPaths(instance);
         if (!string.IsNullOrWhiteSpace(resolution.PrimaryDirectory))
         {
-            Directory.CreateDirectory(resolution.PrimaryDirectory);
             return resolution.PrimaryDirectory;
         }
 
-        var modsDir = Path.Combine(instance.InstallPath, "mods");
-        Directory.CreateDirectory(modsDir);
-        return modsDir;
+        return Path.Combine(instance.InstallPath, "mods");
     }
 
     public Task<IReadOnlyList<ModItem>> GetInstalledModsAsync(GameInstance instance, CancellationToken ct = default)
@@ -62,12 +59,6 @@ public sealed class GenericModManager : IModManager
         var modsUpper = Path.Combine(instance.InstallPath, "Mods");
         if (Directory.Exists(modsUpper)) candidateDirs.Add(modsUpper);
 
-        if (candidateDirs.Count == 0)
-        {
-            var primary = GetModsDirectory(instance);
-            if (!string.IsNullOrWhiteSpace(primary) && Directory.Exists(primary))
-                candidateDirs.Add(primary);
-        }
 
         var result = new List<ModItem>();
         var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -313,10 +304,10 @@ public sealed class GenericModManager : IModManager
             try
             {
                 var ext = Path.GetExtension(sourceFilePath).ToLowerInvariant();
-                if (ext == ".zip")
+                if (ext is ".zip" or ".rar" or ".7z" or ".tar" or ".gz")
                 {
                     var modFolder = Path.Combine(modsDir, Path.GetFileNameWithoutExtension(sourceFilePath));
-                    ZipFile.ExtractToDirectory(sourceFilePath, modFolder, overwriteFiles: true);
+                    BlueStar.Infrastructure.Common.ArchiveExtractor.ExtractToDirectory(sourceFilePath, modFolder, overwrite: true);
                     return true;
                 }
                 else
@@ -325,6 +316,7 @@ public sealed class GenericModManager : IModManager
                     File.Copy(sourceFilePath, dest, overwrite: true);
                     return true;
                 }
+
             }
             catch (Exception ex)
             {

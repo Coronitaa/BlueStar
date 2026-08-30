@@ -13,7 +13,11 @@ public sealed class SteamStoreApiClient : IMetadataProvider
 {
     private readonly HttpClient _http;
     private readonly ILogger<SteamStoreApiClient> _logger;
-    private DateTimeOffset _lastRequest = DateTimeOffset.MinValue;
+    private readonly ICacheService? _cache;
+
+    private static readonly SemaphoreSlim _throttleSemaphore = new(1, 1);
+    private static DateTimeOffset _lastRequest = DateTimeOffset.MinValue;
+    private static DateTimeOffset _cooldownUntil = DateTimeOffset.MinValue;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -28,23 +32,80 @@ public sealed class SteamStoreApiClient : IMetadataProvider
     /// </summary>
     /// <param name="http">HTTP client configured for Steam Store API.</param>
     /// <param name="logger">Logger instance.</param>
-    public SteamStoreApiClient(HttpClient http, ILogger<SteamStoreApiClient> logger)
+    /// <param name="cache">Optional persistent cache service.</param>
+    public SteamStoreApiClient(HttpClient http, ILogger<SteamStoreApiClient> logger, ICacheService? cache = null)
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _cache = cache;
+    }
+
+    private async Task<bool> ThrottleAsync(CancellationToken ct)
+    {
+        if (DateTimeOffset.UtcNow < _cooldownUntil)
+        {
+            _logger.LogWarning("Steam Store API is in backoff cooldown until {Cooldown}", _cooldownUntil);
+            return false;
+        }
+
+        await _throttleSemaphore.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (DateTimeOffset.UtcNow < _cooldownUntil)
+                return false;
+
+            var elapsed = DateTimeOffset.UtcNow - _lastRequest;
+            if (elapsed < MinRequestInterval)
+            {
+                var delay = MinRequestInterval - elapsed;
+                await Task.Delay(delay, ct).ConfigureAwait(false);
+            }
+            _lastRequest = DateTimeOffset.UtcNow;
+            return true;
+        }
+        finally
+        {
+            _throttleSemaphore.Release();
+        }
+    }
+
+    private void ReportRateLimitEncountered(System.Net.HttpStatusCode statusCode)
+    {
+        _logger.LogWarning("Steam API rate limit / block encountered ({StatusCode}). Entering 5-minute backoff cooldown.", statusCode);
+        _cooldownUntil = DateTimeOffset.UtcNow.AddMinutes(5);
     }
 
     /// <inheritdoc />
     public async Task<GameMetadata?> GetMetadataAsync(uint appId, CancellationToken ct = default)
     {
-        await ThrottleAsync(ct).ConfigureAwait(false);
+        if (appId == 0) return null;
+
+        var cacheKey = $"steam_meta_{appId}_v3";
+        if (_cache != null)
+        {
+            try
+            {
+                var cached = await _cache.GetAsync<GameMetadata>(cacheKey, ct).ConfigureAwait(false);
+                if (cached != null) return cached;
+            }
+            catch { }
+        }
+
+        if (!await ThrottleAsync(ct).ConfigureAwait(false))
+            return null;
 
         _logger.LogDebug("Fetching Steam metadata for AppId={AppId}", appId);
 
         try
         {
-            var url = $"https://store.steampowered.com/api/appdetails?appids={appId}";
+            var url = $"https://store.steampowered.com/api/appdetails?appids={appId}&l=english&cc=US";
             var response = await _http.GetAsync(url, ct).ConfigureAwait(false);
+
+            if (response.StatusCode is System.Net.HttpStatusCode.TooManyRequests or System.Net.HttpStatusCode.Forbidden)
+            {
+                ReportRateLimitEncountered(response.StatusCode);
+                return null;
+            }
 
             if (!response.IsSuccessStatusCode)
             {
@@ -54,6 +115,13 @@ public sealed class SteamStoreApiClient : IMetadataProvider
             }
 
             var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            if (json.Contains("Access Denied", StringComparison.OrdinalIgnoreCase) ||
+                json.Contains("edgesuite.net", StringComparison.OrdinalIgnoreCase))
+            {
+                ReportRateLimitEncountered(System.Net.HttpStatusCode.Forbidden);
+                return null;
+            }
+
             using var doc = JsonDocument.Parse(json);
 
             var appKey = appId.ToString();
@@ -66,7 +134,7 @@ public sealed class SteamStoreApiClient : IMetadataProvider
             if (!appElement.TryGetProperty("data", out var data))
                 return null;
 
-            return new GameMetadata
+            var meta = new GameMetadata
             {
                 AppId = appId,
                 Name = data.TryGetProperty("name", out var name) ? name.GetString() ?? $"App {appId}" : $"App {appId}",
@@ -80,6 +148,13 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                 Genres = GetStringArray(data, "genres", "description"),
                 LastUpdated = DateTimeOffset.UtcNow
             };
+
+            if (_cache != null)
+            {
+                try { await _cache.SetAsync(cacheKey, meta, TimeSpan.FromDays(7), ct).ConfigureAwait(false); } catch { }
+            }
+
+            return meta;
         }
         catch (HttpRequestException ex)
         {
@@ -93,20 +168,48 @@ public sealed class SteamStoreApiClient : IMetadataProvider
         }
     }
 
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<DlcInfo>> GetDlcListAsync(uint appId, CancellationToken ct = default)
     {
-        await ThrottleAsync(ct).ConfigureAwait(false);
+        if (appId == 0) return [];
+
+        var cacheKey = $"steam_dlcs_{appId}_v3";
+        if (_cache != null)
+        {
+            try
+            {
+                var cached = await _cache.GetAsync<List<DlcInfo>>(cacheKey, ct).ConfigureAwait(false);
+                if (cached != null) return cached.AsReadOnly();
+            }
+            catch { }
+        }
+
+        if (!await ThrottleAsync(ct).ConfigureAwait(false))
+            return [];
 
         try
         {
-            var url = $"https://store.steampowered.com/api/appdetails?appids={appId}";
+            var url = $"https://store.steampowered.com/api/appdetails?appids={appId}&l=english&cc=US";
             var response = await _http.GetAsync(url, ct).ConfigureAwait(false);
+
+            if (response.StatusCode is System.Net.HttpStatusCode.TooManyRequests or System.Net.HttpStatusCode.Forbidden)
+            {
+                ReportRateLimitEncountered(response.StatusCode);
+                return [];
+            }
 
             if (!response.IsSuccessStatusCode)
                 return [];
 
             var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            if (json.Contains("Access Denied", StringComparison.OrdinalIgnoreCase) ||
+                json.Contains("edgesuite.net", StringComparison.OrdinalIgnoreCase))
+            {
+                ReportRateLimitEncountered(System.Net.HttpStatusCode.Forbidden);
+                return [];
+            }
+
             using var doc = JsonDocument.Parse(json);
 
             var appKey = appId.ToString();
@@ -133,6 +236,11 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                 }
             }
 
+            if (_cache != null && dlcList.Count > 0)
+            {
+                try { await _cache.SetAsync(cacheKey, dlcList, TimeSpan.FromDays(7), ct).ConfigureAwait(false); } catch { }
+            }
+
             _logger.LogDebug("Found {Count} DLCs for AppId={AppId}", dlcList.Count, appId);
             return dlcList.AsReadOnly();
         }
@@ -143,25 +251,79 @@ public sealed class SteamStoreApiClient : IMetadataProvider
         }
     }
 
+    /// <summary>
+    /// Cache payload for SearchResult enrichment to avoid repeated store API calls.
+    /// </summary>
+    public sealed record SearchResultEnrichmentCache(
+        string? Name,
+        int? DlcCount,
+        bool HasWindows,
+        bool HasLinux,
+        bool HasMac,
+        string AppType,
+        string? HeaderImageUrl,
+        bool IsNsfw,
+        bool HasDrm,
+        string? DrmNotice,
+        string? Version
+    );
+
     /// <inheritdoc />
     public async Task EnrichSearchResultAsync(SearchResult result, CancellationToken ct = default)
     {
         if (result == null || result.AppId == 0) return;
 
+        var cacheKey = $"steam_enrich_{result.AppId}_v3";
+        if (_cache != null)
+        {
+            try
+            {
+                var cached = await _cache.GetAsync<SearchResultEnrichmentCache>(cacheKey, ct).ConfigureAwait(false);
+                if (cached != null)
+                {
+                    if (!string.IsNullOrWhiteSpace(cached.Name)) result.Name = cached.Name;
+                    if (cached.DlcCount.HasValue) result.DlcCount = cached.DlcCount.Value;
+                    result.HasWindows = cached.HasWindows;
+                    result.HasLinux = cached.HasLinux;
+                    result.HasMac = cached.HasMac;
+                    if (!string.IsNullOrWhiteSpace(cached.AppType)) result.AppType = cached.AppType;
+                    if (!string.IsNullOrWhiteSpace(cached.HeaderImageUrl)) result.HeaderImageUrl = cached.HeaderImageUrl;
+                    result.IsNsfw = cached.IsNsfw;
+                    result.HasDrm = cached.HasDrm;
+                    result.DrmNotice = cached.DrmNotice;
+                    if (!string.IsNullOrWhiteSpace(cached.Version)) result.Version = cached.Version;
+                    return;
+                }
+            }
+            catch { }
+        }
+
+        // Throttle and serialize Steam Store requests
+        if (!await ThrottleAsync(ct).ConfigureAwait(false))
+            return;
+
         // 1. Try fetching rich store data via Steam Store API (appdetails)
         try
         {
             var url = $"https://store.steampowered.com/api/appdetails?appids={result.AppId}&l=english&cc=US";
-            var request = new HttpRequestMessage(HttpMethod.Get, url);
-            if (!_http.DefaultRequestHeaders.Contains("User-Agent"))
+            var response = await _http.GetAsync(url, ct).ConfigureAwait(false);
+
+            if (response.StatusCode is System.Net.HttpStatusCode.TooManyRequests or System.Net.HttpStatusCode.Forbidden)
             {
-                request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                ReportRateLimitEncountered(response.StatusCode);
+                return;
             }
-            var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
 
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                if (json.Contains("Access Denied", StringComparison.OrdinalIgnoreCase) ||
+                    json.Contains("edgesuite.net", StringComparison.OrdinalIgnoreCase))
+                {
+                    ReportRateLimitEncountered(System.Net.HttpStatusCode.Forbidden);
+                    return;
+                }
+
                 using var doc = JsonDocument.Parse(json);
 
                 var appKey = result.AppId.ToString();
@@ -198,7 +360,7 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                             result.HasMac = macProp.GetBoolean();
                     }
 
-                    // 1.3 App Type & Genres Detection (Game vs Application vs Tool)
+                    // 1.3 App Type & Genres Detection
                     bool isSoftwareGenre = false;
                     if (data.TryGetProperty("genres", out var genresEl) && genresEl.ValueKind == JsonValueKind.Array)
                     {
@@ -252,7 +414,8 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                         if (!string.IsNullOrWhiteSpace(img))
                             result.HeaderImageUrl = img;
                     }
-                    // 1.5 NSFW / Adult Content Detection (Explicit sexual content / Hentai / Adults Only)
+
+                    // 1.5 NSFW / Adult Content Detection
                     bool isNsfw = false;
                     if (data.TryGetProperty("content_descriptors", out var cdProp))
                     {
@@ -260,11 +423,6 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                         {
                             foreach (var id in idsProp.EnumerateArray())
                             {
-                                // Steam Content Descriptors:
-                                // 1 = Some Nudity or Sexual Content
-                                // 3 = Adult Only Sexual Content
-                                // 4 = Frequent Nudity or Sexual Content
-                                // 5 = General Mature Content (Violence, Language - NOT NSFW)
                                 if (id.TryGetInt32(out var descriptorId) && descriptorId is 3 or 4)
                                 {
                                     isNsfw = true;
@@ -317,7 +475,7 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                     }
                     result.IsNsfw = isNsfw;
 
-                    // 1.6 DRM / 3rd-Party Account Detection
+                    // 1.6 DRM
                     bool hasDrm = false;
                     string? drmNotice = null;
                     if (data.TryGetProperty("drm_notice", out var drmProp) && drmProp.ValueKind == JsonValueKind.String)
@@ -364,6 +522,25 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                             result.Version = dateStr;
                         }
                     }
+
+                    // Save enriched payload in persistent cache
+                    if (_cache != null)
+                    {
+                        var item = new SearchResultEnrichmentCache(
+                            result.Name,
+                            result.DlcCount,
+                            result.HasWindows,
+                            result.HasLinux,
+                            result.HasMac,
+                            result.AppType ?? "Game",
+                            result.HeaderImageUrl,
+                            result.IsNsfw,
+                            result.HasDrm,
+                            result.DrmNotice,
+                            result.Version
+                        );
+                        try { await _cache.SetAsync(cacheKey, item, TimeSpan.FromDays(7), ct).ConfigureAwait(false); } catch { }
+                    }
                 }
             }
         }
@@ -372,79 +549,7 @@ public sealed class SteamStoreApiClient : IMetadataProvider
             _logger.LogDebug(ex, "Steam Store appdetails API call skipped/failed for AppId={AppId}", result.AppId);
         }
 
-        // 2. Query SteamCMD AppInfo / Depot Info (for build dates, accurate AppType & manifest data)
-        try
-        {
-            var depotInfo = await GetAppDepotInfoAsync(result.AppId, ct).ConfigureAwait(false);
-
-            if (!string.IsNullOrWhiteSpace(depotInfo?.AppType))
-            {
-                var cmdType = depotInfo.AppType.Trim();
-                if (cmdType.Equals("Application", StringComparison.OrdinalIgnoreCase) ||
-                    cmdType.Equals("Software", StringComparison.OrdinalIgnoreCase))
-                {
-                    result.AppType = "Application";
-                }
-                else if (cmdType.Equals("Tool", StringComparison.OrdinalIgnoreCase) ||
-                         cmdType.Equals("Utility", StringComparison.OrdinalIgnoreCase) ||
-                         cmdType.Equals("Config", StringComparison.OrdinalIgnoreCase))
-                {
-                    result.AppType = "Tool";
-                }
-            }
-
-            if (depotInfo?.LatestBuildDate != null)
-            {
-                result.Version = $"{depotInfo.LatestBuildDate.Value.LocalDateTime:d MMM yyyy}";
-            }
-        }
-        catch { }
-
-        // 3. If latest update date is still null, query Steam News API
-        if (string.IsNullOrWhiteSpace(result.Version))
-        {
-            try
-            {
-                var newsUrl = $"https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid={result.AppId}&count=5&maxlength=300";
-                var request = new HttpRequestMessage(HttpMethod.Get, newsUrl);
-                if (!_http.DefaultRequestHeaders.Contains("User-Agent"))
-                {
-                    request.Headers.UserAgent.ParseAdd("BlueStar/1.1.2");
-                }
-                var newsResponse = await _http.SendAsync(request, ct).ConfigureAwait(false);
-                if (newsResponse.IsSuccessStatusCode)
-                {
-                    var newsJson = await newsResponse.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                    using var newsDoc = JsonDocument.Parse(newsJson);
-                    if (newsDoc.RootElement.TryGetProperty("appnews", out var appNews) &&
-                        appNews.TryGetProperty("newsitems", out var newsItems) &&
-                        newsItems.ValueKind == JsonValueKind.Array &&
-                        newsItems.GetArrayLength() > 0)
-                    {
-                        long maxUnix = 0;
-                        foreach (var item in newsItems.EnumerateArray())
-                        {
-                            if (item.TryGetProperty("date", out var dateEl))
-                            {
-                                long unix = 0;
-                                if (dateEl.ValueKind == JsonValueKind.Number) dateEl.TryGetInt64(out unix);
-                                else if (dateEl.ValueKind == JsonValueKind.String && long.TryParse(dateEl.GetString(), out var p)) unix = p;
-                                if (unix > maxUnix) maxUnix = unix;
-                            }
-                        }
-
-                        if (maxUnix > 0)
-                        {
-                            var updateDate = DateTimeOffset.FromUnixTimeSeconds(maxUnix).LocalDateTime;
-                            result.Version = $"{updateDate:d MMM yyyy}";
-                        }
-                    }
-                }
-            }
-            catch { }
-        }
-
-        // 4. Keyword heuristic overrides for well-known application and tool packages
+        // Keyword heuristic overrides for well-known application and tool packages
         if (result.AppId == 431960 ||
             (!string.IsNullOrWhiteSpace(result.Name) &&
              (result.Name.Contains("Wallpaper Engine", StringComparison.OrdinalIgnoreCase) ||
@@ -465,14 +570,20 @@ public sealed class SteamStoreApiClient : IMetadataProvider
     {
         if (appId == 0) return null;
 
+        var cacheKey = $"steamcmd_depotinfo_{appId}_v3";
+        if (_cache != null)
+        {
+            try
+            {
+                var cached = await _cache.GetAsync<SteamAppDepotInfo>(cacheKey, ct).ConfigureAwait(false);
+                if (cached != null) return cached;
+            }
+            catch { }
+        }
+
         try
         {
             var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.steamcmd.net/v1/info/{appId}");
-            if (!_http.DefaultRequestHeaders.Contains("User-Agent"))
-            {
-                request.Headers.UserAgent.ParseAdd("BlueStar/1.1.2");
-            }
-
             var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
             if (response.IsSuccessStatusCode)
             {
@@ -534,24 +645,35 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                             }
                         }
 
-                        return new SteamAppDepotInfo(latestDate, buildId, manifests, appType);
+                        var info = new SteamAppDepotInfo(latestDate, buildId, manifests, appType);
+                        if (_cache != null)
+                        {
+                            try { await _cache.SetAsync(cacheKey, info, TimeSpan.FromDays(7), ct).ConfigureAwait(false); } catch { }
+                        }
+                        return info;
                     }
                     else if (!string.IsNullOrWhiteSpace(appType))
                     {
-                        return new SteamAppDepotInfo(null, null, new Dictionary<ulong, ulong>(), appType);
+                        var info = new SteamAppDepotInfo(null, null, new Dictionary<ulong, ulong>(), appType);
+                        if (_cache != null)
+                        {
+                            try { await _cache.SetAsync(cacheKey, info, TimeSpan.FromDays(7), ct).ConfigureAwait(false); } catch { }
+                        }
+                        return info;
                     }
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Failed to get SteamCMD depot info for AppId={AppId}", appId);
+            _logger.LogDebug(ex, "Failed to get SteamCMD AppInfo for AppId={AppId}", appId);
         }
 
         return null;
     }
 
     /// <summary>
+
     /// Gets all available game branches and builds from SteamCMD / Steam app info.
     /// </summary>
     public async Task<IReadOnlyList<GameBuildInfo>> GetAppBuildsAsync(uint appId, CancellationToken ct = default)
@@ -806,16 +928,107 @@ public sealed class SteamStoreApiClient : IMetadataProvider
         string? AppType = null
     );
 
-    private async Task ThrottleAsync(CancellationToken ct)
+    /// <summary>
+    /// Per-depot enrichment data pulled from the SteamCMD info endpoint.
+    /// </summary>
+    public sealed record SteamDepotMeta(
+        uint DepotId,
+        string? Name,
+        /// <summary>Comma-separated OS list from config.oslist, e.g. "windows" or "linux,macos".</summary>
+        string? OsList,
+        /// <summary>True when config.optional = "1" — not auto-installed by Steam.</summary>
+        bool IsOptional,
+        /// <summary>True when config.SharedInstall = "1" — shared depot, not game-specific content.</summary>
+        bool IsShared
+    );
+
+    /// <summary>
+    /// Fetches per-depot enrichment data (names, OS lists, optional flags) for <paramref name="appId"/>
+    /// via the SteamCMD info API. Returns a dictionary keyed by DepotId.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<uint, SteamDepotMeta>> GetDepotEnrichmentAsync(
+        uint appId, CancellationToken ct = default)
     {
-        var elapsed = DateTimeOffset.UtcNow - _lastRequest;
-        if (elapsed < MinRequestInterval)
+        if (appId == 0) return new Dictionary<uint, SteamDepotMeta>();
+
+        var cacheKey = $"steamcmd_depot_enrich_{appId}_v3";
+        if (_cache != null)
         {
-            var delay = MinRequestInterval - elapsed;
-            await Task.Delay(delay, ct).ConfigureAwait(false);
+            try
+            {
+                var cached = await _cache.GetAsync<Dictionary<uint, SteamDepotMeta>>(cacheKey, ct).ConfigureAwait(false);
+                if (cached != null) return cached;
+            }
+            catch { }
         }
-        _lastRequest = DateTimeOffset.UtcNow;
+
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.steamcmd.net/v1/info/{appId}");
+            var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                return new Dictionary<uint, SteamDepotMeta>();
+
+            var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(json);
+
+            if (!doc.RootElement.TryGetProperty("data", out var dataEl) ||
+                !dataEl.TryGetProperty(appId.ToString(), out var appEl) ||
+                !appEl.TryGetProperty("depots", out var depotsEl))
+                return new Dictionary<uint, SteamDepotMeta>();
+
+            var result = new Dictionary<uint, SteamDepotMeta>();
+
+            foreach (var depotProp in depotsEl.EnumerateObject())
+            {
+                // Skip non-numeric keys like "branches", "overrides", "baselanguages"
+                if (!uint.TryParse(depotProp.Name, out var depotId))
+                    continue;
+
+                var depotEl = depotProp.Value;
+
+                // Depot name (may be at root or under "config")
+                string? name = null;
+                if (depotEl.TryGetProperty("name", out var nameProp))
+                    name = nameProp.GetString()?.Trim();
+
+                string? osList = null;
+                bool isOptional = false;
+                bool isShared = false;
+
+                if (depotEl.TryGetProperty("config", out var configEl))
+                {
+                    if (configEl.TryGetProperty("oslist", out var osListProp))
+                        osList = osListProp.GetString()?.Trim().ToLowerInvariant();
+
+                    if (configEl.TryGetProperty("optional", out var optProp))
+                        isOptional = optProp.GetString() == "1" || (optProp.ValueKind == JsonValueKind.Number && optProp.GetInt32() == 1);
+
+                    if (configEl.TryGetProperty("SharedInstall", out var sharedProp))
+                        isShared = sharedProp.GetString() == "1" || (sharedProp.ValueKind == JsonValueKind.Number && sharedProp.GetInt32() == 1);
+                }
+
+                // Some depots mark shared via a top-level flag
+                if (!isShared && depotEl.TryGetProperty("sharedinstall", out var si))
+                    isShared = si.GetString() == "1" || (si.ValueKind == JsonValueKind.Number && si.GetInt32() == 1);
+
+                result[depotId] = new SteamDepotMeta(depotId, name, osList, isOptional, isShared);
+            }
+
+            if (_cache != null && result.Count > 0)
+            {
+                try { await _cache.SetAsync(cacheKey, result, TimeSpan.FromDays(7), ct).ConfigureAwait(false); } catch { }
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to get depot enrichment for AppId={AppId}", appId);
+            return new Dictionary<uint, SteamDepotMeta>();
+        }
     }
+
 
     private static string? GetFirstArrayString(JsonElement parent, string propertyName)
     {

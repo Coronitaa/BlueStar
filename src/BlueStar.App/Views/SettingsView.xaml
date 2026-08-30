@@ -208,13 +208,139 @@
                 </StackPanel>
             </Border>
 
-            <!-- ═══ ADVANCED FEATURES & BUILDS SECTION ═══ -->
+            <!-- ═══ SYSTEM REQUIREMENTS & RUNTIMES SECTION ═══ -->
             <Border Style="{StaticResource Card}" Margin="0,0,0,20">
                 <StackPanel>
-                    <TextBlock Text="Advanced Features &amp; Game Builds" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                    <TextBlock Text="Enable advanced tools for historical game builds, depot manifests management, and package imports."
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="System Requirements &amp; Game Runtimes" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                            <TextBlock Text="Analyze and install essential Windows runtimes (Visual C++, DirectX, .NET) required to launch games and BlueStar tools."
+                                       Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Content="🔄 Re-Scan"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Padding="12,6" FontSize="11" Margin="0,0,8,0"
+                                    Command="{Binding ScanRequirementsCommand}"
+                                    IsEnabled="{Binding IsInstallingRequirements, Converter={StaticResource InverseBoolConverter}}"/>
+                            <Button Content="⚡ Install All Missing"
+                                    Style="{StaticResource PrimaryButton}"
+                                    Padding="14,6" FontSize="11"
+                                    Visibility="{Binding HasMissingRequirements, Converter={StaticResource BoolToVisibilityConverter}}"
+                                    Command="{Binding InstallAllRequirementsCommand}"
+                                    IsEnabled="{Binding IsInstallingRequirements, Converter={StaticResource InverseBoolConverter}}"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Auto check toggle -->
+                    <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,10" Margin="0,12,0,14">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                                <TextBlock Text="🔍 Check System Requirements on Startup" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
+                                <TextBlock Text="When enabled, BlueStar verifies on launch that all necessary runtime dependencies are installed and offers 1-click installation if any are missing."
+                                           Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1"
+                                      IsChecked="{Binding CheckSystemRequirementsOnStartup, Mode=TwoWay}"
+                                      Style="{StaticResource DarkCheckBox}"
+                                      VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Progress bar when installing -->
+                    <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,8" Margin="0,0,0,12"
+                            Visibility="{Binding IsInstallingRequirements, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <StackPanel>
+                            <ProgressBar Height="4" IsIndeterminate="True"
+                                         Foreground="{StaticResource AccentBrush}"
+                                         Background="{StaticResource SurfaceCardBrush}"
+                                         BorderThickness="0" Margin="0,0,0,6"/>
+                            <TextBlock Text="{Binding InstallRequirementsStatusText}" Style="{StaticResource Caption}" Foreground="{StaticResource AccentBrush}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Prerequisites List -->
+                    <ItemsControl ItemsSource="{Binding SystemPrerequisites}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{StaticResource SurfaceInputBrush}"
+                                        BorderBrush="{StaticResource SubtleBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource RadiusSm}"
+                                        Padding="12,10"
+                                        Margin="0,0,0,8">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="14"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Column="0">
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
+                                                <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="12" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,8,0"/>
+                                                <Border CornerRadius="{StaticResource RadiusSm}"
+                                                        Padding="6,1"
+                                                        Background="{Binding Status, Converter={StaticResource PrerequisiteStatusToBgBrushConverter}}">
+                                                    <TextBlock Text="{Binding Status, Converter={StaticResource PrerequisiteStatusToTextConverter}}"
+                                                               FontSize="10" FontWeight="SemiBold"
+                                                               Foreground="{Binding Status, Converter={StaticResource PrerequisiteStatusToBrushConverter}}"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding Description}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                            <Button Content="Install"
+                                                    Style="{StaticResource SecondaryButton}"
+                                                    Padding="12,5" FontSize="11"
+                                                    Command="{Binding DataContext.InstallPrerequisiteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    IsEnabled="{Binding DataContext.IsInstallingRequirements, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource InverseBoolConverter}}"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- ═══ ADVANCED & EXPERIMENTAL FEATURES SECTION ═══ -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,20">
+                <StackPanel>
+                    <TextBlock Text="Advanced &amp; Experimental Features" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                    <TextBlock Text="Enable experimental tools for game modding, historical builds, depot manifests management, and package imports."
                                Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,16"/>
 
+                    <!-- Experimental Modding Tab Toggle -->
+                    <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,10" Margin="0,0,0,10">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                                <TextBlock Text="🧪 Enable Experimental Modding (Mods Tab)" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
+                                <TextBlock Text="When enabled, unlocks the experimental Mods management tab and automated mod directory handling for game instances. Keep disabled for a cleaner vanilla experience."
+                                           Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1"
+                                      IsChecked="{Binding EnableExperimentalMods, Mode=TwoWay}"
+                                      Style="{StaticResource DarkCheckBox}"
+                                      VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Advanced Builds Toggle -->
                     <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,10">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -234,6 +360,7 @@
                     </Border>
                 </StackPanel>
             </Border>
+
 
             <!-- ═══ ENGINES & ECOSYSTEM REGISTRY SECTION ═══ -->
             <Border Style="{StaticResource Card}" Margin="0,0,0,20">

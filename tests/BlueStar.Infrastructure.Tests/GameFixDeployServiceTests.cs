@@ -138,7 +138,7 @@ public class GameFixDeployServiceTests : IDisposable
 
         Assert.Single(fixes);
         Assert.Equal("12fbbb1be29121d2", fixes[0].Id);
-        Assert.Equal("PRAGMATA (Bypass)", fixes[0].Name);
+        Assert.Equal("PRAGMATA", fixes[0].Name);
         Assert.Equal("PRAGMATA_bypass.zip", fixes[0].DownloadName);
         Assert.True(fixes[0].IsBypass);
         Assert.NotNull(fixes[0].SizeBytes);

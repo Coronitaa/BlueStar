@@ -46,16 +46,18 @@ public class BackgroundTaskServiceTests
     {
         var service = new BackgroundTaskService(NullLogger<BackgroundTaskService>.Instance);
 
+        var startedTcs = new TaskCompletionSource<bool>();
         var taskId = service.QueueTask("Cancellable Task", "Will be cancelled", async (reporter, ct) =>
         {
+            startedTcs.TrySetResult(true);
             await Task.Delay(5000, ct);
         });
 
-        await Task.Delay(20);
+        await startedTcs.Task;
         service.CancelTask(taskId);
 
         // Wait for background cancellation to take effect
-        for (int i = 0; i < 20 && service.Tasks.FirstOrDefault(t => t.Id == taskId)?.Status == BackgroundTaskStatus.Running; i++)
+        for (int i = 0; i < 30 && service.Tasks.FirstOrDefault(t => t.Id == taskId)?.Status != BackgroundTaskStatus.Cancelled; i++)
         {
             await Task.Delay(50);
         }

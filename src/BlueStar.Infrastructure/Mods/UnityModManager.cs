@@ -35,20 +35,16 @@ public sealed class UnityModManager : IModManager
         var resolution = GameModPathResolver.ResolveModPaths(instance);
         if (!string.IsNullOrWhiteSpace(resolution.PrimaryDirectory))
         {
-            Directory.CreateDirectory(resolution.PrimaryDirectory);
             return resolution.PrimaryDirectory;
         }
 
         var bepPlugins = Path.Combine(instance.InstallPath, "BepInEx", "plugins");
         if (Directory.Exists(Path.Combine(instance.InstallPath, "BepInEx")))
         {
-            Directory.CreateDirectory(bepPlugins);
             return bepPlugins;
         }
 
-        var fallbackMods = Path.Combine(instance.InstallPath, "mods");
-        Directory.CreateDirectory(fallbackMods);
-        return fallbackMods;
+        return Path.Combine(instance.InstallPath, "mods");
     }
 
     public Task<IReadOnlyList<ModItem>> GetInstalledModsAsync(GameInstance instance, CancellationToken ct = default)
@@ -73,13 +69,6 @@ public sealed class UnityModManager : IModManager
         var modsUpper = Path.Combine(instance.InstallPath, "Mods");
         if (Directory.Exists(modsUpper)) candidateDirs.Add(modsUpper);
 
-        // If none exist, include the primary mods directory
-        if (candidateDirs.Count == 0)
-        {
-            var primary = GetModsDirectory(instance);
-            if (!string.IsNullOrWhiteSpace(primary) && Directory.Exists(primary))
-                candidateDirs.Add(primary);
-        }
 
         var result = new List<ModItem>();
         var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -299,10 +288,10 @@ public sealed class UnityModManager : IModManager
             try
             {
                 var ext = Path.GetExtension(sourceFilePath).ToLowerInvariant();
-                if (ext == ".zip")
+                if (ext is ".zip" or ".rar" or ".7z" or ".tar" or ".gz")
                 {
                     var pluginFolder = Path.Combine(modsDir, Path.GetFileNameWithoutExtension(sourceFilePath));
-                    ZipFile.ExtractToDirectory(sourceFilePath, pluginFolder, overwriteFiles: true);
+                    BlueStar.Infrastructure.Common.ArchiveExtractor.ExtractToDirectory(sourceFilePath, pluginFolder, overwrite: true);
                     return true;
                 }
                 else
@@ -311,6 +300,7 @@ public sealed class UnityModManager : IModManager
                     File.Copy(sourceFilePath, dest, overwrite: true);
                     return true;
                 }
+
             }
             catch (Exception ex)
             {

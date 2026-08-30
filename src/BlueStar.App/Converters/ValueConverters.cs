@@ -715,4 +715,27 @@ public sealed class BackgroundTaskStatusToBrushConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
 }
 
+/// <summary>
+/// Converts an image URL (or Steam AppID) to a high-performance cached, frozen ImageSource.
+/// Reuses the exact same in-memory bitmap instance across all categories, search results, and views.
+/// </summary>
+public sealed class CachedImageConverter : IValueConverter
+{
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is null) return null;
+        var url = value.ToString();
+        if (string.IsNullOrWhiteSpace(url)) return null;
+
+        uint appId = 0;
+        if (parameter is uint id) appId = id;
+        else if (parameter is int intId && intId > 0) appId = (uint)intId;
+
+        return BlueStar.App.Services.ImageCacheService.Instance.GetOrLoadImage(url, appId);
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 

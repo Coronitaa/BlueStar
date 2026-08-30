@@ -14,7 +14,9 @@ using BlueStar.Core.Models;
 using BlueStar.Infrastructure.Downloader;
 using BlueStar.Infrastructure.Emulators;
 using BlueStar.Infrastructure.Mods;
+using BlueStar.Infrastructure.Services;
 using BlueStar.Infrastructure.Storage;
+
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -99,14 +101,48 @@ public partial class SelectableDepotItem : ObservableObject
         _ => $"{Depot.SizeBytes / 1024.0:F0} KB"
     };
 
-    public string DisplayName => !string.IsNullOrWhiteSpace(Depot.Name) && !Depot.Name.StartsWith("Depot ")
-        ? Depot.Name
-        : $"Depot {Depot.DepotId}";
+    /// <summary>
+    /// Returns the best available display name: SteamDB name → DepotBox name → fallback "Depot {id}".
+    /// </summary>
+    public string DisplayName
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(Depot.SteamDbName))
+                return Depot.SteamDbName;
+            if (!string.IsNullOrWhiteSpace(Depot.Name) && !Depot.Name.StartsWith("Depot "))
+                return Depot.Name;
+            return $"Depot {Depot.DepotId}";
+        }
+    }
 
     public string CategoryTag => string.IsNullOrWhiteSpace(Depot.Category) ? "Base Game" : Depot.Category;
     public string PlatformTag => string.IsNullOrWhiteSpace(Depot.Platform) ? "Universal" : Depot.Platform;
     public string? ArchitectureTag => Depot.Architecture;
+
+    /// <summary>True when Steam auto-installs this depot for the current OS (base game content).</summary>
+    public bool IsRecommended => Depot.IsRecommended;
+
+    /// <summary>Steam CDN header image URL for this depot's associated app (for DLC depots). Null for base-game depots.</summary>
+    public string? ImageUrl =>
+        Depot.Category?.Equals("DLC", StringComparison.OrdinalIgnoreCase) == true && Depot.DepotId > 0
+            ? $"https://cdn.cloudflare.steamstatic.com/steam/apps/{Depot.DepotId}/header.jpg"
+            : null;
+
+    /// <summary>
+    /// Fires property-changed notifications for all depot-enrichment–derived properties
+    /// (DisplayName, IsRecommended, ImageUrl). Call this after setting <see cref="Depot"/>
+    /// with updated SteamDB data.
+    /// </summary>
+    public void NotifyEnrichmentChanged()
+    {
+        OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(IsRecommended));
+        OnPropertyChanged(nameof(ImageUrl));
+    }
 }
+
+
 
 /// <summary>
 /// Model for a DLC item with selection state and tags in the UI.
@@ -286,8 +322,16 @@ public partial class InstanceDetailViewModel : ObservableObject
     [ObservableProperty]
     private string? _statusMessage;
 
+    public bool IsStatusMessageVisible => !string.IsNullOrWhiteSpace(StatusMessage) && !HasActiveJob;
+
+    partial void OnStatusMessageChanged(string? value)
+    {
+        OnPropertyChanged(nameof(IsStatusMessageVisible));
+    }
+
     [ObservableProperty]
     private bool _isProcessing;
+
 
     [ObservableProperty]
     private bool _isDlcUnlocked;
@@ -297,6 +341,15 @@ public partial class InstanceDetailViewModel : ObservableObject
 
     [ObservableProperty]
     private long _totalSelectedSizeBytes;
+
+    /// <summary>Number of currently checked depots (base + DLC) shown in the bottom bar.</summary>
+    public int SelectedDepotsCount =>
+        Depots.Count(d => d.IsSelected) + Dlcs.Where(d => d.IsSelected).Sum(d => d.Dlc.Depots.Count);
+
+    /// <summary>Formatted total size of selected depots — alias used by the bottom summary bar.</summary>
+    public string SelectedDepotsSize => TotalSelectedSizeFormatted;
+
+
 
     // ── Version & Update Comparison State ──
     [ObservableProperty]
@@ -341,6 +394,7 @@ public partial class InstanceDetailViewModel : ObservableObject
     {
         get
         {
+            if (!_appSettings.EnableExperimentalMods) return false;
             if (!IsInstalled) return false;
             if (Instance == null) return false;
 
@@ -366,6 +420,7 @@ public partial class InstanceDetailViewModel : ObservableObject
             return false;
         }
     }
+
 
     [ObservableProperty]
     private string _modsDirectoryPath = string.Empty;
@@ -470,6 +525,30 @@ public partial class InstanceDetailViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsSpecificFixesSectionVisible))]
     private bool _hasAvailableGameFixes;
 
+    [ObservableProperty]
+    private ObservableCollection<GameFixInfo> _onlineGameFixes = [];
+
+    [ObservableProperty]
+    private bool _hasOnlineGameFixes;
+
+    [ObservableProperty]
+    private ObservableCollection<GameFixInfo> _bypassGameFixes = [];
+
+    [ObservableProperty]
+    private bool _hasBypassGameFixes;
+
+    [ObservableProperty]
+    private ObservableCollection<GameFixInfo> _hypervisorGameFixes = [];
+
+    [ObservableProperty]
+    private bool _hasHypervisorGameFixes;
+
+    [ObservableProperty]
+    private ObservableCollection<GameFixInfo> _otherGameFixes = [];
+
+    [ObservableProperty]
+    private bool _hasOtherGameFixes;
+
     public bool IsSpecificFixesSectionVisible => HasAvailableGameFixes || IsLoadingGameFixes;
 
     [ObservableProperty]
@@ -486,11 +565,21 @@ public partial class InstanceDetailViewModel : ObservableObject
     private ObservableCollection<FixLayerInfo> _installedFixLayers = [];
 
     [ObservableProperty]
+    private ObservableCollection<FixLayerInfo> _nonOnlineInstalledFixLayers = [];
+
+    [ObservableProperty]
     private bool _hasInstalledFixLayers;
+
+    [ObservableProperty]
+    private bool _isOnlineFixWarningModalOpen;
+
+    [ObservableProperty]
+    private GameFixInfo? _pendingOnlineFixToInstall;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanDeployEmulator))]
     private bool _isDeployingGameFix;
+
 
     [ObservableProperty]
     private double _gameFixDeployProgress;
@@ -627,9 +716,21 @@ public partial class InstanceDetailViewModel : ObservableObject
         }
     }
 
-    public string DownloadButtonText => AreAllSelectedDepotsDownloaded ? "🔄 Reinstall Selected" : "📥 Start Download";
+    public string DownloadButtonText => AreAllSelectedDepotsDownloaded ? "🔄 Reinstall Selected" : "⬇ Download Selected";
+
+    /// <summary>Whether a download can be initiated (at least 1 depot checked and not currently downloading).</summary>
+    public bool CanStartDownload =>
+        SelectedDepotsCount > 0 &&
+        (!IsInstanceDownloading || ActiveJob?.IsPaused == true || ActiveJob?.IsCompleted == true || ActiveJob?.IsFailed == true);
+
+    [RelayCommand]
+    public async Task DownloadSelectedDepotsAsync()
+    {
+        await StartDownloadAsync().ConfigureAwait(true);
+    }
 
     // ── Shortcut Modal State ──
+
     [ObservableProperty]
     private bool _isShortcutModalOpen;
 
@@ -750,9 +851,16 @@ public partial class InstanceDetailViewModel : ObservableObject
             App.Current?.Dispatcher?.Invoke(() =>
             {
                 EnableAdvancedBuildOptions = _appSettings.EnableAdvancedBuildOptions;
+                SupportsMods = _appSettings.EnableExperimentalMods;
+                OnPropertyChanged(nameof(IsModsTabVisible));
+                if (!IsModsTabVisible && SelectedTab == "Mods")
+                {
+                    SelectedTab = "Overview";
+                }
             });
         };
     }
+
 
     private void OnQueueChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -786,12 +894,28 @@ public partial class InstanceDetailViewModel : ObservableObject
         var isInstalled = ReFixEmulator.IsEmulatorInstalled(Instance.InstallPath) || !string.IsNullOrWhiteSpace(Instance.EmulatorId);
         if (!isInstalled) return;
 
-        var optionId = Instance.EmulatorId ?? (InstalledEmulatorMode?.Contains("Goldberg", StringComparison.OrdinalIgnoreCase) == true ? "refix_goldberg" : "refix_valve");
+        var onlineLayer = Instance.InstalledFixLayers?.FirstOrDefault(l => l.IsOnline);
+        string optionId;
+        string displayName;
+        string? emulatorVersion;
 
-        if (!_emulatorRatingService.HasUserVoted(Instance.Id, optionId))
+        if (onlineLayer != null || Instance.EmulatorId == "gamefix_online")
+        {
+            optionId = onlineLayer?.FixId ?? Instance.InstalledEmulatorVersion ?? "gamefix_online";
+            displayName = onlineLayer?.DisplayName ?? "Online Multiplayer Fix";
+            emulatorVersion = onlineLayer?.Version ?? Instance.InstalledEmulatorVersion ?? "1.0";
+        }
+        else
+        {
+            optionId = Instance.EmulatorId ?? (InstalledEmulatorMode?.Contains("Goldberg", StringComparison.OrdinalIgnoreCase) == true ? "refix_goldberg" : "refix_valve");
+            displayName = InstalledEmulatorMode ?? (optionId == "refix_goldberg" ? "Re:Goldberg LAN" : "ReFix Online (Steam)");
+            emulatorVersion = Instance.InstalledEmulatorVersion ?? "1.0";
+        }
+
+        if (!_emulatorRatingService.HasUserVoted(Instance, optionId, emulatorVersion))
         {
             FeedbackOptionId = optionId;
-            FeedbackEmulatorName = InstalledEmulatorMode ?? (optionId == "refix_goldberg" ? "Re:Goldberg LAN" : "ReFix Online (Steam)");
+            FeedbackEmulatorName = displayName;
             ShowFeedbackUninstallPrompt = false;
             IsFeedbackModalOpen = true;
         }
@@ -857,7 +981,12 @@ public partial class InstanceDetailViewModel : ObservableObject
         OnPropertyChanged(nameof(CanDeployEmulator));
         OnPropertyChanged(nameof(AreAllSelectedDepotsDownloaded));
         OnPropertyChanged(nameof(DownloadButtonText));
+        OnPropertyChanged(nameof(CanStartDownload));
+        OnPropertyChanged(nameof(SelectedDepotsCount));
+        OnPropertyChanged(nameof(SelectedDepotsSize));
+        OnPropertyChanged(nameof(IsStatusMessageVisible));
     }
+
 
     /// <summary>
     /// Loads details for the target game instance.
@@ -975,18 +1104,22 @@ public partial class InstanceDetailViewModel : ObservableObject
 
             SelectedTab = "Overview";
 
-            // Check capabilities: all instances support generic mods/workshop and emulators
-            SupportsMods = true;
+            // Check capabilities
+            SupportsMods = _appSettings.EnableExperimentalMods;
             SupportsEmulation = true;
 
             // Load mods, BepInEx, Workshop, emulators, and prerequisites in background
-            _ = LoadModsAsync();
+            if (_appSettings.EnableExperimentalMods)
+            {
+                _ = LoadModsAsync();
+                if (IsUnityEngine) _ = CheckAndLoadBepInExAsync();
+                _ = CheckWorkshopSupportAsync();
+            }
             _ = LoadEmulatorsAsync();
             _ = ScanPrerequisitesAsync();
-            if (IsUnityEngine) _ = CheckAndLoadBepInExAsync();
-            _ = CheckWorkshopSupportAsync();
 
             if (Dlcs.Count > 0)
+
             {
                 IsDlcUnlocked = await _dlcInstaller.IsDlcInstalledAsync(Instance, Dlcs[0].Dlc, CancellationToken.None).ConfigureAwait(true);
             }
@@ -1020,6 +1153,8 @@ public partial class InstanceDetailViewModel : ObservableObject
             _ = CheckSteamVersionDateAsync();
             _ = LoadDlcsFromMetadataIfEmptyAsync();
             _ = LoadAvailableBuildsAsync();
+            _ = EnrichDepotsFromSteamDbAsync();
+
 
             if (autoCheckDepotUpdates)
             {
@@ -1126,6 +1261,78 @@ public partial class InstanceDetailViewModel : ObservableObject
 
         return null;
     }
+
+    /// <summary>
+    /// Fetches per-depot names, OS lists, and optional flags from the SteamCMD API and
+    /// enriches the loaded <see cref="Depots"/> collection with <see cref="DepotInfo.SteamDbName"/>
+    /// and <see cref="DepotInfo.IsRecommended"/>.  Runs in the background — UI updates on the UI thread.
+    /// </summary>
+    private async Task EnrichDepotsFromSteamDbAsync()
+    {
+        if (Instance is null || Instance.AppId == 0 || Depots.Count == 0) return;
+
+        // Only SteamStoreApiClient exposes GetDepotEnrichmentAsync
+        if (_metadataProvider is not BlueStar.Infrastructure.Metadata.SteamStoreApiClient steamClient) return;
+
+        try
+        {
+            var enrichment = await steamClient.GetDepotEnrichmentAsync(Instance.AppId, CancellationToken.None)
+                                              .ConfigureAwait(false);
+
+            if (enrichment.Count == 0) return;
+
+            // Determine current OS for recommended-flag logic (Windows is always current for this app)
+            const string currentOsKey = "windows";
+
+            // Switch back to UI thread for collection mutations
+            _uiContext.Post(_ =>
+            {
+                bool anyChange = false;
+
+                for (int i = 0; i < Depots.Count; i++)
+                {
+                    var item = Depots[i];
+                    if (!enrichment.TryGetValue(item.Depot.DepotId, out var meta)) continue;
+
+                    // Determine recommended: non-optional, not shared, and OS matches (or no OS restriction)
+                    bool osMatch = string.IsNullOrWhiteSpace(meta.OsList) ||
+                                   meta.OsList.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                                       .Any(os => os.Trim().Equals(currentOsKey, StringComparison.OrdinalIgnoreCase));
+
+                    bool isRecommended = !meta.IsOptional && !meta.IsShared && osMatch;
+
+                    string? newSteamDbName = string.IsNullOrWhiteSpace(meta.Name) ? null : meta.Name.Trim();
+
+                    // Skip if nothing changed
+                    if (item.Depot.SteamDbName == newSteamDbName && item.Depot.IsRecommended == isRecommended)
+                        continue;
+
+                    item.Depot = item.Depot with
+                    {
+                        SteamDbName = newSteamDbName,
+                        IsRecommended = isRecommended
+                    };
+
+                    // Auto-select recommended depots that were not yet selected
+                    if (isRecommended && !item.IsSelected)
+                        item.IsSelected = true;
+
+                    item.NotifyEnrichmentChanged();
+                    anyChange = true;
+
+                }
+
+                if (anyChange)
+                    RecalculateSelectedSize();
+
+            }, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to enrich depots from SteamDB for AppId={AppId}", Instance?.AppId);
+        }
+    }
+
 
     private async Task CheckSteamVersionDateAsync()
     {
@@ -1356,6 +1563,12 @@ public partial class InstanceDetailViewModel : ObservableObject
 
             await _instanceManager.UpdateAsync(updatedInstance, CancellationToken.None).ConfigureAwait(true);
             Instance = updatedInstance;
+
+            // Reset all community emulation ratings and user vote flags for this game AppID due to new game update/build
+            if (_emulatorRatingService != null)
+            {
+                await _emulatorRatingService.ResetRatingsForGameAsync(Instance.AppId, CancellationToken.None).ConfigureAwait(true);
+            }
 
             IsUpdateModalOpen = false;
 
@@ -2120,19 +2333,45 @@ public partial class InstanceDetailViewModel : ObservableObject
 
         try
         {
-            SupportsEmulation = true;
-            IsEmulatorInstalled = ReFixEmulator.IsEmulatorInstalled(Instance.InstallPath);
-            InstalledEmulatorMode = ReFixEmulator.GetInstalledMode(Instance.InstallPath);
+            var allLayers = Instance.InstalledFixLayers ?? [];
+            InstalledFixLayers = new ObservableCollection<FixLayerInfo>(allLayers);
+            NonOnlineInstalledFixLayers = new ObservableCollection<FixLayerInfo>(allLayers.Where(l => !l.IsOnline));
+            HasInstalledFixLayers = NonOnlineInstalledFixLayers.Count > 0;
 
-            if (_refixUpdateService != null)
+            var onlineLayer = allLayers.FirstOrDefault(l => l.IsOnline);
+            if (onlineLayer != null || Instance.EmulatorId == "gamefix_online")
+            {
+                IsEmulatorInstalled = true;
+                if (onlineLayer != null)
+                {
+                    var cleanName = System.Text.RegularExpressions.Regex.Replace(
+                        onlineLayer.DisplayName,
+                        @"\s*[\(\[](Online(\s*Fix)?|Bypass|Hypervisor)[\)\]]\s*",
+                        "",
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+                    InstalledEmulatorMode = !string.IsNullOrWhiteSpace(cleanName) ? $"{cleanName} (Online Fix)" : "Game-Specific (Online Fix)";
+                }
+                else
+                {
+                    InstalledEmulatorMode = "Game-Specific (Online Fix)";
+                }
+            }
+            else
+            {
+                IsEmulatorInstalled = ReFixEmulator.IsEmulatorInstalled(Instance.InstallPath);
+                InstalledEmulatorMode = ReFixEmulator.GetInstalledMode(Instance.InstallPath);
+            }
+
+            if (_refixUpdateService != null && onlineLayer == null && Instance.EmulatorId != "gamefix_online" && (Instance.EmulatorId == null || Instance.EmulatorId.StartsWith("refix", StringComparison.OrdinalIgnoreCase)))
             {
                 CurrentGlobalReFixVersion = _refixUpdateService.GetCurrentInstalledVersion();
                 InstanceReFixVersion = Instance.InstalledEmulatorVersion ?? "1.0";
                 IsReFixUpdateAvailableForInstance = _refixUpdateService.IsInstanceReFixOutdated(Instance);
             }
-
-            InstalledFixLayers = new ObservableCollection<FixLayerInfo>(Instance.InstalledFixLayers ?? []);
-            HasInstalledFixLayers = InstalledFixLayers.Count > 0;
+            else
+            {
+                IsReFixUpdateAvailableForInstance = false;
+            }
 
             // Session Cache check: if emulators for this instance were already loaded during this app session, reuse without hitting API
             if (!forceReload && _emulatorSessionCache.TryGetValue(Instance.Id, out var cached))
@@ -2141,8 +2380,7 @@ public partial class InstanceDetailViewModel : ObservableObject
                 RecommendedEmulatorOption = cached.Options.FirstOrDefault(o => o.IsRecommended && o.TotalVotes >= 10);
                 AvailableEmulators = new ObservableCollection<IEmulator>(cached.Emulators);
                 SelectedEmulator = cached.Emulators.FirstOrDefault(e => e.Id == (Instance.EmulatorId ?? "refix")) ?? cached.Emulators.FirstOrDefault();
-                AvailableGameFixes = new ObservableCollection<GameFixInfo>(cached.Fixes);
-                HasAvailableGameFixes = AvailableGameFixes.Count > 0;
+                UpdateCategorizedGameFixes(cached.Fixes);
 
                 if (SelectedEmulator != null)
                 {
@@ -2180,6 +2418,46 @@ public partial class InstanceDetailViewModel : ObservableObject
         }
     }
 
+    private void UpdateCategorizedGameFixes(IReadOnlyList<GameFixInfo> fixesList)
+    {
+        var enrichedList = fixesList.Select(fix =>
+        {
+            if (fix.IsOnline && _emulatorRatingService != null && Instance != null)
+            {
+                var (pos, neg) = _emulatorRatingService.GetRatings(Instance.AppId, fix.Id);
+                var hasVoted = _emulatorRatingService.HasUserVoted(Instance, fix.Id, fix.Name);
+                return fix with
+                {
+                    PositiveVotes = pos,
+                    NegativeVotes = neg,
+                    HasUserVoted = hasVoted
+                };
+            }
+            return fix;
+        }).ToList();
+
+        AvailableGameFixes = new ObservableCollection<GameFixInfo>(enrichedList);
+        HasAvailableGameFixes = AvailableGameFixes.Count > 0;
+
+        var onlineList = enrichedList.Where(f => f.IsOnline)
+            .OrderByDescending(f => f.ScorePercentage)
+            .ThenByDescending(f => f.PositiveVotes)
+            .ThenByDescending(f => f.TotalVotes)
+            .ToList();
+
+        OnlineGameFixes = new ObservableCollection<GameFixInfo>(onlineList);
+        HasOnlineGameFixes = OnlineGameFixes.Count > 0;
+
+        BypassGameFixes = new ObservableCollection<GameFixInfo>(enrichedList.Where(f => f.IsBypass && !f.IsOnline));
+        HasBypassGameFixes = BypassGameFixes.Count > 0;
+
+        HypervisorGameFixes = new ObservableCollection<GameFixInfo>(enrichedList.Where(f => f.IsHypervisor && !f.IsOnline && !f.IsBypass));
+        HasHypervisorGameFixes = HypervisorGameFixes.Count > 0;
+
+        OtherGameFixes = new ObservableCollection<GameFixInfo>(enrichedList.Where(f => !f.IsOnline && !f.IsBypass && !f.IsHypervisor));
+        HasOtherGameFixes = OtherGameFixes.Count > 0;
+    }
+
     [RelayCommand]
     public async Task LoadGameFixesAsync() => await LoadGameFixesCoreAsync(forceReload: true).ConfigureAwait(true);
 
@@ -2214,21 +2492,21 @@ public partial class InstanceDetailViewModel : ObservableObject
                 fixes = await _apiClient.GetGameFixesAsync(query: Instance.Name, ct: CancellationToken.None).ConfigureAwait(true);
             }
 
-            AvailableGameFixes = new ObservableCollection<GameFixInfo>(fixes ?? []);
-            HasAvailableGameFixes = AvailableGameFixes.Count > 0;
+            UpdateCategorizedGameFixes(fixes ?? []);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to load DepotBox game fixes for {Game}", Instance.Name);
             HasGameFixesError = true;
             GameFixesErrorMessage = ex.Message;
-            HasAvailableGameFixes = false;
+            UpdateCategorizedGameFixes([]);
         }
         finally
         {
             IsLoadingGameFixes = false;
         }
     }
+
 
     [RelayCommand]
     public async Task DeployGameFixAsync(GameFixInfo? fix)
@@ -2241,6 +2519,89 @@ public partial class InstanceDetailViewModel : ObservableObject
             _notificationService?.ShowWarning("Game Not Installed", "You must install or download the game before configuring a fix.");
             return;
         }
+
+        // If it's an online fix, display the security warning confirmation modal first
+        if (fix.IsOnline)
+        {
+            PendingOnlineFixToInstall = fix;
+            IsOnlineFixWarningModalOpen = true;
+            return;
+        }
+
+        await ExecuteDeployGameFixAsync(fix).ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    public void CloseOnlineFixWarningModal()
+    {
+        IsOnlineFixWarningModalOpen = false;
+        PendingOnlineFixToInstall = null;
+    }
+
+    [RelayCommand]
+    public async Task ConfirmInstallOnlineFixAsync()
+    {
+        var fix = PendingOnlineFixToInstall;
+        IsOnlineFixWarningModalOpen = false;
+        PendingOnlineFixToInstall = null;
+
+        if (Instance == null || fix == null || IsDeployingGameFix || IsDeployingEmulator) return;
+
+        // 1. If ReFix or another emulator is currently installed, cleanly uninstall it first (mutual exclusion)
+        if (ReFixEmulator.IsEmulatorInstalled(Instance.InstallPath) || (Instance.EmulatorId != null && Instance.EmulatorId != "gamefix_online"))
+        {
+            StatusMessage = "⏳ Removing existing ReFix emulator before deploying Online fix...";
+            try
+            {
+                if (_emulatorLifecycleService != null)
+                {
+                    await _emulatorLifecycleService.UninstallEmulatorWithDlcPreservationAsync(
+                        Instance, null, CancellationToken.None).ConfigureAwait(true);
+                }
+                else
+                {
+                    var refix = _emulatorRegistry.GetById("refix") as ReFixEmulator
+                        ?? new ReFixEmulator(_logger as ILogger<ReFixEmulator> ?? LoggerFactory.Create(_ => {}).CreateLogger<ReFixEmulator>());
+                    await refix.UninstallAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to cleanly uninstall previous emulator before online fix deployment");
+            }
+        }
+
+        // 2. Request UAC elevation and add Windows Defender exclusions for game, download cache, and temp deploy directories
+        var pathsToExclude = new List<string>();
+        if (!string.IsNullOrWhiteSpace(Instance.InstallPath))
+        {
+            pathsToExclude.Add(Instance.InstallPath);
+        }
+
+        var cacheDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BlueStar", "cache", "game_fixes");
+        pathsToExclude.Add(cacheDir);
+
+        var tempDeployDir = Path.Combine(Path.GetTempPath(), "BlueStar_FixDeploy");
+        pathsToExclude.Add(tempDeployDir);
+
+        StatusMessage = "🛡️ Adding Windows Defender exclusion for download and game directories...";
+        _logger.LogInformation("Requesting Windows Defender exclusion for {Count} paths: {Paths}", pathsToExclude.Count, string.Join(", ", pathsToExclude));
+        try
+        {
+            await AntivirusExclusionHelper.AddFolderExclusionAsync(pathsToExclude, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed adding Windows Defender exclusion");
+        }
+
+        // 3. Deploy the online fix
+        await ExecuteDeployGameFixAsync(fix, isOnlineFix: true).ConfigureAwait(true);
+    }
+
+    private async Task ExecuteDeployGameFixAsync(GameFixInfo fix, bool isOnlineFix = false)
+    {
+        if (Instance == null || fix == null || IsDeployingGameFix || IsDeployingEmulator) return;
 
         IsDeployingGameFix = true;
         IsGameFixDeployProgressVisible = true;
@@ -2273,11 +2634,18 @@ public partial class InstanceDetailViewModel : ObservableObject
                 var refreshed = await _instanceManager.GetByIdAsync(Instance.Id, CancellationToken.None).ConfigureAwait(true);
                 if (refreshed != null)
                 {
+                    if (isOnlineFix || fix.IsOnline)
+                    {
+                        refreshed = refreshed with
+                        {
+                            EmulatorEnabled = true,
+                            EmulatorId = "gamefix_online",
+                            InstalledEmulatorVersion = fix.Name
+                        };
+                        await _instanceManager.UpdateAsync(refreshed, CancellationToken.None).ConfigureAwait(true);
+                    }
                     Instance = refreshed;
                 }
-
-                InstalledFixLayers = new ObservableCollection<FixLayerInfo>(Instance.InstalledFixLayers ?? []);
-                HasInstalledFixLayers = InstalledFixLayers.Count > 0;
 
                 StatusMessage = $"✅ {fix.Name} installed successfully.";
                 _notificationService?.ShowSuccess("Fix Installed", $"{fix.Name} ({fix.TagsSummary}) deployed to {Instance.Name}.");
@@ -2333,6 +2701,20 @@ public partial class InstanceDetailViewModel : ObservableObject
                 return;
             }
 
+            // If it was an online fix layer, remove Windows Defender folder exclusions
+            if (layer.IsOnline && !string.IsNullOrWhiteSpace(Instance.InstallPath))
+            {
+                try
+                {
+                    await AntivirusExclusionHelper.RemoveFolderExclusionAsync(new[]
+                    {
+                        Instance.InstallPath,
+                        Path.Combine(Path.GetTempPath(), "BlueStar_FixDeploy")
+                    }, CancellationToken.None).ConfigureAwait(true);
+                }
+                catch { }
+            }
+
             var success = await _gameFixDeployService.UninstallFixLayerAsync(Instance, layer, progressReporter, CancellationToken.None).ConfigureAwait(true);
 
             if (success)
@@ -2340,11 +2722,18 @@ public partial class InstanceDetailViewModel : ObservableObject
                 var refreshed = await _instanceManager.GetByIdAsync(Instance.Id, CancellationToken.None).ConfigureAwait(true);
                 if (refreshed != null)
                 {
+                    if (layer.IsOnline)
+                    {
+                        refreshed = refreshed with
+                        {
+                            EmulatorEnabled = false,
+                            EmulatorId = null,
+                            InstalledEmulatorVersion = null
+                        };
+                        await _instanceManager.UpdateAsync(refreshed, CancellationToken.None).ConfigureAwait(true);
+                    }
                     Instance = refreshed;
                 }
-
-                InstalledFixLayers = new ObservableCollection<FixLayerInfo>(Instance.InstalledFixLayers ?? []);
-                HasInstalledFixLayers = InstalledFixLayers.Count > 0;
 
                 StatusMessage = $"✅ {layer.DisplayName} removed.";
                 _notificationService?.ShowInfo("Fix Removed", $"{layer.DisplayName} uninstalled and original files restored.");
@@ -2369,6 +2758,7 @@ public partial class InstanceDetailViewModel : ObservableObject
         }
     }
 
+
     [RelayCommand]
     public async Task DeployEmulatorOptionAsync(EmulatorOptionInfo? option)
     {
@@ -2379,6 +2769,28 @@ public partial class InstanceDetailViewModel : ObservableObject
             StatusMessage = "⚠ You must install or download the game before configuring an emulator.";
             _notificationService?.ShowWarning("Game Not Installed", "You must install or download the game before configuring an emulator.");
             return;
+        }
+
+        // Mutual Exclusion: If an Online game-specific fix is currently installed, remove it first
+        var onlineLayer = Instance.InstalledFixLayers?.FirstOrDefault(l => l.IsOnline);
+        if (onlineLayer != null || Instance.EmulatorId == "gamefix_online")
+        {
+            StatusMessage = "⏳ Removing existing Online fix before installing ReFix...";
+            if (!string.IsNullOrWhiteSpace(Instance.InstallPath))
+            {
+                try
+                {
+                    await AntivirusExclusionHelper.RemoveFolderExclusionAsync(Instance.InstallPath, CancellationToken.None).ConfigureAwait(true);
+                }
+                catch { }
+            }
+
+            if (onlineLayer != null && _gameFixDeployService != null)
+            {
+                await _gameFixDeployService.UninstallFixLayerAsync(Instance, onlineLayer, null, CancellationToken.None).ConfigureAwait(true);
+                var refreshed = await _instanceManager.GetByIdAsync(Instance.Id, CancellationToken.None).ConfigureAwait(true);
+                if (refreshed != null) Instance = refreshed;
+            }
         }
 
         IsDeployingEmulator = true;
@@ -2589,25 +3001,62 @@ public partial class InstanceDetailViewModel : ObservableObject
                 StatusMessage = $"⏳ {p.Message}";
             });
 
-            bool success;
-            if (_emulatorLifecycleService != null)
+            // Check if active emulator is an Online Fix layer
+            var onlineLayer = Instance.InstalledFixLayers?.FirstOrDefault(l => l.IsOnline);
+            if (onlineLayer != null || Instance.EmulatorId == "gamefix_online")
             {
-                success = await _emulatorLifecycleService.UninstallEmulatorWithDlcPreservationAsync(
-                    Instance, progressReporter, CancellationToken.None).ConfigureAwait(true);
+                if (!string.IsNullOrWhiteSpace(Instance.InstallPath))
+                {
+                    try
+                    {
+                        await AntivirusExclusionHelper.RemoveFolderExclusionAsync(new[]
+                        {
+                            Instance.InstallPath,
+                            Path.Combine(Path.GetTempPath(), "BlueStar_FixDeploy")
+                        }, CancellationToken.None).ConfigureAwait(true);
+                    }
+                    catch { }
+                }
+
+                if (onlineLayer != null && _gameFixDeployService != null)
+                {
+                    await _gameFixDeployService.UninstallFixLayerAsync(Instance, onlineLayer, progressReporter, CancellationToken.None).ConfigureAwait(true);
+                }
             }
             else
             {
-                var refix = _emulatorRegistry.GetById("refix") as ReFixEmulator
-                    ?? new ReFixEmulator(_logger as ILogger<ReFixEmulator> ?? LoggerFactory.Create(_ => {}).CreateLogger<ReFixEmulator>());
-                success = await refix.UninstallAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+                if (_emulatorLifecycleService != null)
+                {
+                    await _emulatorLifecycleService.UninstallEmulatorWithDlcPreservationAsync(
+                        Instance, progressReporter, CancellationToken.None).ConfigureAwait(true);
+                }
+                else
+                {
+                    var refix = _emulatorRegistry.GetById("refix") as ReFixEmulator
+                        ?? new ReFixEmulator(_logger as ILogger<ReFixEmulator> ?? LoggerFactory.Create(_ => {}).CreateLogger<ReFixEmulator>());
+                    await refix.UninstallAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+                }
             }
 
-            Instance = Instance with
+            var refreshed = await _instanceManager.GetByIdAsync(Instance.Id, CancellationToken.None).ConfigureAwait(true);
+            if (refreshed != null)
             {
-                EmulatorEnabled = false,
-                EmulatorId = null,
-                InstalledEmulatorVersion = null
-            };
+                Instance = refreshed with
+                {
+                    EmulatorEnabled = false,
+                    EmulatorId = null,
+                    InstalledEmulatorVersion = null
+                };
+            }
+            else
+            {
+                Instance = Instance with
+                {
+                    EmulatorEnabled = false,
+                    EmulatorId = null,
+                    InstalledEmulatorVersion = null
+                };
+            }
             await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
 
             StatusMessage = "✅ Emulator uninstalled. Original files restored.";
@@ -2624,6 +3073,7 @@ public partial class InstanceDetailViewModel : ObservableObject
             IsDeployingEmulator = false;
         }
     }
+
 
     [RelayCommand]
     public async Task ToggleEmulatorAsync()
@@ -2648,8 +3098,11 @@ public partial class InstanceDetailViewModel : ObservableObject
     public async Task SubmitFeedbackPositiveAsync()
     {
         if (Instance == null) return;
+        var onlineLayer = Instance.InstalledFixLayers?.FirstOrDefault(l => l.IsOnline);
+        var emuVer = onlineLayer?.Version ?? Instance.InstalledEmulatorVersion ?? "1.0";
+
         await _emulatorRatingService.SubmitVoteAsync(Instance.AppId, FeedbackOptionId, true, CancellationToken.None).ConfigureAwait(true);
-        await _emulatorRatingService.RecordUserVoteFlagAsync(Instance.Id, FeedbackOptionId, CancellationToken.None).ConfigureAwait(true);
+        await _emulatorRatingService.RecordUserVoteFlagAsync(Instance, FeedbackOptionId, emuVer, CancellationToken.None).ConfigureAwait(true);
         IsFeedbackModalOpen = false;
         StatusMessage = "👍 Thank you for your feedback! Upvote recorded in community statistics.";
         await LoadEmulatorsCoreAsync(forceReload: true).ConfigureAwait(true);
@@ -2659,8 +3112,11 @@ public partial class InstanceDetailViewModel : ObservableObject
     public async Task SubmitFeedbackNegativeAsync()
     {
         if (Instance == null) return;
+        var onlineLayer = Instance.InstalledFixLayers?.FirstOrDefault(l => l.IsOnline);
+        var emuVer = onlineLayer?.Version ?? Instance.InstalledEmulatorVersion ?? "1.0";
+
         await _emulatorRatingService.SubmitVoteAsync(Instance.AppId, FeedbackOptionId, false, CancellationToken.None).ConfigureAwait(true);
-        await _emulatorRatingService.RecordUserVoteFlagAsync(Instance.Id, FeedbackOptionId, CancellationToken.None).ConfigureAwait(true);
+        await _emulatorRatingService.RecordUserVoteFlagAsync(Instance, FeedbackOptionId, emuVer, CancellationToken.None).ConfigureAwait(true);
         ShowFeedbackUninstallPrompt = true;
         await LoadEmulatorsCoreAsync(forceReload: true).ConfigureAwait(true);
     }
@@ -2679,6 +3135,12 @@ public partial class InstanceDetailViewModel : ObservableObject
     {
         IsFeedbackModalOpen = false;
         ShowFeedbackUninstallPrompt = false;
+        if (Instance != null && !string.IsNullOrWhiteSpace(FeedbackOptionId))
+        {
+            var onlineLayer = Instance.InstalledFixLayers?.FirstOrDefault(l => l.IsOnline);
+            var emuVer = onlineLayer?.Version ?? Instance.InstalledEmulatorVersion ?? "1.0";
+            _ = _emulatorRatingService.RecordUserVoteFlagAsync(Instance, FeedbackOptionId, emuVer, CancellationToken.None);
+        }
     }
 
     public static bool IsDepotCompatibleWithCurrentOS(DepotInfo depot)
@@ -2984,8 +3446,12 @@ public partial class InstanceDetailViewModel : ObservableObject
             _ => "0 KB"
         };
 
+        OnPropertyChanged(nameof(SelectedDepotsCount));
+        OnPropertyChanged(nameof(SelectedDepotsSize));
+
         NotifyDownloadProps();
     }
+
 
     [RelayCommand]
     private void SelectAllDepots()
@@ -3101,16 +3567,18 @@ public partial class InstanceDetailViewModel : ObservableObject
         if (combinedDepots.Count == 0)
         {
             StatusMessage = "⚠ Please select at least one depot or DLC to download.";
+            _notificationService?.ShowWarning("No Depots Selected", "Please select at least one depot to download.");
             return;
         }
 
         var downloadInstance = Instance with { Depots = combinedDepots.AsReadOnly() };
-        StatusMessage = "📥 Download queued...";
+        StatusMessage = null;
         _ = _downloadQueueManager.StartDownloadAsync(downloadInstance);
 
         ActiveJob = _downloadQueueManager.Queue.FirstOrDefault(j => j.Instance.Id == Instance.Id);
         NotifyDownloadProps();
     }
+
 
     private static void ExtractManifestsToInstanceStorage(string zipPath, Guid instanceId)
     {
@@ -3142,6 +3610,7 @@ public partial class InstanceDetailViewModel : ObservableObject
     {
         if (Instance is null) return;
         await _downloadQueueManager.PauseAsync(Instance.Id).ConfigureAwait(true);
+        NotifyDownloadProps();
     }
 
     [RelayCommand]
@@ -3149,6 +3618,7 @@ public partial class InstanceDetailViewModel : ObservableObject
     {
         if (Instance is null) return;
         await _downloadQueueManager.ResumeAsync(Instance.Id).ConfigureAwait(true);
+        NotifyDownloadProps();
     }
 
     [RelayCommand]
@@ -3156,6 +3626,7 @@ public partial class InstanceDetailViewModel : ObservableObject
     {
         if (Instance is null) return;
         await _downloadQueueManager.CancelAsync(Instance.Id).ConfigureAwait(true);
+        NotifyDownloadProps();
     }
 
     [RelayCommand]
@@ -3163,7 +3634,9 @@ public partial class InstanceDetailViewModel : ObservableObject
     {
         if (Instance is null) return;
         await _downloadQueueManager.RetryAsync(Instance.Id).ConfigureAwait(true);
+        NotifyDownloadProps();
     }
+
 
     [RelayCommand]
     private async Task UnlockDlcsAsync()

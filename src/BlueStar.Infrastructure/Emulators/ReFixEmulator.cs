@@ -248,6 +248,16 @@ public sealed class ReFixEmulator : IEmulator
 
         _logger.LogInformation("Deploying ReFix ({Mode}) via ReFix_deploy scripts for {Name} at {Path}", onlineMode, instance.Name, instance.InstallPath);
 
+        // Verify that ReFix digital signature is installed in the system; if not, install it
+        try
+        {
+            await BlueStar.Infrastructure.Services.ReFixCertificateHelper.EnsureCertificateInstalledAsync(_logger, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Non-fatal error while ensuring ReFix certificate installation.");
+        }
+
         try
         {
             var targetDir = instance.InstallPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);

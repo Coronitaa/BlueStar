@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Threading.Tasks;
 using BlueStar.Core.Storage;
@@ -159,7 +159,9 @@ public class InstanceStorageManagerTests : IDisposable
         await _storageManager.CreateInstanceAsync(depotPath, instancePath);
 
         // Add a local unique file to the instance
-        File.WriteAllText(Path.Combine(instancePath, "steam_settings", "user.txt"), new string('B', 100));
+        var settingsDir = Path.Combine(instancePath, "steam_settings");
+        Directory.CreateDirectory(settingsDir);
+        File.WriteAllText(Path.Combine(settingsDir, "user.txt"), new string('B', 100));
 
         var stats = await _storageManager.GetStorageStatsAsync(instancePath);
 

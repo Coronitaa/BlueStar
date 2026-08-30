@@ -3,6 +3,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:BlueStar.App.ViewModels"
+             xmlns:controls="clr-namespace:BlueStar.App.Controls"
              d:DataContext="{d:DesignInstance vm:InstanceDetailViewModel}"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -76,7 +77,7 @@
                                 <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}"
                                       Stretch="Uniform" Width="32" Height="32"
                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Image Source="{Binding Instance.HeaderImageUrl}"
+                                <Image Source="{Binding Instance.HeaderImageUrl, Converter={StaticResource CachedImageConverter}}"
                                        Stretch="UniformToFill"
                                        RenderOptions.BitmapScalingMode="HighQuality"/>
                             </Grid>
@@ -143,11 +144,16 @@
                                             <DataTrigger Binding="{Binding Instance.Status}" Value="NotInstalled">
                                                 <Setter Property="Content" Value="📥 Install Game"/>
                                             </DataTrigger>
+                                            <DataTrigger Binding="{Binding HasActiveJob}" Value="True">
+                                                <Setter Property="Content" Value="{Binding InstanceDownloadLabel, StringFormat='📥 Downloading {0}'}"/>
+                                                <Setter Property="IsEnabled" Value="False"/>
+                                            </DataTrigger>
                                             <DataTrigger Binding="{Binding IsGameRunning}" Value="True">
                                                 <Setter Property="Content" Value="⏹ Stop Process"/>
                                                 <Setter Property="Background" Value="{StaticResource DangerBrush}"/>
                                             </DataTrigger>
                                         </Style.Triggers>
+
                                     </Style>
                                 </Button.Style>
                             </Button>
@@ -161,7 +167,8 @@
                         BorderThickness="1"
                         CornerRadius="{StaticResource RadiusMd}"
                         Padding="14,10" Margin="0,0,0,16"
-                        Visibility="{Binding StatusMessage, Converter={StaticResource NullToVisibilityConverter}}">
+                        Visibility="{Binding IsStatusMessageVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+
                     <StackPanel>
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -182,6 +189,74 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ═══ ACTIVE DOWNLOAD PROGRESS CARD ═══ -->
+                <Border Background="{StaticResource SurfaceCardBrush}"
+                        BorderBrush="{StaticResource AccentBrush}"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource RadiusMd}"
+                        Padding="16,12" Margin="0,0,0,16"
+                        Visibility="{Binding HasActiveJob, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="📥 " FontSize="14" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding ActiveJob.StatusMessage, FallbackValue='Downloading game files...'}"
+                                           FontWeight="SemiBold" FontSize="13"
+                                           Foreground="{StaticResource PrimaryTextBrush}"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding ActiveJob.FormattedSpeed, StringFormat='  •  {0}'}"
+                                           Style="{StaticResource Caption}"
+                                           Foreground="{StaticResource AccentBrush}"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center"
+                                           Visibility="{Binding ActiveJob.IsDownloading, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <TextBlock Text="{Binding ActiveJob.FormattedEta, StringFormat='  •  ETA: {0}'}"
+                                           Style="{StaticResource Caption}"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           VerticalAlignment="Center"
+                                           Visibility="{Binding ActiveJob.IsDownloading, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding ActiveJob.Percentage, StringFormat='{}{0:F1}%'}"
+                                           FontWeight="Bold" FontSize="14"
+                                           Foreground="{StaticResource AccentBrush}"
+                                           Margin="0,0,12,0" VerticalAlignment="Center"/>
+
+                                <!-- Pause Button -->
+                                <Button Content="⏸ Pause" Style="{StaticResource SecondaryButton}" Padding="10,4" FontSize="11" Margin="0,0,6,0"
+                                        Command="{Binding PauseDownloadCommand}"
+                                        Visibility="{Binding ActiveJob.CanPause, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                                <!-- Resume Button -->
+                                <Button Content="▶ Resume" Style="{StaticResource PrimaryButton}" Padding="10,4" FontSize="11" Margin="0,0,6,0"
+                                        Command="{Binding ResumeDownloadCommand}"
+                                        Visibility="{Binding ActiveJob.CanResume, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                                <!-- Cancel Button -->
+                                <Button Content="❌ Cancel" Style="{StaticResource SecondaryButton}" Padding="10,4" FontSize="11" Margin="0,0,6,0"
+                                        Command="{Binding CancelDownloadCommand}"
+                                        Visibility="{Binding ActiveJob.CanCancel, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                                <!-- Retry Button -->
+                                <Button Content="🔄 Retry" Style="{StaticResource PrimaryButton}" Padding="10,4" FontSize="11"
+                                        Command="{Binding RetryDownloadCommand}"
+                                        Visibility="{Binding ActiveJob.CanRetry, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <ProgressBar Value="{Binding ActiveJob.Percentage}" Maximum="100" Height="8"
+                                     Foreground="{StaticResource AccentBrush}"
+                                     Background="{StaticResource SurfaceInputBrush}"
+                                     BorderThickness="0"/>
+                    </StackPanel>
+                </Border>
+
                 <!-- ═══ MODRINTH-STYLE DYNAMIC TAB BAR ═══ -->
                 <Border Background="{StaticResource SurfaceCardBrush}"
                         BorderBrush="{StaticResource SubtleBorderBrush}"
@@ -191,6 +266,7 @@
                         Margin="0,0,0,20">
                     <StackPanel Orientation="Horizontal">
                         <RadioButton Style="{StaticResource TabRadioButton}" Content="Overview"
+
                                      IsChecked="{Binding SelectedTab, Converter={StaticResource StringMatchConverter}, ConverterParameter=Overview}"
                                      Command="{Binding SwitchTabCommand}" CommandParameter="Overview"/>
 
@@ -385,15 +461,42 @@
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
 
+                                                <!-- Checkbox -->
                                                 <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" VerticalAlignment="Center" Margin="0,0,12,0"/>
 
-                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding DisplayName}" Style="{StaticResource BodyMedium}"/>
+                                                <!-- DLC Thumbnail (only for DLC depots that have an image) -->
+                                                <Border Grid.Column="1"
+                                                        Width="52" Height="36"
+                                                        CornerRadius="{StaticResource RadiusSm}"
+                                                        ClipToBounds="True"
+                                                        Margin="0,0,12,0"
+                                                        Visibility="{Binding ImageUrl, Converter={StaticResource NullToVisibilityConverter}}">
+                                                    <Image Source="{Binding ImageUrl}"
+                                                           Stretch="UniformToFill"
+                                                           VerticalAlignment="Center"/>
+                                                </Border>
+
+                                                <!-- Name + Subtitle -->
+                                                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                                    <!-- Name row: star badge inline if recommended -->
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <!-- Recommended star badge -->
+                                                        <Border Background="#1F3A1A" BorderBrush="#2D5A27" BorderThickness="1"
+                                                                CornerRadius="{StaticResource RadiusSm}" Padding="5,1"
+                                                                Margin="0,0,6,0" VerticalAlignment="Center"
+                                                                Visibility="{Binding IsRecommended, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                                ToolTip="Steam auto-installs this depot for Windows">
+                                                            <TextBlock Text="⭐ Recommended" FontSize="10" FontWeight="SemiBold"
+                                                                       Foreground="#4ADE80"/>
+                                                        </Border>
+                                                        <TextBlock Text="{Binding DisplayName}" Style="{StaticResource BodyMedium}" VerticalAlignment="Center"/>
+                                                    </StackPanel>
 
                                                     <!-- Regular User Mode (Simple) -->
                                                     <TextBlock Text="{Binding Depot.DepotId, StringFormat='Depot ID: {0}'}" Style="{StaticResource Caption}"
@@ -430,7 +533,8 @@
                                                     </StackPanel>
                                                 </StackPanel>
 
-                                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,14,0">
+                                                <!-- Tags: Installed, Category, Platform, Architecture -->
+                                                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,14,0">
                                                     <Border Background="{StaticResource SuccessBgBrush}" BorderBrush="{StaticResource SuccessBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,2" Margin="0,0,6,0"
                                                             Visibility="{Binding IsDownloaded, Converter={StaticResource BoolToVisibilityConverter}}">
                                                         <TextBlock Text="✓ Installed" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource SuccessBrush}"/>
@@ -447,7 +551,8 @@
                                                     </Border>
                                                 </StackPanel>
 
-                                                <TextBlock Grid.Column="3" Text="{Binding FormattedSize}" Style="{StaticResource CaptionBold}" VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}"/>
+                                                <!-- Size -->
+                                                <TextBlock Grid.Column="4" Text="{Binding FormattedSize}" Style="{StaticResource CaptionBold}" VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}"/>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
@@ -466,21 +571,23 @@
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                     <TextBlock Style="{StaticResource BodyMedium}">
                                         <Run Text="{Binding SelectedDepotsCount, Mode=OneWay}"/>
-                                        <Run Text=" depots selected ("/>
-                                        <Run Text="{Binding SelectedDepotsSize, Mode=OneWay}"/>
-                                        <Run Text=")"/>
+                                        <Run Text=" depot(s) selected"/>
+                                        <Run Text=" — "/>
+                                        <Run Text="{Binding SelectedDepotsSize, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
                                     </TextBlock>
                                     <TextBlock Text="Requires network connection and active Steam session or anonymous depot access." Style="{StaticResource Caption}" Margin="0,2,0,0"/>
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Button Content="⬇ Download Selected"
+                                    <Button Content="{Binding DownloadButtonText}"
                                             Style="{StaticResource PrimaryButton}"
                                             Padding="16,10"
                                             Command="{Binding DownloadSelectedDepotsCommand}"
                                             IsEnabled="{Binding CanStartDownload}"/>
                                 </StackPanel>
+
                             </Grid>
+
                         </StackPanel>
                     </Border>
 
@@ -643,7 +750,7 @@
 
                                                 <!-- DLC Thumbnail (Standard 460:215 aspect ratio: 77x36) -->
                                                 <Border Grid.Column="1" CornerRadius="4" ClipToBounds="True" Width="77" Height="36" Background="{StaticResource SurfaceCardBrush}">
-                                                    <Image Source="{Binding HeaderImageUrl}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                    <Image Source="{Binding HeaderImageUrl, Converter={StaticResource CachedImageConverter}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                                                 </Border>
 
                                                 <StackPanel Grid.Column="3" VerticalAlignment="Center">
@@ -1012,8 +1119,9 @@
                         </Grid>
                     </Border>
 
-                    <!-- ═══ 1. CURRENTLY INSTALLED EMULATOR CARD ═══ -->
-                    <Border Style="{StaticResource Card}" Margin="0,0,0,18">
+                    <!-- ═══ 1. CURRENTLY INSTALLED EMULATOR CARD (EMULATOR STATUS) ═══ -->
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,18"
+                            BorderBrush="{StaticResource AccentBrush}" BorderThickness="1.5">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -1053,7 +1161,7 @@
                                         </TextBlock>
                                     </Border>
                                 </StackPanel>
-                                <TextBlock Text="ReFix enables online multiplayer via Steam Spacewar (AppID 480) or local LAN multiplayer via Goldberg without requiring Steam."
+                                <TextBlock Text="Active emulation layer enabling online or local multiplayer without requiring the original Steam client."
                                            Style="{StaticResource Caption}"/>
                             </StackPanel>
 
@@ -1068,132 +1176,23 @@
                         </Grid>
                     </Border>
 
-                    <!-- ═══ 2. TOP COMMUNITY RECOMMENDED BLOCK (HIGHLIGHTED) ═══ -->
-                    <Border Margin="0,0,0,18" CornerRadius="{StaticResource RadiusMd}"
-                            Background="{StaticResource AccentBgBrush}"
-                            BorderBrush="{StaticResource AccentBrush}"
-                            BorderThickness="1.5"
-                            Padding="20"
-                            Visibility="{Binding RecommendedEmulatorOption, Converter={StaticResource NullToVisibilityConverter}}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Grid.Column="0">
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <Border Background="{StaticResource AccentBrush}" CornerRadius="{StaticResource RadiusXs}" Padding="8,3" Margin="0,0,10,0">
-                                        <TextBlock Text="⭐ COMMUNITY RECOMMENDED" FontSize="11" FontWeight="Bold" Foreground="{StaticResource InverseTextBrush}"/>
-                                    </Border>
-                                    <Border Background="{StaticResource SuccessBgBrush}" BorderBrush="{StaticResource SuccessBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusXs}" Padding="8,3"
-                                            Visibility="{Binding RecommendedEmulatorOption.HasEnoughVotesForScore, Converter={StaticResource BoolToVisibilityConverter}}">
-                                        <TextBlock Text="{Binding RecommendedEmulatorOption.ScorePercentage, StringFormat='{}{0:F0}% success rate'}"
-                                                   FontSize="11" FontWeight="Bold" Foreground="{StaticResource SuccessBrush}"/>
-                                    </Border>
-                                </StackPanel>
-
-                                <TextBlock Text="{Binding RecommendedEmulatorOption.Name}" Style="{StaticResource H2}" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,4"/>
-                                <TextBlock Text="{Binding RecommendedEmulatorOption.Description}" Style="{StaticResource Body}" Margin="0,0,0,10"/>
-
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{Binding RecommendedEmulatorOption.PositiveVotes, StringFormat='👍 {0} upvotes'}"
-                                               FontSize="12" Foreground="{StaticResource SuccessBrush}" Margin="0,0,14,0"/>
-                                    <TextBlock Text="{Binding RecommendedEmulatorOption.NegativeVotes, StringFormat='👎 {0} downvotes'}"
-                                               FontSize="12" Foreground="{StaticResource DangerBrush}" Margin="0,0,14,0"/>
-                                    <TextBlock Text="{Binding RecommendedEmulatorOption.TotalVotes, StringFormat='(Total: {0} global votes)'}"
-                                               FontSize="12" Foreground="{StaticResource MutedTextBrush}"/>
-                                </StackPanel>
-                            </StackPanel>
-
-                            <Button Grid.Column="1"
-                                    Content="⚡ Install Recommended Option"
-                                    Style="{StaticResource PrimaryButton}"
-                                    Padding="18,12"
-                                    VerticalAlignment="Center"
-                                    Command="{Binding DeployEmulatorOptionCommand}"
-                                    CommandParameter="{Binding RecommendedEmulatorOption}"
-                                    IsEnabled="{Binding CanDeployEmulator}"/>
-                        </Grid>
-                    </Border>
-
-                    <!-- ═══ 3. ALL REFIX EMULATOR OPTIONS LIST ═══ -->
-                    <Border Style="{StaticResource Card}">
-                        <StackPanel>
-                            <TextBlock Text="Available ReFix Emulation Options" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                            <TextBlock Text="Configurations compatible with this game engine ordered by global community rating:"
-                                       Style="{StaticResource Caption}" Margin="0,0,0,16"/>
-
-                            <ItemsControl ItemsSource="{Binding AvailableEmulatorOptions}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Background="{StaticResource SurfaceInputBrush}"
-                                                BorderBrush="{StaticResource SubtleBorderBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="{StaticResource RadiusMd}"
-                                                Padding="16,14" Margin="0,0,0,10">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-
-                                                <StackPanel Grid.Column="0">
-                                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                                        <TextBlock Text="{Binding Name}" Style="{StaticResource BodyMedium}" FontWeight="Bold" Margin="0,0,10,0"/>
-                                                        <Border Background="{StaticResource InfoBgBrush}" BorderBrush="{StaticResource InfoBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusXs}" Padding="6,2" Margin="0,0,8,0">
-                                                            <TextBlock Text="{Binding BadgeText}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource InfoBrush}"/>
-                                                        </Border>
-                                                        <Border Background="{StaticResource SurfaceCardBrush}" CornerRadius="{StaticResource RadiusXs}" Padding="6,2"
-                                                                Visibility="{Binding HasEnoughVotesForScore, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                            <TextBlock Text="{Binding ScorePercentage, StringFormat='{}{0:F0}% Positive'}" FontSize="11" FontWeight="Bold" Foreground="{StaticResource SuccessBrush}"/>
-                                                        </Border>
-                                                    </StackPanel>
-
-                                                    <TextBlock Text="{Binding Description}" Style="{StaticResource Caption}" Margin="0,0,0,8"/>
-
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="{Binding PositiveVotes, StringFormat='👍 {0}'}" FontSize="11" Foreground="{StaticResource SuccessBrush}" Margin="0,0,12,0"/>
-                                                        <TextBlock Text="{Binding NegativeVotes, StringFormat='👎 {0}'}" FontSize="11" Foreground="{StaticResource DangerBrush}" Margin="0,0,12,0"/>
-                                                        <TextBlock Text="{Binding TotalVotes, StringFormat='({0} ratings)'}" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
-                                                    </StackPanel>
-                                                </StackPanel>
-
-                                                <!-- Install Button -->
-                                                <Button Grid.Column="1"
-                                                        Content="📥 Install"
-                                                        Style="{StaticResource SecondaryButton}"
-                                                        Padding="16,9"
-                                                        VerticalAlignment="Center"
-                                                        Command="{Binding DataContext.DeployEmulatorOptionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                        CommandParameter="{Binding}"
-                                                        IsEnabled="{Binding DataContext.CanDeployEmulator, RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
-
-
-
-                    <!-- ═══ 5. ACTIVE INSTALLED FIX LAYERS STACK ═══ -->
-                    <Border Style="{StaticResource Card}" Margin="0,18,0,0"
+                    <!-- ═══ 2. ACTIVE INSTALLED FIX LAYERS STACK (POSITIONED DIRECTLY BELOW EMULATOR STATUS) ═══ -->
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,18"
+                            BorderBrush="#8B5CF6" BorderThickness="1.5"
                             Visibility="{Binding HasInstalledFixLayers, Converter={StaticResource BoolToVisibilityConverter}}">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                                 <TextBlock Text="Active Fix &amp; Emulator Layers" Style="{StaticResource H2}"/>
                                 <Border Background="{StaticResource SuccessBgBrush}" BorderBrush="{StaticResource SuccessBrush}" BorderThickness="1"
                                         CornerRadius="{StaticResource RadiusXs}" Padding="8,2" Margin="12,0,0,0" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding InstalledFixLayers.Count, StringFormat='{}{0} Stacked Layers'}"
+                                    <TextBlock Text="{Binding NonOnlineInstalledFixLayers.Count, StringFormat='{}{0} Stacked Layers'}"
                                                FontSize="11" FontWeight="Bold" Foreground="{StaticResource SuccessBrush}"/>
                                 </Border>
                             </StackPanel>
-                            <TextBlock Text="Currently active and stacked layers on this instance (LIFO Stack):"
+                            <TextBlock Text="Currently active layers on this instance:"
                                        Style="{StaticResource Caption}" Margin="0,0,0,16"/>
 
-                            <ItemsControl ItemsSource="{Binding InstalledFixLayers}">
+                            <ItemsControl ItemsSource="{Binding NonOnlineInstalledFixLayers}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Border Background="{StaticResource SurfaceInputBrush}"
@@ -1237,14 +1236,154 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- ═══ 6. SPECIFIC EMULATORS & GAME FIXES ═══ -->
-                    <Border Style="{StaticResource Card}" Margin="0,18,0,0"
+                    <!-- ═══ 3. TOP COMMUNITY RECOMMENDED BLOCK (HIGHLIGHTED) ═══ -->
+                    <Border Margin="0,0,0,18" CornerRadius="{StaticResource RadiusMd}"
+                            Background="{StaticResource AccentBgBrush}"
+                            BorderBrush="{StaticResource AccentBrush}"
+                            BorderThickness="1.5"
+                            Padding="20"
+                            Visibility="{Binding RecommendedEmulatorOption, Converter={StaticResource NullToVisibilityConverter}}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <Border Background="{StaticResource AccentBrush}" CornerRadius="{StaticResource RadiusXs}" Padding="8,3" Margin="0,0,10,0">
+                                        <TextBlock Text="⭐ COMMUNITY RECOMMENDED" FontSize="11" FontWeight="Bold" Foreground="{StaticResource InverseTextBrush}"/>
+                                    </Border>
+                                    <Border Background="{StaticResource SuccessBgBrush}" BorderBrush="{StaticResource SuccessBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusXs}" Padding="8,3"
+                                            Visibility="{Binding RecommendedEmulatorOption.HasEnoughVotesForScore, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <TextBlock Text="{Binding RecommendedEmulatorOption.ScorePercentage, StringFormat='{}{0:F0}% success rate'}"
+                                                   FontSize="11" FontWeight="Bold" Foreground="{StaticResource SuccessBrush}"/>
+                                    </Border>
+                                </StackPanel>
+
+                                <TextBlock Text="{Binding RecommendedEmulatorOption.Name}" Style="{StaticResource H2}" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{Binding RecommendedEmulatorOption.Description}" Style="{StaticResource Body}" Margin="0,0,0,10"/>
+
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding RecommendedEmulatorOption.PositiveVotes, StringFormat='👍 {0} upvotes'}"
+                                               FontSize="12" Foreground="{StaticResource SuccessBrush}" Margin="0,0,14,0"/>
+                                    <TextBlock Text="{Binding RecommendedEmulatorOption.NegativeVotes, StringFormat='👎 {0} downvotes'}"
+                                               FontSize="12" Foreground="{StaticResource DangerBrush}" Margin="0,0,14,0"/>
+                                    <TextBlock Text="{Binding RecommendedEmulatorOption.TotalVotes, StringFormat='(Total: {0} global votes)'}"
+                                               FontSize="12" Foreground="{StaticResource MutedTextBrush}"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <!-- Green Shield with Checkmark (Tick) - Standalone Icon -->
+                                <Viewbox Width="24" Height="24" Margin="0,0,14,0" Cursor="Hand" ToolTipService.InitialShowDelay="50" VerticalAlignment="Center">
+                                    <Path Fill="{StaticResource SuccessBrush}"
+                                          Data="M12 2L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-3zm-2 15l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/>
+                                    <Viewbox.ToolTip>
+                                        <ToolTip Background="{StaticResource SurfaceCardElevatedBrush}" BorderBrush="{StaticResource SuccessBrush}" BorderThickness="1.5" Padding="14,10">
+                                            <StackPanel MaxWidth="340">
+                                                <TextBlock Text="Safe &amp; Verified Emulator" FontWeight="Bold" FontSize="13" Foreground="{StaticResource SuccessBrush}" Margin="0,0,0,6" TextWrapping="Wrap"/>
+                                                <TextBlock Text="• 100% Open-source codebase" Style="{StaticResource Caption}" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,3" TextWrapping="Wrap"/>
+                                                <TextBlock Text="• Passed clean tests across major antivirus vendors" Style="{StaticResource Caption}" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,3" TextWrapping="Wrap"/>
+                                                <TextBlock Text="• Rare to zero false-positive detections" Style="{StaticResource Caption}" Foreground="{StaticResource PrimaryTextBrush}" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </Viewbox.ToolTip>
+                                </Viewbox>
+
+                                <Button Content="⚡ Install Recommended Option"
+                                        Style="{StaticResource PrimaryButton}"
+                                        Padding="18,12"
+                                        Command="{Binding DeployEmulatorOptionCommand}"
+                                        CommandParameter="{Binding RecommendedEmulatorOption}"
+                                        IsEnabled="{Binding CanDeployEmulator}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- ═══ 4. ALL REFIX EMULATOR OPTIONS LIST ═══ -->
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,18">
+                        <StackPanel>
+                            <TextBlock Text="Available ReFix Emulation Options" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                            <TextBlock Text="Configurations compatible with this game engine ordered by global community rating:"
+                                       Style="{StaticResource Caption}" Margin="0,0,0,16"/>
+
+                            <ItemsControl ItemsSource="{Binding AvailableEmulatorOptions}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{StaticResource SurfaceInputBrush}"
+                                                BorderBrush="{StaticResource SubtleBorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="{StaticResource RadiusMd}"
+                                                Padding="16,14" Margin="0,0,0,10">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <StackPanel Grid.Column="0">
+                                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                        <TextBlock Text="{Binding Name}" Style="{StaticResource BodyMedium}" FontWeight="Bold" Margin="0,0,10,0"/>
+                                                        <Border Background="{StaticResource InfoBgBrush}" BorderBrush="{StaticResource InfoBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusXs}" Padding="6,2" Margin="0,0,8,0">
+                                                            <TextBlock Text="{Binding BadgeText}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource InfoBrush}"/>
+                                                        </Border>
+                                                        <Border Background="{StaticResource SurfaceCardBrush}" CornerRadius="{StaticResource RadiusXs}" Padding="6,2"
+                                                                Visibility="{Binding HasEnoughVotesForScore, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                            <TextBlock Text="{Binding ScorePercentage, StringFormat='{}{0:F0}% Positive'}" FontSize="11" FontWeight="Bold" Foreground="{StaticResource SuccessBrush}"/>
+                                                        </Border>
+                                                    </StackPanel>
+
+                                                    <TextBlock Text="{Binding Description}" Style="{StaticResource Caption}" Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding PositiveVotes, StringFormat='👍 {0}'}" FontSize="11" Foreground="{StaticResource SuccessBrush}" Margin="0,0,12,0"/>
+                                                        <TextBlock Text="{Binding NegativeVotes, StringFormat='👎 {0}'}" FontSize="11" Foreground="{StaticResource DangerBrush}" Margin="0,0,12,0"/>
+                                                        <TextBlock Text="{Binding TotalVotes, StringFormat='({0} ratings)'}" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
+                                                    </StackPanel>
+                                                </StackPanel>
+
+                                                <!-- Action Area: Standalone Green Shield Icon + Install Button -->
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <!-- Green Shield with Checkmark (Tick) - Standalone Icon -->
+                                                    <Viewbox Width="20" Height="20" Margin="0,0,12,0" Cursor="Hand" ToolTipService.InitialShowDelay="50" VerticalAlignment="Center">
+                                                        <Path Fill="{StaticResource SuccessBrush}"
+                                                              Data="M12 2L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-3zm-2 15l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/>
+                                                        <Viewbox.ToolTip>
+                                                            <ToolTip Background="{StaticResource SurfaceCardElevatedBrush}" BorderBrush="{StaticResource SuccessBrush}" BorderThickness="1.5" Padding="14,10">
+                                                                <StackPanel MaxWidth="340">
+                                                                    <TextBlock Text="Safe &amp; Verified Emulator" FontWeight="Bold" FontSize="13" Foreground="{StaticResource SuccessBrush}" Margin="0,0,0,6" TextWrapping="Wrap"/>
+                                                                    <TextBlock Text="• 100% Open-source codebase" Style="{StaticResource Caption}" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,3" TextWrapping="Wrap"/>
+                                                                    <TextBlock Text="• Passed clean tests across major antivirus vendors" Style="{StaticResource Caption}" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,3" TextWrapping="Wrap"/>
+                                                                    <TextBlock Text="• Rare to zero false-positive detections" Style="{StaticResource Caption}" Foreground="{StaticResource PrimaryTextBrush}" TextWrapping="Wrap"/>
+                                                                </StackPanel>
+                                                            </ToolTip>
+                                                        </Viewbox.ToolTip>
+                                                    </Viewbox>
+
+                                                    <Button Content="📥 Install"
+                                                            Style="{StaticResource SecondaryButton}"
+                                                            Padding="16,9"
+                                                            Command="{Binding DataContext.DeployEmulatorOptionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            CommandParameter="{Binding}"
+                                                            IsEnabled="{Binding DataContext.CanDeployEmulator, RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- ═══ 5. SPECIFIC EMULATORS & GAME FIXES (CATEGORIZED: ONLINE, BYPASS, HYPERVISOR) ═══ -->
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,0"
                             Visibility="{Binding IsSpecificFixesSectionVisible, Converter={StaticResource BoolToVisibilityConverter}}">
                         <StackPanel>
                             <Grid Margin="0,0,0,4">
                                 <StackPanel>
-                                    <TextBlock Text="Game-Specific Emulators" Style="{StaticResource H2}"/>
-                                    <TextBlock Text="Tested emulators and fixes for this game."
+                                    <TextBlock Text="Game-Specific Emulators &amp; Fixes" Style="{StaticResource H2}"/>
+                                    <TextBlock Text="Tested game fixes and specialized emulators from DepotBox catalog."
                                                Style="{StaticResource Caption}" Margin="0,2,0,0"/>
                                 </StackPanel>
                             </Grid>
@@ -1276,52 +1415,223 @@
                                 </Grid>
                             </Border>
 
-                            <!-- Available Game Fixes List -->
-                            <ItemsControl ItemsSource="{Binding AvailableGameFixes}" Margin="0,6,0,0">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Background="{StaticResource SurfaceInputBrush}"
-                                                BorderBrush="{StaticResource SubtleBorderBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="{StaticResource RadiusMd}"
-                                                Padding="16,14" Margin="0,0,0,10">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
+                            <!-- ── 5A. ONLINE MULTIPLAYER EMULATORS ── -->
+                            <StackPanel Visibility="{Binding HasOnlineGameFixes, Converter={StaticResource BoolToVisibilityConverter}}" Margin="0,6,0,16">
+                                <TextBlock Text="🌐 Online Multiplayer Emulators" Style="{StaticResource BodyMedium}" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,4"/>
+                                <TextBlock Text="Tested online multiplayer fixes for this game."
+                                           Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,10"/>
 
-                                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
-                                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                                        <TextBlock Text="{Binding Name}" Style="{StaticResource BodyMedium}" FontWeight="Bold" Margin="0,0,10,0"/>
-                                                        <Border Background="{StaticResource AccentBgBrush}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusXs}" Padding="6,2" Margin="0,0,8,0">
-                                                            <TextBlock Text="{Binding TagsSummary}" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
-                                                        </Border>
-                                                        <Border Background="{StaticResource SurfaceCardBrush}" CornerRadius="{StaticResource RadiusXs}" Padding="6,2">
-                                                            <TextBlock Text="{Binding FormattedSize}" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
-                                                        </Border>
+                                <ItemsControl ItemsSource="{Binding OnlineGameFixes}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{StaticResource SurfaceInputBrush}"
+                                                    BorderBrush="{StaticResource SubtleBorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="{StaticResource RadiusMd}"
+                                                    Padding="16,14" Margin="0,0,0,10">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                            <TextBlock Text="{Binding Name}" Style="{StaticResource BodyMedium}" FontWeight="Bold" Margin="0,0,10,0"/>
+                                                            <Border Background="{StaticResource AccentBgBrush}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusXs}" Padding="6,2" Margin="0,0,8,0">
+                                                                <TextBlock Text="ONLINE" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
+                                                            </Border>
+                                                            <!-- Score Percentage Badge if enough votes -->
+                                                            <Border Background="{StaticResource SurfaceCardBrush}" CornerRadius="{StaticResource RadiusXs}" Padding="6,2" Margin="0,0,8,0"
+                                                                    Visibility="{Binding HasEnoughVotesForScore, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                                <TextBlock Text="{Binding ScorePercentage, StringFormat='{}{0:F0}% Positive'}" FontSize="11" FontWeight="Bold" Foreground="{StaticResource SuccessBrush}"/>
+                                                            </Border>
+                                                        </StackPanel>
+
+                                                        <TextBlock Text="{Binding Description, FallbackValue='Specific online multiplayer fix for this game.'}"
+                                                                   Style="{StaticResource Caption}" Margin="0,0,0,6" TextWrapping="Wrap"/>
+
+                                                        <!-- Community Ratings Stats (Read-Only on card; votes submitted via game exit feedback modal) -->
+                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding PositiveVotes, StringFormat='👍 {0}'}" FontSize="11" Foreground="{StaticResource SuccessBrush}" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                                            <TextBlock Text="{Binding NegativeVotes, StringFormat='👎 {0}'}" FontSize="11" Foreground="{StaticResource DangerBrush}" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                                            <TextBlock Text="{Binding TotalVotes, StringFormat='({0} ratings)'}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                                                        </StackPanel>
                                                     </StackPanel>
 
-                                                    <TextBlock Text="{Binding Description, FallbackValue='Specific emulator fix for this game.'}"
-                                                               Style="{StaticResource Caption}" Margin="0,0,0,4" TextWrapping="Wrap"/>
-                                                    <TextBlock Text="{Binding DownloadName, StringFormat='📦 Archive: {0}'}"
-                                                               Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}"/>
-                                                </StackPanel>
+                                                    <!-- Action Area: Standalone Orange Shield Icon + Install Online Fix Button -->
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <!-- Orange Shield with Exclamation Mark (!) - Standalone Icon -->
+                                                        <Viewbox Width="20" Height="20" Margin="0,0,12,0" Cursor="Hand" ToolTipService.InitialShowDelay="50" VerticalAlignment="Center">
+                                                            <Path Fill="{StaticResource WarningBrush}"
+                                                                  Data="M12 2L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-3zm1 14h-2v-2h2v2zm0-4h-2V7h2v5z"/>
+                                                            <Viewbox.ToolTip>
+                                                                <ToolTip Background="{StaticResource SurfaceCardElevatedBrush}" BorderBrush="{StaticResource WarningBrush}" BorderThickness="1.5" Padding="14,10">
+                                                                    <StackPanel MaxWidth="340">
+                                                                        <TextBlock Text="Third-Party Closed-Source Fix" FontWeight="Bold" FontSize="13" Foreground="{StaticResource WarningBrush}" Margin="0,0,0,6" TextWrapping="Wrap"/>
+                                                                        <TextBlock Text="• Highly popular &amp; widely used by the community" Style="{StaticResource Caption}" FontWeight="SemiBold" Foreground="{StaticResource SuccessBrush}" Margin="0,0,0,3" TextWrapping="Wrap"/>
+                                                                        <TextBlock Text="• Closed-source third-party binaries" Style="{StaticResource Caption}" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,3" TextWrapping="Wrap"/>
+                                                                        <TextBlock Text="• Code is obfuscated / packed" Style="{StaticResource Caption}" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,3" TextWrapping="Wrap"/>
+                                                                        <TextBlock Text="• Requires Windows Defender exclusion to function" Style="{StaticResource Caption}" Foreground="{StaticResource PrimaryTextBrush}" TextWrapping="Wrap"/>
+                                                                    </StackPanel>
+                                                                </ToolTip>
+                                                            </Viewbox.ToolTip>
+                                                        </Viewbox>
 
-                                                <!-- Install Button -->
-                                                <Button Grid.Column="1"
-                                                        Content="📥 Install Fix"
-                                                        Style="{StaticResource PrimaryButton}"
-                                                        Padding="16,9"
-                                                        VerticalAlignment="Center"
-                                                        Command="{Binding DataContext.DeployGameFixCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                        CommandParameter="{Binding}"
-                                                        IsEnabled="{Binding DataContext.CanDeployEmulator, RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                                                        <Button Content="📥 Install Online Fix"
+                                                                Style="{StaticResource PrimaryButton}"
+                                                                Padding="16,9"
+                                                                Command="{Binding DataContext.DeployGameFixCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                CommandParameter="{Binding}"
+                                                                IsEnabled="{Binding DataContext.CanDeployEmulator, RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
+                            <!-- ── 5B. DRM & LICENSE BYPASS LAYERS ── -->
+                            <StackPanel Visibility="{Binding HasBypassGameFixes, Converter={StaticResource BoolToVisibilityConverter}}" Margin="0,0,0,16">
+                                <TextBlock Text="⚡ DRM &amp; License Bypass Layers" Style="{StaticResource BodyMedium}" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,4"/>
+                                <TextBlock Text="License and DRM bypass layers for this game."
+                                           Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,10"/>
+
+                                <ItemsControl ItemsSource="{Binding BypassGameFixes}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{StaticResource SurfaceInputBrush}"
+                                                    BorderBrush="{StaticResource SubtleBorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="{StaticResource RadiusMd}"
+                                                    Padding="16,14" Margin="0,0,0,10">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                            <TextBlock Text="{Binding Name}" Style="{StaticResource BodyMedium}" FontWeight="Bold" Margin="0,0,10,0"/>
+                                                            <Border Background="{StaticResource AccentBgBrush}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusXs}" Padding="6,2" Margin="0,0,8,0">
+                                                                <TextBlock Text="BYPASS" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
+                                                            </Border>
+                                                        </StackPanel>
+
+                                                        <TextBlock Text="{Binding Description, FallbackValue='DRM / license bypass layer for this game.'}"
+                                                                   Style="{StaticResource Caption}" Margin="0,0,0,0" TextWrapping="Wrap"/>
+                                                    </StackPanel>
+
+                                                    <!-- Install Button -->
+                                                    <Button Grid.Column="1"
+                                                            Content="📥 Install Bypass"
+                                                            Style="{StaticResource SecondaryButton}"
+                                                            Padding="16,9"
+                                                            VerticalAlignment="Center"
+                                                            Command="{Binding DataContext.DeployGameFixCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            CommandParameter="{Binding}"
+                                                            IsEnabled="{Binding DataContext.CanDeployEmulator, RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
+                            <!-- ── 5C. HYPERVISOR & ANTI-CHEAT LAYERS ── -->
+                            <StackPanel Visibility="{Binding HasHypervisorGameFixes, Converter={StaticResource BoolToVisibilityConverter}}" Margin="0,0,0,16">
+                                <TextBlock Text="🛡️ Hypervisor &amp; Anti-Cheat Layers" Style="{StaticResource BodyMedium}" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,4"/>
+                                <TextBlock Text="Hypervisor-level emulation layers for this game."
+                                           Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,10"/>
+
+                                <ItemsControl ItemsSource="{Binding HypervisorGameFixes}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{StaticResource SurfaceInputBrush}"
+                                                    BorderBrush="{StaticResource SubtleBorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="{StaticResource RadiusMd}"
+                                                    Padding="16,14" Margin="0,0,0,10">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                            <TextBlock Text="{Binding Name}" Style="{StaticResource BodyMedium}" FontWeight="Bold" Margin="0,0,10,0"/>
+                                                            <Border Background="{StaticResource AccentBgBrush}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusXs}" Padding="6,2" Margin="0,0,8,0">
+                                                                <TextBlock Text="HYPERVISOR" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
+                                                            </Border>
+                                                        </StackPanel>
+
+                                                        <TextBlock Text="{Binding Description, FallbackValue='Hypervisor-level fix layer for this game.'}"
+                                                                   Style="{StaticResource Caption}" Margin="0,0,0,0" TextWrapping="Wrap"/>
+                                                    </StackPanel>
+
+                                                    <!-- Install Button -->
+                                                    <Button Grid.Column="1"
+                                                            Content="📥 Install Hypervisor"
+                                                            Style="{StaticResource SecondaryButton}"
+                                                            Padding="16,9"
+                                                            VerticalAlignment="Center"
+                                                            Command="{Binding DataContext.DeployGameFixCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            CommandParameter="{Binding}"
+                                                            IsEnabled="{Binding DataContext.CanDeployEmulator, RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
+                            <!-- ── 5D. OTHER CUSTOM FIXES ── -->
+                            <StackPanel Visibility="{Binding HasOtherGameFixes, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <TextBlock Text="📦 Other Custom Fixes" Style="{StaticResource BodyMedium}" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,10"/>
+                                <ItemsControl ItemsSource="{Binding OtherGameFixes}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{StaticResource SurfaceInputBrush}"
+                                                    BorderBrush="{StaticResource SubtleBorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="{StaticResource RadiusMd}"
+                                                    Padding="16,14" Margin="0,0,0,10">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                            <TextBlock Text="{Binding Name}" Style="{StaticResource BodyMedium}" FontWeight="Bold" Margin="0,0,10,0"/>
+                                                            <Border Background="{StaticResource AccentBgBrush}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusXs}" Padding="6,2" Margin="0,0,8,0">
+                                                                <TextBlock Text="{Binding TagsSummary}" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
+                                                            </Border>
+                                                        </StackPanel>
+
+                                                        <TextBlock Text="{Binding Description, FallbackValue='Custom game fix layer.'}"
+                                                                   Style="{StaticResource Caption}" Margin="0,0,0,0" TextWrapping="Wrap"/>
+                                                    </StackPanel>
+
+                                                    <!-- Install Button -->
+                                                    <Button Grid.Column="1"
+                                                            Content="📥 Install Fix"
+                                                            Style="{StaticResource SecondaryButton}"
+                                                            Padding="16,9"
+                                                            VerticalAlignment="Center"
+                                                            Command="{Binding DataContext.DeployGameFixCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            CommandParameter="{Binding}"
+                                                            IsEnabled="{Binding DataContext.CanDeployEmulator, RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -2306,6 +2616,78 @@
                                 Command="{Binding StartSteamAndLaunchCommand}"
                                 IsEnabled="{Binding IsStartingSteam, Converter={StaticResource InverseBoolConverter}}"/>
                     </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ═══ ONLINE FIX WARNING & ANTIVIRUS EXCLUSION MODAL OVERLAY ═══ -->
+        <Grid Visibility="{Binding IsOnlineFixWarningModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
+              Background="{StaticResource ModalOverlayBrush}"
+              Panel.ZIndex="1001">
+            <Border Width="520" Background="{StaticResource SurfaceCardElevatedBrush}"
+                    BorderBrush="{StaticResource WarningBrush}" BorderThickness="1.5"
+                    CornerRadius="{StaticResource RadiusLg}" Padding="28,24"
+                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                <StackPanel>
+                    <!-- Header with Warning Icon -->
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Background="{StaticResource WarningBgBrush}"
+                                BorderBrush="{StaticResource WarningBrush}" BorderThickness="1"
+                                CornerRadius="{StaticResource RadiusSm}" Width="40" Height="40"
+                                Margin="0,0,14,0" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="⚠️" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="Online Fix Security Warning" Style="{StaticResource H2}" Foreground="{StaticResource WarningBrush}"/>
+                            <TextBlock Text="Third-party fix &amp; Windows Defender exclusion" Style="{StaticResource Caption}"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="2" Content="✕" Style="{StaticResource GhostButton}" Command="{Binding CloseOnlineFixWarningModalCommand}"/>
+                    </Grid>
+
+                    <Separator Margin="0,0,0,16" Background="{StaticResource SubtleBorderBrush}"/>
+
+                    <!-- Description -->
+                    <TextBlock Style="{StaticResource Body}" Margin="0,0,0,12" TextWrapping="Wrap">
+                        <Run Text="You are about to install: "/>
+                        <Run Text="{Binding PendingOnlineFixToInstall.Name}" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}"/>
+                    </TextBlock>
+
+                    <!-- Bullet points notice box -->
+                    <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}"
+                            BorderThickness="1" CornerRadius="{StaticResource RadiusMd}" Padding="16,12" Margin="0,0,0,16">
+                        <StackPanel>
+                            <TextBlock Text="⚠️ Important security &amp; system details:" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,8" Foreground="{StaticResource WarningBrush}"/>
+                            <TextBlock Text="• Highly popular &amp; widely used across the multiplayer community." Style="{StaticResource Caption}" FontWeight="SemiBold" Foreground="{StaticResource SuccessBrush}" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                            <TextBlock Text="• This emulator is not open-source and its binary files are obfuscated / packed." Style="{StaticResource Caption}" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                            <TextBlock Text="• Windows Defender will automatically add an exclusion for this game folder so the files are not quarantined." Style="{StaticResource Caption}" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                            <TextBlock Text="• A Windows Administrator prompt (UAC) will appear before extracting files to apply the exclusion." Style="{StaticResource Caption}" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                            <TextBlock Text="• When you uninstall this fix, the Windows Defender exclusion will be cleanly removed." Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="Do you want to proceed with installing this online fix?"
+                               Style="{StaticResource BodySmall}" FontWeight="SemiBold" Margin="0,0,0,20"/>
+
+                    <!-- Action Buttons -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0" Content="Cancel" Style="{StaticResource SecondaryButton}" Command="{Binding CloseOnlineFixWarningModalCommand}" Margin="0,0,10,0"/>
+                        <Button Grid.Column="1" Content="🛡️ Proceed &amp; Add Exclusion" Style="{StaticResource PrimaryButton}"
+                                Background="{StaticResource WarningBrush}"
+                                Command="{Binding ConfirmInstallOnlineFixCommand}"/>
+                    </Grid>
                 </StackPanel>
             </Border>
         </Grid>

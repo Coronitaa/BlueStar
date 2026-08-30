@@ -4,6 +4,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:sys="clr-namespace:System;assembly=mscorlib"
+             xmlns:ctrl="clr-namespace:BlueStar.App.Controls"
              mc:Ignorable="d"
              x:Name="RootCarouselControl">
 
@@ -129,7 +130,7 @@
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="12"/>
+                                            <RowDefinition Height="*" MinHeight="12"/>
                                             <RowDefinition Height="Auto"/>
                                         </Grid.RowDefinitions>
 
@@ -142,7 +143,7 @@
                                                 <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}"
                                                       Stretch="Uniform" Width="32" Height="32"
                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                <Image Source="{Binding HeaderImageUrl}"
+                                                <Image Source="{Binding HeaderImageUrl, Converter={StaticResource CachedImageConverter}}"
                                                        Stretch="UniformToFill"
                                                        RenderOptions.BitmapScalingMode="HighQuality"/>
                                             </Grid>
@@ -166,18 +167,6 @@
                                                 <TextBlock Text="{Binding AppType, FallbackValue='Game'}"
                                                            FontSize="10" FontWeight="Normal"
                                                            Foreground="{StaticResource SecondaryTextBrush}"/>
-                                            </Border>
-
-                                            <!-- Steam Update Date -->
-                                            <Border CornerRadius="{StaticResource RadiusSm}"
-                                                    Padding="6,2" Margin="0,0,5,4"
-                                                    Background="{StaticResource SurfaceInputBrush}"
-                                                    BorderBrush="{StaticResource SubtleBorderBrush}"
-                                                    BorderThickness="1"
-                                                    Visibility="{Binding Version, Converter={StaticResource NullToVisibilityConverter}}">
-                                                <TextBlock Text="{Binding Version, StringFormat='📅 {0}'}"
-                                                           FontSize="10" FontWeight="Normal"
-                                                           Foreground="{StaticResource PrimaryTextBrush}"/>
                                             </Border>
 
                                             <!-- DLCs Badge -->
@@ -353,7 +342,7 @@
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="14"/>
+                                        <RowDefinition Height="*" MinHeight="14"/>
                                         <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
 
@@ -366,7 +355,7 @@
                                             <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}"
                                                   Stretch="Uniform" Width="36" Height="36"
                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            <Image Source="{Binding HeaderImageUrl}"
+                                            <Image Source="{Binding HeaderImageUrl, Converter={StaticResource CachedImageConverter}}"
                                                    Stretch="UniformToFill"
                                                    RenderOptions.BitmapScalingMode="HighQuality"/>
                                         </Grid>
@@ -390,18 +379,6 @@
                                             <TextBlock Text="{Binding AppType, FallbackValue='Game'}"
                                                        FontSize="11" FontWeight="Normal"
                                                        Foreground="{StaticResource SecondaryTextBrush}"/>
-                                        </Border>
-
-                                        <!-- Steam Update Date -->
-                                        <Border CornerRadius="{StaticResource RadiusSm}"
-                                                Padding="7,2" Margin="0,0,6,4"
-                                                Background="{StaticResource SurfaceInputBrush}"
-                                                BorderBrush="{StaticResource SubtleBorderBrush}"
-                                                BorderThickness="1"
-                                                Visibility="{Binding Version, Converter={StaticResource NullToVisibilityConverter}}">
-                                            <TextBlock Text="{Binding Version, StringFormat='📅 {0}'}"
-                                                       FontSize="11" FontWeight="Normal"
-                                                       Foreground="{StaticResource PrimaryTextBrush}"/>
                                         </Border>
 
                                         <!-- DLCs -->

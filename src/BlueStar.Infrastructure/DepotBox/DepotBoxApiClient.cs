@@ -673,17 +673,16 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
         if (combined.Contains("goldberg")) tagsList.Add("Goldberg");
         if (combined.Contains("steamless")) tagsList.Add("Steamless");
 
-        // Determine user-friendly fix display name
-        var name = TryGetString(el, "name", "gameName", "game_name", "title");
-        if (string.IsNullOrWhiteSpace(name))
+        // Determine user-friendly fix display name (without redundant 'Online' or file extensions)
+        var rawName = TryGetString(el, "name", "gameName", "game_name", "title");
+        if (string.IsNullOrWhiteSpace(rawName))
         {
-            var primaryTag = tagsList.FirstOrDefault(t => t.Equals("Bypass", StringComparison.OrdinalIgnoreCase) ||
-                                                          t.Equals("Online", StringComparison.OrdinalIgnoreCase) ||
-                                                          t.Equals("Hypervisor", StringComparison.OrdinalIgnoreCase)) ?? "Fix";
-            name = !string.IsNullOrWhiteSpace(contextGameName)
-                ? $"{contextGameName} ({primaryTag})"
-                : Path.GetFileNameWithoutExtension(downloadName).Replace('_', ' ');
+            rawName = !string.IsNullOrWhiteSpace(contextGameName)
+                ? contextGameName
+                : Path.GetFileNameWithoutExtension(downloadName);
         }
+
+        var name = CleanGameFixName(rawName, contextGameName);
 
         var sizeBytes = ParseSizeBytes(el);
         var downloadUrl = TryGetString(el, "url", "downloadUrl", "download_url", "link");
@@ -698,6 +697,42 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
             Description = description ?? (!string.IsNullOrWhiteSpace(contextGameName) ? $"DepotBox specific fix for {contextGameName}." : "DepotBox game fix archive."),
             DownloadUrl = downloadUrl
         };
+    }
+
+    public static string CleanGameFixName(string? rawName, string? contextGameName = null)
+    {
+        if (string.IsNullOrWhiteSpace(rawName))
+        {
+            return !string.IsNullOrWhiteSpace(contextGameName) ? contextGameName.Trim() : "Game Fix";
+        }
+
+        var name = rawName.Trim();
+
+        // 1. Remove leading AppID bracket or number prefix e.g. "[4704690]_", "[286160] "
+        name = System.Text.RegularExpressions.Regex.Replace(name, @"^\[\d+\]_?\s*", "");
+
+        // 2. Remove common archive file extensions (.rar, .zip, .7z, .tar, .gz)
+        name = System.Text.RegularExpressions.Regex.Replace(name, @"\.(rar|zip|7z|tar|gz)\b", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        // 3. Replace underscores with spaces
+        name = name.Replace('_', ' ');
+
+        // 4. Remove redundant category/type suffixes like "(Online)", "(Online Fix)", "(Bypass)", "(Hypervisor)", "[Online]"
+        name = System.Text.RegularExpressions.Regex.Replace(
+            name,
+            @"\s*[\(\[](Online(\s*Fix)?|Bypass|Hypervisor)[\)\]]\s*",
+            "",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        // 5. Replace multiple spaces with a single space
+        name = System.Text.RegularExpressions.Regex.Replace(name, @"\s+", " ").Trim();
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return !string.IsNullOrWhiteSpace(contextGameName) ? contextGameName.Trim() : "Game Fix";
+        }
+
+        return name;
     }
 
     private static long? ParseSizeBytes(JsonElement el)
