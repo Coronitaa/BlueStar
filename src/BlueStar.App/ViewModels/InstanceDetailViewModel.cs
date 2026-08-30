@@ -2005,9 +2005,17 @@ public partial class InstanceDetailViewModel : ObservableObject
         }
     }
 
+    // ── In-Memory Session Cache for Emulators & Fixes (resets when BlueStar application restarts) ──
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, (IReadOnlyList<EmulatorOptionInfo> Options, IReadOnlyList<IEmulator> Emulators, IReadOnlyList<GameFixInfo> Fixes)> _emulatorSessionCache = new();
+
     // ── Emulators Management ──
     [RelayCommand]
-    public async Task LoadEmulatorsAsync()
+    public async Task LoadEmulatorsAsync() => await LoadEmulatorsCoreAsync(forceReload: false).ConfigureAwait(true);
+
+    [RelayCommand]
+    public async Task ForceRefreshEmulatorsAsync() => await LoadEmulatorsCoreAsync(forceReload: true).ConfigureAwait(true);
+
+    public async Task LoadEmulatorsCoreAsync(bool forceReload = false)
     {
         if (Instance == null) return;
 
@@ -2024,6 +2032,26 @@ public partial class InstanceDetailViewModel : ObservableObject
                 IsReFixUpdateAvailableForInstance = _refixUpdateService.IsInstanceReFixOutdated(Instance);
             }
 
+            InstalledFixLayers = new ObservableCollection<FixLayerInfo>(Instance.InstalledFixLayers ?? []);
+            HasInstalledFixLayers = InstalledFixLayers.Count > 0;
+
+            // Session Cache check: if emulators for this instance were already loaded during this app session, reuse without hitting API
+            if (!forceReload && _emulatorSessionCache.TryGetValue(Instance.Id, out var cached))
+            {
+                AvailableEmulatorOptions = new ObservableCollection<EmulatorOptionInfo>(cached.Options);
+                RecommendedEmulatorOption = cached.Options.FirstOrDefault(o => o.IsRecommended && o.TotalVotes >= 10);
+                AvailableEmulators = new ObservableCollection<IEmulator>(cached.Emulators);
+                SelectedEmulator = cached.Emulators.FirstOrDefault(e => e.Id == (Instance.EmulatorId ?? "refix")) ?? cached.Emulators.FirstOrDefault();
+                AvailableGameFixes = new ObservableCollection<GameFixInfo>(cached.Fixes);
+                HasAvailableGameFixes = AvailableGameFixes.Count > 0;
+
+                if (SelectedEmulator != null)
+                {
+                    EmulatorStatus = await SelectedEmulator.GetStatusAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+                }
+                return;
+            }
+
             var options = await _emulatorRatingService.GetOptionsForInstanceAsync(Instance, CancellationToken.None).ConfigureAwait(true);
             AvailableEmulatorOptions = new ObservableCollection<EmulatorOptionInfo>(options);
 
@@ -2038,10 +2066,14 @@ public partial class InstanceDetailViewModel : ObservableObject
                 EmulatorStatus = await SelectedEmulator.GetStatusAsync(Instance, CancellationToken.None).ConfigureAwait(true);
             }
 
-            InstalledFixLayers = new ObservableCollection<FixLayerInfo>(Instance.InstalledFixLayers ?? []);
-            HasInstalledFixLayers = InstalledFixLayers.Count > 0;
+            await LoadGameFixesCoreAsync(forceReload).ConfigureAwait(true);
 
-            _ = LoadGameFixesAsync();
+            // Store in session cache
+            _emulatorSessionCache[Instance.Id] = (
+                AvailableEmulatorOptions.ToList().AsReadOnly(),
+                AvailableEmulators.ToList().AsReadOnly(),
+                AvailableGameFixes.ToList().AsReadOnly()
+            );
         }
         catch (Exception ex)
         {
@@ -2050,7 +2082,9 @@ public partial class InstanceDetailViewModel : ObservableObject
     }
 
     [RelayCommand]
-    public async Task LoadGameFixesAsync()
+    public async Task LoadGameFixesAsync() => await LoadGameFixesCoreAsync(forceReload: true).ConfigureAwait(true);
+
+    public async Task LoadGameFixesCoreAsync(bool forceReload = false)
     {
         if (Instance == null || _apiClient == null) return;
 
@@ -2067,6 +2101,12 @@ public partial class InstanceDetailViewModel : ObservableObject
             if ((fixes == null || fixes.Count == 0) && Instance.AppId > 0)
             {
                 fixes = await _apiClient.GetGameFixesAsync(query: Instance.AppId.ToString(), ct: CancellationToken.None).ConfigureAwait(true);
+            }
+
+            // If still empty, try searching by original instance name
+            if ((fixes == null || fixes.Count == 0) && !string.Equals(cleanName, Instance.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                fixes = await _apiClient.GetGameFixesAsync(query: Instance.Name, ct: CancellationToken.None).ConfigureAwait(true);
             }
 
             AvailableGameFixes = new ObservableCollection<GameFixInfo>(fixes ?? []);
@@ -2141,7 +2181,7 @@ public partial class InstanceDetailViewModel : ObservableObject
                 _notificationService?.ShowError("Deployment Error", $"Could not deploy {fix.Name} in {Instance.Name}.");
             }
 
-            await LoadEmulatorsAsync().ConfigureAwait(true);
+            await LoadEmulatorsCoreAsync(forceReload: true).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -2204,7 +2244,7 @@ public partial class InstanceDetailViewModel : ObservableObject
                 StatusMessage = $"❌ Failed to remove {layer.DisplayName}.";
             }
 
-            await LoadEmulatorsAsync().ConfigureAwait(true);
+            await LoadEmulatorsCoreAsync(forceReload: true).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -2299,7 +2339,7 @@ public partial class InstanceDetailViewModel : ObservableObject
                 _notificationService?.ShowError("Installation Error", $"Could not install {option.Name} in {Instance.Name}. {reason}");
             }
 
-            await LoadEmulatorsAsync().ConfigureAwait(true);
+            await LoadEmulatorsCoreAsync(forceReload: true).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -2406,7 +2446,7 @@ public partial class InstanceDetailViewModel : ObservableObject
                 _notificationService?.ShowError("Update Error", $"Could not update ReFix in {Instance.Name}.");
             }
 
-            await LoadEmulatorsAsync().ConfigureAwait(true);
+            await LoadEmulatorsCoreAsync(forceReload: true).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -2462,7 +2502,7 @@ public partial class InstanceDetailViewModel : ObservableObject
 
             StatusMessage = "✅ Emulator uninstalled. Original files restored.";
             _notificationService?.ShowInfo("Emulator Uninstalled", $"Original files restored in {Instance.Name}.");
-            await LoadEmulatorsAsync().ConfigureAwait(true);
+            await LoadEmulatorsCoreAsync(forceReload: true).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -2502,7 +2542,7 @@ public partial class InstanceDetailViewModel : ObservableObject
         await _emulatorRatingService.RecordUserVoteFlagAsync(Instance.Id, FeedbackOptionId, CancellationToken.None).ConfigureAwait(true);
         IsFeedbackModalOpen = false;
         StatusMessage = "👍 Thank you for your feedback! Upvote recorded in community statistics.";
-        await LoadEmulatorsAsync().ConfigureAwait(true);
+        await LoadEmulatorsCoreAsync(forceReload: true).ConfigureAwait(true);
     }
 
     [RelayCommand]
@@ -2512,7 +2552,7 @@ public partial class InstanceDetailViewModel : ObservableObject
         await _emulatorRatingService.SubmitVoteAsync(Instance.AppId, FeedbackOptionId, false, CancellationToken.None).ConfigureAwait(true);
         await _emulatorRatingService.RecordUserVoteFlagAsync(Instance.Id, FeedbackOptionId, CancellationToken.None).ConfigureAwait(true);
         ShowFeedbackUninstallPrompt = true;
-        await LoadEmulatorsAsync().ConfigureAwait(true);
+        await LoadEmulatorsCoreAsync(forceReload: true).ConfigureAwait(true);
     }
 
     [RelayCommand]

@@ -180,6 +180,17 @@ public class SearchResult : INotifyPropertyChanged
         set => SetField(ref _creationStatus, value);
     }
 
+    private IReadOnlyList<string> _tags = [];
+
+    /// <summary>
+    /// Gets or sets any specific tags or emulator features (e.g. "BYPASS", "ONLINE", "REFIX").
+    /// </summary>
+    public IReadOnlyList<string> Tags
+    {
+        get => _tags;
+        set => SetField(ref _tags, value);
+    }
+
     /// <summary>
     /// Gets the direct URL to SteamDB for this app.
     /// </summary>

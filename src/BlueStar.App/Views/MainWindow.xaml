@@ -375,6 +375,11 @@
                                     <Setter Property="BorderBrush" Value="#10B981"/>
                                     <Setter Property="Foreground" Value="#10B981"/>
                                 </DataTrigger>
+                                <DataTrigger Binding="{Binding HasPausedDownloads}" Value="True">
+                                    <Setter Property="Background" Value="#1aF59E0B"/>
+                                    <Setter Property="BorderBrush" Value="#F59E0B"/>
+                                    <Setter Property="Foreground" Value="#F59E0B"/>
+                                </DataTrigger>
                                 <Trigger Property="IsMouseOver" Value="True">
                                     <Setter Property="Background" Value="{StaticResource SurfaceCardHoverBrush}"/>
                                 </Trigger>
@@ -395,6 +400,9 @@
                                             <DataTrigger Binding="{Binding HasActiveDownloads}" Value="True">
                                                 <Setter Property="Fill" Value="#10B981"/>
                                             </DataTrigger>
+                                            <DataTrigger Binding="{Binding HasPausedDownloads}" Value="True">
+                                                <Setter Property="Fill" Value="#F59E0B"/>
+                                            </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
                                 </Path.Style>
@@ -406,13 +414,22 @@
                                    FontSize="11" FontWeight="SemiBold"
                                    VerticalAlignment="Center"/>
 
-                        <!-- Active count badge when active -->
-                        <Border Background="#10B981"
-                                CornerRadius="8"
+                        <!-- Active / Pending / Paused Count Notification Badge -->
+                        <Border CornerRadius="8"
                                 Padding="6,1"
                                 Margin="8,0,0,0"
-                                Visibility="{Binding HasActiveDownloads, Converter={StaticResource BoolToVisibilityConverter}}">
-                            <TextBlock Text="{Binding ActiveDownloadsCount}"
+                                Visibility="{Binding HasPendingOrActiveDownloads, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Background" Value="#10B981"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasActiveDownloads}" Value="False">
+                                            <Setter Property="Background" Value="#F59E0B"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <TextBlock Text="{Binding TotalPendingDownloadsCount}"
                                        FontSize="10" FontWeight="Bold"
                                        Foreground="#042F2E"/>
                         </Border>

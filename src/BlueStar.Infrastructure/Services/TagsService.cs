@@ -48,6 +48,17 @@ public sealed class TagsService : ITagsService
             tags.Add(new GameTag("18+ Adults Only", TagType.Nsfw, "Mature content / Adult Only rating"));
         }
 
+        // 6. Specific Tags / Emulators / Bypasses (e.g. BYPASS, ONLINE, REFIX)
+        if (result.Tags != null && result.Tags.Count > 0)
+        {
+            foreach (var t in result.Tags)
+            {
+                var upper = t.ToUpperInvariant();
+                var tagType = upper.Contains("BYPASS") ? TagType.Engine : TagType.Custom;
+                tags.Add(new GameTag(upper, tagType, $"{upper} option available on DepotBox"));
+            }
+        }
+
         return tags.AsReadOnly();
     }
 

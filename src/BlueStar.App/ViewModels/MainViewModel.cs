@@ -67,6 +67,18 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool _hasActiveDownloads;
 
+    [ObservableProperty]
+    private int _pausedDownloadsCount;
+
+    [ObservableProperty]
+    private bool _hasPausedDownloads;
+
+    [ObservableProperty]
+    private int _totalPendingDownloadsCount;
+
+    [ObservableProperty]
+    private bool _hasPendingOrActiveDownloads;
+
     // ── App Startup Loading State ──
     [ObservableProperty]
     private bool _isLoading = true;
@@ -333,35 +345,61 @@ public partial class MainViewModel : ObservableObject
             }
         }
 
-        var activeJobs = _downloadQueueManager.Queue.Where(j => j.IsActive).ToList();
+        var activeDownloadingJobs = _downloadQueueManager.Queue.Where(j => j.JobStatus == DownloadJobStatus.Downloading).ToList();
+        var pausedJobs = _downloadQueueManager.Queue.Where(j => j.JobStatus == DownloadJobStatus.Paused).ToList();
+        var queuedJobs = _downloadQueueManager.Queue.Where(j => j.JobStatus == DownloadJobStatus.Queued).ToList();
+        var pendingOrActiveJobs = _downloadQueueManager.Queue.Where(j => j.JobStatus is DownloadJobStatus.Downloading or DownloadJobStatus.Queued or DownloadJobStatus.Paused).ToList();
+
         var totalJobs = _downloadQueueManager.Queue.Count;
         var completedJobs = _downloadQueueManager.Queue.Count(j => j.IsCompleted);
-        var count = activeJobs.Count;
 
-        ActiveDownloadsCount = count;
-        HasActiveDownloads = count > 0;
-        HasMultipleActiveDownloads = count > 1;
+        var activeCount = activeDownloadingJobs.Count;
+        var pausedCount = pausedJobs.Count;
+        var totalPendingCount = pendingOrActiveJobs.Count;
 
-        if (count == 0)
+        ActiveDownloadsCount = activeCount;
+        PausedDownloadsCount = pausedCount;
+        TotalPendingDownloadsCount = totalPendingCount;
+
+        HasActiveDownloads = activeCount > 0;
+        HasPausedDownloads = pausedCount > 0 && activeCount == 0;
+        HasPendingOrActiveDownloads = totalPendingCount > 0;
+        HasMultipleActiveDownloads = activeCount > 1;
+
+        if (totalPendingCount == 0)
         {
             DownloadsButtonText = "Downloads";
             StatusText = totalJobs > 0 && completedJobs == totalJobs ? "All downloads completed" : "Ready";
         }
-        else if (count == 1)
+        else if (activeCount == 1)
         {
-            var singleJob = activeJobs[0];
+            var singleJob = activeDownloadingJobs[0];
             var gameName = singleJob.Instance?.Name ?? "Game";
             var pct = singleJob.Percentage;
             var speed = singleJob.FormattedSpeed;
             DownloadsButtonText = $"Downloads: {gameName} ({pct:F0}%) • {speed}";
             StatusText = $"Downloading {gameName} ({pct:F0}%) • {speed}";
         }
-        else
+        else if (activeCount > 1)
         {
-            var totalSpeed = activeJobs.Sum(j => j.SpeedBytesPerSec);
+            var totalSpeed = activeDownloadingJobs.Sum(j => j.SpeedBytesPerSec);
             var formattedSpeed = FormatSpeed(totalSpeed);
             DownloadsButtonText = $"Downloads ({completedJobs}/{totalJobs}) • {formattedSpeed}";
-            StatusText = $"{count} downloads active ({completedJobs}/{totalJobs} completed) • {formattedSpeed}";
+            StatusText = $"{activeCount} downloads active ({completedJobs}/{totalJobs} completed) • {formattedSpeed}";
+        }
+        else if (pausedCount > 0)
+        {
+            var singleJob = pausedJobs[0];
+            var gameName = singleJob.Instance?.Name ?? "Game";
+            DownloadsButtonText = pausedCount == 1 ? $"Downloads: {gameName} (Paused)" : $"Downloads: {pausedCount} Paused";
+            StatusText = $"{pausedCount} downloads paused in queue";
+        }
+        else
+        {
+            var singleJob = queuedJobs.FirstOrDefault();
+            var gameName = singleJob?.Instance?.Name ?? "Game";
+            DownloadsButtonText = queuedJobs.Count == 1 ? $"Downloads: {gameName} (Queued)" : $"Downloads: {queuedJobs.Count} Queued";
+            StatusText = $"{queuedJobs.Count} downloads queued";
         }
     }
 

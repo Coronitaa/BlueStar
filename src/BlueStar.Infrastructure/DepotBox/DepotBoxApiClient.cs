@@ -302,13 +302,47 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
         }
 
         var endpoint = "/api/game-fixes" + (queryParams.Count > 0 ? "?" + string.Join("&", queryParams) : "");
-        using var request = await CreateRequestAsync(HttpMethod.Get, endpoint, ct).ConfigureAwait(false);
+        try
+        {
+            using var request = await CreateRequestAsync(HttpMethod.Get, endpoint, ct).ConfigureAwait(false);
+            using var response = await SendWithErrorHandlingAsync(request, ct).ConfigureAwait(false);
+            var jsonString = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
 
-        using var response = await SendWithErrorHandlingAsync(request, ct).ConfigureAwait(false);
-        var jsonString = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            _logger.LogDebug("DepotBox game fixes response: {Json}", jsonString);
+            var fixes = ParseGameFixes(jsonString);
+            if (fixes.Count > 0) return fixes;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed querying game fixes at {Endpoint}", endpoint);
+        }
 
-        _logger.LogDebug("DepotBox game fixes response: {Json}", jsonString);
-        return ParseGameFixes(jsonString);
+        // Fallback: If querying with parameter returned nothing, query without parameters to get all available fixes and match locally
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            try
+            {
+                using var requestAll = await CreateRequestAsync(HttpMethod.Get, "/api/game-fixes", ct).ConfigureAwait(false);
+                using var responseAll = await SendWithErrorHandlingAsync(requestAll, ct).ConfigureAwait(false);
+                var allJson = await responseAll.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                var allFixes = ParseGameFixes(allJson);
+                var q = query.Trim();
+                var filtered = allFixes.Where(f =>
+                    f.Id.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    f.Name.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    f.DownloadName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    (f.Description != null && f.Description.Contains(q, StringComparison.OrdinalIgnoreCase)) ||
+                    f.Tags.Any(t => t.Contains(q, StringComparison.OrdinalIgnoreCase))
+                ).ToList();
+                if (filtered.Count > 0) return filtered.AsReadOnly();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed querying full game fixes list");
+            }
+        }
+
+        return [];
     }
 
     /// <inheritdoc />
@@ -479,16 +513,24 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
                 tagsList.AddRange(s.Split(new[] { ',', ';', '|', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(t => t.ToLowerInvariant()));
             }
         }
-        else
+
+        var rawType = TryGetString(el, "type", "fixType", "fix_type", "category", "kind");
+        if (!string.IsNullOrWhiteSpace(rawType))
         {
-            // Infer tags from filename / name / type if not explicitly listed
-            var combined = $"{id} {name} {downloadName}".ToLowerInvariant();
-            if (combined.Contains("bypass")) tagsList.Add("bypass");
-            if (combined.Contains("hypervisor")) tagsList.Add("hypervisor");
-            if (combined.Contains("online") || combined.Contains("onlinefix")) tagsList.Add("online");
-            if (combined.Contains("refix")) tagsList.Add("refix");
-            if (combined.Contains("goldberg")) tagsList.Add("goldberg");
+            tagsList.Add(rawType.Trim().ToLowerInvariant());
         }
+
+        var description = TryGetString(el, "description", "notes", "summary", "info");
+
+        // Infer tags from filename / name / id / description
+        var combined = $"{id} {name} {downloadName} {description}".ToLowerInvariant();
+        if (combined.Contains("bypass")) tagsList.Add("bypass");
+        if (combined.Contains("hypervisor")) tagsList.Add("hypervisor");
+        if (combined.Contains("online") || combined.Contains("onlinefix")) tagsList.Add("online");
+        if (combined.Contains("refix")) tagsList.Add("refix");
+        if (combined.Contains("goldberg")) tagsList.Add("goldberg");
+        if (combined.Contains("steamless")) tagsList.Add("steamless");
+        if (combined.Contains("clean steam files")) tagsList.Add("clean steam files");
 
         long? sizeBytes = null;
         if (TryGetLong(el, out var size, "size", "sizeBytes", "size_bytes", "fileSize", "file_size"))
@@ -496,7 +538,6 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
             sizeBytes = size;
         }
 
-        var description = TryGetString(el, "description", "notes", "summary", "info");
         var downloadUrl = TryGetString(el, "url", "downloadUrl", "download_url", "link");
 
         return new GameFixInfo
@@ -729,6 +770,33 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
             headerImage = $"https://cdn.cloudflare.steamstatic.com/steam/apps/{appId}/header.jpg";
         }
 
+        // ── 6. Specific Tags & Emulators (e.g. BYPASS, ONLINE, REFIX) ──
+        var tags = new List<string>();
+        if (el.TryGetProperty("tags", out var searchTagsEl))
+        {
+            if (searchTagsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var t in searchTagsEl.EnumerateArray())
+                {
+                    if (t.ValueKind == JsonValueKind.String && t.GetString() is string s && !string.IsNullOrWhiteSpace(s))
+                        tags.Add(s.Trim());
+                }
+            }
+            else if (searchTagsEl.ValueKind == JsonValueKind.String && searchTagsEl.GetString() is string s)
+            {
+                tags.AddRange(s.Split(new[] { ',', ';', '|', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            }
+        }
+        var emuTag = TryGetString(el, "emulator", "emu", "fix", "crack", "bypass");
+        if (!string.IsNullOrWhiteSpace(emuTag))
+        {
+            tags.Add(emuTag.Trim());
+        }
+        if (typeLower is "bypass" or "online" or "crack")
+        {
+            tags.Add(rawType?.Trim() ?? "BYPASS");
+        }
+
         return new SearchResult
         {
             AppId = appId,
@@ -742,7 +810,8 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
             HasLinux = hasLinux,
             HasMac = hasMac,
             IsDlc = false,
-            IsRedistributable = false
+            IsRedistributable = false,
+            Tags = tags.Distinct(StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly()
         };
     }
 
