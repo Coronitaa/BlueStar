@@ -106,6 +106,46 @@ public class GameFixDeployServiceTests : IDisposable
     }
 
     [Fact]
+    public void ParseGameFixes_DepotBoxGamesResponse_ParsesCorrectly()
+    {
+        var json = """
+        {
+            "success": true,
+            "tags": ["online", "bypass", "hypervisor"],
+            "count": 1,
+            "games": [
+                {
+                    "appid": "3357650",
+                    "name": "PRAGMATA",
+                    "headerImage": "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/3357650/header.jpg",
+                    "capsuleImage": "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/3357650/capsule_231x87.jpg",
+                    "fixes": [
+                        {
+                            "id": "12fbbb1be29121d2",
+                            "downloadName": "PRAGMATA_bypass.zip",
+                            "filename": "PRAGMATA_bypass.zip",
+                            "size": "5.9 MB",
+                            "badges": ["Bypass"],
+                            "tags": ["bypass"]
+                        }
+                    ]
+                }
+            ]
+        }
+        """;
+
+        var fixes = DepotBoxApiClient.ParseGameFixes(json);
+
+        Assert.Single(fixes);
+        Assert.Equal("12fbbb1be29121d2", fixes[0].Id);
+        Assert.Equal("PRAGMATA (Bypass)", fixes[0].Name);
+        Assert.Equal("PRAGMATA_bypass.zip", fixes[0].DownloadName);
+        Assert.True(fixes[0].IsBypass);
+        Assert.NotNull(fixes[0].SizeBytes);
+        Assert.True(fixes[0].SizeBytes > 5_000_000);
+    }
+
+    [Fact]
     public async Task DeployFixAsync_And_UninstallFixLayer_WorksCleanly()
     {
         // 1. Setup mock game files

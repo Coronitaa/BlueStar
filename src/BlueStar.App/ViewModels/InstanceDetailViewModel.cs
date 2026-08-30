@@ -2094,17 +2094,23 @@ public partial class InstanceDetailViewModel : ObservableObject
             HasGameFixesError = false;
             GameFixesErrorMessage = null;
 
-            var cleanName = CleanName(Instance.Name) ?? Instance.Name;
-            var fixes = await _apiClient.GetGameFixesAsync(query: cleanName, ct: CancellationToken.None).ConfigureAwait(true);
+            IReadOnlyList<GameFixInfo>? fixes = null;
 
-            // If empty and AppId is known, try searching by AppId as fallback
-            if ((fixes == null || fixes.Count == 0) && Instance.AppId > 0)
+            // 1. Try searching by exact AppId first if available
+            if (Instance.AppId > 0)
             {
                 fixes = await _apiClient.GetGameFixesAsync(query: Instance.AppId.ToString(), ct: CancellationToken.None).ConfigureAwait(true);
             }
 
-            // If still empty, try searching by original instance name
-            if ((fixes == null || fixes.Count == 0) && !string.Equals(cleanName, Instance.Name, StringComparison.OrdinalIgnoreCase))
+            // 2. If empty, try searching by clean game name
+            var cleanName = CleanName(Instance.Name) ?? Instance.Name;
+            if ((fixes == null || fixes.Count == 0) && !string.IsNullOrWhiteSpace(cleanName))
+            {
+                fixes = await _apiClient.GetGameFixesAsync(query: cleanName, ct: CancellationToken.None).ConfigureAwait(true);
+            }
+
+            // 3. If still empty, try searching by raw instance name
+            if ((fixes == null || fixes.Count == 0) && !string.IsNullOrWhiteSpace(Instance.Name) && !string.Equals(cleanName, Instance.Name, StringComparison.OrdinalIgnoreCase))
             {
                 fixes = await _apiClient.GetGameFixesAsync(query: Instance.Name, ct: CancellationToken.None).ConfigureAwait(true);
             }

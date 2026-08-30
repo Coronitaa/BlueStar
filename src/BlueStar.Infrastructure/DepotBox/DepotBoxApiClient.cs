@@ -437,33 +437,37 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
             {
                 foreach (var el in root.EnumerateArray())
                 {
-                    var fix = ParseGameFixElement(el);
-                    if (fix != null) list.Add(fix);
+                    ProcessGameFixEntry(el, list);
                 }
             }
             else if (root.ValueKind == JsonValueKind.Object)
             {
-                // Check if array is under "fixes", "data", "results", "items", "games"
-                bool found = false;
-                foreach (var prop in new[] { "fixes", "data", "results", "items", "gameFixes", "games", "result" })
+                // DepotBox API returns: { "success": true, "count": 1, "games": [ { "appid": "...", "name": "...", "fixes": [...] } ] }
+                if (root.TryGetProperty("games", out var gamesArr) && gamesArr.ValueKind == JsonValueKind.Array)
                 {
-                    if (root.TryGetProperty(prop, out var arr) && arr.ValueKind == JsonValueKind.Array)
+                    foreach (var gameEl in gamesArr.EnumerateArray())
                     {
-                        found = true;
-                        foreach (var el in arr.EnumerateArray())
-                        {
-                            var fix = ParseGameFixElement(el);
-                            if (fix != null) list.Add(fix);
-                        }
-                        break;
+                        ProcessGameFixEntry(gameEl, list);
                     }
                 }
-
-                if (!found)
+                else if (root.TryGetProperty("fixes", out var fixesArr) && fixesArr.ValueKind == JsonValueKind.Array)
                 {
-                    // Check if root itself is a single fix
-                    var single = ParseGameFixElement(root);
-                    if (single != null) list.Add(single);
+                    foreach (var fixEl in fixesArr.EnumerateArray())
+                    {
+                        var fix = ParseGameFixElement(fixEl);
+                        if (fix != null) list.Add(fix);
+                    }
+                }
+                else if (root.TryGetProperty("data", out var dataArr) && dataArr.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var el in dataArr.EnumerateArray())
+                    {
+                        ProcessGameFixEntry(el, list);
+                    }
+                }
+                else
+                {
+                    ProcessGameFixEntry(root, list);
                 }
             }
 
@@ -475,27 +479,62 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
         }
     }
 
-    private static GameFixInfo? ParseGameFixElement(JsonElement el)
+    private static void ProcessGameFixEntry(JsonElement el, List<GameFixInfo> list)
+    {
+        if (el.ValueKind != JsonValueKind.Object) return;
+
+        // If the element has a nested "fixes" array (standard DepotBox /api/game-fixes structure)
+        if (el.TryGetProperty("fixes", out var fixesEl) && fixesEl.ValueKind == JsonValueKind.Array)
+        {
+            var gameName = TryGetString(el, "name", "gameName", "game_name", "title");
+            var appIdStr = TryGetString(el, "appid", "appId", "id");
+
+            foreach (var fixItem in fixesEl.EnumerateArray())
+            {
+                var fix = ParseGameFixElement(fixItem, gameName, appIdStr);
+                if (fix != null) list.Add(fix);
+            }
+            return;
+        }
+
+        // Direct single fix object fallback
+        var singleFix = ParseGameFixElement(el);
+        if (singleFix != null) list.Add(singleFix);
+    }
+
+    private static GameFixInfo? ParseGameFixElement(JsonElement el, string? contextGameName = null, string? contextAppId = null)
     {
         if (el.ValueKind != JsonValueKind.Object) return null;
 
         var id = TryGetString(el, "id", "fixId", "fix_id", "slug", "filename", "file", "downloadName");
-        var name = TryGetString(el, "name", "gameName", "game_name", "title") ?? id;
         var downloadName = TryGetString(el, "downloadName", "download_name", "filename", "file", "downloadFilename") ?? id;
 
         if (string.IsNullOrWhiteSpace(id) && string.IsNullOrWhiteSpace(downloadName)) return null;
 
         id ??= downloadName!;
-        name ??= id;
         downloadName ??= $"{id}.zip";
 
-        if (!downloadName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        if (!downloadName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+            !downloadName.EndsWith(".rar", StringComparison.OrdinalIgnoreCase) &&
+            !downloadName.EndsWith(".7z", StringComparison.OrdinalIgnoreCase))
         {
             downloadName += ".zip";
         }
 
-        // Parse tags
+        // Parse tags and badges
         var tagsList = new List<string>();
+
+        // 1. Badges array (e.g. ["Bypass"], ["Online", "Tested"])
+        if (el.TryGetProperty("badges", out var badgesEl) && badgesEl.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var b in badgesEl.EnumerateArray())
+            {
+                if (b.ValueKind == JsonValueKind.String && b.GetString() is string s && !string.IsNullOrWhiteSpace(s))
+                    tagsList.Add(s.Trim());
+            }
+        }
+
+        // 2. Tags array / string (e.g. ["bypass"], ["online"])
         if (el.TryGetProperty("tags", out var tagsEl))
         {
             if (tagsEl.ValueKind == JsonValueKind.Array)
@@ -503,41 +542,45 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
                 foreach (var t in tagsEl.EnumerateArray())
                 {
                     if (t.ValueKind == JsonValueKind.String && t.GetString() is string s && !string.IsNullOrWhiteSpace(s))
-                    {
-                        tagsList.Add(s.Trim().ToLowerInvariant());
-                    }
+                        tagsList.Add(s.Trim());
                 }
             }
             else if (tagsEl.ValueKind == JsonValueKind.String && tagsEl.GetString() is string s)
             {
-                tagsList.AddRange(s.Split(new[] { ',', ';', '|', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(t => t.ToLowerInvariant()));
+                tagsList.AddRange(s.Split(new[] { ',', ';', '|', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
             }
         }
 
         var rawType = TryGetString(el, "type", "fixType", "fix_type", "category", "kind");
         if (!string.IsNullOrWhiteSpace(rawType))
         {
-            tagsList.Add(rawType.Trim().ToLowerInvariant());
+            tagsList.Add(rawType.Trim());
         }
 
         var description = TryGetString(el, "description", "notes", "summary", "info");
 
-        // Infer tags from filename / name / id / description
-        var combined = $"{id} {name} {downloadName} {description}".ToLowerInvariant();
-        if (combined.Contains("bypass")) tagsList.Add("bypass");
-        if (combined.Contains("hypervisor")) tagsList.Add("hypervisor");
-        if (combined.Contains("online") || combined.Contains("onlinefix")) tagsList.Add("online");
-        if (combined.Contains("refix")) tagsList.Add("refix");
-        if (combined.Contains("goldberg")) tagsList.Add("goldberg");
-        if (combined.Contains("steamless")) tagsList.Add("steamless");
-        if (combined.Contains("clean steam files")) tagsList.Add("clean steam files");
+        // Infer tags from filename, id, name, description, contextGameName
+        var combined = $"{id} {downloadName} {description} {contextGameName}".ToLowerInvariant();
+        if (combined.Contains("bypass")) tagsList.Add("Bypass");
+        if (combined.Contains("hypervisor")) tagsList.Add("Hypervisor");
+        if (combined.Contains("online") || combined.Contains("onlinefix")) tagsList.Add("Online");
+        if (combined.Contains("refix")) tagsList.Add("ReFix");
+        if (combined.Contains("goldberg")) tagsList.Add("Goldberg");
+        if (combined.Contains("steamless")) tagsList.Add("Steamless");
 
-        long? sizeBytes = null;
-        if (TryGetLong(el, out var size, "size", "sizeBytes", "size_bytes", "fileSize", "file_size"))
+        // Determine user-friendly fix display name
+        var name = TryGetString(el, "name", "gameName", "game_name", "title");
+        if (string.IsNullOrWhiteSpace(name))
         {
-            sizeBytes = size;
+            var primaryTag = tagsList.FirstOrDefault(t => t.Equals("Bypass", StringComparison.OrdinalIgnoreCase) ||
+                                                          t.Equals("Online", StringComparison.OrdinalIgnoreCase) ||
+                                                          t.Equals("Hypervisor", StringComparison.OrdinalIgnoreCase)) ?? "Fix";
+            name = !string.IsNullOrWhiteSpace(contextGameName)
+                ? $"{contextGameName} ({primaryTag})"
+                : Path.GetFileNameWithoutExtension(downloadName).Replace('_', ' ');
         }
 
+        var sizeBytes = ParseSizeBytes(el);
         var downloadUrl = TryGetString(el, "url", "downloadUrl", "download_url", "link");
 
         return new GameFixInfo
@@ -545,11 +588,48 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
             Id = id,
             Name = name,
             DownloadName = downloadName,
-            Tags = tagsList.Distinct().ToList().AsReadOnly(),
+            Tags = tagsList.Distinct(StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly(),
             SizeBytes = sizeBytes,
-            Description = description,
+            Description = description ?? (!string.IsNullOrWhiteSpace(contextGameName) ? $"DepotBox specific fix for {contextGameName}." : "DepotBox game fix archive."),
             DownloadUrl = downloadUrl
         };
+    }
+
+    private static long? ParseSizeBytes(JsonElement el)
+    {
+        if (TryGetLong(el, out var numericSize, "sizeBytes", "size_bytes", "fileSize", "file_size"))
+        {
+            return numericSize;
+        }
+
+        if (el.TryGetProperty("size", out var sizeEl))
+        {
+            if (sizeEl.ValueKind == JsonValueKind.Number && sizeEl.TryGetInt64(out var num))
+            {
+                return num;
+            }
+            if (sizeEl.ValueKind == JsonValueKind.String && sizeEl.GetString() is string str)
+            {
+                var s = str.Trim();
+                if (s.EndsWith("GB", StringComparison.OrdinalIgnoreCase) && double.TryParse(s[..^2].Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var gb))
+                {
+                    return (long)(gb * 1024 * 1024 * 1024);
+                }
+                if (s.EndsWith("MB", StringComparison.OrdinalIgnoreCase) && double.TryParse(s[..^2].Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var mb))
+                {
+                    return (long)(mb * 1024 * 1024);
+                }
+                if (s.EndsWith("KB", StringComparison.OrdinalIgnoreCase) && double.TryParse(s[..^2].Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var kb))
+                {
+                    return (long)(kb * 1024);
+                }
+                if (s.EndsWith("B", StringComparison.OrdinalIgnoreCase) && double.TryParse(s[..^1].Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var b))
+                {
+                    return (long)b;
+                }
+            }
+        }
+        return null;
     }
 
     // --- Private helpers & Flexible Parsers ---
