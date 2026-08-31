@@ -40,7 +40,7 @@
 
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                            <TextBlock Text="BlueStar Launcher" Style="{StaticResource H1}" Margin="0,0,10,0"/>
+                            <TextBlock Text="{DynamicResource String_AboutTitle}" Style="{StaticResource H1}" Margin="0,0,10,0"/>
                             <Border Background="{StaticResource AccentTranslucentBrush}"
                                     BorderBrush="{StaticResource AccentBrush}"
                                     BorderThickness="1"
@@ -52,14 +52,14 @@
                                            Foreground="{StaticResource AccentBrush}"/>
                             </Border>
                         </StackPanel>
-                        <TextBlock Text="Universal Steam game instance manager, depot downloader, and multi-engine launcher."
+                        <TextBlock Text="{DynamicResource String_AboutSubtitle}"
                                    Style="{StaticResource Subtitle}" Margin="0,0,0,6"/>
-                        <TextBlock Text="BlueStar is built on top of amazing open-source software and community projects. All credits and repositories are listed below."
+                        <TextBlock Text="{DynamicResource String_AboutBuiltOnOss}"
                                    Style="{StaticResource Caption}"/>
                     </StackPanel>
 
                     <Button Grid.Column="2"
-                            Content="★ BlueStar on GitHub"
+                            Content="{DynamicResource String_BlueStarOnGitHub}"
                             Style="{StaticResource PrimaryButton}"
                             Padding="16,10"
                             VerticalAlignment="Center"
@@ -70,8 +70,8 @@
 
             <!-- ═══ SECTION TITLE ═══ -->
             <StackPanel Margin="0,0,0,16">
-                <TextBlock Text="Integrated Open-Source Projects &amp; Repositories" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                <TextBlock Text="Libraries, tools, emulators, and frameworks utilized in BlueStar:"
+                <TextBlock Text="{DynamicResource String_IntegratedProjectsTitle}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                <TextBlock Text="{DynamicResource String_IntegratedProjectsDesc}"
                            Style="{StaticResource Caption}"/>
             </StackPanel>
 
@@ -159,7 +159,7 @@
                                                    TextTrimming="CharacterEllipsis"/>
 
                                         <Button Grid.Column="1"
-                                                Content="View on GitHub ↗"
+                                                Content="{DynamicResource String_ViewOnGitHub}"
                                                 Style="{StaticResource SecondaryButton}"
                                                 Padding="12,6"
                                                 FontSize="11"

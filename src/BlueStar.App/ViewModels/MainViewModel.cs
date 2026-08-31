@@ -202,8 +202,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
             CheckRequirementsOnStartup = _appSettings.CheckSystemRequirementsOnStartup;
         }
 
-        _queueCollectionChangedHandler = (_, _) => _uiContext.Post(_ => UpdateDownloadStats(), null);
-        _queueChangedHandler = (_, _) => _uiContext.Post(_ => UpdateDownloadStats(), null);
+        _queueCollectionChangedHandler = (_, _) => _uiContext.Post(_ => { UpdateDownloadStats(); UpdateBackgroundTaskStats(); }, null);
+        _queueChangedHandler = (_, _) => _uiContext.Post(_ => { UpdateDownloadStats(); UpdateBackgroundTaskStats(); }, null);
         _steamStatusChangedHandler = OnSteamStatusChanged;
         _tasksChangedHandler = (_, _) => _uiContext.Post(_ => UpdateBackgroundTaskStats(), null);
         _instancesChangedHandler = (_, _) => _ = RefreshRecentShortcutsAsync();
@@ -513,6 +513,114 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _notificationService.Dismiss(id);
     }
 
+    #region Navigation & History (Mouse 4 & 5 Support)
+
+    private readonly Stack<NavigationEntry> _backStack = new();
+    private readonly Stack<NavigationEntry> _forwardStack = new();
+    private bool _isNavigatingHistory;
+
+    private sealed record NavigationEntry(string Page, object? Parameter, string? CategoryId);
+
+    public bool CanGoBack => _backStack.Count > 0;
+    public bool CanGoForward => _forwardStack.Count > 0;
+
+    private void PushNavigation(string page, object? parameter = null, string? categoryId = null)
+    {
+        if (_isNavigatingHistory) return;
+
+        var current = GetCurrentNavigationEntry();
+        if (current != null)
+        {
+            _backStack.Push(current);
+            _forwardStack.Clear();
+            OnPropertyChanged(nameof(CanGoBack));
+            OnPropertyChanged(nameof(CanGoForward));
+        }
+    }
+
+    private NavigationEntry? GetCurrentNavigationEntry()
+    {
+        if (CurrentView is InstanceDetailView && CurrentView.DataContext is InstanceDetailViewModel idvm && idvm.Instance != null)
+        {
+            return new NavigationEntry("InstanceDetail", idvm.Instance, null);
+        }
+
+        if (!string.IsNullOrWhiteSpace(SelectedNavigation))
+        {
+            return new NavigationEntry(SelectedNavigation, null, null);
+        }
+
+        return null;
+    }
+
+    [RelayCommand]
+    public void GoBack()
+    {
+        if (_backStack.Count == 0) return;
+
+        var current = GetCurrentNavigationEntry();
+        var prev = _backStack.Pop();
+        if (current != null)
+        {
+            _forwardStack.Push(current);
+        }
+
+        _isNavigatingHistory = true;
+        try
+        {
+            ApplyNavigationEntry(prev);
+        }
+        finally
+        {
+            _isNavigatingHistory = false;
+            OnPropertyChanged(nameof(CanGoBack));
+            OnPropertyChanged(nameof(CanGoForward));
+        }
+    }
+
+    [RelayCommand]
+    public void GoForward()
+    {
+        if (_forwardStack.Count == 0) return;
+
+        var current = GetCurrentNavigationEntry();
+        var next = _forwardStack.Pop();
+        if (current != null)
+        {
+            _backStack.Push(current);
+        }
+
+        _isNavigatingHistory = true;
+        try
+        {
+            ApplyNavigationEntry(next);
+        }
+        finally
+        {
+            _isNavigatingHistory = false;
+            OnPropertyChanged(nameof(CanGoBack));
+            OnPropertyChanged(nameof(CanGoForward));
+        }
+    }
+
+    private void ApplyNavigationEntry(NavigationEntry entry)
+    {
+        if (entry.Page == "InstanceDetail" && entry.Parameter is GameInstance inst)
+        {
+            OpenInstanceDetail(inst, autoCheckUpdates: false);
+        }
+        else if (entry.Page == "ExploreCategory" && !string.IsNullOrWhiteSpace(entry.CategoryId))
+        {
+            NavigateToExploreCategory(entry.CategoryId);
+        }
+        else
+        {
+            Navigate(entry.Page);
+        }
+    }
+
+    #endregion
+
     /// <summary>
     /// Navigates to the specified view.
     /// </summary>
@@ -520,6 +628,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public void Navigate(string page)
     {
+        PushNavigation(page);
         SelectedNavigation = page;
 
         if (page == "Home")
@@ -585,6 +694,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     public void OpenInstanceDetail(GameInstance instance, bool autoCheckUpdates)
     {
+        PushNavigation("InstanceDetail", instance);
         var view = new InstanceDetailView();
         var vm = App.Services.GetRequiredService<InstanceDetailViewModel>();
         vm.OnNavigateBack = () => Navigate("Library");
@@ -598,6 +708,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     public void NavigateToExploreCategory(string categoryId)
     {
+        PushNavigation("ExploreCategory", null, categoryId);
         SelectedNavigation = "Explore";
         var view = new BrowseView();
         var vm = App.Services.GetRequiredService<BrowseViewModel>();
@@ -658,12 +769,38 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void UpdateBackgroundTaskStats()
     {
-        var active = _backgroundTaskService.Tasks.Where(t => t.IsActive).ToList();
-        ActiveTasksCount = active.Count;
-        HasActiveTasks = active.Count > 0;
-        HasMultipleActiveTasks = active.Count > 1;
+        var activeBgTasks = _backgroundTaskService.Tasks.Where(t => t.IsActive).ToList();
+        var activeDownloadJobs = _downloadQueueManager.Queue
+            .Where(j => j.JobStatus is DownloadJobStatus.Downloading or DownloadJobStatus.Queued)
+            .ToList();
 
-        if (active.Count == 0)
+        var downloadTaskItems = new List<BackgroundTaskItem>();
+        foreach (var job in activeDownloadJobs)
+        {
+            downloadTaskItems.Add(new BackgroundTaskItem
+            {
+                Id = job.Instance.Id,
+                Title = job.Instance.Name,
+                InstanceName = job.Instance.Name,
+                InstanceId = job.Instance.Id,
+                Status = job.JobStatus == DownloadJobStatus.Downloading ? BackgroundTaskStatus.Running : BackgroundTaskStatus.Queued,
+                ProgressPercentage = job.Percentage,
+                CurrentStepMessage = job.JobStatus == DownloadJobStatus.Downloading
+                    ? $"{job.FormattedSpeed} — {job.StatusMessage}"
+                    : "Queued...",
+                CanCancel = true
+            });
+        }
+
+        var allActive = new List<BackgroundTaskItem>();
+        allActive.AddRange(activeBgTasks);
+        allActive.AddRange(downloadTaskItems);
+
+        ActiveTasksCount = allActive.Count;
+        HasActiveTasks = allActive.Count > 0;
+        HasMultipleActiveTasks = allActive.Count > 1;
+
+        if (allActive.Count == 0)
         {
             BackgroundTaskStatusText = "No active tasks";
             TotalTasksProgressPercentage = 0;
@@ -675,19 +812,33 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
         else
         {
-            var avg = active.Average(t => t.ProgressPercentage);
+            var avg = allActive.Average(t => t.ProgressPercentage);
             TotalTasksProgressPercentage = Math.Clamp(avg, 0, 100);
-            BackgroundTaskStatusText = active.Count == 1
-                ? $"{active[0].Title} ({active[0].ProgressPercentage:F0}%)"
-                : $"{active.Count} tasks ({TotalTasksProgressPercentage:F0}%)";
+
+            if (allActive.Count == 1)
+            {
+                var item = allActive[0];
+                BackgroundTaskStatusText = $"{item.Title} ({item.ProgressPercentage:F0}%)";
+            }
+            else
+            {
+                BackgroundTaskStatusText = $"{allActive.Count} tasks ({TotalTasksProgressPercentage:F0}%)";
+            }
 
             // Sync ActiveBackgroundTasks collection so UI updates cleanly
-            var toRemove = ActiveBackgroundTasks.Where(t => !active.Contains(t)).ToList();
+            var toRemove = ActiveBackgroundTasks.Where(t => !allActive.Any(a => a.Id == t.Id)).ToList();
             foreach (var rem in toRemove) ActiveBackgroundTasks.Remove(rem);
 
-            foreach (var act in active)
+            foreach (var act in allActive)
             {
-                if (!ActiveBackgroundTasks.Contains(act))
+                var existing = ActiveBackgroundTasks.FirstOrDefault(t => t.Id == act.Id);
+                if (existing != null)
+                {
+                    existing.ProgressPercentage = act.ProgressPercentage;
+                    existing.CurrentStepMessage = act.CurrentStepMessage;
+                    existing.Status = act.Status;
+                }
+                else
                 {
                     ActiveBackgroundTasks.Add(act);
                 }
@@ -711,6 +862,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public void CancelBackgroundTask(Guid taskId)
     {
         _backgroundTaskService.CancelTask(taskId);
+
+        var downloadJob = _downloadQueueManager.Queue.FirstOrDefault(j => j.Instance.Id == taskId);
+        if (downloadJob != null)
+        {
+            _ = _downloadQueueManager.CancelAsync(taskId);
+        }
     }
 
     [RelayCommand]

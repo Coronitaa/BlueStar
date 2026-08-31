@@ -78,7 +78,10 @@ public class BackgroundTaskServiceTests
             return Task.CompletedTask;
         });
 
-        await Task.Delay(50);
+        for (int i = 0; i < 30 && service.Tasks.FirstOrDefault(t => t.Id == taskId)?.Status != BackgroundTaskStatus.Completed; i++)
+        {
+            await Task.Delay(50);
+        }
         service.Tasks.Should().Contain(t => t.Id == taskId);
 
         service.ClearCompleted();

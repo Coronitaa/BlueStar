@@ -60,7 +60,7 @@
                                 <TextBlock Text="{Binding GreetingText}" Style="{StaticResource H2}" Margin="0,0,8,0" VerticalAlignment="Center"/>
                                 <TextBlock Text="★" FontSize="18" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
                             </StackPanel>
-                            <TextBlock Text="Your favorite games in one place"
+                            <TextBlock Text="{DynamicResource String_HeroSubtitle}"
                                        Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
 
                             <!-- Compact Quick Stats Hub Row -->
@@ -68,21 +68,22 @@
                                 <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="10,4" Margin="0,0,8,0">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="{Binding TotalInstancesCount}" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}" FontSize="11" Margin="0,0,5,0"/>
-                                        <TextBlock Text="Instances" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                        <TextBlock Text="{DynamicResource String_InstancesStat}" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}"/>
                                     </StackPanel>
                                 </Border>
 
                                 <Border Background="{StaticResource SuccessBgBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="10,4" Margin="0,0,8,0">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="{Binding ReadyInstancesCount}" FontWeight="Bold" Foreground="{StaticResource SuccessBrush}" FontSize="11" Margin="0,0,5,0"/>
-                                        <TextBlock Text="Ready to Play" FontSize="11" Foreground="{StaticResource SuccessBrush}"/>
+                                        <TextBlock Text="{DynamicResource String_ReadyStat}" FontSize="11" Foreground="{StaticResource SuccessBrush}"/>
                                     </StackPanel>
                                 </Border>
 
                                 <Border Background="{StaticResource AccentTranslucentBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="10,4" Margin="0,0,8,0"
                                         Visibility="{Binding CurrentActiveDownload, Converter={StaticResource NullToVisibilityConverter}}">
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="● Downloading" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" FontSize="11"/>
+                                        <TextBlock Text="● " FontWeight="Bold" Foreground="{StaticResource AccentBrush}" FontSize="11"/>
+                                        <TextBlock Text="{DynamicResource String_DownloadingStat}" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" FontSize="11"/>
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
@@ -97,7 +98,7 @@
                                         Command="{Binding ToggleImportMenuCommand}"
                                         Width="34" Height="34"
                                         Padding="0"
-                                        ToolTip="Import instance from..."
+                                        ToolTip="{DynamicResource String_ImportInstanceFrom}"
                                         Style="{StaticResource SecondaryButton}"
                                         Cursor="Hand">
                                     <Path x:Name="PlusIcon"
@@ -156,7 +157,7 @@
                                             <DropShadowEffect Color="#000000" BlurRadius="16" ShadowDepth="4" Opacity="0.6"/>
                                         </Border.Effect>
                                         <StackPanel>
-                                            <TextBlock Text="Import instance from"
+                                            <TextBlock Text="{DynamicResource String_ImportInstanceFrom}"
                                                        Style="{StaticResource CaptionBold}"
                                                        Foreground="{StaticResource SecondaryTextBrush}"
                                                        Margin="8,4,8,8"/>
@@ -175,8 +176,8 @@
                                                     <Path Grid.Column="0" Data="{StaticResource IconGamepad}" Fill="{StaticResource AccentBrush}"
                                                           Stretch="Uniform" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                     <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                                                        <TextBlock Text="Steam" FontWeight="SemiBold" FontSize="13"/>
-                                                        <TextBlock Text="Import installed Steam game" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                        <TextBlock Text="{DynamicResource String_ImportSteamTitle}" FontWeight="SemiBold" FontSize="13"/>
+                                                        <TextBlock Text="{DynamicResource String_ImportSteamDesc}" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
                                                     </StackPanel>
                                                 </Grid>
                                             </Button>
@@ -195,8 +196,8 @@
                                                     <Path Grid.Column="0" Data="{StaticResource IconDownload}" Fill="{StaticResource WarningBrush}"
                                                           Stretch="Uniform" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                     <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                                                        <TextBlock Text="Depot ZIP" FontWeight="SemiBold" FontSize="13"/>
-                                                        <TextBlock Text="Import DepotBox archive" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                        <TextBlock Text="{DynamicResource String_ImportZipTitle}" FontWeight="SemiBold" FontSize="13"/>
+                                                        <TextBlock Text="{DynamicResource String_ImportZipDesc}" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
                                                     </StackPanel>
                                                 </Grid>
                                             </Button>
@@ -214,8 +215,8 @@
                                                     <Path Grid.Column="0" Data="{StaticResource IconFolder}" Fill="{StaticResource SuccessBrush}"
                                                           Stretch="Uniform" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                     <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                                                        <TextBlock Text="Folder" FontWeight="SemiBold" FontSize="13"/>
-                                                        <TextBlock Text="Import existing game folder" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                        <TextBlock Text="{DynamicResource String_ImportFolderTitle}" FontWeight="SemiBold" FontSize="13"/>
+                                                        <TextBlock Text="{DynamicResource String_ImportFolderDesc}" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
                                                     </StackPanel>
                                                 </Grid>
                                             </Button>
@@ -224,12 +225,16 @@
                                 </Popup>
                             </Grid>
 
-                            <Button Content="🎮 My Instances"
-                                    Style="{StaticResource PrimaryButton}"
+                            <Button Style="{StaticResource PrimaryButton}"
                                     Padding="14,7"
                                     FontSize="12"
                                     Command="{Binding NavigateToCommand}"
-                                    CommandParameter="Library"/>
+                                    CommandParameter="Library">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="🎮 "/>
+                                    <TextBlock Text="{DynamicResource String_MyInstances}"/>
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -262,12 +267,12 @@
 
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="Active Download:" Style="{StaticResource CaptionBold}" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{DynamicResource String_ActiveDownload}" Style="{StaticResource CaptionBold}" Margin="0,0,6,0" VerticalAlignment="Center"/>
                                     <TextBlock Text="{Binding CurrentActiveDownload.Instance.Name}" Style="{StaticResource H3}" FontWeight="Bold" TextTrimming="CharacterEllipsis" MaxWidth="500" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </StackPanel>
 
-                            <Button Grid.Column="2" Content="View Downloads ➔"
+                            <Button Grid.Column="2" Content="{DynamicResource String_ViewDownloads}"
                                     Style="{StaticResource GhostButton}"
                                     Foreground="{StaticResource AccentBrush}"
                                     Padding="8,4"
@@ -300,10 +305,10 @@
 
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                         <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource AccentBrush}" Stretch="Uniform" Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                        <TextBlock Text="Recent Instances" Style="{StaticResource H2}" VerticalAlignment="Center"/>
+                        <TextBlock Text="{DynamicResource String_RecentInstances}" Style="{StaticResource H2}" VerticalAlignment="Center"/>
                     </StackPanel>
 
-                    <Button Grid.Column="1" Content="View All ➔"
+                    <Button Grid.Column="1" Content="{DynamicResource String_ViewAll}"
                             Style="{StaticResource GhostButton}"
                             Padding="8,4"
                             Command="{Binding NavigateToCommand}"
@@ -320,8 +325,8 @@
                         Visibility="{Binding RecentInstances.Count, Converter={StaticResource ZeroToVisibilityConverter}, FallbackValue=Collapsed}">
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                         <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}" Stretch="Uniform" Width="40" Height="40" Margin="0,0,0,12" HorizontalAlignment="Center"/>
-                        <TextBlock Text="No game instances configured yet" Style="{StaticResource H3}" HorizontalAlignment="Center"/>
-                        <TextBlock Text="Click the '+' button above to import from Steam, ZIP or Folder, or search games below."
+                        <TextBlock Text="{DynamicResource String_NoRecentInstances}" Style="{StaticResource H3}" HorizontalAlignment="Center"/>
+                        <TextBlock Text="{DynamicResource String_NoRecentInstancesDesc}"
                                    Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,4,0,12"/>
                     </StackPanel>
                 </Border>
@@ -370,13 +375,13 @@
                                                             CornerRadius="{StaticResource RadiusSm}"
                                                             Padding="7,2"
                                                             Visibility="{Binding HasUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                            ToolTip="{Binding UpdateDescription, FallbackValue='Game update available'}">
+                                                            ToolTip="{DynamicResource String_GameUpdateAvailable}">
                                                         <Border.Effect>
                                                             <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="2" Opacity="0.6"/>
                                                         </Border.Effect>
                                                         <StackPanel Orientation="Horizontal">
                                                             <Path Data="{StaticResource IconRefresh}" Fill="#FFFFFF" Stretch="Uniform" Width="9" Height="9" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                                            <TextBlock Text="Update" FontSize="10" FontWeight="Bold" Foreground="#FFFFFF"/>
+                                                            <TextBlock Text="{DynamicResource String_UpdateAvailable}" FontSize="10" FontWeight="Bold" Foreground="#FFFFFF"/>
                                                         </StackPanel>
                                                     </Border>
                                                 </Grid>
@@ -393,14 +398,14 @@
                                                               Margin="6,0,0,0"
                                                               VerticalAlignment="Center"
                                                               Visibility="{Binding IsSteamGame, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                              ToolTip="Steam Game (Imported from Steam)"/>
+                                                              ToolTip="{DynamicResource String_SteamGameImportedTooltip}"/>
                                                         <!-- Imported Folder Icon -->
                                                         <Path Data="{StaticResource IconFolder}" Fill="#10B981"
                                                               Stretch="Uniform" Width="14" Height="14"
                                                               Margin="6,0,0,0"
                                                               VerticalAlignment="Center"
                                                               Visibility="{Binding IsImportedFolder, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                              ToolTip="Imported Game (Folder/ZIP)"/>
+                                                              ToolTip="{DynamicResource String_ImportedFolderTooltip}"/>
                                                     </StackPanel>
 
                                                     <TextBlock Text="{Binding Name}"
@@ -448,7 +453,7 @@
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
 
-                                                <Button Grid.Column="0" Content="Manage"
+                                                <Button Grid.Column="0" Content="{DynamicResource String_Manage}"
                                                         Style="{StaticResource SecondaryButton}"
                                                         Padding="12,7"
                                                         FontSize="12"
@@ -457,7 +462,7 @@
 
                                                 <!-- Update Available (DepotBox) Button — only shown when update is available -->
                                                 <Button Grid.Column="2"
-                                                        ToolTip="Update Available (DepotBox)"
+                                                        ToolTip="{DynamicResource String_UpdateAvailableDepotBox}"
                                                         Visibility="{Binding HasUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}"
                                                         Command="{Binding DataContext.CheckDepotBoxUpdatesCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}">
@@ -472,7 +477,7 @@
                                                           Stretch="Uniform" Width="13" Height="13"/>
                                                 </Button>
 
-                                                <Button Grid.Column="4" Content="▶ Play"
+                                                <Button Grid.Column="4" Content="{DynamicResource String_Play}"
                                                         Style="{StaticResource PrimaryButton}"
                                                         Padding="16,7"
                                                         FontSize="12"
@@ -493,7 +498,7 @@
                             Margin="4,0,0,0"
                             Width="36" Height="36"
                             Click="OnScrollLeftClick"
-                            ToolTip="Scroll Left">
+                            ToolTip="{DynamicResource String_ScrollLeft}">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource CarouselArrowButton}">
                                 <Setter Property="Opacity" Value="0.0"/>
@@ -527,7 +532,7 @@
                             Margin="0,0,4,0"
                             Width="36" Height="36"
                             Click="OnScrollRightClick"
-                            ToolTip="Scroll Right">
+                            ToolTip="{DynamicResource String_ScrollRight}">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource CarouselArrowButton}">
                                 <Setter Property="Opacity" Value="0.0"/>
@@ -573,13 +578,13 @@
                             <StackPanel Grid.Column="0">
                                 <StackPanel Orientation="Horizontal">
                                     <Path Data="{StaticResource IconSparkles}" Fill="{StaticResource AccentBrush}" Stretch="Uniform" Width="20" Height="20" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Explore &amp; Discover Games" Style="{StaticResource H2}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{DynamicResource String_ExploreDiscoverGames}" Style="{StaticResource H2}" VerticalAlignment="Center"/>
                                 </StackPanel>
-                                <TextBlock Text="Search games and manifests across DepotBox to create and install new instances instantly."
+                                <TextBlock Text="{DynamicResource String_ExploreDiscoverGamesDesc}"
                                            Style="{StaticResource Caption}" Margin="0,4,0,0"/>
                             </StackPanel>
 
-                            <Button Grid.Column="1" Content="Full Catalog View ➔"
+                            <Button Grid.Column="1" Content="{DynamicResource String_FullCatalogView}"
                                     Style="{StaticResource GhostButton}"
                                     Command="{Binding NavigateToCommand}"
                                     CommandParameter="Explore"/>
@@ -613,7 +618,7 @@
                                           Stretch="Uniform" Width="14" Height="14"
                                           Margin="0,0,10,0" VerticalAlignment="Center"/>
                                     <Grid Grid.Column="1">
-                                        <TextBlock Text="Search games, AppIDs, or keywords (e.g. Counter-Strike, Cyberpunk)..."
+                                        <TextBlock Text="{DynamicResource String_SearchGamesPlaceholder}"
                                                    Foreground="{StaticResource MutedTextBrush}"
                                                    FontSize="12" VerticalAlignment="Center" Margin="2,0,0,0"
                                                    IsHitTestVisible="False"
@@ -643,7 +648,7 @@
                             </Border>
 
                             <!-- Search Button -->
-                            <Button Grid.Column="2" Content="Search"
+                            <Button Grid.Column="2" Content="{DynamicResource String_Search}"
                                     Style="{StaticResource PrimaryButton}"
                                     Padding="20,8"
                                     FontSize="12"
@@ -651,7 +656,7 @@
                                     IsEnabled="{Binding IsSearchingCatalog, Converter={StaticResource InverseBoolConverter}}"/>
 
                             <!-- Clear Button (when searched) -->
-                            <Button Grid.Column="4" Content="Clear"
+                            <Button Grid.Column="4" Content="{DynamicResource String_Clear}"
                                     Style="{StaticResource SecondaryButton}"
                                     Padding="14,8"
                                     FontSize="12"
@@ -665,7 +670,7 @@
                                    Visibility="{Binding HasSearchedCatalog, Converter={StaticResource InverseBoolToVisibilityConverter}}">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
                                 <TextBlock Text="🔥" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                <TextBlock Text="Trending:" Style="{StaticResource CaptionBold}" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Text="{DynamicResource String_TrendingSuggestions}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
                             </StackPanel>
 
                             <ItemsControl ItemsSource="{Binding TrendingSuggestionChips}" VerticalAlignment="Center">
@@ -967,14 +972,17 @@
                                                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                                                 <TextBlock Text="⏳ " FontWeight="Normal" Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                                 <TextBlock Text="{Binding CreationStatus}" FontWeight="Normal" Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                                                <TextBlock Text="➕ Add to Instances" FontWeight="Normal" Visibility="{Binding IsCreating, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                                                <StackPanel Orientation="Horizontal" Visibility="{Binding IsCreating, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                                                                    <TextBlock Text="➕ " FontWeight="Normal"/>
+                                                                    <TextBlock Text="{DynamicResource String_AddToInstances}" FontWeight="Normal"/>
+                                                                </StackPanel>
                                                             </StackPanel>
                                                         </Button>
 
                                                         <Button Grid.Column="2"
                                                                 Style="{StaticResource SecondaryButton}"
                                                                 Padding="10,8"
-                                                                ToolTip="View on SteamDB"
+                                                                ToolTip="{DynamicResource String_ViewOnSteamDb}"
                                                                 Command="{Binding DataContext.OpenSteamDbCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                                 CommandParameter="{Binding}">
                                                             <TextBlock Text="🌐 SteamDB" FontSize="11" FontWeight="Normal"/>
@@ -997,12 +1005,17 @@
                                     <StackPanel HorizontalAlignment="Center">
                                         <Path Data="{StaticResource IconSearch}" Fill="{StaticResource MutedTextBrush}"
                                               Stretch="Uniform" Width="36" Height="36" Margin="0,0,0,12" HorizontalAlignment="Center"/>
-                                        <TextBlock Text="No games found matching your search" Style="{StaticResource H3}" HorizontalAlignment="Center"/>
-                                        <TextBlock Text="Try adjusting spelling or searching with a different title or keyword."
+                                        <TextBlock Text="{DynamicResource String_NoDiscoveredGames}" Style="{StaticResource H3}" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="{DynamicResource String_NoDiscoveredGamesDesc}"
                                                    Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,4,0,14"/>
-                                        <Button Content="✕ Clear Search" Style="{StaticResource GhostButton}"
+                                        <Button Style="{StaticResource GhostButton}"
                                                 HorizontalAlignment="Center"
-                                                Command="{Binding ClearCatalogSearchCommand}"/>
+                                                Command="{Binding ClearCatalogSearchCommand}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="✕ "/>
+                                                <TextBlock Text="{DynamicResource String_ClearSearch}"/>
+                                            </StackPanel>
+                                        </Button>
                                     </StackPanel>
                                 </Border>
 
@@ -1054,9 +1067,9 @@
                         <StackPanel Grid.Column="0">
                             <StackPanel Orientation="Horizontal">
                                 <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource AccentBrush}" Stretch="Uniform" Width="20" Height="20" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="Import from Steam Library" Style="{StaticResource H2}" Foreground="{StaticResource WhiteBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Text="{DynamicResource String_ModalImportSteamTitle}" Style="{StaticResource H2}" Foreground="{StaticResource WhiteBrush}" VerticalAlignment="Center"/>
                             </StackPanel>
-                            <TextBlock Text="Select an installed game from your Steam library to manage in BlueStar."
+                            <TextBlock Text="{DynamicResource String_ModalImportSteamSubtitle}"
                                        Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,4,0,0"/>
                         </StackPanel>
                         <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}"
@@ -1094,7 +1107,7 @@
                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Visibility="{Binding IsScanningSteam, Converter={StaticResource BoolToVisibilityConverter}}">
                             <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource AccentBrush}" Stretch="Uniform" Width="36" Height="36" Margin="0,0,0,12" HorizontalAlignment="Center"/>
-                            <TextBlock Text="Scanning local Steam library folders..." Style="{StaticResource CaptionBold}" Foreground="{StaticResource PrimaryTextBrush}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{DynamicResource String_ScanningSteam}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource PrimaryTextBrush}" HorizontalAlignment="Center"/>
                         </StackPanel>
 
                         <!-- Error State -->
@@ -1120,14 +1133,17 @@
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
                                 <StackPanel Grid.Row="0">
-                                    <TextBlock Text="⚠️ Game Already in Library" FontWeight="Bold" FontSize="13" Foreground="#F43F5E"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="⚠️ " FontWeight="Bold" FontSize="13" Foreground="#F43F5E"/>
+                                        <TextBlock Text="{DynamicResource String_SteamGameAlreadyInLibrary}" FontWeight="Bold" FontSize="13" Foreground="#F43F5E"/>
+                                    </StackPanel>
                                     <TextBlock Text="{Binding DuplicateSteamGame.Name, StringFormat='An instance for \'{0}\' already exists. Do you want to import it as a duplicate instance?'}"
                                                Style="{StaticResource Caption}" Foreground="{StaticResource PrimaryTextBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                                 </StackPanel>
                                 <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
-                                    <Button Content="Cancel" Style="{StaticResource SecondaryButton}" Padding="12,5" FontSize="11" Margin="0,0,8,0"
+                                    <Button Content="{DynamicResource String_Cancel}" Style="{StaticResource SecondaryButton}" Padding="12,5" FontSize="11" Margin="0,0,8,0"
                                             Command="{Binding CancelDuplicateSteamGameCommand}"/>
-                                    <Button Content="Confirm Import" Style="{StaticResource PrimaryButton}" Background="#F43F5E" BorderBrush="#E11D48" Padding="12,5" FontSize="11"
+                                    <Button Content="{DynamicResource String_ConfirmImport}" Style="{StaticResource PrimaryButton}" Background="#F43F5E" BorderBrush="#E11D48" Padding="12,5" FontSize="11"
                                             Command="{Binding ConfirmDuplicateSteamGameCommand}"/>
                                 </StackPanel>
                             </Grid>
@@ -1169,13 +1185,18 @@
                                                 </StackPanel>
 
                                                 <!-- Import Button -->
-                                                <Button Grid.Column="4" Content="📥 Import"
+                                                <Button Grid.Column="4"
                                                         Style="{StaticResource PrimaryButton}"
                                                         Padding="14,6"
                                                         FontSize="12"
                                                         VerticalAlignment="Center"
                                                         Command="{Binding DataContext.ImportSteamGameCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                        CommandParameter="{Binding}"/>
+                                                        CommandParameter="{Binding}">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="📥 "/>
+                                                        <TextBlock Text="{DynamicResource String_Import}"/>
+                                                    </StackPanel>
+                                                </Button>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
@@ -1186,7 +1207,7 @@
 
                     <!-- Footer -->
                     <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Content="Close" Style="{StaticResource SecondaryButton}" Padding="16,8"
+                        <Button Content="{DynamicResource String_Close}" Style="{StaticResource SecondaryButton}" Padding="16,8"
                                 Command="{Binding CloseSteamImportModalCommand}"/>
                     </StackPanel>
                 </Grid>
@@ -1230,9 +1251,9 @@
                         <StackPanel Grid.Column="0">
                             <StackPanel Orientation="Horizontal">
                                 <Path Data="{StaticResource IconDownload}" Fill="{StaticResource WarningBrush}" Stretch="Uniform" Width="20" Height="20" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="Import DepotBox ZIP Archive" Style="{StaticResource H2}" Foreground="{StaticResource WhiteBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Text="{DynamicResource String_ModalImportZipTitle}" Style="{StaticResource H2}" Foreground="{StaticResource WhiteBrush}" VerticalAlignment="Center"/>
                             </StackPanel>
-                            <TextBlock Text="Inspect detected games and manifests before adding to BlueStar."
+                            <TextBlock Text="{DynamicResource String_ModalImportZipSubtitle}"
                                        Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,4,0,0"/>
                         </StackPanel>
                         <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}"
@@ -1264,23 +1285,27 @@
                                     </Border>
 
                                     <!-- Centered Titles -->
-                                    <TextBlock Text="Drag &amp; drop DepotBox .ZIP here"
+                                    <TextBlock Text="{DynamicResource String_DragDropZip}"
                                                Style="{StaticResource H3}"
                                                Foreground="{StaticResource WhiteBrush}"
                                                HorizontalAlignment="Center"
                                                Margin="0,0,0,4"/>
-                                    <TextBlock Text="Supports official DepotBox ZIP archives containing game files and manifests"
+                                    <TextBlock Text="{DynamicResource String_DragDropZipDesc}"
                                                Style="{StaticResource Caption}"
                                                Foreground="{StaticResource SecondaryTextBrush}"
                                                HorizontalAlignment="Center"
                                                Margin="0,0,0,18"/>
 
                                     <!-- Browse Button -->
-                                    <Button Content="📁 Browse ZIP File..."
-                                            Style="{StaticResource PrimaryButton}"
+                                    <Button Style="{StaticResource PrimaryButton}"
                                             Padding="22,10"
                                             HorizontalAlignment="Center"
-                                            Command="{Binding BrowseZipFileCommand}"/>
+                                            Command="{Binding BrowseZipFileCommand}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="📁 "/>
+                                            <TextBlock Text="{DynamicResource String_BrowseZipFile}"/>
+                                        </StackPanel>
+                                    </Button>
                                 </StackPanel>
                             </Border>
 
@@ -1306,9 +1331,9 @@
                                         <Path Grid.Column="0" Data="{StaticResource IconDownload}" Fill="{StaticResource AccentBrush}" Stretch="Uniform" Width="18" Height="18" VerticalAlignment="Center"/>
                                         <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                             <TextBlock Text="{Binding PendingZipPath}" FontWeight="SemiBold" FontSize="12" TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock Text="Archive loaded successfully" Style="{StaticResource Caption}" Foreground="{StaticResource SuccessBrush}"/>
+                                            <TextBlock Text="{DynamicResource String_ArchiveLoadedSuccess}" Style="{StaticResource Caption}" Foreground="{StaticResource SuccessBrush}"/>
                                         </StackPanel>
-                                        <Button Grid.Column="3" Content="Change ZIP..." Style="{StaticResource SecondaryButton}" Padding="10,5" FontSize="11" VerticalAlignment="Center"
+                                        <Button Grid.Column="3" Content="{DynamicResource String_ChangeZip}" Style="{StaticResource SecondaryButton}" Padding="10,5" FontSize="11" VerticalAlignment="Center"
                                                 Command="{Binding BrowseZipFileCommand}"/>
                                     </Grid>
                                 </Border>
@@ -1347,13 +1372,13 @@
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
 
-                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Game Name:" Style="{StaticResource CaptionBold}"/>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{DynamicResource String_GameNameLabel}" Style="{StaticResource CaptionBold}"/>
                                         <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ZipGameName}" Style="{StaticResource BodyMedium}" FontWeight="Bold"/>
 
-                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Steam AppID:" Style="{StaticResource CaptionBold}"/>
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="{DynamicResource String_SteamAppIdLabel}" Style="{StaticResource CaptionBold}"/>
                                         <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding ZipAppId}" Style="{StaticResource Body}"/>
 
-                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Manifest Date:" Style="{StaticResource CaptionBold}"/>
+                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="{DynamicResource String_ManifestDateLabel}" Style="{StaticResource CaptionBold}"/>
                                         <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding ZipManifestDateFormatted}" Style="{StaticResource BodySmall}" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
                                     </Grid>
                                 </Border>
@@ -1376,10 +1401,10 @@
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
                                                 <StackPanel>
-                                                    <TextBlock Text="Depots Found" Style="{StaticResource Caption}"/>
+                                                    <TextBlock Text="{DynamicResource String_Depots}" Style="{StaticResource Caption}"/>
                                                     <TextBlock Text="{Binding PreviewDepots.Count}" Style="{StaticResource H3}" FontWeight="Bold" Margin="0,2,0,0"/>
                                                 </StackPanel>
-                                                <TextBlock Grid.Column="1" Text="▾ View" Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                                                <TextBlock Grid.Column="1" Text="▾ " Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
                                             </Grid>
                                         </Border>
                                     </Button>
@@ -1394,10 +1419,10 @@
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
                                                 <StackPanel>
-                                                    <TextBlock Text="DLCs Included" Style="{StaticResource Caption}"/>
+                                                    <TextBlock Text="{DynamicResource String_Dlcs}" Style="{StaticResource Caption}"/>
                                                     <TextBlock Text="{Binding PreviewDlcs.Count}" Style="{StaticResource H3}" FontWeight="Bold" Margin="0,2,0,0"/>
                                                 </StackPanel>
-                                                <TextBlock Grid.Column="1" Text="▾ View" Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                                                <TextBlock Grid.Column="1" Text="▾ " Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
                                             </Grid>
                                         </Border>
                                     </Button>
@@ -1450,7 +1475,7 @@
                                 </Border>
 
                                 <!-- Install Path Row -->
-                                <TextBlock Text="Destination Install Path" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{DynamicResource String_DestinationInstallPath}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
                                 <TextBox Text="{Binding ZipInstallPath, UpdateSourceTrigger=PropertyChanged}"
                                          Style="{StaticResource DarkTextBox}"
                                          Padding="10,8"
@@ -1471,7 +1496,7 @@
                             <!-- Loading State -->
                             <StackPanel HorizontalAlignment="Center" Margin="0,12"
                                         Visibility="{Binding IsParsingZip, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <TextBlock Text="Analyzing ZIP archive contents..." Style="{StaticResource CaptionBold}" Foreground="{StaticResource PrimaryTextBrush}" HorizontalAlignment="Center"/>
+                                <TextBlock Text="{DynamicResource String_AnalyzingZip}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource PrimaryTextBrush}" HorizontalAlignment="Center"/>
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
@@ -1482,11 +1507,16 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <Button Grid.Column="0" Content="Cancel" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Padding="16,8"
+                        <Button Grid.Column="0" Content="{DynamicResource String_Cancel}" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Padding="16,8"
                                 Command="{Binding CloseZipImportModalCommand}"/>
-                        <Button Grid.Column="1" Content="📥 Import &amp; Configure Instance" Style="{StaticResource PrimaryButton}" Padding="18,8"
+                        <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Padding="18,8"
                                 Command="{Binding ConfirmZipImportCommand}"
-                                IsEnabled="{Binding PendingZipPath, Converter={StaticResource NullToBoolConverter}}"/>
+                                IsEnabled="{Binding PendingZipPath, Converter={StaticResource NullToBoolConverter}}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="📥 "/>
+                                <TextBlock Text="{DynamicResource String_ImportConfigureInstance}"/>
+                            </StackPanel>
+                        </Button>
                     </Grid>
                 </Grid>
             </Border>
@@ -1529,9 +1559,9 @@
                         <StackPanel Grid.Column="0">
                             <StackPanel Orientation="Horizontal">
                                 <Path Data="{StaticResource IconFolder}" Fill="{StaticResource SuccessBrush}" Stretch="Uniform" Width="20" Height="20" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="Import Game Folder" Style="{StaticResource H2}" Foreground="{StaticResource WhiteBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Text="{DynamicResource String_ModalImportFolderTitle}" Style="{StaticResource H2}" Foreground="{StaticResource WhiteBrush}" VerticalAlignment="Center"/>
                             </StackPanel>
-                            <TextBlock Text="Select a local folder. BlueStar will auto-detect AppID, engine and executable."
+                            <TextBlock Text="{DynamicResource String_ModalImportFolderSubtitle}"
                                        Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,4,0,0"/>
                         </StackPanel>
                         <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}"
@@ -1563,23 +1593,27 @@
                                     </Border>
 
                                     <!-- Centered Titles -->
-                                    <TextBlock Text="Drag &amp; drop game folder here"
+                                    <TextBlock Text="{DynamicResource String_DragDropFolder}"
                                                Style="{StaticResource H3}"
                                                Foreground="{StaticResource WhiteBrush}"
                                                HorizontalAlignment="Center"
                                                Margin="0,0,0,4"/>
-                                    <TextBlock Text="BlueStar will auto-detect executable, engine and Steam AppID"
+                                    <TextBlock Text="{DynamicResource String_DragDropFolderDesc}"
                                                Style="{StaticResource Caption}"
                                                Foreground="{StaticResource SecondaryTextBrush}"
                                                HorizontalAlignment="Center"
                                                Margin="0,0,0,18"/>
 
                                     <!-- Browse Button -->
-                                    <Button Content="📁 Browse Game Folder..."
-                                            Style="{StaticResource PrimaryButton}"
+                                    <Button Style="{StaticResource PrimaryButton}"
                                             Padding="22,10"
                                             HorizontalAlignment="Center"
-                                            Command="{Binding BrowseFolderCommand}"/>
+                                            Command="{Binding BrowseFolderCommand}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="📁 "/>
+                                            <TextBlock Text="{DynamicResource String_BrowseGameFolder}"/>
+                                        </StackPanel>
+                                    </Button>
                                 </StackPanel>
                             </Border>
 
@@ -1605,9 +1639,9 @@
                                         <Path Grid.Column="0" Data="{StaticResource IconFolder}" Fill="{StaticResource SuccessBrush}" Stretch="Uniform" Width="18" Height="18" VerticalAlignment="Center"/>
                                         <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                             <TextBlock Text="{Binding FolderPath}" FontWeight="SemiBold" FontSize="12" TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock Text="Folder selected" Style="{StaticResource Caption}" Foreground="{StaticResource SuccessBrush}"/>
+                                            <TextBlock Text="{DynamicResource String_FolderSelected}" Style="{StaticResource Caption}" Foreground="{StaticResource SuccessBrush}"/>
                                         </StackPanel>
-                                        <Button Grid.Column="3" Content="Change..." Style="{StaticResource SecondaryButton}" Padding="10,5" FontSize="11" VerticalAlignment="Center"
+                                        <Button Grid.Column="3" Content="{DynamicResource String_Change}" Style="{StaticResource SecondaryButton}" Padding="10,5" FontSize="11" VerticalAlignment="Center"
                                                 Command="{Binding BrowseFolderCommand}"/>
                                     </Grid>
                                 </Border>
@@ -1632,7 +1666,7 @@
 
                                         <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="Engine: " Style="{StaticResource CaptionBold}"/>
+                                                <TextBlock Text="{DynamicResource String_EngineLabel}" Style="{StaticResource CaptionBold}"/>
                                                 <TextBlock Text="{Binding FolderEngine.DisplayText, FallbackValue='Generic Game'}"
                                                            Foreground="{Binding FolderEngine, Converter={StaticResource EngineTypeToBrushConverter}, FallbackValue={StaticResource SecondaryTextBrush}}"
                                                            FontWeight="SemiBold"/>
@@ -1647,7 +1681,7 @@
                                                 </Grid.ColumnDefinitions>
                                                 <TextBlock Grid.Column="0" Text="{Binding FolderExecutablePath, StringFormat='Executable: {0}', FallbackValue='Executable: None detected'}"
                                                            Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
-                                                <Button Grid.Column="2" Content="Browse .exe..." Style="{StaticResource GhostButton}"
+                                                <Button Grid.Column="2" Content="{DynamicResource String_BrowseExe}" Style="{StaticResource GhostButton}"
                                                         Padding="8,2" FontSize="11" Command="{Binding BrowseFolderExecutableCommand}"/>
                                             </Grid>
                                         </StackPanel>
@@ -1655,14 +1689,14 @@
                                 </Border>
 
                                 <!-- Game Name (Editable) -->
-                                <TextBlock Text="Game Name (Editable)" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{DynamicResource String_GameNameEditable}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
                                 <TextBox Text="{Binding FolderGameName, UpdateSourceTrigger=PropertyChanged}"
                                          Style="{StaticResource DarkTextBox}"
                                          Padding="10,8"
                                          Margin="0,0,0,12"/>
 
                                 <!-- Steam AppID (Editable) + Search on Steam button -->
-                                <TextBlock Text="Steam AppID (Editable)" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{DynamicResource String_SteamAppIdEditable}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
                                 <Grid Margin="0,0,0,4">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
@@ -1673,12 +1707,17 @@
                                              Text="{Binding FolderAppId, UpdateSourceTrigger=PropertyChanged}"
                                              Style="{StaticResource DarkTextBox}"
                                              Padding="10,8"/>
-                                    <Button Grid.Column="2" Content="🔍 Search on Steam"
+                                    <Button Grid.Column="2"
                                             Style="{StaticResource SecondaryButton}"
                                             Padding="12,7" FontSize="11"
-                                            Command="{Binding OpenSteamSearchModalCommand}"/>
+                                            Command="{Binding OpenSteamSearchModalCommand}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="🔍 "/>
+                                            <TextBlock Text="{DynamicResource String_SearchOnSteam}"/>
+                                        </StackPanel>
+                                    </Button>
                                 </Grid>
-                                <TextBlock Text="If no AppID was found or if Spacewar (480) was detected, search was performed automatically."
+                                <TextBlock Text="{DynamicResource String_AutoSearchNotice}"
                                            Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,14"/>
                             </StackPanel>
 
@@ -1696,7 +1735,7 @@
                             <!-- Scanning State -->
                             <StackPanel HorizontalAlignment="Center" Margin="0,10"
                                         Visibility="{Binding IsScanningFolder, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <TextBlock Text="Inspecting game folder, engine and Steam AppID..." Style="{StaticResource CaptionBold}" Foreground="{StaticResource PrimaryTextBrush}" HorizontalAlignment="Center"/>
+                                <TextBlock Text="{DynamicResource String_InspectingFolder}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource PrimaryTextBrush}" HorizontalAlignment="Center"/>
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
@@ -1707,11 +1746,16 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <Button Grid.Column="0" Content="Cancel" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Padding="16,8"
+                        <Button Grid.Column="0" Content="{DynamicResource String_Cancel}" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Padding="16,8"
                                 Command="{Binding CloseFolderImportModalCommand}"/>
-                        <Button Grid.Column="1" Content="📥 Create Instance" Style="{StaticResource PrimaryButton}" Padding="18,8"
+                        <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Padding="18,8"
                                 Command="{Binding ConfirmFolderImportCommand}"
-                                IsEnabled="{Binding FolderPath, Converter={StaticResource NullToBoolConverter}}"/>
+                                IsEnabled="{Binding FolderPath, Converter={StaticResource NullToBoolConverter}}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="📥 "/>
+                                <TextBlock Text="{DynamicResource String_CreateInstance}"/>
+                            </StackPanel>
+                        </Button>
                     </Grid>
                 </Grid>
             </Border>
@@ -1752,7 +1796,10 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="🔍 Search Game on Steam" Style="{StaticResource H3}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🔍 " Style="{StaticResource H3}"/>
+                            <TextBlock Text="{DynamicResource String_SearchGameOnSteamTitle}" Style="{StaticResource H3}"/>
+                        </StackPanel>
                         <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}" Command="{Binding CloseSteamSearchModalCommand}"/>
                     </Grid>
 
@@ -1765,7 +1812,7 @@
                         </Grid.ColumnDefinitions>
                         <TextBox Grid.Column="0" Style="{StaticResource DarkTextBox}"
                                  Text="{Binding SteamSearchStoreQuery, UpdateSourceTrigger=PropertyChanged}"/>
-                        <Button Grid.Column="2" Content="Search" Style="{StaticResource PrimaryButton}"
+                        <Button Grid.Column="2" Content="{DynamicResource String_Search}" Style="{StaticResource PrimaryButton}"
                                 Command="{Binding SearchSteamStoreCommand}" Padding="14,7"/>
                     </Grid>
 
@@ -1777,7 +1824,7 @@
                             Padding="6" MinHeight="160">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel>
-                                <TextBlock Text="Searching Steam Store..." Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,20"
+                                <TextBlock Text="{DynamicResource String_SearchingSteamStore}" Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,20"
                                            Visibility="{Binding IsSearchingSteamStore, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                 <ItemsControl ItemsSource="{Binding SteamStoreSearchResults}">
                                     <ItemsControl.ItemTemplate>
@@ -1797,7 +1844,7 @@
                                                         <TextBlock Text="{Binding Name}" Style="{StaticResource BodySmall}" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
                                                         <TextBlock Text="{Binding AppId, StringFormat='AppID: {0}'}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
                                                     </StackPanel>
-                                                    <Button Grid.Column="3" Content="Select" Style="{StaticResource PrimaryButton}" Padding="10,4" FontSize="11"
+                                                    <Button Grid.Column="3" Content="{DynamicResource String_Select}" Style="{StaticResource PrimaryButton}" Padding="10,4" FontSize="11"
                                                             Command="{Binding DataContext.SelectSteamSearchResultCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                             CommandParameter="{Binding}"/>
                                                 </Grid>
@@ -1810,7 +1857,7 @@
                     </Border>
 
                     <!-- Close Button -->
-                    <Button Grid.Row="6" Content="Close" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Right" Padding="14,6"
+                    <Button Grid.Row="6" Content="{DynamicResource String_Close}" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Right" Padding="14,6"
                             Command="{Binding CloseSteamSearchModalCommand}"/>
                 </Grid>
             </Border>

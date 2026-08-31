@@ -10,6 +10,7 @@
                 <ResourceDictionary Source="pack://application:,,,/BlueStar;component/Themes/Typography.xaml"/>
                 <ResourceDictionary Source="pack://application:,,,/BlueStar;component/Themes/Controls.xaml"/>
                 <ResourceDictionary Source="pack://application:,,,/BlueStar;component/Themes/DarkTheme.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/BlueStar;component/Themes/Strings.en.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

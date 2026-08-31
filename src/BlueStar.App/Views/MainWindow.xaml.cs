@@ -67,6 +67,66 @@ public partial class MainWindow : Window
         var handle = new WindowInteropHelper(this).Handle;
         var hwndSource = HwndSource.FromHwnd(handle);
         hwndSource?.AddHook(WndProc);
+
+        ApplyAdaptiveWindowSize(handle);
+    }
+
+    private void ApplyAdaptiveWindowSize(IntPtr hwnd)
+    {
+        try
+        {
+            var monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            if (monitor != IntPtr.Zero)
+            {
+                var monitorInfo = new MONITORINFO();
+                GetMonitorInfo(monitor, monitorInfo);
+                RECT rcWork = monitorInfo.rcWork;
+
+                var source = HwndSource.FromHwnd(hwnd);
+                double dpiX = source?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+                double dpiY = source?.CompositionTarget?.TransformToDevice.M22 ?? 1.0;
+
+                double workAreaWidth = (rcWork.Right - rcWork.Left) / dpiX;
+                double workAreaHeight = (rcWork.Bottom - rcWork.Top) / dpiY;
+                double workAreaLeft = rcWork.Left / dpiX;
+                double workAreaTop = rcWork.Top / dpiY;
+
+                // Compute adaptive dimensions (ideal 82% width, 85% height, bounded within MinWidth/MinHeight and max limits)
+                double targetWidth = Math.Clamp(workAreaWidth * 0.82, MinWidth, 1440);
+                double targetHeight = Math.Clamp(workAreaHeight * 0.85, MinHeight, 920);
+
+                if (targetWidth > workAreaWidth * 0.95) targetWidth = Math.Max(MinWidth, workAreaWidth * 0.95);
+                if (targetHeight > workAreaHeight * 0.95) targetHeight = Math.Max(MinHeight, workAreaHeight * 0.95);
+
+                Width = targetWidth;
+                Height = targetHeight;
+                Left = workAreaLeft + (workAreaWidth - targetWidth) / 2.0;
+                Top = workAreaTop + (workAreaHeight - targetHeight) / 2.0;
+            }
+        }
+        catch { }
+    }
+
+    protected override void OnPreviewMouseDown(System.Windows.Input.MouseButtonEventArgs e)
+    {
+        base.OnPreviewMouseDown(e);
+
+        if (e.ChangedButton == System.Windows.Input.MouseButton.XButton1)
+        {
+            if (DataContext is ViewModels.MainViewModel vm && vm.CanGoBack)
+            {
+                vm.GoBack();
+                e.Handled = true;
+            }
+        }
+        else if (e.ChangedButton == System.Windows.Input.MouseButton.XButton2)
+        {
+            if (DataContext is ViewModels.MainViewModel vm && vm.CanGoForward)
+            {
+                vm.GoForward();
+                e.Handled = true;
+            }
+        }
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)

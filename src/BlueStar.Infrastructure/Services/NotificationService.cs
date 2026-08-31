@@ -37,7 +37,8 @@ public sealed class NotificationService : INotificationService
             Type = type,
             Duration = duration ?? TimeSpan.FromSeconds(20),
             ActionText = actionText,
-            Action = action
+            Action = action,
+            DismissAction = Dismiss
         };
 
         _logger.LogInformation("[Toast] [{Type}] {Title}: {Message}", type, title, message);
@@ -105,13 +106,31 @@ public sealed class NotificationService : INotificationService
 
     private void PostToUi(Action action)
     {
-        if (_uiContext != null && SynchronizationContext.Current != _uiContext)
+        var targetCtx = _uiContext ?? SynchronizationContext.Current;
+        if (targetCtx != null && SynchronizationContext.Current != targetCtx)
         {
-            _uiContext.Post(_ => action(), null);
+            targetCtx.Post(_ =>
+            {
+                try
+                {
+                    action();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Error executing UI action in NotificationService");
+                }
+            }, null);
         }
         else
         {
-            action();
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Error executing UI action in NotificationService");
+            }
         }
     }
 }

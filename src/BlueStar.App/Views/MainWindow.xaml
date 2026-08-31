@@ -129,10 +129,9 @@
             <!-- ── LEFT NAVIGATION SIDEBAR ── -->
             <Border Grid.Column="0" Background="{StaticResource SidebarBackgroundBrush}">
                 <DockPanel>
-                    <!-- Bottom: Settings Nav Button (Directly above bottom status bar) -->
                     <Border DockPanel.Dock="Bottom" Padding="0,8" Margin="0,0,0,4">
                         <RadioButton Style="{StaticResource CompactSidebarNavButton}"
-                                     Tag="{StaticResource IconSettings}" ToolTip="Settings &amp; About"
+                                     Tag="{StaticResource IconSettings}" ToolTip="{DynamicResource String_NavSettings}"
                                      IsChecked="{Binding SelectedNavigation, Converter={StaticResource StringMatchConverter}, ConverterParameter=Settings}"
                                      Command="{Binding NavigateCommand}"
                                      CommandParameter="Settings"/>
@@ -143,21 +142,21 @@
                         <StackPanel Margin="0,8,0,0" HorizontalAlignment="Center">
                             <!-- 1. Home Dashboard -->
                             <RadioButton Style="{StaticResource CompactSidebarNavButton}"
-                                         Tag="{StaticResource IconHome}" ToolTip="Home Dashboard"
+                                         Tag="{StaticResource IconHome}" ToolTip="{DynamicResource String_NavDashboard}"
                                          IsChecked="{Binding SelectedNavigation, Converter={StaticResource StringMatchConverter}, ConverterParameter=Home}"
                                          Command="{Binding NavigateCommand}"
                                          CommandParameter="Home"/>
 
                             <!-- 2. Explore Catalog -->
                             <RadioButton Style="{StaticResource CompactSidebarNavButton}"
-                                         Tag="{StaticResource IconExplore}" ToolTip="Explore DepotBox"
+                                         Tag="{StaticResource IconExplore}" ToolTip="{DynamicResource String_NavExplore}"
                                          IsChecked="{Binding SelectedNavigation, Converter={StaticResource StringMatchConverter}, ConverterParameter=Explore}"
                                          Command="{Binding NavigateCommand}"
                                          CommandParameter="Explore"/>
 
                             <!-- 3. Instances Library -->
                             <RadioButton Style="{StaticResource CompactSidebarNavButton}"
-                                         Tag="{StaticResource IconGamepad}" ToolTip="Instance Library"
+                                         Tag="{StaticResource IconGamepad}" ToolTip="{DynamicResource String_NavLibrary}"
                                          IsChecked="{Binding SelectedNavigation, Converter={StaticResource StringMatchConverter}, ConverterParameter=Library}"
                                          Command="{Binding NavigateCommand}"
                                          CommandParameter="Library"/>
@@ -177,9 +176,9 @@
                                                 <Grid>
                                                     <!-- Centered Fallback Initial Letter (behind image) -->
                                                     <TextBlock Text="{Binding Name[0]}"
-                                                               FontWeight="Bold" FontSize="14"
-                                                               Foreground="{StaticResource AccentBrush}"
-                                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                                FontWeight="Bold" FontSize="14"
+                                                                Foreground="{StaticResource AccentBrush}"
+                                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
 
                                                     <!-- Centered Image (strictly clipped to rounded border) -->
                                                     <Border CornerRadius="8">
@@ -202,7 +201,7 @@
                                 <Button Width="40" Height="40"
                                         Style="{StaticResource GhostButton}"
                                         Command="{Binding ToggleSidebarImportMenuCommand}"
-                                        ToolTip="Import / Add Instance"
+                                        ToolTip="{DynamicResource String_ImportGame}"
                                         Padding="0"
                                         HorizontalAlignment="Center">
                                     <Border Background="{StaticResource SurfaceCardBrush}"
@@ -441,7 +440,7 @@
                     <Button Style="{StaticResource GhostButton}"
                             Padding="8,4"
                             Cursor="Hand"
-                            ToolTip="View background tasks and bulk updates"
+                            ToolTip="{DynamicResource String_TaskDrawerTooltip}"
                             Command="{Binding ToggleTasksFlyoutCommand}"
                             Visibility="{Binding HasActiveTasks, Converter={StaticResource BoolToVisibilityConverter}}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -492,7 +491,7 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0">
-                            <TextBlock Text="Active Tasks" Style="{StaticResource H3}"/>
+                            <TextBlock Text="{DynamicResource String_ActiveTasks}" Style="{StaticResource H3}"/>
                             <TextBlock Text="{Binding BackgroundTaskStatusText}" Style="{StaticResource Caption}" Margin="0,2,0,0"/>
                         </StackPanel>
                         <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}"
@@ -511,7 +510,7 @@
                             Visibility="{Binding HasMultipleActiveTasks, Converter={StaticResource BoolToVisibilityConverter}}">
                         <StackPanel>
                             <Grid Margin="0,0,0,6">
-                                <TextBlock Text="Total Progress" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource PrimaryTextBrush}"/>
+                                <TextBlock Text="{DynamicResource String_TotalProgress}" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource PrimaryTextBrush}"/>
                                 <TextBlock Text="{Binding TotalTasksProgressPercentage, StringFormat='{}{0:F0}%'}"
                                            FontWeight="Bold" FontSize="12" Foreground="{StaticResource AccentBrush}"
                                            HorizontalAlignment="Right"/>
@@ -527,7 +526,7 @@
                     <!-- Active Tasks List -->
                     <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" MaxHeight="300">
                         <StackPanel>
-                            <TextBlock Text="No active tasks in progress."
+                            <TextBlock Text="{DynamicResource String_NoActiveTasks}"
                                        Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,20"
                                        Visibility="{Binding ActiveBackgroundTasks.Count, Converter={StaticResource ZeroToVisibilityConverter}}"/>
 
@@ -542,9 +541,9 @@
                                                 Margin="0,0,0,8">
                                             <Grid>
                                                 <Grid.RowDefinitions>
-                                                    <RowDefinition Height="Auto"/>
-                                                    <RowDefinition Height="Auto"/>
-                                                    <RowDefinition Height="Auto"/>
+                                                     <RowDefinition Height="Auto"/>
+                                                     <RowDefinition Height="Auto"/>
+                                                     <RowDefinition Height="Auto"/>
                                                 </Grid.RowDefinitions>
 
                                                 <!-- Top Row: Title, Progress % and Cancel -->
@@ -563,7 +562,7 @@
 
                                                     <Button Grid.Column="2" Content="✕" Style="{StaticResource GhostButton}"
                                                             Padding="4,1" Margin="8,0,0,0" FontSize="10" Foreground="{StaticResource DangerBrush}"
-                                                            ToolTip="Cancel task"
+                                                            ToolTip="{DynamicResource String_CancelTask}"
                                                             Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisibilityConverter}}"
                                                             Command="{Binding DataContext.CancelBackgroundTaskCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                             CommandParameter="{Binding Id}"/>
@@ -655,9 +654,9 @@
                                     Style="{StaticResource GhostButton}"
                                     Padding="4,2"
                                     VerticalAlignment="Top"
-                                    ToolTip="Close notification"
-                                    Command="{Binding DataContext.DismissNotificationCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                    CommandParameter="{Binding Id}">
+                                    Cursor="Hand"
+                                    ToolTip="{DynamicResource String_Close}"
+                                    Command="{Binding DismissCommand}">
                                 <TextBlock Text="✕" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
                             </Button>
                         </Grid>
@@ -814,14 +813,14 @@
                         <StackPanel Grid.Column="0">
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                                 <TextBlock Text="🛠️" FontSize="20" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="Requisitos del Sistema / System Requirements" Style="{StaticResource H2}" Foreground="{StaticResource WhiteBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Text="{DynamicResource String_SysReqTitle}" Style="{StaticResource H2}" Foreground="{StaticResource WhiteBrush}" VerticalAlignment="Center"/>
                             </StackPanel>
-                            <TextBlock Text="Verificación de componentes esenciales para la ejecución de BlueStar, inyección de emuladores y lanzamiento de juegos."
+                            <TextBlock Text="{DynamicResource String_SysReqSubtitle}"
                                        Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
                         </StackPanel>
                         <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}"
                                 Command="{Binding CloseSystemRequirementsModalCommand}"
-                                ToolTip="Continuar al lanzador"/>
+                                ToolTip="{DynamicResource String_ContinueToBlueStar}"/>
                     </Grid>
 
                     <!-- Status Alert Banner -->
@@ -859,11 +858,11 @@
                                 <TextBlock FontWeight="SemiBold" FontSize="13">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
-                                            <Setter Property="Text" Value="¡Todos los requisitos del sistema están instalados y verificados!"/>
+                                            <Setter Property="Text" Value="{DynamicResource String_AllReqsVerified}"/>
                                             <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding HasMissingRequirements}" Value="True">
-                                                    <Setter Property="Text" Value="{Binding MissingPrerequisitesCount, StringFormat='{}Se detectaron {0} componente(s) faltante(s) en tu sistema.'}"/>
+                                                    <Setter Property="Text" Value="{Binding MissingPrerequisitesCount, StringFormat='{}Missing prerequisite components ({0})'}"/>
                                                     <Setter Property="Foreground" Value="{StaticResource WarningBrush}"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
@@ -874,10 +873,10 @@
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock" BasedOn="{StaticResource Caption}">
                                             <Setter Property="Foreground" Value="{StaticResource SecondaryTextBrush}"/>
-                                            <Setter Property="Text" Value="Tu equipo cuenta con todos los runtimes de C++, DirectX y .NET necesarios para una compatibilidad perfecta."/>
+                                            <Setter Property="Text" Value="{DynamicResource String_AllReqsVerifiedDesc}"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding HasMissingRequirements}" Value="True">
-                                                    <Setter Property="Text" Value="Instala los componentes faltantes para prevenir errores de DLLs ausentes (MSVCP140, D3DX9) o fallos al abrir juegos."/>
+                                                    <Setter Property="Text" Value="{DynamicResource String_MissingReqsDesc}"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
@@ -919,14 +918,14 @@
                                                 </StackPanel>
                                                 <TextBlock Text="{Binding Description}" Style="{StaticResource BodySmall}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,4" TextWrapping="Wrap"/>
                                                 <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="Categoría: " Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}"/>
+                                                    <TextBlock Text="{DynamicResource String_Filter}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,4,0"/>
                                                     <TextBlock Text="{Binding Category}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource SecondaryTextBrush}"/>
                                                 </StackPanel>
                                             </StackPanel>
 
                                             <!-- Right Install action -->
                                             <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                                <Button Content="Instalar"
+                                                <Button Content="{DynamicResource String_Install}"
                                                         Style="{StaticResource SecondaryButton}"
                                                         Padding="14,6" FontSize="11"
                                                         Command="{Binding DataContext.InstallSystemPrerequisiteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
@@ -958,7 +957,7 @@
                                              Foreground="{StaticResource AccentBrush}"
                                              Background="{StaticResource SurfaceCardBrush}"
                                              BorderThickness="0" Margin="0,0,0,6"/>
-                                <TextBlock Text="{Binding SystemPrerequisitesInstallStatusText, FallbackValue='Instalando componente...'}"
+                                <TextBlock Text="{Binding SystemPrerequisitesInstallStatusText, FallbackValue='Installing component...'}"
                                            Style="{StaticResource Caption}" Foreground="{StaticResource AccentBrush}"/>
                             </StackPanel>
                         </Border>
@@ -973,21 +972,21 @@
 
                             <!-- Checkbox: Check on startup -->
                             <CheckBox Grid.Column="0"
-                                      Content="Verificar automáticamente al iniciar BlueStar"
+                                      Content="{DynamicResource String_CheckReqsSetting}"
                                       IsChecked="{Binding CheckRequirementsOnStartup, Mode=TwoWay}"
                                       Style="{StaticResource DarkCheckBox}"
                                       VerticalAlignment="Center"/>
 
                             <!-- Buttons -->
                             <StackPanel Grid.Column="2" Orientation="Horizontal">
-                                <Button Content="🔄 Re-escanear"
+                                <Button Content="{DynamicResource String_Rescan}"
                                         Style="{StaticResource SecondaryButton}"
                                         Padding="12,7" FontSize="12"
                                         Margin="0,0,8,0"
                                         Command="{Binding ScanSystemRequirementsCommand}"
                                         IsEnabled="{Binding IsInstallingSystemPrerequisites, Converter={StaticResource InverseBoolConverter}}"/>
 
-                                <Button Content="⚡ Instalar Faltantes"
+                                <Button Content="{DynamicResource String_InstallMissing}"
                                         Style="{StaticResource PrimaryButton}"
                                         Padding="16,7" FontSize="12"
                                         Margin="0,0,8,0"
@@ -995,7 +994,7 @@
                                         Command="{Binding InstallAllSystemPrerequisitesCommand}"
                                         IsEnabled="{Binding IsInstallingSystemPrerequisites, Converter={StaticResource InverseBoolConverter}}"/>
 
-                                <Button Content="Continuar a BlueStar"
+                                <Button Content="{DynamicResource String_ContinueToBlueStar}"
                                         Style="{StaticResource SecondaryButton}"
                                         Padding="14,7" FontSize="12"
                                         Command="{Binding CloseSystemRequirementsModalCommand}"/>

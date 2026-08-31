@@ -180,8 +180,19 @@ public sealed class AppSettingsService
         }
     }
 
+    /// <summary>Application language code ("en" or "es").</summary>
+    public string Language => string.IsNullOrWhiteSpace(_current.Language) ? "en" : _current.Language;
+
+    /// <summary>Persists the language setting.</summary>
+    public async Task SetLanguageAsync(string language)
+    {
+        _current = _current with { Language = language };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
     private sealed record AppSettings
     {
+        public string? Language { get; init; } = "en";
         public string? LastInstallDirectory { get; init; }
         public string? DefaultDownloadDirectory { get; init; }
         public bool DeleteDepotsAfterInstall { get; init; } = true;

@@ -38,15 +38,37 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="32,24" MaxWidth="950" HorizontalAlignment="Stretch">
 
-            <TextBlock Text="Settings" Style="{StaticResource H1}" Margin="0,0,0,6"/>
-            <TextBlock Text="Configure DepotBox API, download behaviors, game engines, and local storage."
+            <TextBlock Text="{DynamicResource String_SettingsTitle}" Style="{StaticResource H1}" Margin="0,0,0,6"/>
+            <TextBlock Text="{DynamicResource String_SettingsSubtitle}"
                        Style="{StaticResource Subtitle}" TextWrapping="Wrap" Margin="0,0,0,24"/>
+
+            <!-- ═══ LANGUAGE & LOCALIZATION SECTION ═══ -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,20">
+                <StackPanel>
+                    <TextBlock Text="{DynamicResource String_LanguageSetting}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                    <TextBlock Text="{DynamicResource String_LanguageSettingDesc}"
+                               Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,14"/>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="320"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <ComboBox ItemsSource="{Binding LanguageOptions}"
+                                  SelectedItem="{Binding SelectedLanguageOption}"
+                                  Height="36"
+                                  FontSize="13"
+                                  VerticalContentAlignment="Center"
+                                  Style="{StaticResource DarkComboBox}"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
 
             <!-- ═══ DEPOTBOX API SECTION ═══ -->
             <Border Style="{StaticResource Card}" Margin="0,0,0,20">
                 <StackPanel>
-                    <TextBlock Text="DepotBox API Configuration" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                    <TextBlock Text="BlueStar connects to the DepotBox catalog to fetch game metadata, availability, and depot manifests."
+                    <TextBlock Text="{DynamicResource String_ApiConfigHeader}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                    <TextBlock Text="{DynamicResource String_ApiConnectionDesc}"
                                Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,14"/>
 
                     <!-- Active status info banner -->
@@ -67,26 +89,26 @@
 
                     <!-- Personal Override API Key -->
                     <StackPanel Margin="0,4,0,0">
-                        <TextBlock Text="Personal API Key (Optional Override):" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
-                        <TextBlock Text="Leave this field empty to use the built-in default API configuration. Enter your personal key only if you wish to override settings with your own DepotBox account."
+                        <TextBlock Text="{DynamicResource String_ApiKeyLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                        <TextBlock Text="{DynamicResource String_ApiKeyHelp}"
                                    Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,8"/>
                         <TextBox Style="{StaticResource DarkTextBox}"
                                  Text="{Binding ApiKey, UpdateSourceTrigger=PropertyChanged}"
                                  Margin="0,0,0,14"/>
 
                         <StackPanel Orientation="Horizontal">
-                            <Button Content="Save Personal Key"
+                            <Button Content="{DynamicResource String_SavePersonalKeyBtn}"
                                     Style="{StaticResource PrimaryButton}"
                                     Command="{Binding SaveApiKeyCommand}"
                                     Margin="0,0,10,0"/>
 
-                            <Button Content="Test Connection"
+                            <Button Content="{DynamicResource String_TestConnectionBtn}"
                                     Style="{StaticResource SecondaryButton}"
                                     Command="{Binding TestConnectionCommand}"
                                     IsEnabled="{Binding IsTestingConnection, Converter={StaticResource InverseBoolConverter}}"
                                     Margin="0,0,10,0"/>
 
-                            <Button Content="Clear Personal Override"
+                            <Button Content="{DynamicResource String_ClearPersonalOverrideBtn}"
                                     Style="{StaticResource GhostButton}"
                                     Command="{Binding ClearApiKeyCommand}"
                                     Visibility="{Binding HasCustomKey, Converter={StaticResource BoolToVisibilityConverter}}"/>
@@ -105,12 +127,12 @@
             <!-- ═══ PATHS & STORAGE SECTION ═══ -->
             <Border Style="{StaticResource Card}" Margin="0,0,0,20">
                 <StackPanel>
-                    <TextBlock Text="Storage &amp; Directories" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                    <TextBlock Text="Persistent directories used for game downloads, instance staging, configurations, and cache."
+                    <TextBlock Text="{DynamicResource String_StorageDirectoriesTitle}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                    <TextBlock Text="{DynamicResource String_StorageDirectoriesDesc}"
                                Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,16"/>
 
                     <!-- Default Downloads / Installs Directory -->
-                    <TextBlock Text="Default Game Downloads &amp; Installs Directory:" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                    <TextBlock Text="{DynamicResource String_DefaultDownloadsDirLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
                     <Grid Margin="0,0,0,14">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -125,22 +147,20 @@
                                  Text="{Binding DefaultDownloadDirectory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
 
                         <Button Grid.Column="2"
-                                Content="📁 Browse..."
+                                Content="{DynamicResource String_BrowseDirBtn}"
                                 Style="{StaticResource SecondaryButton}"
                                 Padding="14,6"
-                                Command="{Binding BrowseDownloadDirectoryCommand}"
-                                ToolTip="Select a default installation folder on your drive"/>
+                                Command="{Binding BrowseDownloadDirectoryCommand}"/>
 
                         <Button Grid.Column="4"
-                                Content="🌐 Open"
+                                Content="{DynamicResource String_OpenDirBtn}"
                                 Style="{StaticResource GhostButton}"
                                 Padding="10,6"
-                                Command="{Binding OpenDownloadDirectoryCommand}"
-                                ToolTip="Open this folder in File Explorer"/>
+                                Command="{Binding OpenDownloadDirectoryCommand}"/>
                     </Grid>
 
                     <!-- Instances Metadata Root -->
-                    <TextBlock Text="Instances Metadata Root:" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                    <TextBlock Text="{DynamicResource String_InstancesMetadataRootLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
                     <TextBox Style="{StaticResource DarkTextBox}" Text="{Binding InstanceRoot}" IsReadOnly="True"/>
                 </StackPanel>
             </Border>
@@ -148,15 +168,15 @@
             <!-- ═══ DOWNLOADS & CLEANUP SECTION ═══ -->
             <Border Style="{StaticResource Card}" Margin="0,0,0,20">
                 <StackPanel>
-                    <TextBlock Text="Downloads &amp; Staging Cleanup" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                    <TextBlock Text="Manage automatic disk space recovery after successful downloads."
+                    <TextBlock Text="{DynamicResource String_DownloadsCleanupTitle}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                    <TextBlock Text="{DynamicResource String_DownloadsCleanupDesc}"
                                Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,16"/>
 
-                    <CheckBox Content="Automatically delete raw depot files and ZIP archives after staging"
+                    <CheckBox Content="{DynamicResource String_AutoDeleteDepotsCheckbox}"
                               IsChecked="{Binding DeleteDepotsAfterInstall, Mode=TwoWay}"
                               Style="{StaticResource DarkCheckBox}"
                               Margin="0,0,0,8"/>
-                    <TextBlock Text="When enabled, .DepotDownloader temp folders and source ZIP archives are cleaned up to free disk space."
+                    <TextBlock Text="{DynamicResource String_AutoDeleteDepotsHelp}"
                                Style="{StaticResource Muted}" TextWrapping="Wrap"/>
                 </StackPanel>
             </Border>
@@ -164,8 +184,8 @@
             <!-- ═══ CATALOG & CONTENT FILTERS SECTION ═══ -->
             <Border Style="{StaticResource Card}" Margin="0,0,0,20">
                 <StackPanel>
-                    <TextBlock Text="Catalog &amp; Content Filters" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                    <TextBlock Text="Control which tags and types of games appear in the Explore Catalog, Discovery Hub and carousels (does not affect your personal instances list)."
+                    <TextBlock Text="{DynamicResource String_CatalogContentFiltersTitle}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                    <TextBlock Text="{DynamicResource String_CatalogContentFiltersDesc}"
                                Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,16"/>
 
                     <!-- NSFW Filter Toggle -->
@@ -176,8 +196,8 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
-                                <TextBlock Text="🔞 Show NSFW &amp; Adult Content" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
-                                <TextBlock Text="When disabled, adult games (18+, nudity, sexual themes) are hidden from all carousels and search results."
+                                <TextBlock Text="{DynamicResource String_ShowNsfwContentLabel}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
+                                <TextBlock Text="{DynamicResource String_ShowNsfwContentDesc}"
                                            Style="{StaticResource Muted}" TextWrapping="Wrap"/>
                             </StackPanel>
                             <CheckBox Grid.Column="1"
@@ -195,8 +215,8 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
-                                <TextBlock Text="🔒 Show 3rd-Party DRM Games" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
-                                <TextBlock Text="When disabled, games requiring Denuvo, EA Account or Ubisoft Connect DRM are filtered out of public catalogs."
+                                <TextBlock Text="{DynamicResource String_ShowDrmContentLabel}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
+                                <TextBlock Text="{DynamicResource String_ShowDrmContentDesc}"
                                            Style="{StaticResource Muted}" TextWrapping="Wrap"/>
                             </StackPanel>
                             <CheckBox Grid.Column="1"
@@ -217,17 +237,17 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0">
-                            <TextBlock Text="System Requirements &amp; Game Runtimes" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                            <TextBlock Text="Analyze and install essential Windows runtimes (Visual C++, DirectX, .NET) required to launch games and BlueStar tools."
+                            <TextBlock Text="{DynamicResource String_SysReqRuntimesTitle}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                            <TextBlock Text="{DynamicResource String_SysReqRuntimesDesc}"
                                        Style="{StaticResource Caption}" TextWrapping="Wrap"/>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button Content="🔄 Re-Scan"
+                            <Button Content="{DynamicResource String_ReScanBtn}"
                                     Style="{StaticResource SecondaryButton}"
                                     Padding="12,6" FontSize="11" Margin="0,0,8,0"
                                     Command="{Binding ScanRequirementsCommand}"
                                     IsEnabled="{Binding IsInstallingRequirements, Converter={StaticResource InverseBoolConverter}}"/>
-                            <Button Content="⚡ Install All Missing"
+                            <Button Content="{DynamicResource String_InstallAllMissingBtn}"
                                     Style="{StaticResource PrimaryButton}"
                                     Padding="14,6" FontSize="11"
                                     Visibility="{Binding HasMissingRequirements, Converter={StaticResource BoolToVisibilityConverter}}"
@@ -244,8 +264,8 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
-                                <TextBlock Text="🔍 Check System Requirements on Startup" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
-                                <TextBlock Text="When enabled, BlueStar verifies on launch that all necessary runtime dependencies are installed and offers 1-click installation if any are missing."
+                                <TextBlock Text="{DynamicResource String_CheckReqsOnStartupLabel}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
+                                <TextBlock Text="{DynamicResource String_CheckReqsOnStartupDesc}"
                                            Style="{StaticResource Muted}" TextWrapping="Wrap"/>
                             </StackPanel>
                             <CheckBox Grid.Column="1"
@@ -299,7 +319,7 @@
                                         </StackPanel>
 
                                         <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                            <Button Content="Install"
+                                            <Button Content="{DynamicResource String_Install}"
                                                     Style="{StaticResource SecondaryButton}"
                                                     Padding="12,5" FontSize="11"
                                                     Command="{Binding DataContext.InstallPrerequisiteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
@@ -317,8 +337,8 @@
             <!-- ═══ ADVANCED & EXPERIMENTAL FEATURES SECTION ═══ -->
             <Border Style="{StaticResource Card}" Margin="0,0,0,20">
                 <StackPanel>
-                    <TextBlock Text="Advanced &amp; Experimental Features" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                    <TextBlock Text="Enable experimental tools for game modding, historical builds, depot manifests management, and package imports."
+                    <TextBlock Text="{DynamicResource String_AdvancedExperimentalTitle}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                    <TextBlock Text="{DynamicResource String_AdvancedExperimentalDesc}"
                                Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,16"/>
 
                     <!-- Experimental Modding Tab Toggle -->
@@ -329,8 +349,8 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
-                                <TextBlock Text="🧪 Enable Experimental Modding (Mods Tab)" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
-                                <TextBlock Text="When enabled, unlocks the experimental Mods management tab and automated mod directory handling for game instances. Keep disabled for a cleaner vanilla experience."
+                                <TextBlock Text="{DynamicResource String_ExperimentalModdingLabel}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
+                                <TextBlock Text="{DynamicResource String_ExperimentalModdingDesc}"
                                            Style="{StaticResource Muted}" TextWrapping="Wrap"/>
                             </StackPanel>
                             <CheckBox Grid.Column="1"
@@ -348,8 +368,8 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
-                                <TextBlock Text="🛠 Enable Advanced Builds &amp; Depots Management" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
-                                <TextBlock Text="Shows build and branch version selectors, custom manifest editing per depot, and community ZIP package importer in the Files &amp; Depots tab."
+                                <TextBlock Text="{DynamicResource String_AdvancedBuildsLabel}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
+                                <TextBlock Text="{DynamicResource String_AdvancedBuildsDesc}"
                                            Style="{StaticResource Muted}" TextWrapping="Wrap"/>
                             </StackPanel>
                             <CheckBox Grid.Column="1"
@@ -361,12 +381,11 @@
                 </StackPanel>
             </Border>
 
-
             <!-- ═══ ENGINES & ECOSYSTEM REGISTRY SECTION ═══ -->
             <Border Style="{StaticResource Card}" Margin="0,0,0,20">
                 <StackPanel>
-                    <TextBlock Text="Engine &amp; Modding Ecosystem" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                    <TextBlock Text="Registered engine scanners and mod managers."
+                    <TextBlock Text="{DynamicResource String_EngineEcosystemTitle}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                    <TextBlock Text="{DynamicResource String_EngineEcosystemDesc}"
                                Style="{StaticResource Caption}" Margin="0,0,0,16"/>
 
                     <Grid>
@@ -422,7 +441,7 @@
 
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
-                                <TextBlock Text="BlueStar Launcher" Style="{StaticResource H2}" Margin="0,0,10,0"/>
+                                <TextBlock Text="{DynamicResource String_AboutTitle}" Style="{StaticResource H2}" Margin="0,0,10,0"/>
                                 <Border Background="{StaticResource AccentTranslucentBrush}"
                                         BorderBrush="{StaticResource AccentBrush}"
                                         BorderThickness="1"
@@ -433,7 +452,7 @@
                                                Foreground="{StaticResource AccentBrush}"/>
                                 </Border>
                             </StackPanel>
-                            <TextBlock Text="Universal Steam game instance manager, depot downloader, and multi-engine launcher."
+                            <TextBlock Text="{DynamicResource String_AboutSubtitle}"
                                        Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
                         </StackPanel>
 
@@ -459,8 +478,8 @@
                     <Border Height="1" Background="{StaticResource SubtleBorderBrush}" Margin="0,0,0,18"/>
 
                     <!-- Community Ecosystem Header -->
-                    <TextBlock Text="Open-Source Community Ecosystem &amp; Credits" Style="{StaticResource H3}" Margin="0,0,0,4"/>
-                    <TextBlock Text="BlueStar is built on the shoulders of giants. We proudly integrate, credit, and link each essential open-source project:"
+                    <TextBlock Text="{DynamicResource String_CreditsTitle}" Style="{StaticResource H3}" Margin="0,0,0,4"/>
+                    <TextBlock Text="{DynamicResource String_CreditsDesc}"
                                Style="{StaticResource Caption}" Margin="0,0,0,16"/>
 
                     <!-- Ecosystem Component Grid -->

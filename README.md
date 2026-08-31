@@ -5,7 +5,7 @@
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20(x64)-brightgreen.svg)]()
 [![.NET 8.0](https://img.shields.io/badge/.NET-8.0%20WPF-purple.svg)]()
-[![Release: v1.2.0](https://img.shields.io/badge/Release-v1.2.0-orange.svg)](https://github.com/Coronitaa/BlueStar/releases)
+[![Release: v1.2.1](https://img.shields.io/badge/Release-v1.2.1-orange.svg)](https://github.com/Coronitaa/BlueStar/releases)
 
 BlueStar is an all-in-one desktop game management and launcher ecosystem designed for modern PC gaming. It seamlessly integrates Steam depot downloads, manifest staging, automated engine detection, multi-engine emulation, DLC unlocking, prerequisite management, and mod injection into a clean, modern, and dark-themed interface.
 
@@ -17,8 +17,8 @@ You can download the latest version from the [Releases](https://github.com/Coron
 
 | Edition | File | Description |
 | :--- | :--- | :--- |
-| **Windows Setup (Recommended)** | `BlueStar-v1.2.0-Setup-win-x64.exe` | Standard Windows installer with start menu shortcuts, desktop icons, and uninstaller. |
-| **Portable Edition** | `BlueStar-v1.2.0-Portable-win-x64.zip` | Standalone zero-install archive. Extract anywhere and launch `BlueStar.exe`. |
+| **Windows Setup (Recommended)** | `BlueStar-v1.2.1-Setup-win-x64.exe` | Standard Windows installer with start menu shortcuts, desktop icons, and uninstaller. |
+| **Portable Edition** | `BlueStar-v1.2.1-Portable-win-x64.zip` | Standalone zero-install archive. Extract anywhere and launch `BlueStar.exe`. |
 
 > [!NOTE]
 > All release binaries are self-contained for 64-bit Windows systems (no prior .NET 8 runtime installation required).

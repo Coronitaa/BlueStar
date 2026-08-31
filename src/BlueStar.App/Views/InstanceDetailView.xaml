@@ -48,7 +48,7 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
-                    <Button Grid.Column="0" Content="← Back to Instances"
+                    <Button Grid.Column="0" Content="{DynamicResource String_BackToInstances}"
                             Style="{StaticResource GhostButton}"
                             Foreground="{StaticResource SecondaryTextBrush}"
                             Command="{Binding GoBackCommand}"/>
@@ -124,13 +124,13 @@
                         <!-- Primary Action Buttons (Play & Shortcut) -->
                         <StackPanel Grid.Column="3" VerticalAlignment="Center" Orientation="Horizontal">
                             <Button Style="{StaticResource IconButton}" Margin="0,0,8,0"
-                                    ToolTip="Open Game Directory" Command="{Binding OpenFolderCommand}">
+                                    ToolTip="{DynamicResource String_OpenGameDirTooltip}" Command="{Binding OpenFolderCommand}">
                                 <Path Data="{StaticResource IconFolder}" Fill="{StaticResource SecondaryTextBrush}"
                                       Stretch="Uniform" Width="15" Height="15"/>
                             </Button>
 
                             <Button Style="{StaticResource IconButton}" Margin="0,0,12,0"
-                                    ToolTip="Create Desktop / Steam Shortcuts" Command="{Binding OpenShortcutModalCommand}">
+                                    ToolTip="{DynamicResource String_CreateShortcutsTooltip}" Command="{Binding OpenShortcutModalCommand}">
                                 <Path Data="{StaticResource IconLink}" Fill="{StaticResource SecondaryTextBrush}"
                                       Stretch="Uniform" Width="15" Height="15"/>
                             </Button>
@@ -139,17 +139,17 @@
                             <Button Command="{Binding LaunchGameCommand}">
                                 <Button.Style>
                                     <Style TargetType="Button" BasedOn="{StaticResource PlayHeroButton}">
-                                        <Setter Property="Content" Value="▶ Play Game"/>
+                                        <Setter Property="Content" Value="{DynamicResource String_PlayGame}"/>
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding Instance.Status}" Value="NotInstalled">
-                                                <Setter Property="Content" Value="📥 Install Game"/>
+                                                <Setter Property="Content" Value="{DynamicResource String_InstallGame}"/>
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding HasActiveJob}" Value="True">
                                                 <Setter Property="Content" Value="{Binding InstanceDownloadLabel, StringFormat='📥 Downloading {0}'}"/>
                                                 <Setter Property="IsEnabled" Value="False"/>
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding IsGameRunning}" Value="True">
-                                                <Setter Property="Content" Value="⏹ Stop Process"/>
+                                                <Setter Property="Content" Value="{DynamicResource String_StopProcess}"/>
                                                 <Setter Property="Background" Value="{StaticResource DangerBrush}"/>
                                             </DataTrigger>
                                         </Style.Triggers>
@@ -265,40 +265,40 @@
                         Padding="8,4"
                         Margin="0,0,0,20">
                     <StackPanel Orientation="Horizontal">
-                        <RadioButton Style="{StaticResource TabRadioButton}" Content="Overview"
+                        <RadioButton Style="{StaticResource TabRadioButton}" Content="{DynamicResource String_TabOverview}"
 
                                      IsChecked="{Binding SelectedTab, Converter={StaticResource StringMatchConverter}, ConverterParameter=Overview}"
                                      Command="{Binding SwitchTabCommand}" CommandParameter="Overview"/>
 
-                        <RadioButton Style="{StaticResource TabRadioButton}" Content="Files &amp; Depots"
+                        <RadioButton Style="{StaticResource TabRadioButton}" Content="{DynamicResource String_TabFilesDepots}"
                                      Visibility="{Binding IsDepotBoxTabsVisible, Converter={StaticResource BoolToVisibilityConverter}}"
                                      IsChecked="{Binding SelectedTab, Converter={StaticResource StringMatchConverter}, ConverterParameter=Files}"
                                      Command="{Binding SwitchTabCommand}" CommandParameter="Files"/>
 
-                        <RadioButton Style="{StaticResource TabRadioButton}" Content="DLCs &amp; Unlocker"
+                        <RadioButton Style="{StaticResource TabRadioButton}" Content="{DynamicResource String_TabDlcs}"
                                      Visibility="{Binding IsInstalled, Converter={StaticResource BoolToVisibilityConverter}}"
                                      IsChecked="{Binding SelectedTab, Converter={StaticResource StringMatchConverter}, ConverterParameter=Dlcs}"
                                      Command="{Binding SwitchTabCommand}" CommandParameter="Dlcs"/>
 
-                        <RadioButton Style="{StaticResource TabRadioButton}" Content="Mods"
+                        <RadioButton Style="{StaticResource TabRadioButton}" Content="{DynamicResource String_TabMods}"
                                      Visibility="{Binding IsModsTabVisible, Converter={StaticResource BoolToVisibilityConverter}}"
                                      IsChecked="{Binding SelectedTab, Converter={StaticResource StringMatchConverter}, ConverterParameter=Mods}"
                                      Command="{Binding SwitchTabCommand}" CommandParameter="Mods"/>
 
-                        <RadioButton Style="{StaticResource TabRadioButton}" Content="Emulator"
+                        <RadioButton Style="{StaticResource TabRadioButton}" Content="{DynamicResource String_TabEmulator}"
                                      Visibility="{Binding IsInstalled, Converter={StaticResource BoolToVisibilityConverter}}"
                                      IsChecked="{Binding SelectedTab, Converter={StaticResource StringMatchConverter}, ConverterParameter=Emulator}"
                                      Command="{Binding SwitchTabCommand}" CommandParameter="Emulator"/>
 
-                        <RadioButton Style="{StaticResource TabRadioButton}" Content="Prerequisites"
+                        <RadioButton Style="{StaticResource TabRadioButton}" Content="{DynamicResource String_TabPrerequisites}"
                                      IsChecked="{Binding SelectedTab, Converter={StaticResource StringMatchConverter}, ConverterParameter=Prerequisites}"
                                      Command="{Binding SwitchTabCommand}" CommandParameter="Prerequisites"/>
 
-                        <RadioButton Style="{StaticResource TabRadioButton}" Content="Settings"
+                        <RadioButton Style="{StaticResource TabRadioButton}" Content="{DynamicResource String_TabSettings}"
                                      IsChecked="{Binding SelectedTab, Converter={StaticResource StringMatchConverter}, ConverterParameter=Settings}"
                                      Command="{Binding SwitchTabCommand}" CommandParameter="Settings"/>
 
-                        <RadioButton Style="{StaticResource TabRadioButton}" Content="Console Logs"
+                        <RadioButton Style="{StaticResource TabRadioButton}" Content="{DynamicResource String_TabLogs}"
                                      Visibility="{Binding IsInstalled, Converter={StaticResource BoolToVisibilityConverter}}"
                                      IsChecked="{Binding SelectedTab, Converter={StaticResource StringMatchConverter}, ConverterParameter=Logs}"
                                      Command="{Binding SwitchTabCommand}" CommandParameter="Logs"/>
@@ -321,7 +321,7 @@
                         <!-- Left Column: Description & Metadata -->
                         <Border Grid.Column="0" Style="{StaticResource Card}">
                             <StackPanel>
-                                <TextBlock Text="About Game" Style="{StaticResource H2}" Margin="0,0,0,12"/>
+                                <TextBlock Text="{DynamicResource String_AboutGame}" Style="{StaticResource H2}" Margin="0,0,0,12"/>
                                 <TextBlock Text="{Binding Instance.Metadata.ShortDescription, FallbackValue='No description provided for this game instance.'}"
                                            Style="{StaticResource Body}" TextWrapping="Wrap" LineHeight="20" Margin="0,0,0,16"/>
 
@@ -344,19 +344,19 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
 
-                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Developer:" Style="{StaticResource CaptionBold}"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{DynamicResource String_Developer}" Style="{StaticResource CaptionBold}"/>
                                     <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Instance.Metadata.Developer, FallbackValue='Unknown'}" Style="{StaticResource Body}"/>
 
-                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Publisher:" Style="{StaticResource CaptionBold}"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="{DynamicResource String_Publisher}" Style="{StaticResource CaptionBold}"/>
                                     <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Instance.Metadata.Publisher, FallbackValue='Unknown'}" Style="{StaticResource Body}"/>
 
-                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Installed Version:" Style="{StaticResource CaptionBold}"/>
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="{DynamicResource String_InstalledVersion}" Style="{StaticResource CaptionBold}"/>
                                     <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding InstalledVersionText}" Style="{StaticResource Body}"/>
 
-                                    <TextBlock Grid.Row="6" Grid.Column="0" Text="Latest on Steam:" Style="{StaticResource CaptionBold}"/>
+                                    <TextBlock Grid.Row="6" Grid.Column="0" Text="{DynamicResource String_LatestOnSteam}" Style="{StaticResource CaptionBold}"/>
                                     <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding LatestVersionText}" Style="{StaticResource Body}" Foreground="{StaticResource AccentBrush}"/>
 
-                                    <TextBlock Grid.Row="8" Grid.Column="0" Text="Release Date:" Style="{StaticResource CaptionBold}"/>
+                                    <TextBlock Grid.Row="8" Grid.Column="0" Text="{DynamicResource String_ReleaseDate}" Style="{StaticResource CaptionBold}"/>
                                     <TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding Instance.Metadata.ReleaseDate, FallbackValue='Unknown'}" Style="{StaticResource Body}"/>
                                 </Grid>
                             </StackPanel>
@@ -371,13 +371,20 @@
                                     Margin="0,0,0,16"
                                     Visibility="{Binding IsImportedUnassociatedInstance, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <StackPanel>
-                                    <TextBlock Text="📦 Associate with DepotBox" Style="{StaticResource H3}" Foreground="#38BDF8" Margin="0,0,0,4"/>
-                                    <TextBlock Text="This game was imported from a folder. Associate it with DepotBox to enable automatic updates, depot management, and DLC installation."
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                        <TextBlock Text="📦 " Style="{StaticResource H3}" Foreground="#38BDF8"/>
+                                        <TextBlock Text="{DynamicResource String_AssociateDepotBoxTitle}" Style="{StaticResource H3}" Foreground="#38BDF8"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{DynamicResource String_AssociateDepotBoxDesc}"
                                                Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,12"/>
-                                    <Button Content="🔍 Find depots for this game"
-                                            Style="{StaticResource PrimaryButton}"
+                                    <Button Style="{StaticResource PrimaryButton}"
                                             Background="#0284C7" BorderBrush="#0369A1"
-                                            Command="{Binding OpenDepotAssociationModalCommand}"/>
+                                            Command="{Binding OpenDepotAssociationModalCommand}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="🔍 "/>
+                                            <TextBlock Text="{DynamicResource String_FindDepotsBtn}"/>
+                                        </StackPanel>
+                                    </Button>
                                 </StackPanel>
                             </Border>
 
@@ -388,9 +395,12 @@
                                     Margin="0,0,0,16"
                                     Visibility="{Binding HasGameUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <StackPanel>
-                                    <TextBlock Text="🔄 New Version Detected" Style="{StaticResource H3}" Foreground="{StaticResource AccentBrush}" Margin="0,0,0,4"/>
-                                    <TextBlock Text="Steam indicates a newer build is available than the currently installed version." Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,10"/>
-                                    <Button Content="Check for DepotBox Updates"
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                        <TextBlock Text="🔄 " Style="{StaticResource H3}" Foreground="{StaticResource AccentBrush}"/>
+                                        <TextBlock Text="{DynamicResource String_NewVersionDetectedTitle}" Style="{StaticResource H3}" Foreground="{StaticResource AccentBrush}"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{DynamicResource String_NewVersionDetectedDesc}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                                    <Button Content="{DynamicResource String_CheckDepotBoxUpdatesBtn}"
                                             Style="{StaticResource PrimaryButton}"
                                             Command="{Binding CheckAndOpenDepotUpdateModalCommand}"
                                             IsEnabled="{Binding IsCheckingGameUpdate, Converter={StaticResource InverseBoolConverter}}"/>
@@ -399,21 +409,31 @@
 
                             <Border Style="{StaticResource Card}" Margin="0,0,0,16">
                                 <StackPanel>
-                                    <TextBlock Text="Instance Information" Style="{StaticResource H3}" Margin="0,0,0,12"/>
+                                    <TextBlock Text="{DynamicResource String_InstanceInfoTitle}" Style="{StaticResource H3}" Margin="0,0,0,12"/>
 
-                                    <TextBlock Text="Installation Directory:" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                                    <TextBlock Text="{DynamicResource String_InstallationDirLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
                                     <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="10,6" Margin="0,0,0,12">
                                         <TextBlock Text="{Binding Instance.InstallPath}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis"/>
                                     </Border>
-                                    <Button Content="Change Directory" Style="{StaticResource SecondaryButton}" Command="{Binding ChangeInstallPathCommand}"/>
+                                    <Button Content="{DynamicResource String_ChangeDirBtn}" Style="{StaticResource SecondaryButton}" Command="{Binding ChangeInstallPathCommand}"/>
                                 </StackPanel>
                             </Border>
 
                             <Border Style="{StaticResource Card}">
                                 <StackPanel>
-                                    <TextBlock Text="Quick Actions" Style="{StaticResource H3}" Margin="0,0,12,0"/>
-                                    <Button Content="📁 Open Game Folder" Style="{StaticResource SecondaryButton}" Margin="0,8,0,8" Command="{Binding OpenFolderCommand}"/>
-                                    <Button Content="🔗 Create Shortcuts" Style="{StaticResource SecondaryButton}" Command="{Binding OpenShortcutModalCommand}"/>
+                                    <TextBlock Text="{DynamicResource String_QuickActionsTitle}" Style="{StaticResource H3}" Margin="0,0,12,0"/>
+                                    <Button Style="{StaticResource SecondaryButton}" Margin="0,8,0,8" Command="{Binding OpenFolderCommand}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="📁 "/>
+                                            <TextBlock Text="{DynamicResource String_OpenGameFolder}"/>
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Style="{StaticResource SecondaryButton}" Command="{Binding OpenShortcutModalCommand}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="🔗 "/>
+                                            <TextBlock Text="{DynamicResource String_CreatingShortcuts}"/>
+                                        </StackPanel>
+                                    </Button>
 
                                     <!-- ReFix 1-Click Update Button when outdated -->
                                     <Button Content="{Binding ReFixUpdateButtonText}"
@@ -442,13 +462,13 @@
                                 </Grid.ColumnDefinitions>
 
                                 <StackPanel Grid.Column="0">
-                                    <TextBlock Text="Select Game Depots to Download" Style="{StaticResource H2}"/>
-                                    <TextBlock Text="DepotDownloaderMod will retrieve and install the checked manifests." Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                                    <TextBlock Text="{DynamicResource String_SelectDepotsTitle}" Style="{StaticResource H2}"/>
+                                    <TextBlock Text="{DynamicResource String_SelectDepotsSubtitle}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Button Content="Select All" Style="{StaticResource GhostButton}" Margin="0,0,8,0" Command="{Binding SelectAllDepotsCommand}"/>
-                                    <Button Content="Deselect All" Style="{StaticResource GhostButton}" Command="{Binding DeselectAllDepotsCommand}"/>
+                                    <Button Content="{DynamicResource String_SelectAll}" Style="{StaticResource GhostButton}" Margin="0,0,8,0" Command="{Binding SelectAllDepotsCommand}"/>
+                                    <Button Content="{DynamicResource String_DeselectAll}" Style="{StaticResource GhostButton}" Command="{Binding DeselectAllDepotsCommand}"/>
                                 </StackPanel>
                             </Grid>
 
@@ -491,9 +511,11 @@
                                                                 CornerRadius="{StaticResource RadiusSm}" Padding="5,1"
                                                                 Margin="0,0,6,0" VerticalAlignment="Center"
                                                                 Visibility="{Binding IsRecommended, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                                ToolTip="Steam auto-installs this depot for Windows">
-                                                            <TextBlock Text="⭐ Recommended" FontSize="10" FontWeight="SemiBold"
-                                                                       Foreground="#4ADE80"/>
+                                                                ToolTip="{DynamicResource String_RecommendedBadgeTooltip}">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="⭐ " FontSize="10" FontWeight="SemiBold" Foreground="#4ADE80"/>
+                                                                <TextBlock Text="{DynamicResource String_RecommendedBadge}" FontSize="10" FontWeight="SemiBold" Foreground="#4ADE80"/>
+                                                            </StackPanel>
                                                         </Border>
                                                         <TextBlock Text="{Binding DisplayName}" Style="{StaticResource BodyMedium}" VerticalAlignment="Center"/>
                                                     </StackPanel>
@@ -510,7 +532,7 @@
                                                             <TextBlock Text="{Binding Depot.DepotId, StringFormat='Depot: {0}'}" Style="{StaticResource Caption}"/>
                                                             <TextBlock Text=" • Manifest: " Style="{StaticResource Caption}" Margin="4,0,0,0"/>
                                                             <TextBlock Text="{Binding ManifestIdText}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}"/>
-                                                            <Button Content="✏" ToolTip="Edit target Manifest ID for this depot"
+                                                            <Button Content="✏" ToolTip="{DynamicResource String_EditManifestTooltip}"
                                                                     Style="{StaticResource GhostButton}"
                                                                     Padding="5,0" Margin="6,0,0,0" FontSize="11"
                                                                     Command="{Binding StartEditManifestCommand}"/>
@@ -537,7 +559,10 @@
                                                 <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,14,0">
                                                     <Border Background="{StaticResource SuccessBgBrush}" BorderBrush="{StaticResource SuccessBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,2" Margin="0,0,6,0"
                                                             Visibility="{Binding IsDownloaded, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                        <TextBlock Text="✓ Installed" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource SuccessBrush}"/>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="✓ " FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource SuccessBrush}"/>
+                                                            <TextBlock Text="{DynamicResource String_Installed}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource SuccessBrush}"/>
+                                                        </StackPanel>
                                                     </Border>
                                                     <Border Background="{StaticResource SurfaceCardBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,2" Margin="0,0,6,0">
                                                         <TextBlock Text="{Binding CategoryTag}" Style="{StaticResource CaptionBold}"/>
@@ -575,7 +600,7 @@
                                         <Run Text=" — "/>
                                         <Run Text="{Binding SelectedDepotsSize, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
                                     </TextBlock>
-                                    <TextBlock Text="Requires network connection and active Steam session or anonymous depot access." Style="{StaticResource Caption}" Margin="0,2,0,0"/>
+                                    <TextBlock Text="{DynamicResource String_RequiresConnectionNotice}" Style="{StaticResource Caption}" Margin="0,2,0,0"/>
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -610,13 +635,13 @@
 
                                 <StackPanel Grid.Column="0">
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                        <TextBlock Text="🎮 Game Build &amp; Branch Version (Advanced)" Style="{StaticResource H3}" Margin="0,0,8,0"/>
+                                        <TextBlock Text="{DynamicResource String_GameBuildBranchTitle}" Style="{StaticResource H3}" Margin="0,0,8,0"/>
                                         <Border Background="{StaticResource AccentBgBrush}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,2"
                                                 Visibility="{Binding ActiveBuildBadgeText, Converter={StaticResource NullToVisibilityConverter}}">
                                             <TextBlock Text="{Binding ActiveBuildBadgeText}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
                                         </Border>
                                     </StackPanel>
-                                    <TextBlock Text="Select target build or drag &amp; drop a Depots ZIP archive from cs.rin.ru / DepotBox. DLCs and fixes maintain full intercompatibility."
+                                    <TextBlock Text="{DynamicResource String_GameBuildBranchDesc}"
                                                Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,10"/>
 
                                     <ComboBox ItemsSource="{Binding AvailableBuilds}"
@@ -647,21 +672,21 @@
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                    <Button Content="📦 Import ZIP Package..."
+                                    <Button Content="{DynamicResource String_ImportZipPackageBtn}"
                                             Style="{StaticResource PrimaryButton}"
                                             Padding="14,8" Margin="0,0,0,6"
                                             Command="{Binding ImportDepotZipPackageCommand}"/>
                                     <StackPanel Orientation="Horizontal">
-                                        <Button Content="🔄 Scan"
+                                        <Button Content="{DynamicResource String_ScanBuildsBtn}"
                                                 Style="{StaticResource SecondaryButton}"
                                                 Padding="8,6" Margin="0,0,6,0" FontSize="11"
                                                 Command="{Binding LoadAvailableBuildsCommand}"
                                                 IsEnabled="{Binding IsLoadingBuilds, Converter={StaticResource InverseBoolConverter}}"/>
-                                        <Button Content="➕ Custom"
+                                        <Button Content="{DynamicResource String_CustomBuildBtn}"
                                                 Style="{StaticResource SecondaryButton}"
                                                 Padding="8,6" Margin="0,0,6,0" FontSize="11"
                                                 Command="{Binding OpenAddCustomBuildModalCommand}"/>
-                                        <Button Content="🌐 Sources ▾"
+                                        <Button Content="{DynamicResource String_SourcesMenuBtn}"
                                                 Style="{StaticResource GhostButton}"
                                                 Padding="8,6" FontSize="11"
                                                 Command="{Binding ToggleCommunityLinksMenuCommand}"/>
@@ -677,28 +702,28 @@
                                     Visibility="{Binding IsCommunityLinksMenuOpen, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <StackPanel>
                                     <Grid Margin="0,0,0,8">
-                                        <TextBlock Text="🌐 Find Manifests, Builds &amp; Depots for this Game:" Style="{StaticResource CaptionBold}"/>
+                                        <TextBlock Text="{DynamicResource String_CommunitySourcesTitle}" Style="{StaticResource CaptionBold}"/>
                                         <Button Content="✕" Style="{StaticResource GhostButton}" HorizontalAlignment="Right"
                                                 Padding="4,0" FontSize="11" Command="{Binding CloseCommunityLinksMenuCommand}"/>
                                     </Grid>
                                     <WrapPanel Orientation="Horizontal">
-                                        <Button Content="🔍 SteamDB Depots &amp; Manifests"
+                                        <Button Content="{DynamicResource String_SteamDbDepotsBtn}"
                                                 Style="{StaticResource SecondaryButton}"
                                                 Padding="10,5" Margin="0,0,8,6" FontSize="11"
                                                 Command="{Binding OpenCommunityLinkCommand}" CommandParameter="steamdb_depots"/>
-                                        <Button Content="📜 SteamDB Patch &amp; Build History"
+                                        <Button Content="{DynamicResource String_SteamDbPatchesBtn}"
                                                 Style="{StaticResource SecondaryButton}"
                                                 Padding="10,5" Margin="0,0,8,6" FontSize="11"
                                                 Command="{Binding OpenCommunityLinkCommand}" CommandParameter="steamdb_patches"/>
-                                        <Button Content="💬 cs.rin.ru Thread &amp; Depots Search"
+                                        <Button Content="{DynamicResource String_CsRinRuThreadBtn}"
                                                 Style="{StaticResource SecondaryButton}"
                                                 Padding="10,5" Margin="0,0,8,6" FontSize="11"
                                                 Command="{Binding OpenCommunityLinkCommand}" CommandParameter="csrinru"/>
-                                        <Button Content="⚡ DepotBox Hub"
+                                        <Button Content="{DynamicResource String_DepotBoxHubBtn}"
                                                 Style="{StaticResource SecondaryButton}"
                                                 Padding="10,5" Margin="0,0,8,6" FontSize="11"
                                                 Command="{Binding OpenCommunityLinkCommand}" CommandParameter="depotbox"/>
-                                        <Button Content="📂 Open Instance Manifests Folder"
+                                        <Button Content="{DynamicResource String_OpenManifestsFolderBtn}"
                                                 Style="{StaticResource GhostButton}"
                                                 Padding="10,5" Margin="0,0,0,6" FontSize="11"
                                                 Command="{Binding OpenCommunityLinkCommand}" CommandParameter="manifest_dir"/>
@@ -720,8 +745,8 @@
                                 </Grid.ColumnDefinitions>
 
                                 <StackPanel Grid.Column="0">
-                                    <TextBlock Text="Downloadable Content &amp; SmokeAPI Unlocker" Style="{StaticResource H2}"/>
-                                    <TextBlock Text="Unlock DLC entitlements automatically via SmokeAPI cream_api.ini hook." Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                                    <TextBlock Text="{DynamicResource String_DlcsHeaderTitle}" Style="{StaticResource H2}"/>
+                                    <TextBlock Text="{DynamicResource String_DlcsHeaderDesc}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
                                 </StackPanel>
 
                                 <Button Grid.Column="1"
@@ -789,7 +814,7 @@
 
                                 <StackPanel Grid.Column="0">
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                        <TextBlock Text="BepInEx Mod Loader" Style="{StaticResource H2}"/>
+                                        <TextBlock Text="{DynamicResource String_BepInExLoaderTitle}" Style="{StaticResource H2}"/>
                                         <Border Background="{StaticResource PurpleBgBrush}"
                                                 BorderBrush="{StaticResource PurpleBrush}"
                                                 BorderThickness="1"
@@ -799,7 +824,7 @@
                                             <TextBlock Text="Unity Engine" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource PurpleBrush}"/>
                                         </Border>
                                     </StackPanel>
-                                    <TextBlock Text="Runtime modding framework and plugin injector for Unity games (IL2CPP &amp; Mono)."
+                                    <TextBlock Text="{DynamicResource String_BepInExDesc}"
                                                Style="{StaticResource Caption}"/>
                                 </StackPanel>
 
@@ -891,19 +916,19 @@
                                 </ComboBox>
 
                                 <Button Grid.Column="2"
-                                        Content="📥 Install / Update Version"
+                                        Content="{DynamicResource String_InstallUpdateVersionBtn}"
                                         Style="{StaticResource PrimaryButton}"
                                         Command="{Binding InstallOrUpdateBepInExCommand}"
                                         IsEnabled="{Binding IsLoadingBepInEx, Converter={StaticResource InverseBoolConverter}}"/>
 
                                 <Button Grid.Column="4"
-                                        Content="🗑 Uninstall BepInEx"
+                                        Content="{DynamicResource String_UninstallBepInExBtn}"
                                         Style="{StaticResource DangerButton}"
                                         Command="{Binding UninstallBepInExCommand}"
                                         IsEnabled="{Binding IsBepInExInstalled}"/>
 
                                 <Button Grid.Column="6"
-                                        Content="📁 Open BepInEx"
+                                        Content="{DynamicResource String_OpenBepInExFolderBtn}"
                                         Style="{StaticResource SecondaryButton}"
                                         Command="{Binding OpenBepInExFolderCommand}"
                                         IsEnabled="{Binding IsBepInExInstalled}"/>
@@ -922,19 +947,19 @@
 
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
-                                    <TextBlock Text="Steam Workshop Available" Style="{StaticResource H3}"/>
+                                    <TextBlock Text="{DynamicResource String_WorkshopAvailableTitle}" Style="{StaticResource H3}"/>
                                     <Border Background="{StaticResource InfoBgBrush}" BorderBrush="{StaticResource InfoBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusXs}" Padding="5,1" Margin="8,0,0,0">
                                         <TextBlock Text="Community Hub" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource InfoBrush}"/>
                                     </Border>
                                 </StackPanel>
-                                <TextBlock Text="This title supports Steam Workshop mods. Search or download items directly."
+                                <TextBlock Text="{DynamicResource String_WorkshopAvailableDesc}"
                                            Style="{StaticResource Caption}"/>
                             </StackPanel>
 
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                <Button Content="🌐 Browse Workshop" Style="{StaticResource SecondaryButton}" Margin="0,0,10,0"
+                                <Button Content="{DynamicResource String_BrowseWorkshopBtn}" Style="{StaticResource SecondaryButton}" Margin="0,0,10,0"
                                         Command="{Binding OpenSteamWorkshopInBrowserCommand}"/>
-                                <Button Content="📥 Download Workshop Mod" Style="{StaticResource PrimaryButton}"
+                                <Button Content="{DynamicResource String_DownloadWorkshopModBtn}" Style="{StaticResource PrimaryButton}"
                                         Command="{Binding OpenWorkshopModalCommand}"/>
                             </StackPanel>
                         </Grid>
@@ -950,13 +975,13 @@
                                 </Grid.ColumnDefinitions>
 
                                 <StackPanel Grid.Column="0">
-                                    <TextBlock Text="Installed Mods &amp; Packages" Style="{StaticResource H2}"/>
+                                    <TextBlock Text="{DynamicResource String_InstalledModsTitle}" Style="{StaticResource H2}"/>
                                     <TextBlock Text="{Binding ModsDirectoryPath, StringFormat='Mods folder: {0}'}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                    <Button Content="📁 Open Folder" Style="{StaticResource SecondaryButton}" Margin="0,0,10,0" Command="{Binding OpenModsFolderCommand}"/>
-                                    <Button Content="➕ Install Mod File" Style="{StaticResource PrimaryButton}" Command="{Binding InstallModFileCommand}"/>
+                                    <Button Content="{DynamicResource String_OpenFolder}" Style="{StaticResource SecondaryButton}" Margin="0,0,10,0" Command="{Binding OpenModsFolderCommand}"/>
+                                    <Button Content="{DynamicResource String_InstallModFileBtn}" Style="{StaticResource PrimaryButton}" Command="{Binding InstallModFileCommand}"/>
                                 </StackPanel>
                             </Grid>
 
@@ -965,8 +990,8 @@
                                     Padding="24" Margin="0,0,0,0"
                                     Visibility="{Binding InstalledMods.Count, Converter={StaticResource ZeroToVisibilityConverter}}">
                                 <StackPanel HorizontalAlignment="Center">
-                                    <TextBlock Text="No mods installed yet." Style="{StaticResource BodyMedium}" HorizontalAlignment="Center" Margin="0,0,0,4"/>
-                                    <TextBlock Text="Click '+ Install Mod File' or download community mods to get started."
+                                    <TextBlock Text="{DynamicResource String_NoModsInstalled}" Style="{StaticResource BodyMedium}" HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                                    <TextBlock Text="{DynamicResource String_NoModsInstalledDesc}"
                                                Style="{StaticResource Caption}" HorizontalAlignment="Center"/>
                                 </StackPanel>
                             </Border>
@@ -1047,8 +1072,8 @@
                              </Grid.ColumnDefinitions>
                              <TextBlock Grid.Column="0" Text="⚠" FontSize="22" Foreground="{StaticResource WarningBrush}" VerticalAlignment="Center" Margin="0,0,14,0"/>
                              <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                 <TextBlock Text="Game Not Installed" FontWeight="Bold" FontSize="14" Foreground="{StaticResource WarningBrush}" Margin="0,0,0,2"/>
-                                 <TextBlock Text="You must download or install the game first before configuring or updating emulators."
+                                 <TextBlock Text="{DynamicResource String_GameNotInstalledWarnTitle}" FontWeight="Bold" FontSize="14" Foreground="{StaticResource WarningBrush}" Margin="0,0,0,2"/>
+                                 <TextBlock Text="{DynamicResource String_GameNotInstalledWarnDesc}"
                                             Style="{StaticResource BodySmall}" Foreground="{StaticResource PrimaryTextBrush}"/>
                              </StackPanel>
                          </Grid>
@@ -1095,7 +1120,7 @@
 
                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                    <TextBlock Text="⚡ ReFix Update Available for this instance"
+                                    <TextBlock Text="{DynamicResource String_ReFixUpdateAvailableTitle}"
                                                FontWeight="Bold" FontSize="14"
                                                Foreground="{StaticResource WarningBrush}"/>
                                 </StackPanel>
@@ -1130,7 +1155,7 @@
 
                             <StackPanel Grid.Column="0">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <TextBlock Text="Emulator Status" Style="{StaticResource H2}"/>
+                                    <TextBlock Text="{DynamicResource String_EmulatorStatusTitle}" Style="{StaticResource H2}"/>
                                     <Border Margin="12,0,0,0" VerticalAlignment="Center" CornerRadius="{StaticResource RadiusXs}" Padding="8,3">
                                         <Border.Style>
                                             <Style TargetType="Border">
@@ -1161,13 +1186,13 @@
                                         </TextBlock>
                                     </Border>
                                 </StackPanel>
-                                <TextBlock Text="Active emulation layer enabling online or local multiplayer without requiring the original Steam client."
+                                <TextBlock Text="{DynamicResource String_EmulatorStatusDesc}"
                                            Style="{StaticResource Caption}"/>
                             </StackPanel>
 
                             <!-- Uninstall / Restore Action -->
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                <Button Content="🗑 Uninstall Emulator"
+                                <Button Content="{DynamicResource String_UninstallEmulatorBtn}"
                                         Style="{StaticResource DangerButton}"
                                         Padding="14,9"
                                         Command="{Binding UninstallEmulatorCommand}"
@@ -1182,14 +1207,14 @@
                             Visibility="{Binding HasInstalledFixLayers, Converter={StaticResource BoolToVisibilityConverter}}">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                <TextBlock Text="Active Fix &amp; Emulator Layers" Style="{StaticResource H2}"/>
+                                <TextBlock Text="{DynamicResource String_ActiveFixLayersTitle}" Style="{StaticResource H2}"/>
                                 <Border Background="{StaticResource SuccessBgBrush}" BorderBrush="{StaticResource SuccessBrush}" BorderThickness="1"
                                         CornerRadius="{StaticResource RadiusXs}" Padding="8,2" Margin="12,0,0,0" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding NonOnlineInstalledFixLayers.Count, StringFormat='{}{0} Stacked Layers'}"
                                                FontSize="11" FontWeight="Bold" Foreground="{StaticResource SuccessBrush}"/>
                                 </Border>
                             </StackPanel>
-                            <TextBlock Text="Currently active layers on this instance:"
+                            <TextBlock Text="{DynamicResource String_ActiveFixLayersDesc}"
                                        Style="{StaticResource Caption}" Margin="0,0,0,16"/>
 
                             <ItemsControl ItemsSource="{Binding NonOnlineInstalledFixLayers}">
@@ -1221,7 +1246,7 @@
 
                                                 <!-- Uninstall Layer Button -->
                                                 <Button Grid.Column="1"
-                                                        Content="🗑 Uninstall Layer"
+                                                        Content="{DynamicResource String_UninstallLayerBtn}"
                                                         Style="{StaticResource DangerButton}"
                                                         Padding="14,8"
                                                         VerticalAlignment="Center"
@@ -1252,7 +1277,7 @@
                             <StackPanel Grid.Column="0">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <Border Background="{StaticResource AccentBrush}" CornerRadius="{StaticResource RadiusXs}" Padding="8,3" Margin="0,0,10,0">
-                                        <TextBlock Text="⭐ COMMUNITY RECOMMENDED" FontSize="11" FontWeight="Bold" Foreground="{StaticResource InverseTextBrush}"/>
+                                        <TextBlock Text="{DynamicResource String_CommunityRecommendedBadge}" FontSize="11" FontWeight="Bold" Foreground="{StaticResource InverseTextBrush}"/>
                                     </Border>
                                     <Border Background="{StaticResource SuccessBgBrush}" BorderBrush="{StaticResource SuccessBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusXs}" Padding="8,3"
                                             Visibility="{Binding RecommendedEmulatorOption.HasEnoughVotesForScore, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -1304,8 +1329,8 @@
                     <!-- ═══ 4. ALL REFIX EMULATOR OPTIONS LIST ═══ -->
                     <Border Style="{StaticResource Card}" Margin="0,0,0,18">
                         <StackPanel>
-                            <TextBlock Text="Available ReFix Emulation Options" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                            <TextBlock Text="Configurations compatible with this game engine ordered by global community rating:"
+                            <TextBlock Text="{DynamicResource String_AvailableEmulationOptionsTitle}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                            <TextBlock Text="{DynamicResource String_AvailableEmulationOptionsDesc}"
                                        Style="{StaticResource Caption}" Margin="0,0,0,16"/>
 
                             <ItemsControl ItemsSource="{Binding AvailableEmulatorOptions}">
@@ -1361,7 +1386,7 @@
                                                         </Viewbox.ToolTip>
                                                     </Viewbox>
 
-                                                    <Button Content="📥 Install"
+                                                    <Button Content="{DynamicResource String_Install}"
                                                             Style="{StaticResource SecondaryButton}"
                                                             Padding="16,9"
                                                             Command="{Binding DataContext.DeployEmulatorOptionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
@@ -1382,8 +1407,8 @@
                         <StackPanel>
                             <Grid Margin="0,0,0,4">
                                 <StackPanel>
-                                    <TextBlock Text="Game-Specific Emulators &amp; Fixes" Style="{StaticResource H2}"/>
-                                    <TextBlock Text="Tested game fixes and specialized emulators from DepotBox catalog."
+                                    <TextBlock Text="{DynamicResource String_GameSpecificFixesTitle}" Style="{StaticResource H2}"/>
+                                    <TextBlock Text="{DynamicResource String_GameSpecificFixesDesc}"
                                                Style="{StaticResource Caption}" Margin="0,2,0,0"/>
                                 </StackPanel>
                             </Grid>
@@ -1393,7 +1418,7 @@
                             <!-- Loading State -->
                             <StackPanel Visibility="{Binding IsLoadingGameFixes, Converter={StaticResource BoolToVisibilityConverter}}"
                                         HorizontalAlignment="Center" Margin="0,16">
-                                <TextBlock Text="⏳ Checking for available game fixes..."
+                                <TextBlock Text="{DynamicResource String_CheckingAvailableFixes}"
                                            Style="{StaticResource BodyMedium}" Foreground="{StaticResource MutedTextBrush}"/>
                             </StackPanel>
 
@@ -1407,18 +1432,18 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0">
-                                        <TextBlock Text="Could not load fixes from API" FontWeight="Bold" Foreground="{StaticResource DangerBrush}"/>
+                                        <TextBlock Text="{DynamicResource String_CouldNotLoadFixes}" FontWeight="Bold" Foreground="{StaticResource DangerBrush}"/>
                                         <TextBlock Text="{Binding GameFixesErrorMessage}" Style="{StaticResource Caption}" Foreground="{StaticResource PrimaryTextBrush}"/>
                                     </StackPanel>
-                                    <Button Grid.Column="1" Content="Retry" Style="{StaticResource SecondaryButton}"
+                                    <Button Grid.Column="1" Content="{DynamicResource String_RetryAction}" Style="{StaticResource SecondaryButton}"
                                             Padding="12,6" Command="{Binding LoadGameFixesCommand}"/>
                                 </Grid>
                             </Border>
 
                             <!-- ── 5A. ONLINE MULTIPLAYER EMULATORS ── -->
                             <StackPanel Visibility="{Binding HasOnlineGameFixes, Converter={StaticResource BoolToVisibilityConverter}}" Margin="0,6,0,16">
-                                <TextBlock Text="🌐 Online Multiplayer Emulators" Style="{StaticResource BodyMedium}" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,4"/>
-                                <TextBlock Text="Tested online multiplayer fixes for this game."
+                                <TextBlock Text="{DynamicResource String_OnlineMultiplayerEmulatorsTitle}" Style="{StaticResource BodyMedium}" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{DynamicResource String_OnlineMultiplayerEmulatorsDesc}"
                                            Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,10"/>
 
                                 <ItemsControl ItemsSource="{Binding OnlineGameFixes}">
@@ -1478,7 +1503,7 @@
                                                             </Viewbox.ToolTip>
                                                         </Viewbox>
 
-                                                        <Button Content="📥 Install Online Fix"
+                                                        <Button Content="{DynamicResource String_InstallOnlineFixBtn}"
                                                                 Style="{StaticResource PrimaryButton}"
                                                                 Padding="16,9"
                                                                 Command="{Binding DataContext.DeployGameFixCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
@@ -1494,8 +1519,8 @@
 
                             <!-- ── 5B. DRM & LICENSE BYPASS LAYERS ── -->
                             <StackPanel Visibility="{Binding HasBypassGameFixes, Converter={StaticResource BoolToVisibilityConverter}}" Margin="0,0,0,16">
-                                <TextBlock Text="⚡ DRM &amp; License Bypass Layers" Style="{StaticResource BodyMedium}" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,4"/>
-                                <TextBlock Text="License and DRM bypass layers for this game."
+                                <TextBlock Text="{DynamicResource String_DrmBypassLayersTitle}" Style="{StaticResource BodyMedium}" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{DynamicResource String_DrmBypassLayersDesc}"
                                            Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,10"/>
 
                                 <ItemsControl ItemsSource="{Binding BypassGameFixes}">
@@ -1526,7 +1551,7 @@
 
                                                     <!-- Install Button -->
                                                     <Button Grid.Column="1"
-                                                            Content="📥 Install Bypass"
+                                                            Content="{DynamicResource String_InstallBypassBtn}"
                                                             Style="{StaticResource SecondaryButton}"
                                                             Padding="16,9"
                                                             VerticalAlignment="Center"
@@ -1542,8 +1567,8 @@
 
                             <!-- ── 5C. HYPERVISOR & ANTI-CHEAT LAYERS ── -->
                             <StackPanel Visibility="{Binding HasHypervisorGameFixes, Converter={StaticResource BoolToVisibilityConverter}}" Margin="0,0,0,16">
-                                <TextBlock Text="🛡️ Hypervisor &amp; Anti-Cheat Layers" Style="{StaticResource BodyMedium}" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,4"/>
-                                <TextBlock Text="Hypervisor-level emulation layers for this game."
+                                <TextBlock Text="{DynamicResource String_HypervisorLayersTitle}" Style="{StaticResource BodyMedium}" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{DynamicResource String_HypervisorLayersDesc}"
                                            Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,10"/>
 
                                 <ItemsControl ItemsSource="{Binding HypervisorGameFixes}">
@@ -1574,7 +1599,7 @@
 
                                                     <!-- Install Button -->
                                                     <Button Grid.Column="1"
-                                                            Content="📥 Install Hypervisor"
+                                                            Content="{DynamicResource String_InstallHypervisorBtn}"
                                                             Style="{StaticResource SecondaryButton}"
                                                             Padding="16,9"
                                                             VerticalAlignment="Center"
@@ -1590,7 +1615,7 @@
 
                             <!-- ── 5D. OTHER CUSTOM FIXES ── -->
                             <StackPanel Visibility="{Binding HasOtherGameFixes, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <TextBlock Text="📦 Other Custom Fixes" Style="{StaticResource BodyMedium}" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,10"/>
+                                <TextBlock Text="{DynamicResource String_OtherCustomFixesTitle}" Style="{StaticResource BodyMedium}" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,10"/>
                                 <ItemsControl ItemsSource="{Binding OtherGameFixes}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
@@ -1619,7 +1644,7 @@
 
                                                     <!-- Install Button -->
                                                     <Button Grid.Column="1"
-                                                            Content="📥 Install Fix"
+                                                            Content="{DynamicResource String_InstallFixBtn}"
                                                             Style="{StaticResource SecondaryButton}"
                                                             Padding="16,9"
                                                             VerticalAlignment="Center"
@@ -1640,12 +1665,12 @@
                 <StackPanel Visibility="{Binding SelectedTab, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Settings}">
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <TextBlock Text="Instance Configuration &amp; Launch Options" Style="{StaticResource H2}" Margin="0,0,0,16"/>
+                            <TextBlock Text="{DynamicResource String_InstanceConfigTitle}" Style="{StaticResource H2}" Margin="0,0,0,16"/>
 
-                            <TextBlock Text="Instance Alias / Custom Name:" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
+                            <TextBlock Text="{DynamicResource String_InstanceAliasLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
                             <TextBox Style="{StaticResource DarkTextBox}" Text="{Binding InstanceAlias, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,16"/>
 
-                            <TextBlock Text="Primary Game Executable (.exe):" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
+                            <TextBlock Text="{DynamicResource String_PrimaryExecutableLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
                             <Grid Margin="0,0,0,16">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -1653,26 +1678,26 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBox Grid.Column="0" Style="{StaticResource DarkTextBox}" Text="{Binding ConfiguredExecutablePath, UpdateSourceTrigger=PropertyChanged}"/>
-                                <Button Grid.Column="2" Content="Browse..." Style="{StaticResource SecondaryButton}" Command="{Binding BrowseExecutableCommand}"/>
+                                <Button Grid.Column="2" Content="{DynamicResource String_BrowseDirBtn}" Style="{StaticResource SecondaryButton}" Command="{Binding BrowseExecutableCommand}"/>
                             </Grid>
 
-                            <TextBlock Text="Custom Launch Command Line Arguments:" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
+                            <TextBlock Text="{DynamicResource String_CustomLaunchArgsLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
                             <TextBox Style="{StaticResource DarkTextBox}" Text="{Binding CustomLaunchArgs, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,20"/>
 
-                            <Button Content="💾 Save Settings &amp; Alias" Style="{StaticResource PrimaryButton}" Padding="20,10" HorizontalAlignment="Left" Command="{Binding SaveSettingsCommand}"/>
+                            <Button Content="{DynamicResource String_SaveSettingsAliasBtn}" Style="{StaticResource PrimaryButton}" Padding="20,10" HorizontalAlignment="Left" Command="{Binding SaveSettingsCommand}"/>
                         </StackPanel>
                     </Border>
 
                     <!-- Danger Zone & Storage Management -->
                     <Border Style="{StaticResource Card}" Margin="0,20,0,0" BorderBrush="{StaticResource DangerBorderBrush}" BorderThickness="1">
                         <StackPanel>
-                            <TextBlock Text="Danger Zone &amp; Storage Management" Style="{StaticResource H2}" Foreground="{StaticResource DangerBrush}" Margin="0,0,0,8"/>
-                            <TextBlock Text="Manage installed game files or remove this instance entirely from your BlueStar library."
+                            <TextBlock Text="{DynamicResource String_DangerZoneTitle}" Style="{StaticResource H2}" Foreground="{StaticResource DangerBrush}" Margin="0,0,0,8"/>
+                            <TextBlock Text="{DynamicResource String_DangerZoneDesc}"
                                        Style="{StaticResource BodySmall}" Margin="0,0,0,16"/>
 
                             <WrapPanel Orientation="Horizontal">
                                 <!-- Uninstall Game Files (Keeps instance in BlueStar) -->
-                                <Button Content="🗑 Uninstall Game Files..."
+                                <Button Content="{DynamicResource String_UninstallGameFilesBtn}"
                                         Style="{StaticResource SecondaryButton}"
                                         BorderBrush="{StaticResource DangerBrush}"
                                         Foreground="{StaticResource DangerBrush}"
@@ -1681,7 +1706,7 @@
                                         Command="{Binding OpenUninstallModalCommand}"/>
 
                                 <!-- Delete Instance Entirely -->
-                                <Button Content="💥 Delete Instance..."
+                                <Button Content="{DynamicResource String_DeleteInstanceEntirelyBtn}"
                                         Style="{StaticResource DangerButton}"
                                         Padding="18,10"
                                         Margin="0,0,0,8"
@@ -1702,19 +1727,19 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0">
-                                <TextBlock Text="🛠️ Windows Prerequisites Installer" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                                <TextBlock Text="Verifies and installs required dependencies (Visual C++, DirectX, .NET, Unreal Runtime) to ensure games launch properly."
+                                <TextBlock Text="{DynamicResource String_PrerequisitesInstallerTitle}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{DynamicResource String_PrerequisitesInstallerDesc}"
                                            Style="{StaticResource Body}" Foreground="{StaticResource SecondaryTextBrush}"/>
                             </StackPanel>
 
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                <Button Content="🔄 Re-Scan"
+                                <Button Content="{DynamicResource String_ReScanBtn}"
                                         Style="{StaticResource SecondaryButton}"
                                         Margin="0,0,10,0"
                                         Command="{Binding ScanPrerequisitesCommand}"
                                         IsEnabled="{Binding IsInstallingPrerequisites, Converter={StaticResource InverseBoolConverter}}"/>
 
-                                <Button Content="⚡ Install All Prerequisites"
+                                <Button Content="{DynamicResource String_InstallAllPrerequisitesBtn}"
                                         Style="{StaticResource PrimaryButton}"
                                         Command="{Binding InstallAllPrerequisitesCommand}"
                                         IsEnabled="{Binding IsInstallingPrerequisites, Converter={StaticResource InverseBoolConverter}}"/>
@@ -1750,10 +1775,10 @@
                                             <TextBlock Text="{Binding Description}" Style="{StaticResource Body}" Margin="0,0,0,6"/>
 
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="Category: " Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}"/>
+                                                <TextBlock Text="{DynamicResource String_CategoryLabel}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}"/>
                                                 <TextBlock Text="{Binding Category}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,16,0"/>
 
-                                                <TextBlock Text="Location: " Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}"/>
+                                                <TextBlock Text="{DynamicResource String_LocationLabel}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}"/>
                                                 <TextBlock Text="{Binding LocalInstallerPath, FallbackValue='Official Microsoft Direct Download', TargetNullValue='Official Microsoft Direct Download'}"
                                                            Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis"/>
                                             </StackPanel>
@@ -1761,7 +1786,7 @@
 
                                         <!-- Right Action Button -->
                                         <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                            <Button Content="Install"
+                                            <Button Content="{DynamicResource String_Install}"
                                                     Style="{StaticResource SecondaryButton}"
                                                     Padding="16,8"
                                                     Command="{Binding DataContext.InstallPrerequisiteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
@@ -1784,10 +1809,10 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="Live Execution &amp; Output Logs" Style="{StaticResource H2}"/>
+                                <TextBlock Text="{DynamicResource String_LiveLogsTitle}" Style="{StaticResource H2}"/>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                    <Button Content="📋 Copy Logs" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Command="{Binding CopyLogsCommand}"/>
-                                    <Button Content="🗑 Clear" Style="{StaticResource GhostButton}" Command="{Binding ClearLogsCommand}"/>
+                                    <Button Content="{DynamicResource String_CopyLogsBtn}" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Command="{Binding CopyLogsCommand}"/>
+                                    <Button Content="{DynamicResource String_ClearLogsBtn}" Style="{StaticResource GhostButton}" Command="{Binding ClearLogsCommand}"/>
                                 </StackPanel>
                             </Grid>
 
@@ -1824,14 +1849,14 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Create Game Shortcuts" Style="{StaticResource H2}"/>
+                        <TextBlock Text="{DynamicResource String_CreateShortcutsModalTitle}" Style="{StaticResource H2}"/>
                         <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}" Command="{Binding CloseShortcutModalCommand}"/>
                     </Grid>
 
-                    <TextBlock Text="Shortcut Name:" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
+                    <TextBlock Text="{DynamicResource String_ShortcutNameLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
                     <TextBox Style="{StaticResource DarkTextBox}" Text="{Binding ShortcutName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,14"/>
 
-                    <TextBlock Text="Executable File (.exe):" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
+                    <TextBlock Text="{DynamicResource String_ExecutableFileLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
                     <Grid Margin="0,0,0,16">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -1839,19 +1864,19 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <ComboBox Grid.Column="0" Style="{StaticResource DarkComboBox}" ItemsSource="{Binding AvailableExecutables}" SelectedItem="{Binding SelectedExecutable}"/>
-                        <Button Grid.Column="2" Content="Browse..." Style="{StaticResource SecondaryButton}" Command="{Binding BrowseExecutableCommand}"/>
+                        <Button Grid.Column="2" Content="{DynamicResource String_BrowseDirBtn}" Style="{StaticResource SecondaryButton}" Command="{Binding BrowseExecutableCommand}"/>
                     </Grid>
 
-                    <TextBlock Text="Shortcut Destinations:" Style="{StaticResource CaptionBold}" Margin="0,0,0,8"/>
-                    <CheckBox Content="Desktop Shortcut (.lnk)" Style="{StaticResource DarkCheckBox}" IsChecked="{Binding CreateDesktopShortcut}" Margin="0,0,0,8"/>
-                    <CheckBox Content="Start Menu Shortcut" Style="{StaticResource DarkCheckBox}" IsChecked="{Binding CreateStartMenuShortcut}" Margin="0,0,0,8"/>
-                    <CheckBox Content="Steam Library Shortcut" Style="{StaticResource DarkCheckBox}" IsChecked="{Binding CreateSteamShortcut}" IsEnabled="{Binding IsSteamInstalled}" Margin="0,0,0,16"/>
+                    <TextBlock Text="{DynamicResource String_ShortcutDestinationsLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,8"/>
+                    <CheckBox Content="{DynamicResource String_DesktopShortcutOption}" Style="{StaticResource DarkCheckBox}" IsChecked="{Binding CreateDesktopShortcut}" Margin="0,0,0,8"/>
+                    <CheckBox Content="{DynamicResource String_StartMenuShortcutOption}" Style="{StaticResource DarkCheckBox}" IsChecked="{Binding CreateStartMenuShortcut}" Margin="0,0,0,8"/>
+                    <CheckBox Content="{DynamicResource String_SteamLibraryShortcutOption}" Style="{StaticResource DarkCheckBox}" IsChecked="{Binding CreateSteamShortcut}" IsEnabled="{Binding IsSteamInstalled}" Margin="0,0,0,16"/>
 
                     <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusMd}" Padding="12,8" Margin="0,0,0,16" Visibility="{Binding ShortcutStatusMessage, Converter={StaticResource NullToVisibilityConverter}}">
                         <TextBlock Text="{Binding ShortcutStatusMessage}" Style="{StaticResource Caption}"/>
                     </Border>
 
-                    <Button Content="🔄 Restart Steam Client" Style="{StaticResource PrimaryButton}" Margin="0,0,0,14" Visibility="{Binding ShowRestartSteamButton, Converter={StaticResource BoolToVisibilityConverter}}" Command="{Binding RestartSteamCommand}"/>
+                    <Button Content="{DynamicResource String_RestartSteamBtn}" Style="{StaticResource PrimaryButton}" Margin="0,0,0,14" Visibility="{Binding ShowRestartSteamButton, Converter={StaticResource BoolToVisibilityConverter}}" Command="{Binding RestartSteamCommand}"/>
 
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -1859,8 +1884,8 @@
                             <ColumnDefinition Width="12"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <Button Grid.Column="0" Content="Cancel" Style="{StaticResource SecondaryButton}" Command="{Binding CloseShortcutModalCommand}"/>
-                        <Button Grid.Column="2" Content="Create Shortcuts ➔" Style="{StaticResource PrimaryButton}" Command="{Binding CreateShortcutCommand}"/>
+                        <Button Grid.Column="0" Content="{DynamicResource String_Cancel}" Style="{StaticResource SecondaryButton}" Command="{Binding CloseShortcutModalCommand}"/>
+                        <Button Grid.Column="2" Content="{DynamicResource String_CreatingShortcuts}" Style="{StaticResource PrimaryButton}" Command="{Binding CreateShortcutCommand}"/>
                     </Grid>
                 </StackPanel>
             </Border>
@@ -1884,14 +1909,14 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="🌐" FontSize="18" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="Download Steam Workshop Mod" Style="{StaticResource H2}"/>
+                            <TextBlock Text="{DynamicResource String_WorkshopModalTitle}" Style="{StaticResource H2}"/>
                         </StackPanel>
                         <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}" Command="{Binding CloseWorkshopModalCommand}"
                                 IsEnabled="{Binding IsDownloadingWorkshopMod, Converter={StaticResource InverseBoolConverter}}"/>
                     </Grid>
 
                     <!-- Input Box -->
-                    <TextBlock Text="Workshop Item URL or ID:" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
+                    <TextBlock Text="{DynamicResource String_WorkshopUrlOrIdLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
                     <Grid Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -1902,7 +1927,7 @@
                                  Text="{Binding WorkshopSearchInput, UpdateSourceTrigger=PropertyChanged}"
                                  Tag="e.g. https://steamcommunity.com/sharedfiles/filedetails/?id=123456789"
                                  IsEnabled="{Binding IsDownloadingWorkshopMod, Converter={StaticResource InverseBoolConverter}}"/>
-                        <Button Grid.Column="2" Content="🔍 Inspect"
+                        <Button Grid.Column="2" Content="{DynamicResource String_InspectBtn}"
                                 Style="{StaticResource SecondaryButton}"
                                 Command="{Binding FetchWorkshopPreviewCommand}"
                                 IsEnabled="{Binding IsLoadingWorkshopPreview, Converter={StaticResource InverseBoolConverter}}"/>
@@ -1976,9 +2001,9 @@
                             <ColumnDefinition Width="12"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <Button Grid.Column="0" Content="Cancel" Style="{StaticResource SecondaryButton}" Command="{Binding CloseWorkshopModalCommand}"
+                        <Button Grid.Column="0" Content="{DynamicResource String_Cancel}" Style="{StaticResource SecondaryButton}" Command="{Binding CloseWorkshopModalCommand}"
                                 IsEnabled="{Binding IsDownloadingWorkshopMod, Converter={StaticResource InverseBoolConverter}}"/>
-                        <Button Grid.Column="2" Content="📥 Download &amp; Install Mod"
+                        <Button Grid.Column="2" Content="{DynamicResource String_DownloadInstallModBtn}"
                                 Style="{StaticResource PrimaryButton}"
                                 Command="{Binding DownloadWorkshopModCommand}"
                                 IsEnabled="{Binding WorkshopPreviewItem, Converter={StaticResource NullToVisibilityConverter}}"/>
@@ -2003,7 +2028,7 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0">
-                            <TextBlock Text="🎮 Emulation Feedback" Style="{StaticResource H2}"/>
+                            <TextBlock Text="{DynamicResource String_FeedbackModalTitle}" Style="{StaticResource H2}"/>
                             <TextBlock Text="BlueStar Community" Style="{StaticResource Caption}"/>
                         </StackPanel>
                         <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}" Command="{Binding CloseFeedbackModalCommand}"/>
@@ -2018,7 +2043,7 @@
                         <StackPanel>
                             <TextBlock Text="{Binding FeedbackEmulatorName, StringFormat='Did the {0} emulator work properly for this game?'}"
                                        Style="{StaticResource BodyMedium}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,8"/>
-                            <TextBlock Text="Your feedback helps the community rank the most reliable configurations for this title."
+                            <TextBlock Text="{DynamicResource String_FeedbackHelpCommunity}"
                                        Style="{StaticResource Caption}" TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
@@ -2031,12 +2056,12 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <Button Grid.Column="0" Content="👍 Yes, worked great"
+                        <Button Grid.Column="0" Content="{DynamicResource String_FeedbackYesWorked}"
                                 Style="{StaticResource PrimaryButton}"
                                 Padding="16,12"
                                 Command="{Binding SubmitFeedbackPositiveCommand}"/>
 
-                        <Button Grid.Column="2" Content="👎 No, had issues"
+                        <Button Grid.Column="2" Content="{DynamicResource String_FeedbackNoIssues}"
                                 Style="{StaticResource DangerButton}"
                                 Padding="16,12"
                                 Command="{Binding SubmitFeedbackNegativeCommand}"/>
@@ -2049,7 +2074,7 @@
                                 BorderThickness="1"
                                 CornerRadius="{StaticResource RadiusSm}"
                                 Padding="12" Margin="0,0,0,16">
-                            <TextBlock Text="Feedback recorded. Would you like to uninstall this emulator and choose another option?"
+                            <TextBlock Text="{DynamicResource String_FeedbackFollowupDesc}"
                                        Foreground="{StaticResource DangerBrush}" FontSize="13" TextWrapping="Wrap"/>
                         </Border>
 
@@ -2060,15 +2085,15 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
 
-                            <Button Grid.Column="0" Content="Cancel / Keep"
+                            <Button Grid.Column="0" Content="{DynamicResource String_FeedbackCancelKeep}"
                                     Style="{StaticResource SecondaryButton}"
                                     Padding="14,10"
                                     Command="{Binding CloseFeedbackModalCommand}"/>
 
-                            <Button Grid.Column="2" Content="🗑 Uninstall &amp; Change"
-                                    Style="{StaticResource PrimaryButton}"
+                            <Button Grid.Column="2" Content="{DynamicResource String_FeedbackUninstallChange}"
+                                    Style="{StaticResource DangerButton}"
                                     Padding="14,10"
-                                    Command="{Binding ConfirmUninstallAndTryAnotherCommand}"/>
+                                    Command="{Binding UninstallFromFeedbackCommand}"/>
                         </Grid>
                     </StackPanel>
                 </StackPanel>
@@ -2088,7 +2113,7 @@
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center">
                 <StackPanel>
-                    <TextBlock Text="🗑 Delete Instance" Style="{StaticResource H1}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{DynamicResource String_DeleteModalTitle}" Style="{StaticResource H1}" Margin="0,0,0,8"/>
                     <TextBlock Text="{Binding Instance.Name, StringFormat='{}How would you like to delete {0}?'}"
                                Style="{StaticResource Body}" TextWrapping="Wrap" Margin="0,0,0,20"/>
 
@@ -2104,11 +2129,11 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" Margin="0,0,12,0">
-                                <TextBlock Text="Unlink from BlueStar only" FontWeight="SemiBold" FontSize="14" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,4"/>
-                                <TextBlock Text="Keeps downloaded game files on disk. Only removes the record from your library."
+                                <TextBlock Text="{DynamicResource String_UnlinkFromBlueStarOnlyTitle}" FontWeight="SemiBold" FontSize="14" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{DynamicResource String_UnlinkFromBlueStarOnlyDesc}"
                                            Style="{StaticResource BodySmall}" TextWrapping="Wrap"/>
                             </StackPanel>
-                            <Button Grid.Column="1" Content="Unlink"
+                            <Button Grid.Column="1" Content="{DynamicResource String_UnlinkActionBtn}"
                                     Style="{StaticResource SecondaryButton}"
                                     Padding="16,9"
                                     VerticalAlignment="Center"
@@ -2130,11 +2155,11 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" Margin="0,0,12,0">
-                                <TextBlock Text="Delete instance and purge game files" FontWeight="SemiBold" FontSize="14" Foreground="{StaticResource DangerBrush}" Margin="0,0,0,4"/>
-                                <TextBlock Text="Permanently removes the instance and deletes all game files from disk."
+                                <TextBlock Text="{DynamicResource String_DeleteInstanceAndPurgeTitle}" FontWeight="SemiBold" FontSize="14" Foreground="{StaticResource DangerBrush}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{DynamicResource String_DeleteInstanceAndPurgeDesc}"
                                            Style="{StaticResource BodySmall}" TextWrapping="Wrap"/>
                             </StackPanel>
-                            <Button Grid.Column="1" Content="💥 Delete All"
+                            <Button Grid.Column="1" Content="{DynamicResource String_DeleteAllActionBtn}"
                                     Style="{StaticResource DangerButton}"
                                     Padding="16,9"
                                     VerticalAlignment="Center"
@@ -2145,7 +2170,7 @@
                     </Border>
 
                     <!-- Cancel Button -->
-                    <Button Content="Cancel"
+                    <Button Content="{DynamicResource String_Cancel}"
                             Style="{StaticResource GhostButton}"
                             HorizontalAlignment="Right"
                             Padding="18,8"
@@ -2171,7 +2196,7 @@
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center">
                 <StackPanel>
-                    <TextBlock Text="🗑 Uninstall Game Files" Style="{StaticResource H1}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{DynamicResource String_UninstallGameFilesModalTitle}" Style="{StaticResource H1}" Margin="0,0,0,8"/>
                     <TextBlock Text="{Binding Instance.Name, StringFormat='{}Are you sure you want to uninstall game files for {0}?'}"
                                Style="{StaticResource Body}" TextWrapping="Wrap" Margin="0,0,0,16"/>
 
@@ -2181,11 +2206,11 @@
                             CornerRadius="{StaticResource RadiusMd}"
                             Padding="14" Margin="0,0,0,20">
                         <StackPanel>
-                            <TextBlock Text="ℹ️ What will happen:" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,6"/>
-                            <TextBlock Text="• All installed game files will be permanently deleted from disk." Style="{StaticResource BodySmall}" Margin="0,0,0,3"/>
-                            <TextBlock Text="• Active emulator and DLC unlocker files will be cleanly removed." Style="{StaticResource BodySmall}" Margin="0,0,0,3"/>
-                            <TextBlock Text="• This instance record, its configurations, notes, and depot manifests remain saved in your BlueStar library." Style="{StaticResource BodySmall}" Margin="0,0,0,3"/>
-                            <TextBlock Text="• You can reinstall or re-download the game at any time." Style="{StaticResource BodySmall}"/>
+                            <TextBlock Text="{DynamicResource String_WhatWillHappenTitle}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,6"/>
+                            <TextBlock Text="{DynamicResource String_UninstallDescBullet1}" Style="{StaticResource BodySmall}" Margin="0,0,0,3"/>
+                            <TextBlock Text="{DynamicResource String_UninstallDescBullet2}" Style="{StaticResource BodySmall}" Margin="0,0,0,3"/>
+                            <TextBlock Text="{DynamicResource String_UninstallDescBullet3}" Style="{StaticResource BodySmall}" Margin="0,0,0,3"/>
+                            <TextBlock Text="{DynamicResource String_UninstallDescBullet4}" Style="{StaticResource BodySmall}"/>
                         </StackPanel>
                     </Border>
 
@@ -2197,13 +2222,13 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <Button Grid.Column="1" Content="Cancel"
+                        <Button Grid.Column="1" Content="{DynamicResource String_Cancel}"
                                 Style="{StaticResource GhostButton}"
                                 Padding="18,9"
                                 Command="{Binding CloseUninstallModalCommand}"
                                 IsEnabled="{Binding IsUninstallingGameFiles, Converter={StaticResource InverseBoolConverter}}"/>
 
-                        <Button Grid.Column="3" Content="🗑 Uninstall Game Files"
+                        <Button Grid.Column="3" Content="{DynamicResource String_UninstallGameFilesBtnAction}"
                                 Style="{StaticResource DangerButton}"
                                 Padding="20,9"
                                 Command="{Binding ConfirmUninstallGameFilesCommand}"
@@ -2238,13 +2263,13 @@
 
                     <StackPanel Grid.Row="0">
                         <Grid Margin="0,0,0,12">
-                            <TextBlock Text="🎮 Configure Custom Build" Style="{StaticResource H2}"/>
+                            <TextBlock Text="{DynamicResource String_ConfigureCustomBuildModalTitle}" Style="{StaticResource H2}"/>
                             <Button Style="{StaticResource GhostButton}" HorizontalAlignment="Right" VerticalAlignment="Top"
                                     Command="{Binding CloseAddCustomBuildModalCommand}" Padding="8,4">
                                 <TextBlock Text="✕" FontSize="14" Foreground="{StaticResource MutedTextBrush}"/>
                             </Button>
                         </Grid>
-                        <TextBlock Text="Target a specific historical build version or crack-compatible build (e.g. Build 22357085) by specifying Build ID and depot Manifest IDs."
+                        <TextBlock Text="{DynamicResource String_ConfigureCustomBuildDesc}"
                                    Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,16"/>
 
                         <!-- Target Build ID & Name Inputs -->
@@ -2256,14 +2281,14 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0">
-                                <TextBlock Text="Target Build ID:" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{DynamicResource String_TargetBuildIdLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
                                 <TextBox Text="{Binding CustomBuildIdInput, UpdateSourceTrigger=PropertyChanged}"
                                          Style="{StaticResource DarkTextBox}"
                                          Height="32" Padding="8,4"/>
                             </StackPanel>
 
                             <StackPanel Grid.Column="2">
-                                <TextBlock Text="Build Name / Note:" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{DynamicResource String_BuildNameNoteLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
                                 <TextBox Text="{Binding CustomBuildNameInput, UpdateSourceTrigger=PropertyChanged}"
                                          Style="{StaticResource DarkTextBox}"
                                          Height="32" Padding="8,4"/>
@@ -2271,8 +2296,8 @@
                         </Grid>
 
                         <Grid Margin="0,0,0,8">
-                            <TextBlock Text="Depot Manifest IDs for this Build:" Style="{StaticResource CaptionBold}"/>
-                            <Button Content="📁 Import from .manifest files..."
+                            <TextBlock Text="{DynamicResource String_DepotManifestIdsLabel}" Style="{StaticResource CaptionBold}"/>
+                            <Button Content="{DynamicResource String_ImportFromManifestFilesBtn}"
                                     Style="{StaticResource GhostButton}"
                                     HorizontalAlignment="Right"
                                     FontSize="11" Padding="6,2"
@@ -2319,12 +2344,12 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <Button Grid.Column="1" Content="Cancel"
+                        <Button Grid.Column="1" Content="{DynamicResource String_Cancel}"
                                 Style="{StaticResource GhostButton}"
                                 Padding="16,8"
                                 Command="{Binding CloseAddCustomBuildModalCommand}"/>
 
-                        <Button Grid.Column="3" Content="💾 Save &amp; Switch Build"
+                        <Button Grid.Column="3" Content="{DynamicResource String_SaveSwitchBuildBtn}"
                                 Style="{StaticResource PrimaryButton}"
                                 Padding="18,8"
                                 Command="{Binding SaveCustomBuildCommand}"/>
@@ -2350,8 +2375,8 @@
                 <StackPanel>
                     <Grid Margin="0,0,0,16">
                         <StackPanel>
-                            <TextBlock Text="🔄 Depot Updates" Style="{StaticResource H2}"/>
-                            <TextBlock Text="New manifests were detected on DepotBox for this instance."
+                            <TextBlock Text="{DynamicResource String_DepotUpdatesModalTitle}" Style="{StaticResource H2}"/>
+                            <TextBlock Text="{DynamicResource String_DepotUpdatesModalDesc}"
                                        Style="{StaticResource Caption}" Margin="0,4,0,0"/>
                         </StackPanel>
                         <Button Style="{StaticResource GhostButton}" HorizontalAlignment="Right" VerticalAlignment="Top"
@@ -2360,7 +2385,7 @@
                         </Button>
                     </Grid>
 
-                    <TextBlock Text="Select the depots you want to update:" Style="{StaticResource CaptionBold}" Margin="0,0,0,10"/>
+                    <TextBlock Text="{DynamicResource String_SelectDepotsToUpdateLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,10"/>
 
                     <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto" Margin="0,0,0,16">
                         <ItemsControl ItemsSource="{Binding UpdateAvailableDepots}">
@@ -2422,17 +2447,17 @@
                             CornerRadius="{StaticResource RadiusSm}"
                             Padding="12,8" Margin="0,0,0,16"
                             Visibility="{Binding IsGameRunning, Converter={StaticResource BoolToVisibilityConverter}}">
-                        <TextBlock Text="⚠ The game is currently running. Please close it before installing the update."
+                        <TextBlock Text="{DynamicResource String_GameRunningUpdateWarn}"
                                    Style="{StaticResource BodySmall}" Foreground="{StaticResource WarningBrush}"/>
                     </Border>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Content="Cancel"
+                        <Button Content="{DynamicResource String_Cancel}"
                                 Style="{StaticResource GhostButton}"
                                 Command="{Binding CloseUpdateModalCommand}"
                                 Margin="0,0,10,0"/>
 
-                        <Button Content="📥 Download &amp; Install"
+                        <Button Content="{DynamicResource String_DownloadInstallBtn}"
                                 Style="{StaticResource PrimaryButton}"
                                 Command="{Binding ConfirmApplyDepotUpdateCommand}"/>
                     </StackPanel>
@@ -2453,8 +2478,8 @@
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center">
                 <StackPanel>
-                    <TextBlock Text="📦 Associate with DepotBox" Style="{StaticResource H2}" Margin="0,0,0,6"/>
-                    <TextBlock Text="Link this imported game to DepotBox to enable automatic depot updates, manifest tracking, and DLC installation."
+                    <TextBlock Text="{DynamicResource String_AssociateWithDepotBoxModalTitle}" Style="{StaticResource H2}" Margin="0,0,0,6"/>
+                    <TextBlock Text="{DynamicResource String_AssociateWithDepotBoxModalDesc}"
                                Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,16"/>
 
                     <!-- Search Box -->
@@ -2466,7 +2491,7 @@
                         </Grid.ColumnDefinitions>
                         <TextBox Grid.Column="0" Text="{Binding AssociationSearchQuery, UpdateSourceTrigger=PropertyChanged}"
                                  Style="{StaticResource DarkTextBox}"/>
-                        <Button Grid.Column="2" Content="🔍 Search" Style="{StaticResource SecondaryButton}"
+                        <Button Grid.Column="2" Content="{DynamicResource String_SearchButton}" Style="{StaticResource SecondaryButton}"
                                 Command="{Binding SearchDepotBoxManuallyCommand}"/>
                     </Grid>
 
@@ -2488,12 +2513,12 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
-                                    <TextBlock Text="✓ Best Match:" FontWeight="Bold" Foreground="#38BDF8" Margin="0,0,6,0"/>
+                                    <TextBlock Text="{DynamicResource String_BestMatchPrefix}" FontWeight="Bold" Foreground="#38BDF8" Margin="0,0,6,0"/>
                                     <TextBlock Text="{Binding DepotBoxCandidate.Name}" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}"/>
                                 </StackPanel>
                                 <TextBlock Text="{Binding DepotBoxCandidate.AppId, StringFormat='Steam AppID: {0}'}" Style="{StaticResource Muted}"/>
                             </StackPanel>
-                            <Button Grid.Column="1" Content="✓ Select" Style="{StaticResource SecondaryButton}"
+                            <Button Grid.Column="1" Content="{DynamicResource String_SelectBtn}" Style="{StaticResource SecondaryButton}"
                                     Command="{Binding ConfirmAssociationWithCandidateCommand}"/>
                         </Grid>
                     </Border>
@@ -2518,7 +2543,7 @@
                                                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Style="{StaticResource BodySmall}" TextTrimming="CharacterEllipsis"/>
                                                 <TextBlock Text="{Binding AppId, StringFormat='AppID: {0}'}" Style="{StaticResource Muted}"/>
                                             </StackPanel>
-                                            <Button Grid.Column="1" Content="Associate"
+                                            <Button Grid.Column="1" Content="{DynamicResource String_AssociateBtn}"
                                                     Style="{StaticResource SecondaryButton}"
                                                     Padding="12,4" FontSize="11"
                                                     Command="{Binding DataContext.AssociateWithCandidateCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
@@ -2532,9 +2557,9 @@
 
                     <!-- Bottom Buttons -->
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Content="Cancel" Style="{StaticResource GhostButton}"
+                        <Button Content="{DynamicResource String_Cancel}" Style="{StaticResource GhostButton}"
                                 Command="{Binding CloseAssociationModalCommand}" Margin="0,0,10,0"/>
-                        <Button Content="Confirm Association" Style="{StaticResource PrimaryButton}"
+                        <Button Content="{DynamicResource String_ConfirmAssociationBtn}" Style="{StaticResource PrimaryButton}"
                                 Background="#0284C7" BorderBrush="#0369A1"
                                 Command="{Binding ConfirmAssociationWithCandidateCommand}"
                                 IsEnabled="{Binding DepotBoxCandidate, Converter={StaticResource NullToBoolConverter}}"/>
@@ -2556,16 +2581,16 @@
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center">
                 <StackPanel>
-                    <TextBlock Text="⚠️ Confirm DLC Unlocker Setup" Style="{StaticResource H2}" Margin="0,0,0,8"/>
-                    <TextBlock Text="No DLCs registered in database"
+                    <TextBlock Text="{DynamicResource String_DlcWarningModalTitle}" Style="{StaticResource H2}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{DynamicResource String_NoDlcsRegisteredTitle}"
                                FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,6"/>
-                    <TextBlock Text="No specific DLC entries were found for this game in the database. Installing the DLC Unlocker (SmokeAPI / CreamAPI) will integrate the generic wrapper into the game directory to unlock any present or unlisted DLCs. Do you want to proceed?"
+                    <TextBlock Text="{DynamicResource String_NoDlcsRegisteredDesc}"
                                Style="{StaticResource Body}" TextWrapping="Wrap" LineHeight="20" Margin="0,0,0,20"/>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Content="Cancel" Style="{StaticResource GhostButton}" Margin="0,0,8,0"
+                        <Button Content="{DynamicResource String_Cancel}" Style="{StaticResource GhostButton}" Margin="0,0,8,0"
                                 Command="{Binding CancelUnlockDlcsCommand}"/>
-                        <Button Content="Install Anyway" Style="{StaticResource PrimaryButton}"
+                        <Button Content="{DynamicResource String_InstallAnywayBtn}" Style="{StaticResource PrimaryButton}"
                                 Command="{Binding ConfirmUnlockDlcsCommand}"/>
                     </StackPanel>
                 </StackPanel>
@@ -2585,10 +2610,10 @@
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center">
                 <StackPanel>
-                    <TextBlock Text="🎮 Steam Required for Online Features" Style="{StaticResource H2}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{DynamicResource String_SteamRequiredModalTitle}" Style="{StaticResource H2}" Margin="0,0,0,8"/>
                     <TextBlock Text="{Binding Instance.Name, StringFormat='{}Launching {0} with ReFix Online (Spacewar 480).'}"
                                FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,6"/>
-                    <TextBlock Text="Steam is currently not running in the background. To access online multiplayer lobbies and invitations via Spacewar (AppID 480), Steam must be running."
+                    <TextBlock Text="{DynamicResource String_SteamRequiredModalDesc}"
                                Style="{StaticResource Body}" TextWrapping="Wrap" LineHeight="20" Margin="0,0,0,16"/>
 
                     <!-- Loading / Waiting for Steam indicator -->
@@ -2606,13 +2631,13 @@
                     </Border>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Content="Cancel" Style="{StaticResource GhostButton}" Margin="0,0,8,0"
+                        <Button Content="{DynamicResource String_Cancel}" Style="{StaticResource GhostButton}" Margin="0,0,8,0"
                                 Command="{Binding CloseSteamRequiredModalCommand}"
                                 IsEnabled="{Binding IsStartingSteam, Converter={StaticResource InverseBoolConverter}}"/>
-                        <Button Content="Launch Anyway" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"
+                        <Button Content="{DynamicResource String_LaunchAnywayBtn}" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"
                                 Command="{Binding LaunchAnywayCommand}"
                                 IsEnabled="{Binding IsStartingSteam, Converter={StaticResource InverseBoolConverter}}"/>
-                        <Button Content="Start Steam &amp; Play" Style="{StaticResource PrimaryButton}"
+                        <Button Content="{DynamicResource String_StartSteamAndPlayBtn}" Style="{StaticResource PrimaryButton}"
                                 Command="{Binding StartSteamAndLaunchCommand}"
                                 IsEnabled="{Binding IsStartingSteam, Converter={StaticResource InverseBoolConverter}}"/>
                     </StackPanel>
@@ -2645,8 +2670,8 @@
                         </Border>
 
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock Text="Online Fix Security Warning" Style="{StaticResource H2}" Foreground="{StaticResource WarningBrush}"/>
-                            <TextBlock Text="Third-party fix &amp; Windows Defender exclusion" Style="{StaticResource Caption}"/>
+                            <TextBlock Text="{DynamicResource String_OnlineFixWarningModalTitle}" Style="{StaticResource H2}" Foreground="{StaticResource WarningBrush}"/>
+                            <TextBlock Text="{DynamicResource String_OnlineFixWarningModalSubtitle}" Style="{StaticResource Caption}"/>
                         </StackPanel>
 
                         <Button Grid.Column="2" Content="✕" Style="{StaticResource GhostButton}" Command="{Binding CloseOnlineFixWarningModalCommand}"/>
@@ -2656,7 +2681,7 @@
 
                     <!-- Description -->
                     <TextBlock Style="{StaticResource Body}" Margin="0,0,0,12" TextWrapping="Wrap">
-                        <Run Text="You are about to install: "/>
+                        <Run Text="{DynamicResource String_AboutToInstallPrefix}"/>
                         <Run Text="{Binding PendingOnlineFixToInstall.Name}" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}"/>
                     </TextBlock>
 
@@ -2664,16 +2689,16 @@
                     <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}"
                             BorderThickness="1" CornerRadius="{StaticResource RadiusMd}" Padding="16,12" Margin="0,0,0,16">
                         <StackPanel>
-                            <TextBlock Text="⚠️ Important security &amp; system details:" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,8" Foreground="{StaticResource WarningBrush}"/>
-                            <TextBlock Text="• Highly popular &amp; widely used across the multiplayer community." Style="{StaticResource Caption}" FontWeight="SemiBold" Foreground="{StaticResource SuccessBrush}" Margin="0,0,0,4" TextWrapping="Wrap"/>
-                            <TextBlock Text="• This emulator is not open-source and its binary files are obfuscated / packed." Style="{StaticResource Caption}" Margin="0,0,0,4" TextWrapping="Wrap"/>
-                            <TextBlock Text="• Windows Defender will automatically add an exclusion for this game folder so the files are not quarantined." Style="{StaticResource Caption}" Margin="0,0,0,4" TextWrapping="Wrap"/>
-                            <TextBlock Text="• A Windows Administrator prompt (UAC) will appear before extracting files to apply the exclusion." Style="{StaticResource Caption}" Margin="0,0,0,4" TextWrapping="Wrap"/>
-                            <TextBlock Text="• When you uninstall this fix, the Windows Defender exclusion will be cleanly removed." Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                            <TextBlock Text="{DynamicResource String_OnlineFixSecurityDetailsTitle}" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,8" Foreground="{StaticResource WarningBrush}"/>
+                            <TextBlock Text="{DynamicResource String_OnlineFixBullet1}" Style="{StaticResource Caption}" FontWeight="SemiBold" Foreground="{StaticResource SuccessBrush}" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                            <TextBlock Text="{DynamicResource String_OnlineFixBullet2}" Style="{StaticResource Caption}" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                            <TextBlock Text="{DynamicResource String_OnlineFixBullet3}" Style="{StaticResource Caption}" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                            <TextBlock Text="{DynamicResource String_OnlineFixBullet4}" Style="{StaticResource Caption}" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                            <TextBlock Text="{DynamicResource String_OnlineFixBullet5}" Style="{StaticResource Caption}" TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
 
-                    <TextBlock Text="Do you want to proceed with installing this online fix?"
+                    <TextBlock Text="{DynamicResource String_OnlineFixConfirmPrompt}"
                                Style="{StaticResource BodySmall}" FontWeight="SemiBold" Margin="0,0,0,20"/>
 
                     <!-- Action Buttons -->
@@ -2683,8 +2708,8 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <Button Grid.Column="0" Content="Cancel" Style="{StaticResource SecondaryButton}" Command="{Binding CloseOnlineFixWarningModalCommand}" Margin="0,0,10,0"/>
-                        <Button Grid.Column="1" Content="🛡️ Proceed &amp; Add Exclusion" Style="{StaticResource PrimaryButton}"
+                        <Button Grid.Column="0" Content="{DynamicResource String_Cancel}" Style="{StaticResource SecondaryButton}" Command="{Binding CloseOnlineFixWarningModalCommand}" Margin="0,0,10,0"/>
+                        <Button Grid.Column="1" Content="{DynamicResource String_ProceedAddExclusionBtn}" Style="{StaticResource PrimaryButton}"
                                 Background="{StaticResource WarningBrush}"
                                 Command="{Binding ConfirmInstallOnlineFixCommand}"/>
                     </Grid>

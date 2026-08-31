@@ -105,6 +105,7 @@ public partial class App : Application
 
         // Infrastructure services
         services.AddSingleton<BlueStar.Infrastructure.Storage.AppSettingsService>();
+        services.AddSingleton<ILocalizationService, BlueStar.App.Services.LocalizationService>();
         services.AddSingleton<INotificationService, BlueStar.Infrastructure.Services.NotificationService>();
         services.AddSingleton<IBackgroundTaskService, BlueStar.Infrastructure.Services.BackgroundTaskService>();
         services.AddSingleton<ITagsService, BlueStar.Infrastructure.Services.TagsService>();
@@ -136,7 +137,7 @@ public partial class App : Application
         {
             client.BaseAddress = new Uri("https://depotbox.org");
             client.Timeout = TimeSpan.FromMinutes(15); // ZIPs are built on-the-fly
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar/1.2.0");
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar/1.2.1");
         });
 
         services.AddHttpClient<SteamStoreApiClient>(client =>
@@ -192,6 +193,13 @@ public partial class App : Application
         services.AddTransient<ViewModels.AboutViewModel>();
 
         Services = services.BuildServiceProvider();
+
+        // Initialize dynamic localization
+        try
+        {
+            _ = Services.GetRequiredService<ILocalizationService>();
+        }
+        catch { }
 
         // Restore pending downloads from previous interrupted sessions
         _ = Task.Run(async () =>

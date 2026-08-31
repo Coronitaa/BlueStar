@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="BlueStar.App.Controls.SteamDownloadGraphControl"
+<UserControl x:Class="BlueStar.App.Controls.SteamDownloadGraphControl"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
@@ -38,13 +38,13 @@
                     </Border>
                     <StackPanel VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
-                            <TextBlock Text="NETWORK" FontSize="11" FontWeight="Bold" Foreground="#8FA3BF" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="{DynamicResource String_GraphNetwork}" FontSize="11" FontWeight="Bold" Foreground="#8FA3BF" Margin="0,0,8,0" VerticalAlignment="Center"/>
                             <TextBlock x:Name="TxtCurrentNetSpeed" Text="0 B/s" FontSize="18" FontWeight="Bold" Foreground="#00D2FF" VerticalAlignment="Center"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="PEAK: " FontSize="11" FontWeight="SemiBold" Foreground="#6B7C96"/>
+                            <TextBlock Text="{DynamicResource String_GraphPeak}" FontSize="11" FontWeight="SemiBold" Foreground="#6B7C96"/>
                             <TextBlock x:Name="TxtPeakNetSpeed" Text="0 B/s" FontSize="11" FontWeight="Bold" Foreground="#C5D1E0" Margin="0,0,12,0"/>
-                            <TextBlock Text="TOTAL: " FontSize="11" FontWeight="SemiBold" Foreground="#6B7C96"/>
+                            <TextBlock Text="{DynamicResource String_GraphTotal}" FontSize="11" FontWeight="SemiBold" Foreground="#6B7C96"/>
                             <TextBlock x:Name="TxtTotalDownloaded" Text="0 B" FontSize="11" FontWeight="Bold" Foreground="#C5D1E0"/>
                         </StackPanel>
                     </StackPanel>
@@ -61,11 +61,11 @@
                     </Border>
                     <StackPanel VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
-                            <TextBlock Text="DISK USAGE" FontSize="11" FontWeight="Bold" Foreground="#8FA3BF" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="{DynamicResource String_GraphDiskUsage}" FontSize="11" FontWeight="Bold" Foreground="#8FA3BF" Margin="0,0,8,0" VerticalAlignment="Center"/>
                             <TextBlock x:Name="TxtCurrentDiskSpeed" Text="0 B/s" FontSize="18" FontWeight="Bold" Foreground="#5CD65C" VerticalAlignment="Center"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="PEAK: " FontSize="11" FontWeight="SemiBold" Foreground="#6B7C96"/>
+                            <TextBlock Text="{DynamicResource String_GraphPeak}" FontSize="11" FontWeight="SemiBold" Foreground="#6B7C96"/>
                             <TextBlock x:Name="TxtPeakDiskSpeed" Text="0 B/s" FontSize="11" FontWeight="Bold" Foreground="#C5D1E0"/>
                         </StackPanel>
                     </StackPanel>
@@ -77,7 +77,7 @@
                     <Border Background="#1000D2FF" BorderBrush="#3300D2FF" BorderThickness="1" CornerRadius="6" Padding="8,4" Margin="0,0,10,0">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Line X1="0" Y1="0" X2="12" Y2="0" Stroke="#00D2FF" StrokeThickness="2.5" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="Download" FontSize="11" FontWeight="SemiBold" Foreground="#00D2FF"/>
+                            <TextBlock Text="{DynamicResource String_GraphDownload}" FontSize="11" FontWeight="SemiBold" Foreground="#00D2FF"/>
                         </StackPanel>
                     </Border>
 
@@ -85,7 +85,7 @@
                     <Border Background="#105CD65C" BorderBrush="#335CD65C" BorderThickness="1" CornerRadius="6" Padding="8,4">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Line X1="0" Y1="0" X2="12" Y2="0" Stroke="#5CD65C" StrokeThickness="2.5" StrokeDashArray="2 1.5" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="Disk Write" FontSize="11" FontWeight="SemiBold" Foreground="#5CD65C"/>
+                            <TextBlock Text="{DynamicResource String_GraphDiskWrite}" FontSize="11" FontWeight="SemiBold" Foreground="#5CD65C"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>

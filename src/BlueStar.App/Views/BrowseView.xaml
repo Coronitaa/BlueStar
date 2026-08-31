@@ -48,8 +48,8 @@
                     Padding="28,22"
                     Margin="0,0,0,20">
                 <StackPanel>
-                    <TextBlock Text="Explore Catalog" Style="{StaticResource H1}" Margin="0,0,0,4"/>
-                    <TextBlock Text="Search games, manifests, DLCs and tools directly across DepotBox."
+                    <TextBlock Text="{DynamicResource String_ExploreCatalogTitle}" Style="{StaticResource H1}" Margin="0,0,0,4"/>
+                    <TextBlock Text="{DynamicResource String_ExploreCatalogSubtitle}"
                                Style="{StaticResource Subtitle}" Margin="0,0,0,18"/>
 
                     <!-- Search Input Box Row -->
@@ -77,7 +77,7 @@
                                       Stretch="Uniform" Width="16" Height="16"
                                       Margin="0,0,10,0" VerticalAlignment="Center"/>
                                 <Grid Grid.Column="1">
-                                    <TextBlock Text="Search games, manifests, Steam AppID or keywords (e.g. Counter-Strike, Cyberpunk)..."
+                                    <TextBlock Text="{DynamicResource String_SearchGamesPlaceholder}"
                                                Foreground="{StaticResource MutedTextBrush}"
                                                FontSize="13" VerticalAlignment="Center" Margin="2,0,0,0"
                                                IsHitTestVisible="False"
@@ -106,7 +106,7 @@
                             </Grid>
                         </Border>
 
-                        <Button Grid.Column="2" Content="Search Catalog"
+                        <Button Grid.Column="2" Content="{DynamicResource String_SearchCatalogBtn}"
                                 Style="{StaticResource PrimaryButton}"
                                 Padding="24,10"
                                 FontSize="13"
@@ -118,7 +118,7 @@
                     <WrapPanel Orientation="Horizontal" Margin="0,4,0,0">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
                             <TextBlock Text="🔥" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                            <TextBlock Text="Trending:" Style="{StaticResource CaptionBold}" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{DynamicResource String_TrendingSuggestions}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
                         </StackPanel>
                         <ItemsControl ItemsSource="{Binding TrendingSuggestionChips}" VerticalAlignment="Center">
                             <ItemsControl.ItemsPanel>
@@ -207,7 +207,7 @@
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                         <Path Data="{StaticResource IconExplore}" Fill="{StaticResource AccentBrush}"
                               Stretch="Uniform" Width="20" Height="20" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                        <TextBlock Text="Searching DepotBox catalog &amp; retrieving manifests..." Style="{StaticResource BodyMedium}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <TextBlock Text="{DynamicResource String_SearchingDepotBoxManifests}" Style="{StaticResource BodyMedium}" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
@@ -291,23 +291,23 @@
 
                             <!-- Type Filter Chips -->
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <RadioButton GroupName="BrowseTypeFilter" Style="{StaticResource FilterChipRadioButton}" Content="All"
+                                <RadioButton GroupName="BrowseTypeFilter" Style="{StaticResource FilterChipRadioButton}" Content="{DynamicResource String_FilterAll}"
                                              IsChecked="{Binding SelectedTypeFilter, Converter={StaticResource StringMatchConverter}, ConverterParameter=All}"
                                              Command="{Binding SelectTypeFilterCommand}" CommandParameter="All"/>
-                                <RadioButton GroupName="BrowseTypeFilter" Style="{StaticResource FilterChipCyan}" Content="🎮 Games"
+                                <RadioButton GroupName="BrowseTypeFilter" Style="{StaticResource FilterChipCyan}" Content="{DynamicResource String_FilterGames}"
                                              IsChecked="{Binding SelectedTypeFilter, Converter={StaticResource StringMatchConverter}, ConverterParameter=Games}"
                                              Command="{Binding SelectTypeFilterCommand}" CommandParameter="Games"/>
-                                <RadioButton GroupName="BrowseTypeFilter" Style="{StaticResource FilterChipPurple}" Content="🎁 DLCs"
+                                <RadioButton GroupName="BrowseTypeFilter" Style="{StaticResource FilterChipPurple}" Content="{DynamicResource String_FilterDlcs}"
                                              IsChecked="{Binding SelectedTypeFilter, Converter={StaticResource StringMatchConverter}, ConverterParameter=DLCs}"
                                              Command="{Binding SelectTypeFilterCommand}" CommandParameter="DLCs"/>
-                                <RadioButton GroupName="BrowseTypeFilter" Style="{StaticResource FilterChipAmber}" Content="🛠️ Tools"
+                                <RadioButton GroupName="BrowseTypeFilter" Style="{StaticResource FilterChipAmber}" Content="{DynamicResource String_FilterTools}"
                                              IsChecked="{Binding SelectedTypeFilter, Converter={StaticResource StringMatchConverter}, ConverterParameter=Tools}"
                                              Command="{Binding SelectTypeFilterCommand}" CommandParameter="Tools"/>
                             </StackPanel>
                         </StackPanel>
 
                         <!-- Right: Reset / Clear search -->
-                        <Button Grid.Column="1" Content="✕ Clear Search"
+                        <Button Grid.Column="1" Content="{DynamicResource String_ClearSearch}"
                                 Style="{StaticResource GhostButton}"
                                 Foreground="{StaticResource MutedTextBrush}"
                                 Padding="8,4"
@@ -431,7 +431,7 @@
                                                     BorderBrush="#501B90FF"
                                                     BorderThickness="1"
                                                     Visibility="{Binding HasWindows, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                    ToolTip="Windows Compatible">
+                                                    ToolTip="{DynamicResource String_WindowsCompat}">
                                                 <TextBlock Text="⊞ Windows" FontSize="10" FontWeight="Normal" Foreground="{StaticResource AccentBrush}"/>
                                             </Border>
 
@@ -443,7 +443,7 @@
                                                     BorderBrush="#50F59E0B"
                                                     BorderThickness="1"
                                                     Visibility="{Binding HasLinux, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                    ToolTip="Linux / SteamOS Compatible">
+                                                    ToolTip="{DynamicResource String_LinuxCompat}">
                                                 <TextBlock Text="🐧 Linux" FontSize="10" FontWeight="Normal" Foreground="{StaticResource WarningBrush}"/>
                                             </Border>
 
@@ -455,7 +455,7 @@
                                                     BorderBrush="#50A1A1AA"
                                                     BorderThickness="1"
                                                     Visibility="{Binding HasMac, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                    ToolTip="macOS Compatible">
+                                                    ToolTip="{DynamicResource String_MacCompat}">
                                                 <TextBlock Text="🍎 macOS" FontSize="10" FontWeight="Normal" Foreground="{StaticResource SecondaryTextBrush}"/>
                                             </Border>
                                         </WrapPanel>
@@ -477,7 +477,8 @@
                                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                                     <TextBlock Text="⏳ " FontWeight="Normal" Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                     <TextBlock Text="{Binding CreationStatus}" FontWeight="Normal" Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                                    <TextBlock Text="➕ Add to Instances" FontWeight="Normal" Visibility="{Binding IsCreating, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                                    <TextBlock Text="➕ " FontWeight="Normal" Visibility="{Binding IsCreating, Converter={StaticResource InverseBoolConverter}}"/>
+                                                    <TextBlock Text="{DynamicResource String_AddToInstances}" FontWeight="Normal" Visibility="{Binding IsCreating, Converter={StaticResource InverseBoolConverter}}"/>
                                                 </StackPanel>
                                             </Button>
 
@@ -485,7 +486,7 @@
                                             <Button Grid.Column="2"
                                                     Style="{StaticResource SecondaryButton}"
                                                     Padding="10,8"
-                                                    ToolTip="View depot &amp; app details on SteamDB.info"
+                                                    ToolTip="{DynamicResource String_ViewOnSteamDb}"
                                                     Command="{Binding DataContext.OpenSteamDbCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                     CommandParameter="{Binding}">
                                                 <TextBlock Text="🌐 SteamDB" FontSize="11" FontWeight="Normal"/>
@@ -508,10 +509,10 @@
                         <StackPanel HorizontalAlignment="Center">
                             <Path Data="{StaticResource IconSearch}" Fill="{StaticResource MutedTextBrush}"
                                   Stretch="Uniform" Width="44" Height="44" Margin="0,0,0,16" HorizontalAlignment="Center"/>
-                            <TextBlock Text="No results found" Style="{StaticResource H2}" HorizontalAlignment="Center"/>
-                            <TextBlock Text="Try adjusting your search query, clearing filters, or checking spelling."
+                            <TextBlock Text="{DynamicResource String_NoResultsFound}" Style="{StaticResource H2}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{DynamicResource String_NoResultsFoundDesc}"
                                        Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,6,0,16"/>
-                            <Button Content="✕ Reset Search" Style="{StaticResource SecondaryButton}"
+                            <Button Content="{DynamicResource String_ResetSearch}" Style="{StaticResource SecondaryButton}"
                                     HorizontalAlignment="Center"
                                     Command="{Binding ClearSearchCommand}"/>
                         </StackPanel>

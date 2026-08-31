@@ -60,6 +60,16 @@ public sealed class NotificationItem
     public Action? Action { get; init; }
 
     /// <summary>
+    /// Optional callback invoked when the user dismisses this notification.
+    /// </summary>
+    public Action<Guid>? DismissAction { get; set; }
+
+    /// <summary>
+    /// Direct command to dismiss this notification.
+    /// </summary>
+    public System.Windows.Input.ICommand DismissCommand => new NotificationDismissCommand(this);
+
+    /// <summary>
     /// Command wrapper for the Action to bind directly in WPF.
     /// </summary>
     public System.Windows.Input.ICommand? ActionCommand => Action != null ? new NotificationActionCommand(Action) : null;
@@ -74,5 +84,12 @@ public sealed class NotificationItem
         public event EventHandler? CanExecuteChanged { add { } remove { } }
         public bool CanExecute(object? parameter) => true;
         public void Execute(object? parameter) => action();
+    }
+
+    private sealed class NotificationDismissCommand(NotificationItem item) : System.Windows.Input.ICommand
+    {
+        public event EventHandler? CanExecuteChanged { add { } remove { } }
+        public bool CanExecute(object? parameter) => true;
+        public void Execute(object? parameter) => item.DismissAction?.Invoke(item.Id);
     }
 }

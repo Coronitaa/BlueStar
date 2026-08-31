@@ -57,9 +57,11 @@
                         Padding="14,6" FontSize="12"
                         Click="OnViewMoreClick">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="▲ Collapse to Carousel" FontWeight="SemiBold"
+                        <TextBlock Text="▲ " FontWeight="SemiBold"
                                    Visibility="{Binding Category.IsExpanded, ElementName=RootCarouselControl, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                        <TextBlock Text="View More ➔" FontWeight="SemiBold"
+                        <TextBlock Text="{DynamicResource String_CollapseToCarousel}" FontWeight="SemiBold"
+                                   Visibility="{Binding Category.IsExpanded, ElementName=RootCarouselControl, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                        <TextBlock Text="{DynamicResource String_ViewMore}" FontWeight="SemiBold"
                                    Visibility="{Binding Category.IsExpanded, ElementName=RootCarouselControl, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
                     </StackPanel>
                 </Button>
@@ -183,7 +185,7 @@
                                                     Padding="6,2" Margin="0,0,5,4"
                                                     Background="#25EF4444" BorderBrush="#60EF4444" BorderThickness="1"
                                                     Visibility="{Binding IsNsfw, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                    ToolTip="NSFW / Mature Content (18+)">
+                                                    ToolTip="{DynamicResource String_NsfwNotice}">
                                                 <TextBlock Text="🔞 NSFW" FontSize="10" FontWeight="Normal" Foreground="#EF4444"/>
                                             </Border>
 
@@ -192,7 +194,7 @@
                                                     Padding="6,2" Margin="0,0,5,4"
                                                     Background="#25F59E0B" BorderBrush="#60F59E0B" BorderThickness="1"
                                                     Visibility="{Binding HasDrm, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                    ToolTip="{Binding DrmNotice, FallbackValue='Requires 3rd-party DRM or account'}">
+                                                    ToolTip="{DynamicResource String_DrmNotice}">
                                                 <TextBlock Text="🔒 DRM" FontSize="10" FontWeight="Normal" Foreground="#F59E0B"/>
                                             </Border>
                                         </WrapPanel>
@@ -202,19 +204,22 @@
                                             <Border CornerRadius="{StaticResource RadiusSm}"
                                                     Padding="5,1" Margin="0,0,4,4"
                                                     Background="#201B90FF" BorderBrush="#501B90FF" BorderThickness="1"
-                                                    Visibility="{Binding HasWindows, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    Visibility="{Binding HasWindows, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                    ToolTip="{DynamicResource String_WindowsCompat}">
                                                 <TextBlock Text="⊞ Windows" FontSize="10" FontWeight="Normal" Foreground="{StaticResource AccentBrush}"/>
                                             </Border>
                                             <Border CornerRadius="{StaticResource RadiusSm}"
                                                     Padding="5,1" Margin="0,0,4,4"
                                                     Background="#20F59E0B" BorderBrush="#50F59E0B" BorderThickness="1"
-                                                    Visibility="{Binding HasLinux, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    Visibility="{Binding HasLinux, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                    ToolTip="{DynamicResource String_LinuxCompat}">
                                                 <TextBlock Text="🐧 Linux" FontSize="9" FontWeight="Normal" Foreground="{StaticResource WarningBrush}"/>
                                             </Border>
                                             <Border CornerRadius="{StaticResource RadiusSm}"
                                                     Padding="5,1" Margin="0,0,4,4"
                                                     Background="#20A1A1AA" BorderBrush="#50A1A1AA" BorderThickness="1"
-                                                    Visibility="{Binding HasMac, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    Visibility="{Binding HasMac, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                    ToolTip="{DynamicResource String_MacCompat}">
                                                 <TextBlock Text="🍎 macOS" FontSize="9" FontWeight="Normal" Foreground="{StaticResource SecondaryTextBrush}"/>
                                             </Border>
                                         </WrapPanel>
@@ -236,17 +241,18 @@
                                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                                     <TextBlock Text="⏳ " FontWeight="Normal" Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                     <TextBlock Text="{Binding CreationStatus}" FontWeight="Normal" Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                                    <TextBlock Text="➕ Add to Instances" FontWeight="Normal" Visibility="{Binding IsCreating, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                                    <TextBlock Text="➕ " FontWeight="Normal" Visibility="{Binding IsCreating, Converter={StaticResource InverseBoolConverter}}"/>
+                                                    <TextBlock Text="{DynamicResource String_AddToInstances}" FontWeight="Normal" Visibility="{Binding IsCreating, Converter={StaticResource InverseBoolConverter}}"/>
                                                 </StackPanel>
                                             </Button>
 
                                             <Button Grid.Column="2"
                                                     Style="{StaticResource SecondaryButton}"
                                                     Padding="8,6"
-                                                    ToolTip="View on SteamDB.info"
+                                                    ToolTip="{DynamicResource String_ViewOnSteamDb}"
                                                     Command="{Binding OpenSteamDbCommand, ElementName=RootCarouselControl}"
                                                     CommandParameter="{Binding}">
-                                                <TextBlock Text="🌐 SteamDB" FontSize="10" FontWeight="Normal"/>
+                                                 <TextBlock Text="🌐 SteamDB" FontSize="10" FontWeight="Normal"/>
                                             </Button>
                                         </Grid>
                                     </Grid>
@@ -262,7 +268,7 @@
                         Margin="4,0,0,0"
                         Width="36" Height="36"
                         Click="OnPrevClick"
-                        ToolTip="Desplazar hacia la izquierda">
+                        ToolTip="{DynamicResource String_ScrollLeft}">
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource CarouselArrowButton}">
                             <Setter Property="Opacity" Value="0.0"/>
@@ -295,7 +301,7 @@
                         Margin="0,0,4,0"
                         Width="36" Height="36"
                         Click="OnNextClick"
-                        ToolTip="Desplazar hacia la derecha">
+                        ToolTip="{DynamicResource String_ScrollRight}">
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource CarouselArrowButton}">
                             <Setter Property="Opacity" Value="0.0"/>
@@ -395,7 +401,7 @@
                                                 Padding="7,2" Margin="0,0,6,4"
                                                 Background="#25EF4444" BorderBrush="#60EF4444" BorderThickness="1"
                                                 Visibility="{Binding IsNsfw, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                ToolTip="NSFW / Mature Content (18+)">
+                                                ToolTip="{DynamicResource String_NsfwNotice}">
                                             <TextBlock Text="🔞 NSFW" FontSize="11" FontWeight="Normal" Foreground="#EF4444"/>
                                         </Border>
 
@@ -414,19 +420,22 @@
                                         <Border CornerRadius="{StaticResource RadiusSm}"
                                                 Padding="6,2" Margin="0,0,5,4"
                                                 Background="#201B90FF" BorderBrush="#501B90FF" BorderThickness="1"
-                                                Visibility="{Binding HasWindows, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                Visibility="{Binding HasWindows, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                ToolTip="{DynamicResource String_WindowsCompat}">
                                             <TextBlock Text="⊞ Windows" FontSize="10" FontWeight="Normal" Foreground="{StaticResource AccentBrush}"/>
                                         </Border>
                                         <Border CornerRadius="{StaticResource RadiusSm}"
                                                 Padding="6,2" Margin="0,0,5,4"
                                                 Background="#20F59E0B" BorderBrush="#50F59E0B" BorderThickness="1"
-                                                Visibility="{Binding HasLinux, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                Visibility="{Binding HasLinux, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                ToolTip="{DynamicResource String_LinuxCompat}">
                                             <TextBlock Text="🐧 Linux" FontSize="10" FontWeight="Normal" Foreground="{StaticResource WarningBrush}"/>
                                         </Border>
                                         <Border CornerRadius="{StaticResource RadiusSm}"
                                                 Padding="6,2" Margin="0,0,5,4"
                                                 Background="#20A1A1AA" BorderBrush="#50A1A1AA" BorderThickness="1"
-                                                Visibility="{Binding HasMac, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                Visibility="{Binding HasMac, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                ToolTip="{DynamicResource String_MacCompat}">
                                             <TextBlock Text="🍎 macOS" FontSize="10" FontWeight="Normal" Foreground="{StaticResource SecondaryTextBrush}"/>
                                         </Border>
                                     </WrapPanel>
@@ -448,14 +457,15 @@
                                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                                 <TextBlock Text="⏳ " FontWeight="Normal" Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                 <TextBlock Text="{Binding CreationStatus}" FontWeight="Normal" Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                                <TextBlock Text="➕ Add to Instances" FontWeight="Normal" Visibility="{Binding IsCreating, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                                <TextBlock Text="➕ " FontWeight="Normal" Visibility="{Binding IsCreating, Converter={StaticResource InverseBoolConverter}}"/>
+                                                <TextBlock Text="{DynamicResource String_AddToInstances}" FontWeight="Normal" Visibility="{Binding IsCreating, Converter={StaticResource InverseBoolConverter}}"/>
                                             </StackPanel>
                                         </Button>
 
                                         <Button Grid.Column="2"
                                                 Style="{StaticResource SecondaryButton}"
                                                 Padding="10,8"
-                                                ToolTip="View on SteamDB.info"
+                                                ToolTip="{DynamicResource String_ViewOnSteamDb}"
                                                 Command="{Binding OpenSteamDbCommand, ElementName=RootCarouselControl}"
                                                 CommandParameter="{Binding}">
                                             <TextBlock Text="🌐 SteamDB" FontSize="11" FontWeight="Normal"/>
@@ -508,7 +518,7 @@
 
                 <!-- Centered Bottom Buttons: "Load more games" & "Collapse to carousel" -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0">
-                    <Button Content="➕ Load more games"
+                    <Button Content="{DynamicResource String_LoadMoreGames}"
                             Style="{StaticResource PrimaryButton}"
                             Margin="0,0,12,0"
                             Padding="20,8"
@@ -517,7 +527,7 @@
                             Visibility="{Binding Category.HasMoreItems, ElementName=RootCarouselControl, Converter={StaticResource BoolToVisibilityConverter}}"
                             IsEnabled="{Binding Category.IsLoadingMore, ElementName=RootCarouselControl, Converter={StaticResource InverseBoolConverter}}"/>
 
-                    <Button Content="▲ Collapse to carousel"
+                    <Button Content="{DynamicResource String_CollapseToCarousel}"
                             Style="{StaticResource SecondaryButton}"
                             Padding="20,8"
                             Click="OnViewMoreClick"/>

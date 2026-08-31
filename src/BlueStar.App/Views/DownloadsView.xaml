@@ -48,7 +48,7 @@
 
                 <StackPanel Grid.Column="0">
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                        <TextBlock Text="Downloads" Style="{StaticResource H1}" Margin="0,0,10,0"/>
+                        <TextBlock Text="{DynamicResource String_DownloadsTitle}" Style="{StaticResource H1}" Margin="0,0,10,0"/>
                         <Border Background="{StaticResource AccentTranslucentBrush}"
                                 CornerRadius="{StaticResource RadiusSm}"
                                 Padding="8,3" VerticalAlignment="Center"
@@ -57,20 +57,20 @@
                                        Style="{StaticResource Caption}" FontWeight="Medium" Foreground="{StaticResource AccentBrush}"/>
                         </Border>
                     </StackPanel>
-                    <TextBlock Text="Manage active game downloads, queue priorities, and download history."
+                    <TextBlock Text="{DynamicResource String_DownloadsSubtitle}"
                                Style="{StaticResource Subtitle}"/>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Content="🧹 Clear Completed"
+                    <Button Content="{DynamicResource String_ClearCompleted}"
                             Style="{StaticResource SecondaryButton}"
                             Padding="12,7" FontSize="12" Margin="0,0,8,0"
                             Command="{Binding ClearCompletedCommand}"/>
-                    <Button Content="⚠ Clear Failed"
+                    <Button Content="{DynamicResource String_ClearFailed}"
                             Style="{StaticResource SecondaryButton}"
                             Padding="12,7" FontSize="12" Margin="0,0,8,0"
                             Command="{Binding ClearFailedCommand}"/>
-                    <Button Content="🗑 Clear Queue"
+                    <Button Content="{DynamicResource String_ClearQueue}"
                             Style="{StaticResource DangerButton}"
                             Padding="12,7" FontSize="12"
                             Command="{Binding ClearAllCommand}"/>
@@ -87,8 +87,8 @@
                 <StackPanel HorizontalAlignment="Center">
                     <Path Data="{StaticResource IconDownload}" Fill="{StaticResource MutedTextBrush}"
                           Stretch="Uniform" Width="48" Height="48" Margin="0,0,0,16" HorizontalAlignment="Center"/>
-                    <TextBlock Text="No active downloads" Style="{StaticResource H2}" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Downloads started from the Explore catalog or your instances library will appear here."
+                    <TextBlock Text="{DynamicResource String_NoActiveDownloads}" Style="{StaticResource H2}" HorizontalAlignment="Center"/>
+                    <TextBlock Text="{DynamicResource String_NoActiveDownloadsDesc}"
                                Style="{StaticResource Caption}" HorizontalAlignment="Center" Margin="0,6,0,0"/>
                 </StackPanel>
             </Border>
@@ -123,7 +123,7 @@
                                     <!-- Game Thumbnail (Clickable) -->
                                     <Button Grid.Column="0" Style="{StaticResource GhostButton}" Padding="0" Cursor="Hand"
                                             Command="{Binding DataContext.OpenInstanceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                            CommandParameter="{Binding Instance}" ToolTip="View Game Details">
+                                            CommandParameter="{Binding Instance}" ToolTip="{DynamicResource String_ViewGameDetails}">
                                         <Border CornerRadius="6" Height="36" ClipToBounds="True" Background="{StaticResource SurfaceInputBrush}">
                                             <Image Source="{Binding Instance.HeaderImageUrl, Converter={StaticResource CachedImageConverter}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                                         </Border>
@@ -134,7 +134,7 @@
                                         <StackPanel Orientation="Horizontal">
                                             <Button Style="{StaticResource GhostButton}" Padding="0" Margin="0,0,10,0" Cursor="Hand"
                                                     Command="{Binding DataContext.OpenInstanceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                    CommandParameter="{Binding Instance}" ToolTip="View Game Details">
+                                                    CommandParameter="{Binding Instance}" ToolTip="{DynamicResource String_ViewGameDetails}">
                                                 <TextBlock Text="{Binding Instance.Name}" Style="{StaticResource H3}" TextTrimming="CharacterEllipsis" MaxWidth="350"/>
                                             </Button>
                                             <Border CornerRadius="{StaticResource RadiusSm}" Padding="8,2"
@@ -149,36 +149,36 @@
                                     <!-- Action Buttons -->
                                     <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                                         <!-- View Game / Instance -->
-                                        <Button Content="🎮 View Game" Style="{StaticResource SecondaryButton}" Margin="0,0,6,0" Padding="10,6" FontSize="12"
+                                        <Button Content="{DynamicResource String_ViewGame}" Style="{StaticResource SecondaryButton}" Margin="0,0,6,0" Padding="10,6" FontSize="12"
                                                 Command="{Binding DataContext.OpenInstanceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding Instance}"/>
 
                                         <!-- Pause -->
-                                        <Button Content="⏸ Pause" Style="{StaticResource SecondaryButton}" Margin="0,0,6,0" Padding="10,6" FontSize="12"
+                                        <Button Content="{DynamicResource String_Pause}" Style="{StaticResource SecondaryButton}" Margin="0,0,6,0" Padding="10,6" FontSize="12"
                                                 Visibility="{Binding CanPause, Converter={StaticResource BoolToVisibilityConverter}}"
                                                 Command="{Binding DataContext.PauseDownloadCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding Instance.Id}"/>
 
                                         <!-- Resume -->
-                                        <Button Content="▶ Resume" Style="{StaticResource PrimaryButton}" Margin="0,0,6,0" Padding="10,6" FontSize="12"
+                                        <Button Content="{DynamicResource String_Resume}" Style="{StaticResource PrimaryButton}" Margin="0,0,6,0" Padding="10,6" FontSize="12"
                                                 Visibility="{Binding CanResume, Converter={StaticResource BoolToVisibilityConverter}}"
                                                 Command="{Binding DataContext.ResumeDownloadCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding Instance.Id}"/>
 
                                         <!-- Retry -->
-                                        <Button Content="🔄 Retry" Style="{StaticResource PrimaryButton}" Margin="0,0,6,0" Padding="10,6" FontSize="12"
+                                        <Button Content="{DynamicResource String_RetryAction}" Style="{StaticResource PrimaryButton}" Margin="0,0,6,0" Padding="10,6" FontSize="12"
                                                 Visibility="{Binding CanRetry, Converter={StaticResource BoolToVisibilityConverter}}"
                                                 Command="{Binding DataContext.RetryDownloadCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding Instance.Id}"/>
 
                                         <!-- Cancel -->
-                                        <Button Content="✕ Cancel" Style="{StaticResource DangerButton}" Margin="0,0,6,0" Padding="10,6" FontSize="12"
+                                        <Button Content="{DynamicResource String_CancelAction}" Style="{StaticResource DangerButton}" Margin="0,0,6,0" Padding="10,6" FontSize="12"
                                                 Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisibilityConverter}}"
                                                 Command="{Binding DataContext.CancelDownloadCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding Instance.Id}"/>
 
                                         <!-- Remove -->
-                                        <Button Content="Remove" Style="{StaticResource SecondaryButton}" Padding="10,6" FontSize="12"
+                                        <Button Content="{DynamicResource String_RemoveAction}" Style="{StaticResource SecondaryButton}" Padding="10,6" FontSize="12"
                                                 Visibility="{Binding CanRemove, Converter={StaticResource BoolToVisibilityConverter}}"
                                                 Command="{Binding DataContext.RemoveJobCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding Instance.Id}"/>
@@ -237,11 +237,11 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="Recent Download Activity" Style="{StaticResource H3}" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="0" Text="{DynamicResource String_RecentActivityTitle}" Style="{StaticResource H3}" VerticalAlignment="Center"/>
                         <StackPanel Grid.Column="1" Orientation="Horizontal">
-                            <Button Content="🧹 Completed" Style="{StaticResource GhostButton}" Padding="10,5" FontSize="11" Margin="0,0,4,0" Command="{Binding ClearCompletedCommand}"/>
-                            <Button Content="⚠ Failed" Style="{StaticResource GhostButton}" Padding="10,5" FontSize="11" Margin="0,0,4,0" Command="{Binding ClearFailedCommand}"/>
-                            <Button Content="🗑 Clear All" Style="{StaticResource GhostButton}" Foreground="{StaticResource DangerBrush}" Padding="10,5" FontSize="11" Command="{Binding ClearAllCommand}"/>
+                            <Button Content="{DynamicResource String_Completed}" Style="{StaticResource GhostButton}" Padding="10,5" FontSize="11" Margin="0,0,4,0" Command="{Binding ClearCompletedCommand}"/>
+                            <Button Content="{DynamicResource String_Failed}" Style="{StaticResource GhostButton}" Padding="10,5" FontSize="11" Margin="0,0,4,0" Command="{Binding ClearFailedCommand}"/>
+                            <Button Content="{DynamicResource String_Clear}" Style="{StaticResource GhostButton}" Foreground="{StaticResource DangerBrush}" Padding="10,5" FontSize="11" Command="{Binding ClearAllCommand}"/>
                         </StackPanel>
                     </Grid>
 

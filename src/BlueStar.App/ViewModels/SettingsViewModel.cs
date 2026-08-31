@@ -21,12 +21,32 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ILicenseService _licenseService;
     private readonly INotificationService _notificationService;
     private readonly AppSettingsService _appSettings;
+    private readonly ILocalizationService _localizationService;
     private readonly ILogger<SettingsViewModel> _logger;
 
     public Action<string>? OnNavigateRequested { get; set; }
 
+    public System.Collections.ObjectModel.ObservableCollection<string> LanguageOptions { get; } =
+    [
+        "English",
+        "Español (Latinoamérica)"
+    ];
+
     [ObservableProperty]
-    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.2.0";
+    private string _selectedLanguageOption = "English";
+
+    partial void OnSelectedLanguageOptionChanged(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return;
+        var targetCode = value.Contains("Español", StringComparison.OrdinalIgnoreCase) ? "es" : "en";
+        if (_localizationService.CurrentLanguage != targetCode)
+        {
+            _localizationService.SetLanguage(targetCode);
+        }
+    }
+
+    [ObservableProperty]
+    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.2.1";
 
     [ObservableProperty]
     private string _defaultApiUrl = "https://depotbox.org";
@@ -141,6 +161,7 @@ public partial class SettingsViewModel : ObservableObject
         ILicenseService licenseService,
         INotificationService notificationService,
         AppSettingsService appSettings,
+        ILocalizationService localizationService,
         ILogger<SettingsViewModel> logger,
         IPrerequisiteService? prerequisiteService = null)
     {
@@ -149,8 +170,11 @@ public partial class SettingsViewModel : ObservableObject
         _licenseService = licenseService ?? throw new ArgumentNullException(nameof(licenseService));
         _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
         _appSettings = appSettings ?? throw new ArgumentNullException(nameof(appSettings));
+        _localizationService = localizationService ?? throw new ArgumentNullException(nameof(localizationService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _prerequisiteService = prerequisiteService;
+
+        _selectedLanguageOption = _localizationService.CurrentLanguage == "es" ? "Español (Latinoamérica)" : "English";
 
         DeleteDepotsAfterInstall = _appSettings.DeleteDepotsAfterInstall;
         ShowNsfwContent = _appSettings.ShowNsfwContent;

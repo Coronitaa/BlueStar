@@ -16,9 +16,9 @@ public sealed class SteamStoreApiClient : IMetadataProvider
     private readonly ILogger<SteamStoreApiClient> _logger;
     private readonly ICacheService? _cache;
 
-    private readonly ConcurrentDictionary<uint, Task<GameMetadata?>> _inFlightMetadata = new();
-    private readonly ConcurrentDictionary<uint, Task<SteamAppDepotInfo?>> _inFlightDepotInfo = new();
-    private readonly ConcurrentDictionary<uint, Task<DateTimeOffset?>> _inFlightUpdateDates = new();
+    private readonly ConcurrentDictionary<uint, Lazy<Task<GameMetadata?>>> _inFlightMetadata = new();
+    private readonly ConcurrentDictionary<uint, Lazy<Task<SteamAppDepotInfo?>>> _inFlightDepotInfo = new();
+    private readonly ConcurrentDictionary<uint, Lazy<Task<DateTimeOffset?>>> _inFlightUpdateDates = new();
 
     private static readonly SemaphoreSlim _throttleSemaphore = new(1, 1);
     private static DateTimeOffset _lastRequest = DateTimeOffset.MinValue;
@@ -97,7 +97,8 @@ public sealed class SteamStoreApiClient : IMetadataProvider
         }
 
         // Deduplicate concurrent requests for the same AppId
-        return await _inFlightMetadata.GetOrAdd(appId, id => FetchMetadataCoreAsync(id, cacheKey, ct)).ConfigureAwait(false);
+        var lazyTask = _inFlightMetadata.GetOrAdd(appId, id => new Lazy<Task<GameMetadata?>>(() => FetchMetadataCoreAsync(id, cacheKey, ct)));
+        return await lazyTask.Value.ConfigureAwait(false);
     }
 
     private async Task<GameMetadata?> FetchMetadataCoreAsync(uint appId, string cacheKey, CancellationToken ct)
@@ -596,7 +597,8 @@ public sealed class SteamStoreApiClient : IMetadataProvider
             catch { }
         }
 
-        return await _inFlightDepotInfo.GetOrAdd(appId, id => FetchAppDepotInfoCoreAsync(id, cacheKey, ct)).ConfigureAwait(false);
+        var lazyTask = _inFlightDepotInfo.GetOrAdd(appId, id => new Lazy<Task<SteamAppDepotInfo?>>(() => FetchAppDepotInfoCoreAsync(id, cacheKey, ct)));
+        return await lazyTask.Value.ConfigureAwait(false);
     }
 
     private async Task<SteamAppDepotInfo?> FetchAppDepotInfoCoreAsync(uint appId, string cacheKey, CancellationToken ct)
@@ -709,7 +711,7 @@ public sealed class SteamStoreApiClient : IMetadataProvider
             using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.steamcmd.net/v1/info/{appId}");
             if (!_http.DefaultRequestHeaders.Contains("User-Agent"))
             {
-                request.Headers.UserAgent.ParseAdd("BlueStar/1.2.0");
+                request.Headers.UserAgent.ParseAdd("BlueStar/1.2.1");
             }
 
             using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
@@ -831,7 +833,8 @@ public sealed class SteamStoreApiClient : IMetadataProvider
             catch { }
         }
 
-        return await _inFlightUpdateDates.GetOrAdd(appId, id => FetchLatestAppUpdateDateCoreAsync(id, cacheKey, ct)).ConfigureAwait(false);
+        var lazyTask = _inFlightUpdateDates.GetOrAdd(appId, id => new Lazy<Task<DateTimeOffset?>>(() => FetchLatestAppUpdateDateCoreAsync(id, cacheKey, ct)));
+        return await lazyTask.Value.ConfigureAwait(false);
     }
 
     private async Task<DateTimeOffset?> FetchLatestAppUpdateDateCoreAsync(uint appId, string cacheKey, CancellationToken ct)
@@ -857,7 +860,7 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                 using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid={appId}&count=5&maxlength=300");
                 if (!_http.DefaultRequestHeaders.Contains("User-Agent"))
                 {
-                    request.Headers.UserAgent.ParseAdd("BlueStar/1.2.0");
+                    request.Headers.UserAgent.ParseAdd("BlueStar/1.2.1");
                 }
 
                 using var newsResponse = await _http.SendAsync(request, ct).ConfigureAwait(false);

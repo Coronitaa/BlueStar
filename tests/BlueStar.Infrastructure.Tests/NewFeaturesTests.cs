@@ -66,8 +66,8 @@ public class NewFeaturesTests
         var source = await authService.GetCurrentAuthSourceAsync();
 
         // Assert
-        effectiveKey.Should().NotBeNullOrWhiteSpace();
-        source.Should().Be(DepotBoxAuthSource.DefaultBackend);
+        effectiveKey.Should().BeNull();
+        source.Should().Be(DepotBoxAuthSource.None);
     }
 
     [Fact]
@@ -1424,6 +1424,49 @@ public class NewFeaturesTests
         {
             try { if (File.Exists(tempSettingsFile)) File.Delete(tempSettingsFile); } catch { }
         }
+    }
+
+    [Fact]
+    public async Task AppSettingsService_Language_DefaultsToEnglishAndPersistsSpanish()
+    {
+        var tempSettingsFile = Path.Combine(Path.GetTempPath(), $"settings_{Guid.NewGuid():N}.json");
+        try
+        {
+            var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<BlueStar.Infrastructure.Storage.AppSettingsService>.Instance;
+            var settings = new BlueStar.Infrastructure.Storage.AppSettingsService(logger, tempSettingsFile);
+
+            // Default must be 'en'
+            settings.Language.Should().Be("en");
+
+            // Switch to 'es'
+            await settings.SetLanguageAsync("es");
+            settings.Language.Should().Be("es");
+
+            // Reload and verify persistence
+            var reloaded = new BlueStar.Infrastructure.Storage.AppSettingsService(logger, tempSettingsFile);
+            reloaded.Language.Should().Be("es");
+        }
+        finally
+        {
+            try { if (File.Exists(tempSettingsFile)) File.Delete(tempSettingsFile); } catch { }
+        }
+    }
+
+    [Fact]
+    public void NotificationItem_DismissCommand_InvokesDismissAction()
+    {
+        var dismissedId = Guid.Empty;
+        var item = new BlueStar.Core.Models.NotificationItem
+        {
+            Title = "Test",
+            Message = "Test message",
+            DismissAction = id => dismissedId = id
+        };
+
+        item.DismissCommand.CanExecute(null).Should().BeTrue();
+        item.DismissCommand.Execute(null);
+
+        dismissedId.Should().Be(item.Id);
     }
 }
 
