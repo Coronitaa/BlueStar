@@ -845,6 +845,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
         _downloadQueueManager.Queue.CollectionChanged += OnQueueChanged;
+        _instanceManager.InstancesChanged += OnInstanceManagerInstancesChanged;
         _gameLauncher.RunningStateChanged += OnGameRunningStateChanged;
         _gameLauncher.LogReceived += OnGameLogReceived;
 
@@ -871,6 +872,33 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     {
         if (_isDisposed || Instance is null) return;
         ActiveJob = _downloadQueueManager.Queue.FirstOrDefault(j => j.Instance.Id == Instance.Id);
+        _uiContext.Post(async _ =>
+        {
+            if (_isDisposed || Instance is null) return;
+            var refreshed = await _instanceManager.GetByIdAsync(Instance.Id, CancellationToken.None).ConfigureAwait(true);
+            if (refreshed != null && (refreshed.Status != Instance.Status || refreshed.Depots.Any(d => d.IsDownloaded != Instance.Depots.FirstOrDefault(x => x.DepotId == d.DepotId)?.IsDownloaded)))
+            {
+                await LoadInstanceAsync(refreshed).ConfigureAwait(true);
+            }
+            NotifyDownloadProps();
+            OnPropertyChanged(nameof(HeroTags));
+            OnPropertyChanged(nameof(IsInstalled));
+            OnPropertyChanged(nameof(CanDeployEmulator));
+        }, null);
+    }
+
+    private void OnInstanceManagerInstancesChanged(object? sender, EventArgs e)
+    {
+        if (_isDisposed || Instance is null) return;
+        _uiContext.Post(async _ =>
+        {
+            if (_isDisposed || Instance is null) return;
+            var refreshed = await _instanceManager.GetByIdAsync(Instance.Id, CancellationToken.None).ConfigureAwait(true);
+            if (refreshed != null && refreshed.Status != Instance.Status)
+            {
+                await LoadInstanceAsync(refreshed).ConfigureAwait(true);
+            }
+        }, null);
     }
 
     private void OnGameRunningStateChanged(object? sender, (Guid InstanceId, bool IsRunning) e)
@@ -1074,6 +1102,17 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 exe = _engineDetector.FindPrimaryExecutable(installPath, cleanGameName);
             }
 
+            var status = instance.Status;
+            if (status == InstanceStatus.NotInstalled && !string.IsNullOrWhiteSpace(installPath) && Directory.Exists(installPath))
+            {
+                var exes = ShortcutHelper.FindGameExecutables(installPath, cleanGameName);
+                bool hasDownloadedDepots = depotList.Count > 0 && depotList.All(d => d.IsDownloaded);
+                if (exes.Count > 0 || hasDownloadedDepots || (!string.IsNullOrWhiteSpace(exe) && File.Exists(exe)))
+                {
+                    status = InstanceStatus.Ready;
+                }
+            }
+
             Instance = instance with
             {
                 Name = cleanGameName,
@@ -1081,8 +1120,14 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 Depots = depotList.AsReadOnly(),
                 Dlcs = cleanDlcs,
                 Engine = engine,
-                ExecutablePath = exe
+                ExecutablePath = exe,
+                Status = status
             };
+
+            if (status != instance.Status)
+            {
+                _ = _instanceManager.UpdateAsync(Instance, CancellationToken.None);
+            }
 
             ConfiguredExecutablePath = Instance.ExecutablePath ?? string.Empty;
             InstanceAlias = Instance.Name ?? string.Empty;
@@ -3883,11 +3928,28 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
         if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.FolderName))
         {
-            var targetPath = PathHelper.EnsureGameSubfolder(dialog.FolderName, Instance.Name);
-            Instance = Instance with { InstallPath = targetPath };
+            var targetPath = dialog.FolderName;
+            var cleanGameName = CleanName(Instance.Name) ?? Instance.Name;
+            var exes = ShortcutHelper.FindGameExecutables(targetPath, cleanGameName);
+            var exe = Instance.ExecutablePath;
+            if (string.IsNullOrWhiteSpace(exe) || !File.Exists(exe))
+            {
+                exe = _engineDetector.FindPrimaryExecutable(targetPath, cleanGameName);
+            }
+            var status = (exes.Count > 0 || (exe != null && File.Exists(exe))) ? InstanceStatus.Ready : Instance.Status;
+            var engine = await _engineDetector.DetectEngineAsync(targetPath, CancellationToken.None).ConfigureAwait(true) ?? Instance.Engine;
+
+            Instance = Instance with
+            {
+                InstallPath = targetPath,
+                ExecutablePath = exe,
+                Status = status,
+                Engine = engine
+            };
             await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
             await _appSettings.SetLastInstallDirectoryAsync(dialog.FolderName).ConfigureAwait(true);
             StatusMessage = $"✅ Installation directory updated: {targetPath}";
+            await LoadInstanceAsync(Instance).ConfigureAwait(true);
         }
     }
 
@@ -4888,6 +4950,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         catch { }
 
         _downloadQueueManager.Queue.CollectionChanged -= OnQueueChanged;
+        _instanceManager.InstancesChanged -= OnInstanceManagerInstancesChanged;
         _gameLauncher.RunningStateChanged -= OnGameRunningStateChanged;
         _gameLauncher.LogReceived -= OnGameLogReceived;
         if (_settingsChangedHandler != null)

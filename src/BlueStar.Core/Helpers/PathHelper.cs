@@ -34,7 +34,11 @@ public static class PathHelper
         var safeGameName = SanitizeFolderName(gameName);
 
         if (string.Equals(folderLeafName, safeGameName, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(folderLeafName, gameName, StringComparison.OrdinalIgnoreCase))
+            string.Equals(folderLeafName, gameName, StringComparison.OrdinalIgnoreCase) ||
+            cleanFolder.EndsWith(Path.DirectorySeparatorChar + safeGameName, StringComparison.OrdinalIgnoreCase) ||
+            cleanFolder.EndsWith(Path.AltDirectorySeparatorChar + safeGameName, StringComparison.OrdinalIgnoreCase) ||
+            cleanFolder.EndsWith(Path.DirectorySeparatorChar + gameName, StringComparison.OrdinalIgnoreCase) ||
+            cleanFolder.EndsWith(Path.AltDirectorySeparatorChar + gameName, StringComparison.OrdinalIgnoreCase))
         {
             return cleanFolder;
         }
@@ -70,7 +74,7 @@ public static class PathHelper
     }
 
     /// <summary>
-    /// Generates a unique installation path to prevent folder collisions with existing instances or directories.
+    /// Generates a unique installation path to prevent folder collisions with existing instances.
     /// </summary>
     public static string GenerateUniqueInstallPath(string baseDirectory, string gameName, IEnumerable<string>? existingPaths = null)
     {
@@ -89,7 +93,7 @@ public static class PathHelper
         var targetPath = EnsureGameSubfolder(baseDirectory, sanitized);
         var cleanTarget = targetPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-        if (!existingSet.Contains(cleanTarget) && !Directory.Exists(cleanTarget))
+        if (!existingSet.Contains(cleanTarget))
             return cleanTarget;
 
         int index = 2;
@@ -97,7 +101,7 @@ public static class PathHelper
         {
             var candidateName = $"{sanitized} ({index})";
             var candidatePath = Path.Combine(baseDirectory, candidateName).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            if (!existingSet.Contains(candidatePath) && !Directory.Exists(candidatePath))
+            if (!existingSet.Contains(candidatePath))
             {
                 return candidatePath;
             }

@@ -73,7 +73,7 @@ public class GitHubUpdateService : IUpdateService
             _logger.LogInformation("Checking for updates from GitHub Releases...");
 
             var request = new HttpRequestMessage(HttpMethod.Get, GitHubReleasesUrl);
-            request.Headers.UserAgent.ParseAdd("BlueStar-Updater/1.2.2");
+            request.Headers.UserAgent.ParseAdd("BlueStar-Updater/1.2.3");
 
             var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
@@ -93,7 +93,7 @@ public class GitHubUpdateService : IUpdateService
             var rawCurrent = Assembly.GetEntryAssembly()?.GetName().Version
                           ?? Assembly.GetExecutingAssembly().GetName().Version
                           ?? typeof(GitHubUpdateService).Assembly.GetName().Version
-                          ?? new Version(1, 2, 2);
+                          ?? new Version(1, 2, 3);
 
             var currentVersion = new Version(
                 Math.Max(0, rawCurrent.Major),

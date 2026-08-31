@@ -700,9 +700,9 @@ public partial class BrowseViewModel : ObservableObject, IDisposable
 
         _logger.LogInformation("Adding game {Name} ({AppId}) to library", result.Name, result.AppId);
 
-        var defaultRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "BlueStar", "games");
+        var defaultRoot = !string.IsNullOrWhiteSpace(_settingsService?.DefaultDownloadDirectory)
+            ? _settingsService.DefaultDownloadDirectory
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BlueStar", "games");
         var installPath = PathHelper.EnsureGameSubfolder(defaultRoot, result.Name);
 
         // Fetch rich Steam metadata if available

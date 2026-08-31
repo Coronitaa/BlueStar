@@ -418,10 +418,27 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
         try
         {
             var all = await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
-            var sanitized = all.Select(i => i with
+            var sanitized = all.Select(i =>
             {
-                Name = CleanName(i.Name) ?? i.Name,
-                Dlcs = i.Dlcs.Select(d => d with { Name = CleanName(d.Name) ?? d.Name }).ToList().AsReadOnly()
+                var status = i.Status;
+                if (status == InstanceStatus.NotInstalled && !string.IsNullOrWhiteSpace(i.InstallPath) && Directory.Exists(i.InstallPath))
+                {
+                    var cleanName = CleanName(i.Name) ?? i.Name;
+                    var exes = ShortcutHelper.FindGameExecutables(i.InstallPath, cleanName);
+                    bool hasDownloadedDepots = i.Depots.Count > 0 && i.Depots.All(d => d.IsDownloaded);
+                    if (exes.Count > 0 || hasDownloadedDepots || (!string.IsNullOrWhiteSpace(i.ExecutablePath) && File.Exists(i.ExecutablePath)))
+                    {
+                        status = InstanceStatus.Ready;
+                        _ = _instanceManager.UpdateAsync(i with { Status = InstanceStatus.Ready }, CancellationToken.None);
+                    }
+                }
+
+                return i with
+                {
+                    Name = CleanName(i.Name) ?? i.Name,
+                    Status = status,
+                    Dlcs = i.Dlcs.Select(d => d with { Name = CleanName(d.Name) ?? d.Name }).ToList().AsReadOnly()
+                };
             }).ToList();
 
             // Display instances immediately on UI thread without blocking

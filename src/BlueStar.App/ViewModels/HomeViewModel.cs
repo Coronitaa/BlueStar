@@ -420,7 +420,24 @@ public partial class HomeViewModel : ObservableObject, IDisposable
         IsLoading = true;
         try
         {
-            var instances = await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
+            var allInstances = await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
+            var instances = allInstances.Select(i =>
+            {
+                var status = i.Status;
+                if (status == InstanceStatus.NotInstalled && !string.IsNullOrWhiteSpace(i.InstallPath) && Directory.Exists(i.InstallPath))
+                {
+                    var cleanName = CleanName(i.Name) ?? i.Name;
+                    var exes = ShortcutHelper.FindGameExecutables(i.InstallPath, cleanName);
+                    bool hasDownloadedDepots = i.Depots.Count > 0 && i.Depots.All(d => d.IsDownloaded);
+                    if (exes.Count > 0 || hasDownloadedDepots || (!string.IsNullOrWhiteSpace(i.ExecutablePath) && File.Exists(i.ExecutablePath)))
+                    {
+                        status = InstanceStatus.Ready;
+                        _ = _instanceManager.UpdateAsync(i with { Status = InstanceStatus.Ready }, CancellationToken.None);
+                    }
+                }
+                return i with { Status = status };
+            }).ToList();
+
             TotalInstancesCount = instances.Count;
             ReadyInstancesCount = instances.Count(i => i.Status is InstanceStatus.Ready or InstanceStatus.Running);
 
@@ -793,9 +810,9 @@ public partial class HomeViewModel : ObservableObject, IDisposable
     {
         progress.Report(new BackgroundTaskProgress(0, "Fetching metadata...", "Preparing"));
 
-        var defaultRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "BlueStar", "games");
+        var defaultRoot = !string.IsNullOrWhiteSpace(_settingsService?.DefaultDownloadDirectory)
+            ? _settingsService.DefaultDownloadDirectory
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BlueStar", "games");
         var installPath = PathHelper.EnsureGameSubfolder(defaultRoot, result.Name);
 
         GameMetadata? meta = null;

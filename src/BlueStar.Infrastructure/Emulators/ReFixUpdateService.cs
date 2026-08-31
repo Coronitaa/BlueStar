@@ -82,7 +82,7 @@ public sealed class ReFixUpdateService : IReFixUpdateService
             _logger.LogInformation("Checking for ReFix updates from GitHub ({Url})...", GitHubApiUrl);
 
             using var request = new HttpRequestMessage(HttpMethod.Get, GitHubApiUrl);
-            request.Headers.UserAgent.ParseAdd("BlueStar-Launcher/1.2.2");
+            request.Headers.UserAgent.ParseAdd("BlueStar-Launcher/1.2.3");
 
             using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)

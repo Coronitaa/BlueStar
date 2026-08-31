@@ -5,20 +5,21 @@
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20(x64)-brightgreen.svg)]()
 [![.NET 8.0](https://img.shields.io/badge/.NET-8.0%20WPF-purple.svg)]()
-[![Release: v1.2.2](https://img.shields.io/badge/Release-v1.2.2-orange.svg)](https://github.com/Coronitaa/BlueStar/releases)
+[![Release: v1.2.3](https://img.shields.io/badge/Release-v1.2.3-orange.svg)](https://github.com/Coronitaa/BlueStar/releases)
+[![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)](https://github.com/Coronitaa/BlueStar/actions)
+[![Platform: Windows x64](https://img.shields.io/badge/Platform-Windows%20x64-blue.svg)](https://github.com/Coronitaa/BlueStar)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 BlueStar is an all-in-one desktop game management and launcher ecosystem designed for modern PC gaming. It seamlessly integrates Steam depot downloads, manifest staging, automated engine detection, multi-engine emulation, DLC unlocking, prerequisite management, and mod injection into a clean, modern, and dark-themed interface.
 
 ---
 
-## Downloads and Installation
+## ⚡ Quick Download
 
-You can download the latest version from the [Releases](https://github.com/Coronitaa/BlueStar/releases) page:
-
-| Edition | File | Description |
+| Package | Asset Name | Description |
 | :--- | :--- | :--- |
-| **Windows Setup (Recommended)** | `BlueStar-v1.2.2-Setup-win-x64.exe` | Standard Windows installer with start menu shortcuts, desktop icons, and uninstaller. |
-| **Portable Edition** | `BlueStar-v1.2.2-Portable-win-x64.zip` | Standalone zero-install archive. Extract anywhere and launch `BlueStar.exe`. |
+| **Windows Setup (Recommended)** | `BlueStar-v1.2.3-Setup-win-x64.exe` | Standard Windows installer with start menu shortcuts, desktop icons, and uninstaller. |
+| **Portable Edition** | `BlueStar-v1.2.3-Portable-win-x64.zip` | Standalone zero-install archive. Extract anywhere and launch `BlueStar.exe`. |
 
 > [!NOTE]
 > All release binaries are self-contained for 64-bit Windows systems (no prior .NET 8 runtime installation required).

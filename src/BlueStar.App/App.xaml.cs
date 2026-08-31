@@ -137,7 +137,7 @@ public partial class App : Application
         {
             client.BaseAddress = new Uri("https://depotbox.org");
             client.Timeout = TimeSpan.FromMinutes(15); // ZIPs are built on-the-fly
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar/1.2.2");
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar/1.2.3");
         });
 
         services.AddHttpClient<SteamStoreApiClient>(client =>
