@@ -8,13 +8,6 @@
     <RootNamespace>BlueStar.App</RootNamespace>
     <AssemblyName>BlueStar</AssemblyName>
     <ApplicationIcon>Assets\bluestar.ico</ApplicationIcon>
-    <Version>1.2.0</Version>
-    <AssemblyVersion>1.2.0.0</AssemblyVersion>
-    <FileVersion>1.2.0.0</FileVersion>
-    <Company>Corøna (BlueStar Developers)</Company>
-    <Product>BlueStar</Product>
-    <Copyright>Copyright (C) 2026 Corøna</Copyright>
-    <Authors>Corøna &amp; BlueStar Developers</Authors>
     <Description>BlueStar — Universal Steam Game Instance Manager, Depot Staging, Manifest Resolver, and Multi-Engine Launcher</Description>
     <SatelliteResourceLanguages>en-US;en</SatelliteResourceLanguages>
     <DebugType>none</DebugType>

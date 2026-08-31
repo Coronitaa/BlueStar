@@ -92,7 +92,8 @@ public class GitHubUpdateService : IUpdateService
 
             var rawCurrent = Assembly.GetEntryAssembly()?.GetName().Version
                           ?? Assembly.GetExecutingAssembly().GetName().Version
-                          ?? new Version(1, 1, 0);
+                          ?? typeof(GitHubUpdateService).Assembly.GetName().Version
+                          ?? new Version(1, 2, 2);
 
             var currentVersion = new Version(
                 Math.Max(0, rawCurrent.Major),

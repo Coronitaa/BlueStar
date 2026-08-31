@@ -30,7 +30,46 @@ public partial class DownloadsViewModel : ObservableObject
         _queueManager = queueManager;
     }
 
-    // ── Commands ──────────────────────────────────────────────────────────────
+    [ObservableProperty]
+    private bool _isRemoveModalOpen;
+
+    [ObservableProperty]
+    private DownloadJobItem? _jobToRemove;
+
+    [ObservableProperty]
+    private string _removeModalGameName = string.Empty;
+
+    [RelayCommand]
+    private void RequestRemoveJob(DownloadJobItem? job)
+    {
+        if (job is null) return;
+        JobToRemove = job;
+        RemoveModalGameName = job.Instance?.Name ?? "Game";
+        IsRemoveModalOpen = true;
+    }
+
+    [RelayCommand]
+    private void CancelRemoveModal()
+    {
+        IsRemoveModalOpen = false;
+        JobToRemove = null;
+    }
+
+    [RelayCommand]
+    private async Task ConfirmRemoveJobAsync()
+    {
+        if (JobToRemove is null)
+        {
+            IsRemoveModalOpen = false;
+            return;
+        }
+
+        var instanceId = JobToRemove.Instance.Id;
+        IsRemoveModalOpen = false;
+        JobToRemove = null;
+
+        await _queueManager.CancelOrRemoveJobAsync(instanceId).ConfigureAwait(true);
+    }
 
     [RelayCommand]
     private void OpenInstance(BlueStar.Core.Models.GameInstance? instance)

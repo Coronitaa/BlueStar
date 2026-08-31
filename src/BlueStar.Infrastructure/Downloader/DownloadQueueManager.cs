@@ -78,7 +78,7 @@ public partial class DownloadJobItem : ObservableObject
     public bool CanResume     => JobStatus == DownloadJobStatus.Paused;
     public bool CanRetry      => JobStatus is DownloadJobStatus.Failed or DownloadJobStatus.Canceled;
     public bool CanCancel     => JobStatus is DownloadJobStatus.Downloading or DownloadJobStatus.Queued or DownloadJobStatus.Paused;
-    public bool CanRemove     => JobStatus is DownloadJobStatus.Completed or DownloadJobStatus.Failed or DownloadJobStatus.Canceled or DownloadJobStatus.Paused;
+    public bool CanRemove     => true;
 
     partial void OnJobStatusChanged(DownloadJobStatus value)
     {
@@ -228,6 +228,12 @@ public class DownloadQueueManager
 
                 var instance = await _instanceManager.GetByIdAsync(instanceId, ct).ConfigureAwait(false);
                 if (instance == null) continue;
+
+                if (instance.Status == InstanceStatus.Ready && instance.Depots.All(d => d.IsDownloaded))
+                {
+                    _stateManager.ClearState(instanceId);
+                    continue;
+                }
 
                 var pct = state.TotalBytes > 0
                     ? Math.Min(99.0, (double)state.DownloadedBytes / state.TotalBytes * 100.0)
@@ -396,6 +402,7 @@ public class DownloadQueueManager
     public Task CancelAsync(Guid instanceId)
     {
         _pausedInstances.TryRemove(instanceId, out _);
+        _stateManager?.ClearState(instanceId);
 
         var item = Queue.FirstOrDefault(q => q.Instance.Id == instanceId);
         if (item is not null && (item.IsPaused || item.JobStatus == DownloadJobStatus.Queued))
@@ -440,6 +447,24 @@ public class DownloadQueueManager
     /// <summary>Cancels if active, then removes the job from the queue.</summary>
     public async Task CancelOrRemoveJobAsync(Guid instanceId)
     {
+        _pausedInstances.TryRemove(instanceId, out _);
+        _stateManager?.ClearState(instanceId);
+
+        try
+        {
+            var workDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "BlueStar", "DepotWork", instanceId.ToString());
+            if (Directory.Exists(workDir))
+            {
+                Directory.Delete(workDir, true);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to clean DepotWork dir for {InstanceId}", instanceId);
+        }
+
         await CancelAsync(instanceId).ConfigureAwait(false);
 
         var item = Queue.FirstOrDefault(q => q.Instance.Id == instanceId);
@@ -453,11 +478,31 @@ public class DownloadQueueManager
         }
     }
 
-    /// <summary>Removes a finished/failed/canceled job from the active queue list.</summary>
+    /// <summary>Removes a job from the active queue list.</summary>
     public void RemoveJob(Guid instanceId)
     {
+        _pausedInstances.TryRemove(instanceId, out _);
+        _stateManager?.ClearState(instanceId);
+
+        if (_ctsMap.TryGetValue(instanceId, out var cts))
+        {
+            try { cts.Cancel(); } catch { }
+        }
+
+        try
+        {
+            var workDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "BlueStar", "DepotWork", instanceId.ToString());
+            if (Directory.Exists(workDir))
+            {
+                Directory.Delete(workDir, true);
+            }
+        }
+        catch { }
+
         var item2 = Queue.FirstOrDefault(q => q.Instance.Id == instanceId);
-        if (item2 is not null && item2.CanRemove)
+        if (item2 is not null)
         {
             RunOnUi(() =>
             {
@@ -476,7 +521,11 @@ public class DownloadQueueManager
             foreach (var log in toRemoveLogs) HistoryLog.Remove(log);
 
             var toRemoveQueue = Queue.Where(q => q.JobStatus == DownloadJobStatus.Completed).ToList();
-            foreach (var q in toRemoveQueue) Queue.Remove(q);
+            foreach (var q in toRemoveQueue)
+            {
+                _stateManager?.ClearState(q.Instance.Id);
+                Queue.Remove(q);
+            }
 
             NotifyQueueChanged();
         });
@@ -491,7 +540,11 @@ public class DownloadQueueManager
             foreach (var log in toRemoveLogs) HistoryLog.Remove(log);
 
             var toRemoveQueue = Queue.Where(q => q.JobStatus is DownloadJobStatus.Failed or DownloadJobStatus.Canceled).ToList();
-            foreach (var q in toRemoveQueue) Queue.Remove(q);
+            foreach (var q in toRemoveQueue)
+            {
+                _stateManager?.ClearState(q.Instance.Id);
+                Queue.Remove(q);
+            }
 
             NotifyQueueChanged();
         });
@@ -504,7 +557,11 @@ public class DownloadQueueManager
         {
             HistoryLog.Clear();
             var toRemoveQueue = Queue.Where(q => q.CanRemove).ToList();
-            foreach (var q in toRemoveQueue) Queue.Remove(q);
+            foreach (var q in toRemoveQueue)
+            {
+                _stateManager?.ClearState(q.Instance.Id);
+                Queue.Remove(q);
+            }
 
             NotifyQueueChanged();
         });
@@ -630,6 +687,9 @@ public class DownloadQueueManager
                 }
             }
 
+            // Clear persistent download state since download has completed successfully
+            _stateManager?.ClearState(instance.Id);
+
             AddToLog(new DownloadLogEntry
             {
                 GameName = instance.Name,
@@ -664,6 +724,8 @@ public class DownloadQueueManager
             else
             {
                 // Explicitly canceled by user
+                _stateManager?.ClearState(instance.Id);
+
                 RunOnUi(() =>
                 {
                     job.JobStatus = DownloadJobStatus.Canceled;

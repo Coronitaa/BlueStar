@@ -518,6 +518,11 @@
     <sys:String x:Key="String_AllReqsVerifiedDesc">Tu PC cuenta con todos los componentes necesarios de Visual C++, DirectX y .NET para jugar sin problemas.</sys:String>
     <sys:String x:Key="String_MissingReqsDesc">Instala los componentes faltantes para prevenir errores de DLLs (ej. MSVCP140.dll, D3DX9) y cierres inesperados al jugar.</sys:String>
     <sys:String x:Key="String_InstallMissing">Instalar Faltantes</sys:String>
-    <sys:String x:Key="String_Rescan">Volver a analizar</sys:String>
+    <sys:String x:Key="String_Rescan">Volver a Escanear</sys:String>
     <sys:String x:Key="String_ContinueToBlueStar">Continuar a BlueStar</sys:String>
+
+    <!-- ═══ REMOVE DOWNLOAD CONFIRMATION MODAL ═══ -->
+    <sys:String x:Key="String_RemoveDownloadModalTitle">Eliminar Descarga</sys:String>
+    <sys:String x:Key="String_RemoveDownloadModalDesc">¿Estás seguro de que deseas eliminar esta descarga de la cola? Se limpiarán los archivos temporales incompletos de esta sesión.</sys:String>
+    <sys:String x:Key="String_RemoveDownloadConfirmBtn">Eliminar de la Cola</sys:String>
 </ResourceDictionary>

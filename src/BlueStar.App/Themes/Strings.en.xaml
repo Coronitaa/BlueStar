@@ -520,4 +520,9 @@
     <sys:String x:Key="String_InstallMissing">Install Missing</sys:String>
     <sys:String x:Key="String_Rescan">Re-scan</sys:String>
     <sys:String x:Key="String_ContinueToBlueStar">Continue to BlueStar</sys:String>
+
+    <!-- ═══ REMOVE DOWNLOAD CONFIRMATION MODAL ═══ -->
+    <sys:String x:Key="String_RemoveDownloadModalTitle">Remove Download</sys:String>
+    <sys:String x:Key="String_RemoveDownloadModalDesc">Are you sure you want to remove this download from the queue? Any incomplete temporary download files for this session will be cleared.</sys:String>
+    <sys:String x:Key="String_RemoveDownloadConfirmBtn">Remove from Queue</sys:String>
 </ResourceDictionary>

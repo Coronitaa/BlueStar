@@ -36,8 +36,9 @@
         </EventTrigger>
     </UserControl.Triggers>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="32,24" MaxWidth="1180" HorizontalAlignment="Stretch">
+    <Grid>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="32,24" MaxWidth="1180" HorizontalAlignment="Stretch">
 
             <!-- ═══ HEADER ═══ -->
             <Grid Margin="0,0,0,20">
@@ -149,39 +150,54 @@
                                     <!-- Action Buttons -->
                                     <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                                         <!-- View Game / Instance -->
-                                        <Button Content="{DynamicResource String_ViewGame}" Style="{StaticResource SecondaryButton}" Margin="0,0,6,0" Padding="10,6" FontSize="12"
+                                        <Button Content="{DynamicResource String_ViewGame}" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Padding="10,6" FontSize="12"
                                                 Command="{Binding DataContext.OpenInstanceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding Instance}"/>
 
-                                        <!-- Pause -->
-                                        <Button Content="{DynamicResource String_Pause}" Style="{StaticResource SecondaryButton}" Margin="0,0,6,0" Padding="10,6" FontSize="12"
+                                        <!-- Pause (⏸) -->
+                                        <Button Style="{StaticResource SecondaryButton}" Padding="8" Margin="0,0,6,0" Width="34" Height="34"
+                                                ToolTip="{DynamicResource String_Pause}"
                                                 Visibility="{Binding CanPause, Converter={StaticResource BoolToVisibilityConverter}}"
                                                 Command="{Binding DataContext.PauseDownloadCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                CommandParameter="{Binding Instance.Id}"/>
+                                                CommandParameter="{Binding Instance.Id}">
+                                            <Path Data="{StaticResource IconPause}" Fill="{StaticResource PrimaryTextBrush}" Width="12" Height="12" Stretch="Uniform"/>
+                                        </Button>
 
-                                        <!-- Resume -->
-                                        <Button Content="{DynamicResource String_Resume}" Style="{StaticResource PrimaryButton}" Margin="0,0,6,0" Padding="10,6" FontSize="12"
+                                        <!-- Resume / Play (▶) -->
+                                        <Button Style="{StaticResource PrimaryButton}" Padding="8" Margin="0,0,6,0" Width="34" Height="34"
+                                                ToolTip="{DynamicResource String_Resume}"
                                                 Visibility="{Binding CanResume, Converter={StaticResource BoolToVisibilityConverter}}"
                                                 Command="{Binding DataContext.ResumeDownloadCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                CommandParameter="{Binding Instance.Id}"/>
+                                                CommandParameter="{Binding Instance.Id}">
+                                            <Path Data="{StaticResource IconPlay}" Fill="White" Width="12" Height="12" Stretch="Uniform" Margin="1,0,0,0"/>
+                                        </Button>
 
-                                        <!-- Retry -->
-                                        <Button Content="{DynamicResource String_RetryAction}" Style="{StaticResource PrimaryButton}" Margin="0,0,6,0" Padding="10,6" FontSize="12"
+                                        <!-- Retry (🔄) -->
+                                        <Button Style="{StaticResource PrimaryButton}" Padding="8" Margin="0,0,6,0" Width="34" Height="34"
+                                                ToolTip="{DynamicResource String_RetryAction}"
                                                 Visibility="{Binding CanRetry, Converter={StaticResource BoolToVisibilityConverter}}"
                                                 Command="{Binding DataContext.RetryDownloadCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                CommandParameter="{Binding Instance.Id}"/>
+                                                CommandParameter="{Binding Instance.Id}">
+                                            <Path Data="{StaticResource IconRefresh}" Fill="White" Width="13" Height="13" Stretch="Uniform"/>
+                                        </Button>
 
-                                        <!-- Cancel -->
-                                        <Button Content="{DynamicResource String_CancelAction}" Style="{StaticResource DangerButton}" Margin="0,0,6,0" Padding="10,6" FontSize="12"
+                                        <!-- Stop / Cancel (⏹) -->
+                                        <Button Style="{StaticResource DangerButton}" Padding="8" Margin="0,0,6,0" Width="34" Height="34"
+                                                ToolTip="{DynamicResource String_CancelAction}"
                                                 Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisibilityConverter}}"
                                                 Command="{Binding DataContext.CancelDownloadCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                CommandParameter="{Binding Instance.Id}"/>
+                                                CommandParameter="{Binding Instance.Id}">
+                                            <Path Data="{StaticResource IconStop}" Fill="{StaticResource DangerBrush}" Width="11" Height="11" Stretch="Uniform"/>
+                                        </Button>
 
-                                        <!-- Remove -->
-                                        <Button Content="{DynamicResource String_RemoveAction}" Style="{StaticResource SecondaryButton}" Padding="10,6" FontSize="12"
+                                        <!-- Trash / Remove (🗑) with Confirmation Modal -->
+                                        <Button Style="{StaticResource SecondaryButton}" Padding="8" Width="34" Height="34"
+                                                ToolTip="{DynamicResource String_RemoveAction}"
                                                 Visibility="{Binding CanRemove, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                Command="{Binding DataContext.RemoveJobCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                CommandParameter="{Binding Instance.Id}"/>
+                                                Command="{Binding DataContext.RequestRemoveJobCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding .}">
+                                            <Path Data="{StaticResource IconTrash}" Fill="{StaticResource MutedTextBrush}" Width="13" Height="13" Stretch="Uniform"/>
+                                        </Button>
                                     </StackPanel>
                                 </Grid>
 
@@ -278,4 +294,56 @@
 
         </StackPanel>
     </ScrollViewer>
+
+    <!-- ═══ CONFIRM REMOVE DOWNLOAD MODAL OVERLAY ═══ -->
+    <Grid Visibility="{Binding IsRemoveModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
+          Background="{StaticResource ModalOverlayBrush}"
+          Panel.ZIndex="1000">
+        <Border Background="{StaticResource SurfaceCardElevatedBrush}"
+                BorderBrush="{StaticResource SubtleBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource RadiusLg}"
+                Padding="28" Width="460"
+                HorizontalAlignment="Center" VerticalAlignment="Center">
+            <StackPanel>
+                <Grid Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="{DynamicResource String_RemoveDownloadModalTitle}" Style="{StaticResource H2}"/>
+                        <TextBlock Text="{Binding RemoveModalGameName}" Style="{StaticResource Caption}" Foreground="{StaticResource AccentBrush}" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}" Width="24" Height="24" Padding="0"
+                            Command="{Binding CancelRemoveModalCommand}"/>
+                </Grid>
+
+                <TextBlock Text="{DynamicResource String_RemoveDownloadModalDesc}"
+                           Style="{StaticResource BodyMedium}"
+                           Foreground="{StaticResource SecondaryTextBrush}"
+                           TextWrapping="Wrap"
+                           Margin="0,0,0,24"/>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button Grid.Column="0" Content="{DynamicResource String_Cancel}"
+                            Style="{StaticResource SecondaryButton}"
+                            Padding="16,10"
+                            Command="{Binding CancelRemoveModalCommand}"/>
+
+                    <Button Grid.Column="2" Content="{DynamicResource String_RemoveDownloadConfirmBtn}"
+                            Style="{StaticResource DangerButton}"
+                            Padding="16,10"
+                            Command="{Binding ConfirmRemoveJobCommand}"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Grid>
 </UserControl>

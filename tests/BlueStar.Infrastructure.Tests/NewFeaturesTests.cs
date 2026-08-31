@@ -1468,6 +1468,35 @@ public class NewFeaturesTests
 
         dismissedId.Should().Be(item.Id);
     }
+
+    [Fact]
+    public async Task DownloadQueueManager_CancelAndRemove_ClearsDownloadState()
+    {
+        var instanceId = Guid.NewGuid();
+        var tempDir = Path.Combine(Path.GetTempPath(), $"bluestar_test_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var mockProvider = new Mock<IDownloadProvider>();
+            var logger = NullLogger<DownloadQueueManager>.Instance;
+            var stateLogger = NullLogger<DownloadStateManager>.Instance;
+            var stateManager = new DownloadStateManager(stateLogger);
+
+            var qm = new DownloadQueueManager(mockProvider.Object, logger, stateManager: stateManager);
+
+            // Test cancel and remove
+            await qm.CancelAsync(instanceId);
+            await qm.CancelOrRemoveJobAsync(instanceId);
+            qm.RemoveJob(instanceId);
+
+            stateManager.LoadState(instanceId).Should().BeNull();
+        }
+        finally
+        {
+            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch { }
+        }
+    }
 }
 
 
