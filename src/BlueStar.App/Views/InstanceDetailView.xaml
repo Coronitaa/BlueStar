@@ -1836,7 +1836,8 @@
 
         <!-- ═══ SHORTCUT MODAL DIALOG OVERLAY ═══ -->
         <Grid Visibility="{Binding IsShortcutModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Background="{StaticResource ModalOverlayBrush}">
+              Background="{StaticResource ModalOverlayBrush}"
+              Panel.ZIndex="1000">
             <Border Background="{StaticResource SurfaceCardElevatedBrush}"
                     BorderBrush="{StaticResource AccentBrush}"
                     BorderThickness="1"
@@ -1893,7 +1894,8 @@
 
         <!-- ═══ STEAM WORKSHOP DOWNLOAD MODAL OVERLAY ═══ -->
         <Grid Visibility="{Binding IsWorkshopModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Background="{StaticResource ModalOverlayBrush}">
+              Background="{StaticResource ModalOverlayBrush}"
+              Panel.ZIndex="1000">
             <Border Background="{StaticResource SurfaceCardElevatedBrush}"
                     BorderBrush="{StaticResource AccentBrush}"
                     BorderThickness="1"
@@ -2014,7 +2016,8 @@
 
         <!-- ═══ POST-GAME EMULATOR FEEDBACK MODAL OVERLAY ═══ -->
         <Grid Visibility="{Binding IsFeedbackModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Background="{StaticResource ModalOverlayBrush}">
+              Background="{StaticResource ModalOverlayBrush}"
+              Panel.ZIndex="1000">
             <Border Background="{StaticResource SurfaceCardElevatedBrush}"
                     BorderBrush="{StaticResource AccentBrush}"
                     BorderThickness="1"
@@ -2103,7 +2106,8 @@
         <!-- ═══ MODAL: INSTANCE DELETION CONFIRMATION ═══ -->
         <Grid Visibility="{Binding IsDeleteModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
               Background="{StaticResource ModalOverlayBrush}"
-              HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+              HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+              Panel.ZIndex="1000">
             <Border Background="{StaticResource SurfaceCardBrush}"
                     BorderBrush="{StaticResource SubtleBorderBrush}"
                     BorderThickness="1"
@@ -2186,7 +2190,7 @@
         <Grid Visibility="{Binding IsUninstallModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
               Background="{StaticResource ModalOverlayBrush}"
               HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-              Panel.ZIndex="110">
+              Panel.ZIndex="1000">
             <Border Background="{StaticResource SurfaceCardBrush}"
                     BorderBrush="{StaticResource SubtleBorderBrush}"
                     BorderThickness="1"
@@ -2244,7 +2248,7 @@
         <Grid Visibility="{Binding IsCustomBuildModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
               Background="{StaticResource ModalOverlayBrush}"
               HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-              Panel.ZIndex="115">
+              Panel.ZIndex="1000">
             <Border Background="{StaticResource SurfaceCardBrush}"
                     BorderBrush="{StaticResource SubtleBorderBrush}"
                     BorderThickness="1"
@@ -2363,7 +2367,7 @@
              ══════════════════════════════════════════════════════════════ -->
         <Grid Background="#B0000000"
               Visibility="{Binding IsUpdateModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Panel.ZIndex="120">
+              Panel.ZIndex="1000">
             <Border Style="{StaticResource Card}"
                     Width="620"
                     MaxHeight="650"

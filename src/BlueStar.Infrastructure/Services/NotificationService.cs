@@ -19,6 +19,8 @@ public sealed class NotificationService : INotificationService
     private readonly SynchronizationContext? _uiContext;
     private readonly ILogger<NotificationService> _logger;
 
+    public static Action<Action>? UiDispatcher { get; set; }
+
     public ReadOnlyObservableCollection<NotificationItem> Notifications => _readOnlyNotifications;
 
     public NotificationService(ILogger<NotificationService> logger)
@@ -106,6 +108,19 @@ public sealed class NotificationService : INotificationService
 
     private void PostToUi(Action action)
     {
+        if (UiDispatcher != null)
+        {
+            try
+            {
+                UiDispatcher(action);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Error executing UI action in NotificationService via UiDispatcher");
+            }
+            return;
+        }
+
         var targetCtx = _uiContext ?? SynchronizationContext.Current;
         if (targetCtx != null && SynchronizationContext.Current != targetCtx)
         {

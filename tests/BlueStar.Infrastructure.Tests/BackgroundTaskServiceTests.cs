@@ -87,4 +87,82 @@ public class BackgroundTaskServiceTests
         service.ClearCompleted();
         service.Tasks.Should().NotContain(t => t.Id == taskId);
     }
+
+    [Fact]
+    public async Task QueueTask_WithDepotDownloadProgress_ReportsProgressAndCompletes()
+    {
+        var service = new BackgroundTaskService(NullLogger<BackgroundTaskService>.Instance);
+        var reports = new System.Collections.Generic.List<double>();
+
+        var taskId = service.QueueTask(
+            "Downloading Depots: Test Game",
+            "Test Game",
+            async (reporter, ct) =>
+            {
+                reporter.Report(new BackgroundTaskProgress(0, "Fetching metadata...", "Preparing"));
+                await Task.Delay(10, ct);
+
+                // Simulate downloading archive
+                for (int p = 10; p <= 90; p += 20)
+                {
+                    reporter.Report(new BackgroundTaskProgress(p, $"Downloading depot archive ({p}%)...", "Downloading"));
+                    await Task.Delay(10, ct);
+                }
+
+                reporter.Report(new BackgroundTaskProgress(95, "Configuring instance...", "Configuring"));
+                await Task.Delay(10, ct);
+                reporter.Report(new BackgroundTaskProgress(100, "Instance ready", "Complete"));
+            });
+
+        service.TasksChanged += (_, _) =>
+        {
+            var item = service.Tasks.FirstOrDefault(t => t.Id == taskId);
+            if (item != null)
+            {
+                reports.Add(item.ProgressPercentage);
+            }
+        };
+
+        for (int i = 0; i < 50 && service.Tasks.FirstOrDefault(t => t.Id == taskId)?.Status != BackgroundTaskStatus.Completed; i++)
+        {
+            await Task.Delay(20);
+        }
+
+        var task = service.Tasks.FirstOrDefault(t => t.Id == taskId);
+        task.Should().NotBeNull();
+        task!.Title.Should().Be("Downloading Depots: Test Game");
+        task.InstanceName.Should().Be("Test Game");
+        task.Status.Should().Be(BackgroundTaskStatus.Completed);
+        task.ProgressPercentage.Should().Be(100);
+    }
+
+    [Fact]
+    public async Task QueueTask_WithDepotUpdateSearch_ReportsProgressAndCompletes()
+    {
+        var service = new BackgroundTaskService(NullLogger<BackgroundTaskService>.Instance);
+
+        var taskId = service.QueueTask(
+            "Searching Depot Updates: Cyber Game",
+            "Cyber Game",
+            async (reporter, ct) =>
+            {
+                reporter.Report(new BackgroundTaskProgress(15, "Connecting to DepotBox API...", "Searching"));
+                await Task.Delay(10, ct);
+                reporter.Report(new BackgroundTaskProgress(65, "Analyzing depot manifests...", "Analyzing"));
+                await Task.Delay(10, ct);
+                reporter.Report(new BackgroundTaskProgress(100, "Found 2 updated depot(s).", "Complete"));
+            });
+
+        for (int i = 0; i < 50 && service.Tasks.FirstOrDefault(t => t.Id == taskId)?.Status != BackgroundTaskStatus.Completed; i++)
+        {
+            await Task.Delay(20);
+        }
+
+        var task = service.Tasks.FirstOrDefault(t => t.Id == taskId);
+        task.Should().NotBeNull();
+        task!.Title.Should().Be("Searching Depot Updates: Cyber Game");
+        task.InstanceName.Should().Be("Cyber Game");
+        task.Status.Should().Be(BackgroundTaskStatus.Completed);
+        task.CurrentStepMessage.Should().NotBeNullOrWhiteSpace();
+    }
 }

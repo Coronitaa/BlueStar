@@ -694,6 +694,7 @@
         <!-- ═══ UNIFIED EXPANDABLE ADD INSTANCE MODAL OVERLAY ═══ -->
         <Grid Visibility="{Binding IsAddInstanceModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
               Background="{StaticResource ModalOverlayBrush}"
+              Panel.ZIndex="1000"
               SnapsToDevicePixels="True"
               UseLayoutRounding="True"
               TextOptions.TextFormattingMode="Display"
@@ -1496,7 +1497,7 @@
               UseLayoutRounding="True"
               TextOptions.TextFormattingMode="Display"
               TextOptions.TextRenderingMode="ClearType"
-              Panel.ZIndex="150">
+              Panel.ZIndex="1005">
             <Border Background="{StaticResource SurfaceCardElevatedBrush}"
                     BorderBrush="{StaticResource StrongBorderBrush}"
                     BorderThickness="1"
@@ -1536,7 +1537,7 @@
                         <TextBox Grid.Column="0" Style="{StaticResource DarkTextBox}"
                                  Text="{Binding SteamSearchStoreQuery, UpdateSourceTrigger=PropertyChanged}"/>
                         <Button Grid.Column="2" Content="Search" Style="{StaticResource PrimaryButton}"
-                                Command="{Binding SearchSteamStoreCommand}" Padding="14,7"/>
+                                 Command="{Binding SearchSteamStoreCommand}" Padding="14,7"/>
                     </Grid>
 
                     <!-- Search Results List -->
@@ -1589,6 +1590,7 @@
         <!-- ═══ CREATE GROUP MODAL OVERLAY ═══ -->
         <Grid Visibility="{Binding IsCreateGroupOpen, Converter={StaticResource BoolToVisibilityConverter}}"
               Background="{StaticResource ModalOverlayBrush}"
+              Panel.ZIndex="1000"
               SnapsToDevicePixels="True"
               UseLayoutRounding="True"
               TextOptions.TextFormattingMode="Display"

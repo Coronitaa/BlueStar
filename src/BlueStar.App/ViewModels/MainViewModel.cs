@@ -1,7 +1,9 @@
 using System;
 using System.Linq;
 using System.Threading;
+using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using BlueStar.App.Views;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
@@ -202,8 +204,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
             CheckRequirementsOnStartup = _appSettings.CheckSystemRequirementsOnStartup;
         }
 
-        _queueCollectionChangedHandler = (_, _) => _uiContext.Post(_ => { UpdateDownloadStats(); UpdateBackgroundTaskStats(); }, null);
-        _queueChangedHandler = (_, _) => _uiContext.Post(_ => { UpdateDownloadStats(); UpdateBackgroundTaskStats(); }, null);
+        _queueCollectionChangedHandler = (_, _) => _uiContext.Post(_ => UpdateDownloadStats(), null);
+        _queueChangedHandler = (_, _) => _uiContext.Post(_ => UpdateDownloadStats(), null);
         _steamStatusChangedHandler = OnSteamStatusChanged;
         _tasksChangedHandler = (_, _) => _uiContext.Post(_ => UpdateBackgroundTaskStats(), null);
         _instancesChangedHandler = (_, _) => _ = RefreshRecentShortcutsAsync();
@@ -519,7 +521,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly Stack<NavigationEntry> _forwardStack = new();
     private bool _isNavigatingHistory;
 
-    private sealed record NavigationEntry(string Page, object? Parameter, string? CategoryId);
+    private sealed record NavigationEntry(
+        string Page,
+        object? Parameter = null,
+        string? CategoryId = null,
+        string? Tab = null,
+        double ScrollOffset = 0);
 
     public bool CanGoBack => _backStack.Count > 0;
     public bool CanGoForward => _forwardStack.Count > 0;
@@ -540,15 +547,68 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private NavigationEntry? GetCurrentNavigationEntry()
     {
+        string page = SelectedNavigation ?? "Home";
+        object? param = null;
+        string? categoryId = null;
+        string? tab = null;
+        double scrollOffset = 0;
+
+        if (CurrentView is UserControl uc)
+        {
+            var sv = FindMainScrollViewer(uc);
+            if (sv != null)
+            {
+                scrollOffset = sv.VerticalOffset;
+            }
+        }
+
         if (CurrentView is InstanceDetailView && CurrentView.DataContext is InstanceDetailViewModel idvm && idvm.Instance != null)
         {
-            return new NavigationEntry("InstanceDetail", idvm.Instance, null);
+            page = "InstanceDetail";
+            param = idvm.Instance;
+            tab = idvm.SelectedTab;
+            return new NavigationEntry(page, param, categoryId, tab, scrollOffset);
         }
 
         if (!string.IsNullOrWhiteSpace(SelectedNavigation))
         {
-            return new NavigationEntry(SelectedNavigation, null, null);
+            return new NavigationEntry(SelectedNavigation, param, categoryId, tab, scrollOffset);
         }
+
+        return null;
+    }
+
+    private static ScrollViewer? FindMainScrollViewer(DependencyObject? root)
+    {
+        if (root == null) return null;
+        if (root is ScrollViewer sv) return sv;
+
+        if (root is ContentControl cc && cc.Content is DependencyObject contentDep)
+        {
+            var foundInContent = FindMainScrollViewer(contentDep);
+            if (foundInContent != null) return foundInContent;
+        }
+
+        if (root is Panel panel)
+        {
+            foreach (UIElement child in panel.Children)
+            {
+                var found = FindMainScrollViewer(child);
+                if (found != null) return found;
+            }
+        }
+
+        try
+        {
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(root, i);
+                var found = FindMainScrollViewer(child);
+                if (found != null) return found;
+            }
+        }
+        catch { }
 
         return null;
     }
@@ -607,15 +667,43 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         if (entry.Page == "InstanceDetail" && entry.Parameter is GameInstance inst)
         {
-            OpenInstanceDetail(inst, autoCheckUpdates: false);
+            SelectedNavigation = "Library";
+            var view = new InstanceDetailView();
+            var vm = App.Services.GetRequiredService<InstanceDetailViewModel>();
+            vm.OnNavigateBack = () => Navigate("Library");
+            view.DataContext = vm;
+            _ = vm.LoadInstanceAsync(inst, autoCheckDepotUpdates: false);
+            if (!string.IsNullOrWhiteSpace(entry.Tab))
+            {
+                vm.SelectedTab = entry.Tab;
+            }
+            CurrentView = view;
         }
         else if (entry.Page == "ExploreCategory" && !string.IsNullOrWhiteSpace(entry.CategoryId))
         {
-            NavigateToExploreCategory(entry.CategoryId);
+            SelectedNavigation = "Explore";
+            var view = new BrowseView();
+            var vm = App.Services.GetRequiredService<BrowseViewModel>();
+            vm.OnManageInstanceRequested = OpenInstanceDetail;
+            view.DataContext = vm;
+            CurrentView = view;
+            vm.ExpandCategory(entry.CategoryId);
         }
         else
         {
             Navigate(entry.Page);
+        }
+
+        if (entry.ScrollOffset > 0)
+        {
+            App.Current?.Dispatcher?.InvokeAsync(() =>
+            {
+                if (CurrentView is UserControl uc)
+                {
+                    var sv = FindMainScrollViewer(uc);
+                    sv?.ScrollToVerticalOffset(entry.ScrollOffset);
+                }
+            }, System.Windows.Threading.DispatcherPriority.Loaded);
         }
     }
 
@@ -769,32 +857,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void UpdateBackgroundTaskStats()
     {
-        var activeBgTasks = _backgroundTaskService.Tasks.Where(t => t.IsActive).ToList();
-        var activeDownloadJobs = _downloadQueueManager.Queue
-            .Where(j => j.JobStatus is DownloadJobStatus.Downloading or DownloadJobStatus.Queued)
-            .ToList();
-
-        var downloadTaskItems = new List<BackgroundTaskItem>();
-        foreach (var job in activeDownloadJobs)
-        {
-            downloadTaskItems.Add(new BackgroundTaskItem
-            {
-                Id = job.Instance.Id,
-                Title = job.Instance.Name,
-                InstanceName = job.Instance.Name,
-                InstanceId = job.Instance.Id,
-                Status = job.JobStatus == DownloadJobStatus.Downloading ? BackgroundTaskStatus.Running : BackgroundTaskStatus.Queued,
-                ProgressPercentage = job.Percentage,
-                CurrentStepMessage = job.JobStatus == DownloadJobStatus.Downloading
-                    ? $"{job.FormattedSpeed} — {job.StatusMessage}"
-                    : "Queued...",
-                CanCancel = true
-            });
-        }
-
-        var allActive = new List<BackgroundTaskItem>();
-        allActive.AddRange(activeBgTasks);
-        allActive.AddRange(downloadTaskItems);
+        var allActive = _backgroundTaskService.Tasks.Where(t => t.IsActive).ToList();
 
         ActiveTasksCount = allActive.Count;
         HasActiveTasks = allActive.Count > 0;
@@ -862,12 +925,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public void CancelBackgroundTask(Guid taskId)
     {
         _backgroundTaskService.CancelTask(taskId);
-
-        var downloadJob = _downloadQueueManager.Queue.FirstOrDefault(j => j.Instance.Id == taskId);
-        if (downloadJob != null)
-        {
-            _ = _downloadQueueManager.CancelAsync(taskId);
-        }
     }
 
     [RelayCommand]

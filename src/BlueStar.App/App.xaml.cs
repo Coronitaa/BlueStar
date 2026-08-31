@@ -137,7 +137,7 @@ public partial class App : Application
         {
             client.BaseAddress = new Uri("https://depotbox.org");
             client.Timeout = TimeSpan.FromMinutes(15); // ZIPs are built on-the-fly
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar/1.2.1");
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar/1.2.2");
         });
 
         services.AddHttpClient<SteamStoreApiClient>(client =>
@@ -193,6 +193,26 @@ public partial class App : Application
         services.AddTransient<ViewModels.AboutViewModel>();
 
         Services = services.BuildServiceProvider();
+
+        // Wire UI dispatchers
+        BlueStar.Infrastructure.Services.NotificationService.UiDispatcher = action =>
+        {
+            if (Current?.Dispatcher is { } dispatcher)
+            {
+                if (dispatcher.CheckAccess())
+                {
+                    action();
+                }
+                else
+                {
+                    dispatcher.BeginInvoke(action);
+                }
+            }
+            else
+            {
+                action();
+            }
+        };
 
         // Initialize dynamic localization
         try

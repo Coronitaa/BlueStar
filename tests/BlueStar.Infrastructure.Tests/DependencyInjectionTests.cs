@@ -109,6 +109,7 @@ public class DependencyInjectionTests
 
         var keyRegex = new System.Text.RegularExpressions.Regex(@"x:Key=""([^""]+)""");
         var staticResourceRegex = new System.Text.RegularExpressions.Regex(@"StaticResource\s+([a-zA-Z0-9_]+)");
+        var dynamicResourceRegex = new System.Text.RegularExpressions.Regex(@"DynamicResource\s+([a-zA-Z0-9_]+)");
 
         foreach (var file in xamlFiles)
         {
@@ -128,12 +129,21 @@ public class DependencyInjectionTests
                 var resourceKey = match.Groups[1].Value;
                 if (!definedKeys.Contains(resourceKey))
                 {
-                    missing.Add($"{Path.GetFileName(file)} -> {resourceKey}");
+                    missing.Add($"[Static] {Path.GetFileName(file)} -> {resourceKey}");
+                }
+            }
+
+            foreach (System.Text.RegularExpressions.Match match in dynamicResourceRegex.Matches(content))
+            {
+                var resourceKey = match.Groups[1].Value;
+                if (!definedKeys.Contains(resourceKey))
+                {
+                    missing.Add($"[Dynamic] {Path.GetFileName(file)} -> {resourceKey}");
                 }
             }
         }
 
-        missing.Should().BeEmpty("all StaticResources referenced in XAML must be defined in theme dictionaries");
+        missing.Should().BeEmpty("all StaticResources and DynamicResources referenced in XAML must be defined in theme dictionaries");
     }
 
     [Theory]

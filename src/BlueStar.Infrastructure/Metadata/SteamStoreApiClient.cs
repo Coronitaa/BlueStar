@@ -711,7 +711,7 @@ public sealed class SteamStoreApiClient : IMetadataProvider
             using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.steamcmd.net/v1/info/{appId}");
             if (!_http.DefaultRequestHeaders.Contains("User-Agent"))
             {
-                request.Headers.UserAgent.ParseAdd("BlueStar/1.2.1");
+                request.Headers.UserAgent.ParseAdd("BlueStar/1.2.2");
             }
 
             using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
@@ -860,7 +860,7 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                 using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid={appId}&count=5&maxlength=300");
                 if (!_http.DefaultRequestHeaders.Contains("User-Agent"))
                 {
-                    request.Headers.UserAgent.ParseAdd("BlueStar/1.2.1");
+                    request.Headers.UserAgent.ParseAdd("BlueStar/1.2.2");
                 }
 
                 using var newsResponse = await _http.SendAsync(request, ct).ConfigureAwait(false);

@@ -36,6 +36,7 @@ public partial class HomeViewModel : ObservableObject, IDisposable
     private readonly IMetadataProvider? _metadataProvider;
     private readonly INotificationService? _notificationService;
     private readonly BlueStar.Infrastructure.Storage.AppSettingsService? _settingsService;
+    private readonly IBackgroundTaskService? _backgroundTaskService;
     private readonly ILogger<HomeViewModel> _logger;
     private readonly CancellationTokenSource _cts = new();
     private bool _isDisposed;
@@ -214,7 +215,8 @@ public partial class HomeViewModel : ObservableObject, IDisposable
         ICommunityStatsService? statsService = null,
         IMetadataProvider? metadataProvider = null,
         INotificationService? notificationService = null,
-        BlueStar.Infrastructure.Storage.AppSettingsService? settingsService = null)
+        BlueStar.Infrastructure.Storage.AppSettingsService? settingsService = null,
+        IBackgroundTaskService? backgroundTaskService = null)
     {
         _instanceManager = instanceManager;
         _downloadQueueManager = downloadQueueManager;
@@ -227,6 +229,7 @@ public partial class HomeViewModel : ObservableObject, IDisposable
         _metadataProvider = metadataProvider;
         _notificationService = notificationService;
         _settingsService = settingsService;
+        _backgroundTaskService = backgroundTaskService;
 
         if (_settingsService != null)
         {
@@ -747,136 +750,197 @@ public partial class HomeViewModel : ObservableObject, IDisposable
 
         _notificationService?.ShowInfo("Preparing Instance", $"Fetching manifests for {result.Name}...");
 
-        try
+        if (_backgroundTaskService != null)
         {
-            var defaultRoot = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "BlueStar", "games");
-            var installPath = PathHelper.EnsureGameSubfolder(defaultRoot, result.Name);
-
-            GameMetadata? meta = null;
-            if (_metadataProvider != null)
-            {
-                try
+            _backgroundTaskService.QueueTask(
+                $"Downloading Depots: {result.Name}",
+                result.Name,
+                async (progress, ct) =>
                 {
-                    meta = await _metadataProvider.GetMetadataAsync(result.AppId, CancellationToken.None).ConfigureAwait(true);
-                }
-                catch { }
-            }
-
-            var engine = await _engineDetector.DetectEngineAsync(installPath, CancellationToken.None).ConfigureAwait(true);
-
-            // Attempt to download and parse DepotBox archive for this game
-            string? archivePath = null;
-            DepotBoxArchive? archive = null;
-            var archivesDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "BlueStar", "archives");
-            Directory.CreateDirectory(archivesDir);
-
-            result.CreationStatus = "Downloading depots...";
-
+                    try
+                    {
+                        await ProcessAddCatalogGameInternalAsync(result, progress, ct).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        App.Current?.Dispatcher?.Invoke(() =>
+                        {
+                            result.IsCreating = false;
+                            result.CreationStatus = null;
+                        });
+                    }
+                });
+        }
+        else
+        {
             try
             {
-                archivePath = await _apiClient.DownloadArchiveAsync(result.AppId, archivesDir, null, CancellationToken.None).ConfigureAwait(true);
-                if (File.Exists(archivePath))
-                {
-                    archive = await _archiveParser.ParseAsync(archivePath, CancellationToken.None).ConfigureAwait(true);
-                }
+                var dummyProgress = new Progress<BackgroundTaskProgress>();
+                await ProcessAddCatalogGameInternalAsync(result, dummyProgress, CancellationToken.None).ConfigureAwait(true);
             }
-            catch (Exception ex)
+            finally
             {
-                _logger.LogWarning(ex, "Could not pre-download DepotBox archive for {AppId}", result.AppId);
+                result.IsCreating = false;
+                result.CreationStatus = null;
             }
+        }
+    }
 
-            // Verify if depots exist in DepotBox for this game
-            bool hasDepots = archive != null && archive.Games.Count > 0 && archive.Games.Any(g => g.Depots.Count > 0);
-            if (!hasDepots)
+    private async Task ProcessAddCatalogGameInternalAsync(
+        SearchResult result,
+        IProgress<BackgroundTaskProgress> progress,
+        CancellationToken ct)
+    {
+        progress.Report(new BackgroundTaskProgress(0, "Fetching metadata...", "Preparing"));
+
+        var defaultRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "BlueStar", "games");
+        var installPath = PathHelper.EnsureGameSubfolder(defaultRoot, result.Name);
+
+        GameMetadata? meta = null;
+        if (_metadataProvider != null)
+        {
+            try
             {
-                _logger.LogWarning("No depots found in DepotBox for {Name} ({AppId})", result.Name, result.AppId);
+                meta = await _metadataProvider.GetMetadataAsync(result.AppId, ct).ConfigureAwait(false);
+            }
+            catch { }
+        }
+
+        var engine = await _engineDetector.DetectEngineAsync(installPath, ct).ConfigureAwait(false);
+
+        // Attempt to download and parse DepotBox archive for this game
+        string? archivePath = null;
+        DepotBoxArchive? archive = null;
+        var archivesDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "BlueStar", "archives");
+        Directory.CreateDirectory(archivesDir);
+
+        progress.Report(new BackgroundTaskProgress(5, "Downloading depot archive from DepotBox...", "Downloading"));
+
+        var dlProgress = new Progress<DownloadProgress>(p =>
+        {
+            var mb = p.DownloadedBytes / (1024.0 * 1024.0);
+            var totalMb = p.TotalBytes > 0 ? $" / {p.TotalBytes / (1024.0 * 1024.0):F1} MB" : " MB";
+            var pct = 5.0 + (p.Percentage * 0.85); // scales 5% -> 90%
+            progress.Report(new BackgroundTaskProgress(
+                pct,
+                $"Downloading depot archive ({mb:F1}{totalMb})...",
+                "Downloading"));
+
+            App.Current?.Dispatcher?.Invoke(() =>
+            {
+                result.CreationStatus = $"Downloading ({p.Percentage:F0}%)...";
+            });
+        });
+
+        try
+        {
+            archivePath = await _apiClient.DownloadArchiveAsync(result.AppId, archivesDir, dlProgress, ct).ConfigureAwait(false);
+            if (File.Exists(archivePath))
+            {
+                progress.Report(new BackgroundTaskProgress(90, "Parsing depot archive manifests...", "Parsing"));
+                archive = await _archiveParser.ParseAsync(archivePath, ct).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not pre-download DepotBox archive for {AppId}", result.AppId);
+        }
+
+        // Verify if depots exist in DepotBox for this game
+        bool hasDepots = archive != null && archive.Games.Count > 0 && archive.Games.Any(g => g.Depots.Count > 0);
+        if (!hasDepots)
+        {
+            _logger.LogWarning("No depots found in DepotBox for {Name} ({AppId})", result.Name, result.AppId);
+            App.Current?.Dispatcher?.Invoke(() =>
+            {
                 CatalogErrorMessage = $"No depots found for \"{result.Name}\" (AppID: {result.AppId}) in DepotBox.";
-                _notificationService?.ShowError("Depots Not Found", $"No depots were found for \"{result.Name}\" (AppID: {result.AppId}) in DepotBox.");
-                return;
-            }
+            });
+            _notificationService?.ShowError("Depots Not Found", $"No depots were found for \"{result.Name}\" (AppID: {result.AppId}) in DepotBox.");
+            throw new InvalidOperationException($"No depots found for \"{result.Name}\" (AppID: {result.AppId}) in DepotBox.");
+        }
 
-            // Generate unique instance name and non-colliding installation path
-            var allExisting = await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
-            var existingNames = allExisting.Select(i => i.Name).ToList();
-            var existingPaths = allExisting.Select(i => i.InstallPath).Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
+        progress.Report(new BackgroundTaskProgress(94, "Configuring game instance and depots...", "Configuring"));
 
-            var mainGame = archive!.Games.FirstOrDefault(g => !g.IsDlc) ?? archive.Games[0];
-            var rawName = CleanName(mainGame.Name) ?? result.Name;
-            var uniqueName = PathHelper.GenerateUniqueInstanceName(existingNames, rawName);
-            var uniqueInstallPath = PathHelper.GenerateUniqueInstallPath(defaultRoot, uniqueName, existingPaths);
+        // Generate unique instance name and non-colliding installation path
+        var allExisting = await _instanceManager.GetAllAsync(ct).ConfigureAwait(false);
+        var existingNames = allExisting.Select(i => i.Name).ToList();
+        var existingPaths = allExisting.Select(i => i.InstallPath).Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
 
-            var newInstance = new GameInstance
+        var mainGame = archive!.Games.FirstOrDefault(g => !g.IsDlc) ?? archive.Games[0];
+        var rawName = CleanName(mainGame.Name) ?? result.Name;
+        var uniqueName = PathHelper.GenerateUniqueInstanceName(existingNames, rawName);
+        var uniqueInstallPath = PathHelper.GenerateUniqueInstallPath(defaultRoot, uniqueName, existingPaths);
+
+        var newInstance = new GameInstance
+        {
+            Name = uniqueName,
+            AppId = result.AppId,
+            InstallPath = uniqueInstallPath,
+            SourceArchivePath = archivePath,
+            Status = InstanceStatus.NotInstalled,
+            Metadata = meta,
+            Engine = engine,
+            Depots = archive.Games.SelectMany(g => g.Depots.Select(d => new DepotInfo
             {
-                Name = uniqueName,
-                AppId = result.AppId,
-                InstallPath = uniqueInstallPath,
-                SourceArchivePath = archivePath,
-                Status = InstanceStatus.NotInstalled,
-                Metadata = meta,
-                Engine = engine,
-                Depots = archive.Games.SelectMany(g => g.Depots.Select(d => new DepotInfo
+                DepotId = d.DepotId,
+                ManifestId = d.ManifestId,
+                SizeBytes = d.SizeBytes,
+                DepotKey = g.DepotKey,
+                Name = d.Name ?? (g.IsDlc ? $"{CleanName(g.Name)} Depot" : "Base Game Content"),
+                Category = d.Category,
+                Platform = d.Platform,
+                Architecture = d.Architecture,
+                IsSharedDepot = false
+            })).DistinctBy(d => d.DepotId).ToList().AsReadOnly(),
+            Dlcs = archive.Games.Where(g => g.IsDlc).Select(dlc => new DlcInfo
+            {
+                AppId = dlc.AppId,
+                Name = CleanName(dlc.Name) ?? $"DLC {dlc.AppId}",
+                Category = "DLC",
+                Platform = dlc.Depots.FirstOrDefault(d => !string.IsNullOrWhiteSpace(d.Platform))?.Platform ?? "Universal",
+                Depots = dlc.Depots.Select(d => new DepotInfo
                 {
                     DepotId = d.DepotId,
                     ManifestId = d.ManifestId,
                     SizeBytes = d.SizeBytes,
-                    DepotKey = g.DepotKey,
-                    Name = d.Name ?? (g.IsDlc ? $"{CleanName(g.Name)} Depot" : "Base Game Content"),
-                    Category = d.Category,
+                    DepotKey = dlc.DepotKey,
+                    Name = d.Name ?? $"{CleanName(dlc.Name)} Depot",
+                    Category = "DLC",
                     Platform = d.Platform,
                     Architecture = d.Architecture,
                     IsSharedDepot = false
-                })).DistinctBy(d => d.DepotId).ToList().AsReadOnly(),
-                Dlcs = archive.Games.Where(g => g.IsDlc).Select(dlc => new DlcInfo
-                {
-                    AppId = dlc.AppId,
-                    Name = CleanName(dlc.Name) ?? $"DLC {dlc.AppId}",
-                    Category = "DLC",
-                    Platform = dlc.Depots.FirstOrDefault(d => !string.IsNullOrWhiteSpace(d.Platform))?.Platform ?? "Universal",
-                    Depots = dlc.Depots.Select(d => new DepotInfo
-                    {
-                        DepotId = d.DepotId,
-                        ManifestId = d.ManifestId,
-                        SizeBytes = d.SizeBytes,
-                        DepotKey = dlc.DepotKey,
-                        Name = d.Name ?? $"{CleanName(dlc.Name)} Depot",
-                        Category = "DLC",
-                        Platform = d.Platform,
-                        Architecture = d.Architecture,
-                        IsSharedDepot = false
-                    }).ToList().AsReadOnly(),
-                    IsInstalled = false
-                }).ToList().AsReadOnly()
-            };
+                }).ToList().AsReadOnly(),
+                IsInstalled = false
+            }).ToList().AsReadOnly()
+        };
 
-            var created = await _instanceManager.CreateAsync(newInstance, CancellationToken.None).ConfigureAwait(true);
-            if (!string.IsNullOrWhiteSpace(archivePath) && File.Exists(archivePath))
-            {
-                ExtractManifestsToInstanceStorage(archivePath, created.Id);
-            }
+        var created = await _instanceManager.CreateAsync(newInstance, ct).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(archivePath) && File.Exists(archivePath))
+        {
+            progress.Report(new BackgroundTaskProgress(98, "Extracting manifests...", "Extracting"));
+            ExtractManifestsToInstanceStorage(archivePath, created.Id);
+        }
 
-            _logger.LogInformation("Created new instance from Home: {Id} ({Name})", created.Id, created.Name);
-            _notificationService?.ShowSuccess("Instance Created", $"Configured {newInstance.Name} with {newInstance.Depots.Count} depot(s).");
-            _ = _statsService?.ReportInstanceAddedAsync(created.AppId, created.Name);
+        _logger.LogInformation("Created new instance from Home: {Id} ({Name})", created.Id, created.Name);
+        _notificationService?.ShowSuccess("Instance Created", $"Configured {newInstance.Name} with {newInstance.Depots.Count} depot(s).");
+        _ = _statsService?.ReportInstanceAddedAsync(created.AppId, created.Name);
 
+        progress.Report(new BackgroundTaskProgress(100, $"Ready ({newInstance.Depots.Count} depots configured)", "Complete"));
+
+        App.Current?.Dispatcher?.Invoke(async () =>
+        {
             result.CreationStatus = "Ready";
             await LoadDashboardDataAsync();
             OnManageInstanceRequested?.Invoke(created);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to create instance for {Name}", result.Name);
-            CatalogErrorMessage = $"Error adding game: {ex.Message}";
-            _notificationService?.ShowError("Error Creating Instance", $"Could not add {result.Name}: {ex.Message}");
-        }
-        finally
-        {
-            result.IsCreating = false;
-            result.CreationStatus = null;
-        }
+        });
     }
 
     private static void ExtractManifestsToInstanceStorage(string zipPath, Guid instanceId)

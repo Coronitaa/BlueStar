@@ -1410,27 +1410,74 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         IsCheckingGameUpdate = true;
         StatusMessage = "🔍 Checking for depot updates on DepotBox...";
 
+        if (_backgroundTaskService != null)
+        {
+            _backgroundTaskService.QueueTask(
+                $"Searching Depot Updates: {Instance.Name}",
+                Instance.Name,
+                async (progress, ct) =>
+                {
+                    try
+                    {
+                        await CheckDepotUpdatesInternalAsync(progress, ct).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        _uiContext.Post(_ =>
+                        {
+                            IsCheckingGameUpdate = false;
+                        }, null);
+                    }
+                },
+                Instance.Id);
+        }
+        else
+        {
+            try
+            {
+                var dummyProgress = new Progress<BackgroundTaskProgress>();
+                await CheckDepotUpdatesInternalAsync(dummyProgress, CancellationToken.None).ConfigureAwait(true);
+            }
+            finally
+            {
+                IsCheckingGameUpdate = false;
+            }
+        }
+    }
+
+    private async Task CheckDepotUpdatesInternalAsync(
+        IProgress<BackgroundTaskProgress> progress,
+        CancellationToken ct)
+    {
+        progress.Report(new BackgroundTaskProgress(15, "Connecting to DepotBox API...", "Searching"));
+
         try
         {
-            var manifests = await _apiClient.GetManifestsAsync(Instance.AppId, CancellationToken.None).ConfigureAwait(true);
+            var manifests = await _apiClient!.GetManifestsAsync(Instance!.AppId, ct).ConfigureAwait(false);
             if (manifests.Count == 0)
             {
-                if (HasGameUpdateAvailable)
+                progress.Report(new BackgroundTaskProgress(100, "No pending updates on DepotBox.", "Complete"));
+                _uiContext.Post(_ =>
                 {
-                    _notificationService?.ShowWarning(
-                        "Update Pending on DepotBox",
-                        $"A newer build was detected on Steam ({LatestVersionText ?? "latest release"}), but DepotBox contributors have not uploaded updated manifests for this game yet. Please check back later.",
-                        TimeSpan.FromSeconds(8));
-                }
-                else
-                {
-                    _notificationService?.ShowInfo(
-                        "Depots Up to Date",
-                        "No pending updates found on DepotBox.",
-                        TimeSpan.FromSeconds(5));
-                }
+                    if (HasGameUpdateAvailable)
+                    {
+                        _notificationService?.ShowWarning(
+                            "Update Pending on DepotBox",
+                            $"A newer build was detected on Steam ({LatestVersionText ?? "latest release"}), but DepotBox contributors have not uploaded updated manifests for this game yet. Please check back later.",
+                            TimeSpan.FromSeconds(8));
+                    }
+                    else
+                    {
+                        _notificationService?.ShowInfo(
+                            "Depots Up to Date",
+                            "No pending updates found on DepotBox.",
+                            TimeSpan.FromSeconds(5));
+                    }
+                }, null);
                 return;
             }
+
+            progress.Report(new BackgroundTaskProgress(65, "Analyzing depot manifests and version dates...", "Analyzing"));
 
             var outdatedDepots = new List<DepotUpdateItem>();
             foreach (var man in manifests)
@@ -1458,42 +1505,54 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
             if (outdatedDepots.Count > 0)
             {
-                UpdateAvailableDepots = new ObservableCollection<DepotUpdateItem>(outdatedDepots);
-                IsUpdateModalOpen = true;
+                progress.Report(new BackgroundTaskProgress(100, $"Found {outdatedDepots.Count} updated depot(s).", "Complete"));
+                _uiContext.Post(_ =>
+                {
+                    UpdateAvailableDepots = new ObservableCollection<DepotUpdateItem>(outdatedDepots);
+                    IsUpdateModalOpen = true;
+                }, null);
             }
             else
             {
-                if (HasGameUpdateAvailable)
+                progress.Report(new BackgroundTaskProgress(100, "All depots match installed version.", "Complete"));
+                _uiContext.Post(_ =>
                 {
-                    _notificationService?.ShowWarning(
-                        "Update Pending on DepotBox",
-                        $"Steam detected a newer build for {Instance.Name} ({LatestVersionText ?? "latest release"}), but the manifests currently hosted on DepotBox match your installed version. The new update has not been uploaded to DepotBox yet.",
-                        TimeSpan.FromSeconds(8));
-                }
-                else
-                {
-                    HasGameUpdateAvailable = false;
-                    if (Instance.HasUpdateAvailable)
+                    if (HasGameUpdateAvailable)
                     {
-                        Instance = Instance with { HasUpdateAvailable = false, UpdateDescription = null };
-                        _ = _instanceManager.UpdateAsync(Instance, CancellationToken.None);
+                        _notificationService?.ShowWarning(
+                            "Update Pending on DepotBox",
+                            $"Steam detected a newer build for {Instance.Name} ({LatestVersionText ?? "latest release"}), but the manifests currently hosted on DepotBox match your installed version. The new update has not been uploaded to DepotBox yet.",
+                            TimeSpan.FromSeconds(8));
                     }
+                    else
+                    {
+                        HasGameUpdateAvailable = false;
+                        if (Instance.HasUpdateAvailable)
+                        {
+                            Instance = Instance with { HasUpdateAvailable = false, UpdateDescription = null };
+                            _ = _instanceManager.UpdateAsync(Instance, CancellationToken.None);
+                        }
 
-                    _notificationService?.ShowInfo(
-                        "Depots Up to Date",
-                        "Depot manifests on DepotBox match the versions already installed on your instance. No new files pending download.",
-                        TimeSpan.FromSeconds(5));
-                }
+                        _notificationService?.ShowInfo(
+                            "Depots Up to Date",
+                            "Depot manifests on DepotBox match the versions already installed on your instance. No new files pending download.",
+                            TimeSpan.FromSeconds(5));
+                    }
+                }, null);
             }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to check depot updates for {Name}", Instance.Name);
-            _notificationService?.ShowError("Failed to Check for Updates", ex.Message);
-        }
-        finally
-        {
-            IsCheckingGameUpdate = false;
+            _logger.LogError(ex, "Failed to check depot updates for {Name}", Instance?.Name);
+            _uiContext.Post(_ =>
+            {
+                _notificationService?.ShowError("Failed to Check for Updates", ex.Message);
+            }, null);
+            throw;
         }
     }
 
@@ -1531,69 +1590,125 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         StatusMessage = "📥 Downloading new manifests and update keys from DepotBox...";
         _notificationService?.ShowInfo("Downloading Update", "Fetching updated manifests and keys from DepotBox...");
 
-        try
+        if (_backgroundTaskService != null)
         {
-            var workDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "BlueStar", "DepotWork", Instance.Id.ToString());
-            Directory.CreateDirectory(workDir);
-
-            var instanceManifestDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "BlueStar", "instances", Instance.Id.ToString(), "manifests");
-            Directory.CreateDirectory(instanceManifestDir);
-
-            string? archivePath = null;
-            DepotBoxArchive? parsedArchive = null;
-
-            if (_apiClient != null)
-            {
-                archivePath = await _apiClient.DownloadArchiveAsync(Instance.AppId, workDir, null, CancellationToken.None).ConfigureAwait(true);
-
-                if (_archiveParser != null && File.Exists(archivePath))
+            _backgroundTaskService.QueueTask(
+                $"Downloading Updated Depots: {Instance.Name}",
+                Instance.Name,
+                async (progress, ct) =>
                 {
-                    await _archiveParser.ExtractManifestsAsync(archivePath, instanceManifestDir, CancellationToken.None).ConfigureAwait(true);
-                    await _archiveParser.ExtractManifestsAsync(archivePath, workDir, CancellationToken.None).ConfigureAwait(true);
-                    parsedArchive = await _archiveParser.ParseAsync(archivePath, CancellationToken.None).ConfigureAwait(true);
-                }
-            }
-
-            var allArchiveDepots = parsedArchive?.Games.SelectMany(g => g.Depots.Select(d => new { Depot = d, Game = g })).ToList() ?? [];
-
-            // Update instance depots with new Manifest IDs and Keys
-            var updatedDepots = Instance.Depots.Select(d =>
-            {
-                var sel = selected.FirstOrDefault(s => s.DepotId == d.DepotId);
-                var archiveEntry = allArchiveDepots.FirstOrDefault(a => a.Depot.DepotId == d.DepotId);
-
-                if (sel != null || archiveEntry != null)
-                {
-                    return d with
+                    try
                     {
-                        ManifestId = sel?.NewManifestId ?? archiveEntry?.Depot.ManifestId ?? d.ManifestId,
-                        DepotKey = archiveEntry?.Game.DepotKey ?? d.DepotKey,
-                        SizeBytes = (archiveEntry?.Depot.SizeBytes > 0 ? archiveEntry.Depot.SizeBytes : sel?.SizeBytes) ?? d.SizeBytes,
-                        IsDownloaded = false
-                    };
-                }
-                return d;
-            }).ToList();
-
-            var updatedInstance = Instance with
+                        await ProcessApplyDepotUpdateInternalAsync(selected, progress, ct).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        _uiContext.Post(_ =>
+                        {
+                            IsApplyingGameUpdate = false;
+                        }, null);
+                    }
+                },
+                Instance.Id);
+        }
+        else
+        {
+            try
             {
-                Depots = updatedDepots.AsReadOnly(),
-                SourceArchivePath = archivePath ?? Instance.SourceArchivePath
-            };
-
-            await _instanceManager.UpdateAsync(updatedInstance, CancellationToken.None).ConfigureAwait(true);
-            Instance = updatedInstance;
-
-            // Reset all community emulation ratings and user vote flags for this game AppID due to new game update/build
-            if (_emulatorRatingService != null)
-            {
-                await _emulatorRatingService.ResetRatingsForGameAsync(Instance.AppId, CancellationToken.None).ConfigureAwait(true);
+                var dummyProgress = new Progress<BackgroundTaskProgress>();
+                await ProcessApplyDepotUpdateInternalAsync(selected, dummyProgress, CancellationToken.None).ConfigureAwait(true);
             }
+            finally
+            {
+                IsApplyingGameUpdate = false;
+            }
+        }
+    }
 
+    private async Task ProcessApplyDepotUpdateInternalAsync(
+        List<DepotUpdateItem> selected,
+        IProgress<BackgroundTaskProgress> progress,
+        CancellationToken ct)
+    {
+        progress.Report(new BackgroundTaskProgress(5, "Downloading updated manifests and keys from DepotBox...", "Downloading"));
+
+        var workDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "BlueStar", "DepotWork", Instance!.Id.ToString());
+        Directory.CreateDirectory(workDir);
+
+        var instanceManifestDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "BlueStar", "instances", Instance.Id.ToString(), "manifests");
+        Directory.CreateDirectory(instanceManifestDir);
+
+        string? archivePath = null;
+        DepotBoxArchive? parsedArchive = null;
+
+        if (_apiClient != null)
+        {
+            var dlProgress = new Progress<DownloadProgress>(p =>
+            {
+                var mb = p.DownloadedBytes / (1024.0 * 1024.0);
+                var totalMb = p.TotalBytes > 0 ? $" / {p.TotalBytes / (1024.0 * 1024.0):F1} MB" : " MB";
+                var pct = 5.0 + (p.Percentage * 0.80);
+                progress.Report(new BackgroundTaskProgress(
+                    pct,
+                    $"Downloading depot archive ({mb:F1}{totalMb})...",
+                    "Downloading"));
+            });
+
+            archivePath = await _apiClient.DownloadArchiveAsync(Instance.AppId, workDir, dlProgress, ct).ConfigureAwait(false);
+
+            if (_archiveParser != null && File.Exists(archivePath))
+            {
+                progress.Report(new BackgroundTaskProgress(88, "Extracting updated manifests...", "Extracting"));
+                await _archiveParser.ExtractManifestsAsync(archivePath, instanceManifestDir, ct).ConfigureAwait(false);
+                await _archiveParser.ExtractManifestsAsync(archivePath, workDir, ct).ConfigureAwait(false);
+                parsedArchive = await _archiveParser.ParseAsync(archivePath, ct).ConfigureAwait(false);
+            }
+        }
+
+        var allArchiveDepots = parsedArchive?.Games.SelectMany(g => g.Depots.Select(d => new { Depot = d, Game = g })).ToList() ?? [];
+
+        // Update instance depots with new Manifest IDs and Keys
+        var updatedDepots = Instance.Depots.Select(d =>
+        {
+            var sel = selected.FirstOrDefault(s => s.DepotId == d.DepotId);
+            var archiveEntry = allArchiveDepots.FirstOrDefault(a => a.Depot.DepotId == d.DepotId);
+
+            if (sel != null || archiveEntry != null)
+            {
+                return d with
+                {
+                    ManifestId = sel?.NewManifestId ?? archiveEntry?.Depot.ManifestId ?? d.ManifestId,
+                    DepotKey = archiveEntry?.Game.DepotKey ?? d.DepotKey,
+                    SizeBytes = (archiveEntry?.Depot.SizeBytes > 0 ? archiveEntry.Depot.SizeBytes : sel?.SizeBytes) ?? d.SizeBytes,
+                    IsDownloaded = false
+                };
+            }
+            return d;
+        }).ToList();
+
+        var updatedInstance = Instance with
+        {
+            Depots = updatedDepots.AsReadOnly(),
+            SourceArchivePath = archivePath ?? Instance.SourceArchivePath
+        };
+
+        await _instanceManager.UpdateAsync(updatedInstance, ct).ConfigureAwait(false);
+
+        // Reset all community emulation ratings and user vote flags for this game AppID due to new game update/build
+        if (_emulatorRatingService != null)
+        {
+            await _emulatorRatingService.ResetRatingsForGameAsync(Instance.AppId, ct).ConfigureAwait(false);
+        }
+
+        progress.Report(new BackgroundTaskProgress(95, "Enqueuing updated depots for download...", "Finalizing"));
+
+        _uiContext.Post(_ =>
+        {
+            Instance = updatedInstance;
             IsUpdateModalOpen = false;
 
             // Enqueue updated depots for download
@@ -1620,16 +1735,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             _ = CheckSteamVersionDateAsync();
             ActiveJob = _downloadQueueManager.Queue.FirstOrDefault(j => j.Instance.Id == Instance.Id);
             NotifyDownloadProps();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error starting depot update for {Name}", Instance.Name);
-            _notificationService?.ShowError("Failed to Start Update", ex.Message);
-        }
-        finally
-        {
-            IsApplyingGameUpdate = false;
-        }
+        }, null);
+
+        progress.Report(new BackgroundTaskProgress(100, $"Updated {selected.Count} depot(s) configuration.", "Complete"));
     }
 
     [RelayCommand]
@@ -1859,7 +1967,11 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             {
                 try
                 {
-                    archivePath = await _apiClient.DownloadArchiveAsync(candidate.AppId, archivesDir, null, CancellationToken.None).ConfigureAwait(true);
+                    var dlProgress = new Progress<DownloadProgress>(p =>
+                    {
+                        StatusMessage = $"⏳ Downloading depot archive ({p.Percentage:F0}%)...";
+                    });
+                    archivePath = await _apiClient.DownloadArchiveAsync(candidate.AppId, archivesDir, dlProgress, CancellationToken.None).ConfigureAwait(true);
                 }
                 catch { }
             }
@@ -3530,7 +3642,11 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
             try
             {
-                var archivePath = await _apiClient.DownloadArchiveAsync(Instance.AppId, archivesDir, null, CancellationToken.None).ConfigureAwait(true);
+                var dlProgress = new Progress<DownloadProgress>(p =>
+                {
+                    StatusMessage = $"⏳ Fetching depot archive ({p.Percentage:F0}%)...";
+                });
+                var archivePath = await _apiClient.DownloadArchiveAsync(Instance.AppId, archivesDir, dlProgress, CancellationToken.None).ConfigureAwait(true);
                 if (File.Exists(archivePath))
                 {
                     var archive = await _archiveParser.ParseAsync(archivePath, CancellationToken.None).ConfigureAwait(true);

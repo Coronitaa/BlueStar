@@ -203,6 +203,6 @@ public sealed class AppSettingsService
         public bool CheckSystemRequirementsOnStartup { get; init; } = true;
 
         public string? DefaultApiUrl { get; init; } = "https://depotbox.org";
-        public string? DefaultApiKey { get; init; }
+        public string? DefaultApiKey { get; init; } = "YOUR-API-KEY";
     }
 }
