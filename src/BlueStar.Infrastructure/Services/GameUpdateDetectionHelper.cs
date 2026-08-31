@@ -69,26 +69,26 @@ public static class GameUpdateDetectionHelper
     /// <summary>
     /// Checks whether a newer build or updated depot manifests are available for the given game instance.
     /// </summary>
-    public static async Task<(bool HasUpdate, string? Description)> CheckInstanceUpdateAsync(
+    public static async Task<(UpdateCheckStatus Status, string? Description)> CheckInstanceUpdateAsync(
         GameInstance instance,
         SteamStoreApiClient steamClient,
         CancellationToken ct = default)
     {
         var result = await CheckInstanceUpdateDetailsAsync(instance, steamClient, ct).ConfigureAwait(false);
-        return (result.HasUpdate, result.Description);
+        return (result.Status, result.Description);
     }
 
     /// <summary>
     /// Checks update status and returns detailed date and version information.
     /// </summary>
-    public static async Task<(bool HasUpdate, string? Description, DateTimeOffset? LatestDate, string? LatestDateText, DateTimeOffset? InstalledDate, string? InstalledDateText)> CheckInstanceUpdateDetailsAsync(
+    public static async Task<(UpdateCheckStatus Status, string? Description, DateTimeOffset? LatestDate, string? LatestDateText, DateTimeOffset? InstalledDate, string? InstalledDateText)> CheckInstanceUpdateDetailsAsync(
         GameInstance instance,
         SteamStoreApiClient steamClient,
         CancellationToken ct = default)
     {
-        if (instance == null || instance.AppId == 0 || steamClient == null)
+        if (instance == null || instance.AppId == 0 || steamClient == null || ct.IsCancellationRequested)
         {
-            return (false, null, null, null, null, null);
+            return (UpdateCheckStatus.Unknown, null, null, null, null, null);
         }
 
         try
@@ -120,7 +120,7 @@ public static class GameUpdateDetectionHelper
             {
                 if (Math.Abs((latestDate.Value - installedDate.Value).TotalHours) <= 36.0 || latestDate.Value <= installedDate.Value.AddDays(1))
                 {
-                    return (false, null, latestDate, latestDateText, installedDate, installedDateText ?? latestDateText);
+                    return (UpdateCheckStatus.UpToDate, null, latestDate, latestDateText, installedDate, installedDateText ?? latestDateText);
                 }
             }
 
@@ -149,14 +149,14 @@ public static class GameUpdateDetectionHelper
                     // If dates are also present and show no difference, don't flag as outdated
                     if (installedDate.HasValue && latestDate.HasValue && latestDate.Value <= installedDate.Value.AddDays(1))
                     {
-                        return (false, null, latestDate, latestDateText, installedDate, installedDateText);
+                        return (UpdateCheckStatus.UpToDate, null, latestDate, latestDateText, installedDate, installedDateText);
                     }
 
-                    return (true, "Newer depot build available on Steam/DepotBox", latestDate, latestDateText, installedDate, installedDateText);
+                    return (UpdateCheckStatus.UpdateAvailable, "Newer depot build available on Steam/DepotBox", latestDate, latestDateText, installedDate, installedDateText);
                 }
                 else if (hasCheckedDepot && allDepotsMatch)
                 {
-                    return (false, null, latestDate, latestDateText, latestDate, latestDateText);
+                    return (UpdateCheckStatus.UpToDate, null, latestDate, latestDateText, latestDate, latestDateText);
                 }
             }
 
@@ -165,19 +165,25 @@ public static class GameUpdateDetectionHelper
             {
                 if (latestDate.Value > installedDate.Value.AddDays(1))
                 {
-                    return (true, $"New build released on {latestDate.Value:d MMM yyyy}", latestDate, latestDateText, installedDate, installedDateText);
+                    return (UpdateCheckStatus.UpdateAvailable, $"New build released on {latestDate.Value:d MMM yyyy}", latestDate, latestDateText, installedDate, installedDateText);
                 }
                 else
                 {
-                    return (false, null, latestDate, latestDateText, installedDate, installedDateText);
+                    return (UpdateCheckStatus.UpToDate, null, latestDate, latestDateText, installedDate, installedDateText);
                 }
             }
 
-            return (false, null, latestDate, latestDateText, installedDate, installedDateText);
+            // If neither depot manifests nor dates could be verified, return Unknown rather than false UpToDate
+            if (depotInfo == null && !latestDate.HasValue)
+            {
+                return (UpdateCheckStatus.Unknown, null, null, null, installedDate, installedDateText);
+            }
+
+            return (UpdateCheckStatus.UpToDate, null, latestDate, latestDateText, installedDate, installedDateText);
         }
         catch
         {
-            return (false, null, null, null, null, null);
+            return (UpdateCheckStatus.Unknown, null, null, null, null, null);
         }
     }
 }

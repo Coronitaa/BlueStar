@@ -15,7 +15,7 @@ namespace BlueStar.App.ViewModels;
 /// <summary>
 /// Main window ViewModel controlling AppShell navigation, active downloads, real-time Steam status, and toast notifications.
 /// </summary>
-public partial class MainViewModel : ObservableObject
+public partial class MainViewModel : ObservableObject, IDisposable
 {
     private readonly DownloadQueueManager _downloadQueueManager;
     private readonly ISteamStatusService _steamStatusService;
@@ -26,6 +26,15 @@ public partial class MainViewModel : ObservableObject
     private readonly IDepotBoxApiClient? _apiClient;
     private readonly IBackgroundTaskService _backgroundTaskService;
     private readonly SynchronizationContext _uiContext;
+    private readonly CancellationTokenSource _cts = new();
+    private bool _isDisposed;
+
+    private readonly System.Collections.Specialized.NotifyCollectionChangedEventHandler _queueCollectionChangedHandler;
+    private readonly EventHandler _queueChangedHandler;
+    private readonly EventHandler<SteamStatus> _steamStatusChangedHandler;
+    private readonly EventHandler _tasksChangedHandler;
+    private readonly EventHandler _instancesChangedHandler;
+    private readonly EventHandler<(Guid InstanceId, bool IsRunning)>? _runningStateChangedHandler;
 
     public IBackgroundTaskService BackgroundTaskService => _backgroundTaskService;
 
@@ -54,6 +63,18 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private UserControl? _currentView;
+
+    partial void OnCurrentViewChanged(UserControl? oldValue, UserControl? newValue)
+    {
+        if (oldValue?.DataContext is IDisposable oldDisposable && !ReferenceEquals(oldDisposable, newValue?.DataContext))
+        {
+            try
+            {
+                oldDisposable.Dispose();
+            }
+            catch { }
+        }
+    }
 
     [ObservableProperty]
     private string _selectedNavigation = "Home";
@@ -181,16 +202,22 @@ public partial class MainViewModel : ObservableObject
             CheckRequirementsOnStartup = _appSettings.CheckSystemRequirementsOnStartup;
         }
 
-        _downloadQueueManager.Queue.CollectionChanged += (_, _) => _uiContext.Post(_ => UpdateDownloadStats(), null);
-        _downloadQueueManager.QueueChanged += (_, _) => _uiContext.Post(_ => UpdateDownloadStats(), null);
-        _steamStatusService.StatusChanged += OnSteamStatusChanged;
-        _backgroundTaskService.TasksChanged += (_, _) => _uiContext.Post(_ => UpdateBackgroundTaskStats(), null);
+        _queueCollectionChangedHandler = (_, _) => _uiContext.Post(_ => UpdateDownloadStats(), null);
+        _queueChangedHandler = (_, _) => _uiContext.Post(_ => UpdateDownloadStats(), null);
+        _steamStatusChangedHandler = OnSteamStatusChanged;
+        _tasksChangedHandler = (_, _) => _uiContext.Post(_ => UpdateBackgroundTaskStats(), null);
+        _instancesChangedHandler = (_, _) => _ = RefreshRecentShortcutsAsync();
 
-        // Auto-refresh sidebar shortcuts on any instance create, update, delete or game launch
-        _instanceManager.InstancesChanged += (_, _) => _ = RefreshRecentShortcutsAsync();
+        _downloadQueueManager.Queue.CollectionChanged += _queueCollectionChangedHandler;
+        _downloadQueueManager.QueueChanged += _queueChangedHandler;
+        _steamStatusService.StatusChanged += _steamStatusChangedHandler;
+        _backgroundTaskService.TasksChanged += _tasksChangedHandler;
+        _instanceManager.InstancesChanged += _instancesChangedHandler;
+
         if (_gameLauncher != null)
         {
-            _gameLauncher.RunningStateChanged += (_, _) => _ = RefreshRecentShortcutsAsync();
+            _runningStateChangedHandler = (_, _) => _ = RefreshRecentShortcutsAsync();
+            _gameLauncher.RunningStateChanged += _runningStateChangedHandler;
         }
 
         // Initialize state
@@ -208,20 +235,13 @@ public partial class MainViewModel : ObservableObject
     {
         try
         {
-            StartupStatusText = "Starting ecosystem services...";
-            await Task.Delay(150).ConfigureAwait(true);
-
             StartupStatusText = "Loading local instances and manifests...";
             await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
-
-            StartupStatusText = "Syncing Steam status...";
-            await Task.Delay(150).ConfigureAwait(true);
 
             StartupStatusText = "Analyzing system requirements...";
             await ScanSystemRequirementsAsync(autoPromptModal: true).ConfigureAwait(true);
 
             StartupStatusText = "Ready!";
-            await Task.Delay(100).ConfigureAwait(true);
 
             // Trigger smooth exit transition
             IsLoading = false;
@@ -327,17 +347,30 @@ public partial class MainViewModel : ObservableObject
 
                     try
                     {
-                        var (hasUpdate, desc) = await BlueStar.Infrastructure.Services.GameUpdateDetectionHelper.CheckInstanceUpdateAsync(inst, steamClient, ct).ConfigureAwait(false);
-                        if (hasUpdate != inst.HasUpdateAvailable || desc != inst.UpdateDescription)
+                        var (status, desc) = await BlueStar.Infrastructure.Services.GameUpdateDetectionHelper.CheckInstanceUpdateAsync(inst, steamClient, ct).ConfigureAwait(false);
+                        if (status == UpdateCheckStatus.UpdateAvailable)
                         {
                             var updated = inst with
                             {
-                                HasUpdateAvailable = hasUpdate,
+                                HasUpdateAvailable = true,
                                 UpdateDescription = desc
                             };
                             await _instanceManager.UpdateAsync(updated, ct).ConfigureAwait(false);
+                            updatesFound++;
                         }
-                        if (hasUpdate) updatesFound++;
+                        else if (status == UpdateCheckStatus.UpToDate)
+                        {
+                            if (inst.HasUpdateAvailable || inst.UpdateDescription != null)
+                            {
+                                var updated = inst with
+                                {
+                                    HasUpdateAvailable = false,
+                                    UpdateDescription = null
+                                };
+                                await _instanceManager.UpdateAsync(updated, ct).ConfigureAwait(false);
+                            }
+                        }
+                        // When status is UpdateCheckStatus.Unknown, preserve existing known state
                     }
                     catch { }
 
@@ -373,22 +406,35 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private readonly HashSet<DownloadJobItem> _subscribedJobs = new();
+    private readonly System.Collections.Generic.Dictionary<DownloadJobItem, System.ComponentModel.PropertyChangedEventHandler> _subscribedJobs = new();
 
     private void UpdateDownloadStats()
     {
-        // Subscribe to any new jobs for live progress and speed
+        // 1. Remove jobs that are no longer in the queue
+        var currentQueueJobs = _downloadQueueManager.Queue.ToHashSet();
+        var jobsToRemove = _subscribedJobs.Keys.Where(j => !currentQueueJobs.Contains(j)).ToList();
+        foreach (var job in jobsToRemove)
+        {
+            if (_subscribedJobs.Remove(job, out var handler))
+            {
+                job.PropertyChanged -= handler;
+            }
+        }
+
+        // 2. Subscribe to any new jobs for live progress and speed
         foreach (var job in _downloadQueueManager.Queue)
         {
-            if (_subscribedJobs.Add(job))
+            if (!_subscribedJobs.ContainsKey(job))
             {
-                job.PropertyChanged += (s, e) =>
+                System.ComponentModel.PropertyChangedEventHandler handler = (s, e) =>
                 {
                     if (e.PropertyName is nameof(DownloadJobItem.Percentage) or nameof(DownloadJobItem.SpeedBytesPerSec) or nameof(DownloadJobItem.JobStatus))
                     {
                         _uiContext.Post(_ => UpdateDownloadStats(), null);
                     }
                 };
+                _subscribedJobs[job] = handler;
+                job.PropertyChanged += handler;
             }
         }
 
@@ -843,5 +889,47 @@ public partial class MainViewModel : ObservableObject
         var vm = App.Services.GetRequiredService<TViewModel>();
         view.DataContext = vm;
         return view;
+    }
+
+    /// <summary>
+    /// Releases all event subscriptions and cancels running background operations.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_isDisposed) return;
+        _isDisposed = true;
+
+        try
+        {
+            _cts.Cancel();
+            _cts.Dispose();
+        }
+        catch { }
+
+        _downloadQueueManager.Queue.CollectionChanged -= _queueCollectionChangedHandler;
+        _downloadQueueManager.QueueChanged -= _queueChangedHandler;
+        _steamStatusService.StatusChanged -= _steamStatusChangedHandler;
+        _backgroundTaskService.TasksChanged -= _tasksChangedHandler;
+        _instanceManager.InstancesChanged -= _instancesChangedHandler;
+
+        if (_gameLauncher != null && _runningStateChangedHandler != null)
+        {
+            _gameLauncher.RunningStateChanged -= _runningStateChangedHandler;
+        }
+
+        foreach (var kvp in _subscribedJobs)
+        {
+            kvp.Key.PropertyChanged -= kvp.Value;
+        }
+        _subscribedJobs.Clear();
+
+        if (CurrentView?.DataContext is IDisposable currentDisposable)
+        {
+            try
+            {
+                currentDisposable.Dispose();
+            }
+            catch { }
+        }
     }
 }

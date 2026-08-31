@@ -5,7 +5,7 @@
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20(x64)-brightgreen.svg)]()
 [![.NET 8.0](https://img.shields.io/badge/.NET-8.0%20WPF-purple.svg)]()
-[![Release: v1.1.2](https://img.shields.io/badge/Release-v1.1.2-orange.svg)](https://github.com/Coronitaa/BlueStar/releases)
+[![Release: v1.2.0](https://img.shields.io/badge/Release-v1.2.0-orange.svg)](https://github.com/Coronitaa/BlueStar/releases)
 
 BlueStar is an all-in-one desktop game management and launcher ecosystem designed for modern PC gaming. It seamlessly integrates Steam depot downloads, manifest staging, automated engine detection, multi-engine emulation, DLC unlocking, prerequisite management, and mod injection into a clean, modern, and dark-themed interface.
 
@@ -17,8 +17,8 @@ You can download the latest version from the [Releases](https://github.com/Coron
 
 | Edition | File | Description |
 | :--- | :--- | :--- |
-| **Windows Setup (Recommended)** | `BlueStar-v1.1.2-Setup-win-x64.exe` | Standard Windows installer with start menu shortcuts, desktop icons, and uninstaller. |
-| **Portable Edition** | `BlueStar-v1.1.2-Portable-win-x64.zip` | Standalone zero-install archive. Extract anywhere and launch `BlueStar.exe`. |
+| **Windows Setup (Recommended)** | `BlueStar-v1.2.0-Setup-win-x64.exe` | Standard Windows installer with start menu shortcuts, desktop icons, and uninstaller. |
+| **Portable Edition** | `BlueStar-v1.2.0-Portable-win-x64.zip` | Standalone zero-install archive. Extract anywhere and launch `BlueStar.exe`. |
 
 > [!NOTE]
 > All release binaries are self-contained for 64-bit Windows systems (no prior .NET 8 runtime installation required).
@@ -31,6 +31,17 @@ You can download the latest version from the [Releases](https://github.com/Coron
 - Manage independent game installations from multiple sources: **DepotBox downloads**, **Steam library imports**, and **custom local folders**.
 - Dedicated launch pipeline with automatic protocol fallbacks (`steam://rungameid/{appId}`) for Steam-origin games.
 - Non-destructive manifest updates on DepotBox that preserve save files, mods, and emulator configurations.
+
+### Custom Target Build Creator & Manifest Staging (New in v1.2)
+- Create custom game builds by configuring custom manifest IDs and target depots directly in the UI.
+- 1-click depot ZIP package importer with drag-and-drop support to quickly stage manifests.
+- Inline manifest editor with real-time verification and direct community manifest resolver links.
+- Simplified view mode for regular players with optional Advanced Builds toggle for power users.
+
+### High-Performance Caching & Network Deduplication (New in v1.2)
+- Multi-tier (L1 Memory + L2 Disk) caching architecture with atomic transactional writes.
+- Single-flight deduplication on concurrent requests for Steam metadata, update dates, and DepotBox catalogs.
+- Instantaneous background updates detection with safe `UpdateCheckStatus` state preservation.
 
 ### Dynamic Tagging and Filtering Engine
 - Real-time tag generation based on platform, game engine, installation origin, update status, and active emulator.
@@ -146,7 +157,7 @@ dotnet run --project src/BlueStar.App
 BlueStar proudly relies on and thanks the following open-source projects:
 
 - **ReFix Suite** by [Coronitaa](https://github.com/Coronitaa/ReFix) — Multi-engine multiplayer fix & deployment suite
-- **DepotDownloader** by [SteamRE](https://github.com/SteamRE/DepotDownloader) — Steam depot downloading tool
+- **DepotDownloader** by [SteamRE](https://github.com/SteamRE/DepotDownloader) & [DepotDownloaderMod fork](https://github.com/Coronitaa/DepotDownloaderMod) — Steam depot downloading tool with enhanced manifest resolver and modular library integration
 - **SmokeAPI** by [acidicoala](https://github.com/acidicoala/SmokeAPI) — Universal Steamworks DLC entitlement emulator
 - **CreamInstaller** by [pointfeev](https://github.com/pointfeev/CreamInstaller) — Automatic DLC unlocker installer
 - **BepInEx** by [BepInEx Team](https://github.com/BepInEx/BepInEx) — Unity and .NET game plugin framework

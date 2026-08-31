@@ -194,103 +194,104 @@ public sealed class ImageCacheService
         if (_memoryCache.TryGetValue(key, out var cached))
             return cached;
 
-        return await _inFlightTasks.GetOrAdd(key, async k =>
+        return await _inFlightTasks.GetOrAdd(key, k => LoadImageCoreAsync(k, url, appId)).ConfigureAwait(false);
+    }
+
+    private async Task<BitmapSource?> LoadImageCoreAsync(string key, string? url, uint appId)
+    {
+        try
         {
-            try
+            var diskPath = GetDiskCachePath(key);
+            if (File.Exists(diskPath))
             {
-                // Check disk cache first in task
-                var diskPath = GetDiskCachePath(k);
-                if (File.Exists(diskPath))
+                try
                 {
-                    try
+                    var bytes = await File.ReadAllBytesAsync(diskPath).ConfigureAwait(false);
+                    if (bytes.Length > 200)
                     {
-                        var bytes = await File.ReadAllBytesAsync(diskPath).ConfigureAwait(false);
-                        if (bytes.Length > 200)
+                        var bmp = CreateFrozenBitmap(bytes);
+                        if (bmp != null)
                         {
-                            var bmp = CreateFrozenBitmap(bytes);
-                            if (bmp != null)
-                            {
-                                _memoryCache[k] = bmp;
-                                return bmp;
-                            }
+                            _memoryCache[key] = bmp;
+                            return bmp;
                         }
                     }
-                    catch { }
                 }
+                catch { }
+            }
 
-                // Extract appId if not passed explicitly
-                var targetAppId = appId;
-                if (targetAppId == 0 && !string.IsNullOrWhiteSpace(url))
+            // Extract appId if not passed explicitly
+            var targetAppId = appId;
+            if (targetAppId == 0 && !string.IsNullOrWhiteSpace(url))
+            {
+                var match = SteamAppIdRegex.Match(url);
+                if (match.Success && uint.TryParse(match.Groups["appid"].Value, out var parsedId))
                 {
-                    var match = SteamAppIdRegex.Match(url);
-                    if (match.Success && uint.TryParse(match.Groups["appid"].Value, out var parsedId))
-                    {
-                        targetAppId = parsedId;
-                    }
+                    targetAppId = parsedId;
                 }
+            }
 
-                // Build candidate URLs with multi-CDN fallbacks
-                var candidates = new List<string>();
-                if (!string.IsNullOrWhiteSpace(url))
-                {
-                    candidates.Add(url);
-                }
+            // Build candidate URLs with multi-CDN fallbacks
+            var candidates = new List<string>();
+            if (!string.IsNullOrWhiteSpace(url))
+            {
+                candidates.Add(url);
+            }
 
-                if (targetAppId > 0)
-                {
-                    candidates.Add($"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{targetAppId}/header.jpg");
-                    candidates.Add($"https://cdn.akamai.steamstatic.com/steam/apps/{targetAppId}/header.jpg");
-                    candidates.Add($"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{targetAppId}/capsule_616x353.jpg");
-                    candidates.Add($"https://cdn.cloudflare.steamstatic.com/steam/apps/{targetAppId}/header.jpg");
-                    candidates.Add($"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{targetAppId}/capsule_467x181.jpg");
-                    candidates.Add($"https://cdn.akamai.steamstatic.com/steam/apps/{targetAppId}/capsule_616x353.jpg");
-                    candidates.Add($"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{targetAppId}/library_600x900.jpg");
-                }
+            if (targetAppId > 0)
+            {
+                candidates.Add($"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{targetAppId}/header.jpg");
+                candidates.Add($"https://cdn.akamai.steamstatic.com/steam/apps/{targetAppId}/header.jpg");
+                candidates.Add($"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{targetAppId}/capsule_616x353.jpg");
+                candidates.Add($"https://cdn.cloudflare.steamstatic.com/steam/apps/{targetAppId}/header.jpg");
+                candidates.Add($"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{targetAppId}/capsule_467x181.jpg");
+                candidates.Add($"https://cdn.akamai.steamstatic.com/steam/apps/{targetAppId}/capsule_616x353.jpg");
+                candidates.Add($"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{targetAppId}/library_600x900.jpg");
+            }
 
-                // Try each candidate URL until valid image bytes are retrieved
-                var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var candidate in candidates)
+            // Try each candidate URL until valid image bytes are retrieved
+            var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var candidate in candidates)
+            {
+                if (string.IsNullOrWhiteSpace(candidate) || !seenUrls.Add(candidate))
+                    continue;
+
+                try
                 {
-                    if (string.IsNullOrWhiteSpace(candidate) || !seenUrls.Add(candidate))
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(6));
+                    using var response = await _httpClient.GetAsync(candidate, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false);
+                    if (!response.IsSuccessStatusCode)
                         continue;
 
-                    try
+                    var imageBytes = await response.Content.ReadAsByteArrayAsync(cts.Token).ConfigureAwait(false);
+                    if (imageBytes.Length < 300)
+                        continue;
+
+                    // Verify it is a valid image buffer
+                    var bitmap = CreateFrozenBitmap(imageBytes);
+                    if (bitmap != null)
                     {
-                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(6));
-                        var response = await _httpClient.GetAsync(candidate, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false);
-                        if (!response.IsSuccessStatusCode)
-                            continue;
-
-                        var imageBytes = await response.Content.ReadAsByteArrayAsync(cts.Token).ConfigureAwait(false);
-                        if (imageBytes.Length < 300)
-                            continue;
-
-                        // Verify it is a valid image buffer
-                        var bitmap = CreateFrozenBitmap(imageBytes);
-                        if (bitmap != null)
+                        // Save to L2 disk cache asynchronously
+                        try
                         {
-                            // Save to L2 disk cache asynchronously
-                            try
-                            {
-                                await File.WriteAllBytesAsync(diskPath, imageBytes).ConfigureAwait(false);
-                            }
-                            catch { }
-
-                            _memoryCache[k] = bitmap;
-                            return bitmap;
+                            await File.WriteAllBytesAsync(diskPath, imageBytes).ConfigureAwait(false);
                         }
-                    }
-                    catch { }
-                }
-            }
-            catch { }
-            finally
-            {
-                _inFlightTasks.TryRemove(k, out _);
-            }
+                        catch { }
 
-            return null;
-        }).ConfigureAwait(false);
+                        _memoryCache[key] = bitmap;
+                        return bitmap;
+                    }
+                }
+                catch { }
+            }
+        }
+        catch { }
+        finally
+        {
+            _inFlightTasks.TryRemove(key, out _);
+        }
+
+        return null;
     }
 
     private static BitmapSource? CreateFrozenBitmap(byte[] bytes)

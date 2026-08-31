@@ -19,17 +19,6 @@ public sealed class DepotBoxAuthService : IDepotBoxAuthService
     private readonly BlueStar.Infrastructure.Storage.AppSettingsService? _appSettings;
     private readonly ILogger<DepotBoxAuthService> _logger;
 
-    // Obfuscated backend PRO key storage (byte array with multi-byte XOR masking to prevent plaintext binary extraction)
-    private static readonly byte[] ObfuscatedKeyData =
-    [
-        0xD7, 0x36, 0x7F, 0x1A, 0x21, 0xC5, 0x6E, 0x48,
-        0xB3, 0x1F, 0x5D, 0x0C, 0x98, 0x7A, 0x33, 0x2E,
-        0xE4, 0x55, 0x19, 0x6B, 0x8C, 0x3D, 0x71, 0x4F,
-        0xA2, 0x1B, 0x68, 0x93, 0x4E, 0x2C, 0x50, 0x77
-    ];
-
-    private static readonly byte[] Mask = [0xB2, 0x57, 0x1B, 0x7E, 0x42, 0x9E, 0x3D, 0x28];
-
     public DepotBoxAuthService(
         ISecureStorage secureStorage,
         ILicenseService licenseService,
@@ -60,9 +49,7 @@ public sealed class DepotBoxAuthService : IDepotBoxAuthService
             return _appSettings.DefaultApiKey.Trim();
         }
 
-        // 3. Built-in default protected backend key
-        _logger.LogDebug("Using built-in default backend DepotBox API key");
-        return GetProtectedBackendKey();
+        return null;
     }
 
     /// <inheritdoc />
@@ -79,7 +66,7 @@ public sealed class DepotBoxAuthService : IDepotBoxAuthService
             return DepotBoxAuthSource.DefaultBackend;
         }
 
-        return DepotBoxAuthSource.DefaultBackend;
+        return DepotBoxAuthSource.None;
     }
 
     /// <inheritdoc />
@@ -112,13 +99,5 @@ public sealed class DepotBoxAuthService : IDepotBoxAuthService
     {
         _logger.LogInformation("Clearing custom DepotBox API key from secure storage");
         return _secureStorage.DeleteAsync(ApiKeyStorageKey, ct);
-    }
-
-    /// <summary>
-    /// Decodes the protected backend API key in-memory only when authorized.
-    /// </summary>
-    private static string GetProtectedBackendKey()
-    {
-        return "bc6b0e18-868b-4628-a4d4-97a932096300";
     }
 }

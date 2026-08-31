@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using System.Text.Json;
 using BlueStar.Core.Interfaces;
@@ -14,6 +15,10 @@ public sealed class SteamStoreApiClient : IMetadataProvider
     private readonly HttpClient _http;
     private readonly ILogger<SteamStoreApiClient> _logger;
     private readonly ICacheService? _cache;
+
+    private readonly ConcurrentDictionary<uint, Task<GameMetadata?>> _inFlightMetadata = new();
+    private readonly ConcurrentDictionary<uint, Task<SteamAppDepotInfo?>> _inFlightDepotInfo = new();
+    private readonly ConcurrentDictionary<uint, Task<DateTimeOffset?>> _inFlightUpdateDates = new();
 
     private static readonly SemaphoreSlim _throttleSemaphore = new(1, 1);
     private static DateTimeOffset _lastRequest = DateTimeOffset.MinValue;
@@ -91,15 +96,21 @@ public sealed class SteamStoreApiClient : IMetadataProvider
             catch { }
         }
 
-        if (!await ThrottleAsync(ct).ConfigureAwait(false))
-            return null;
+        // Deduplicate concurrent requests for the same AppId
+        return await _inFlightMetadata.GetOrAdd(appId, id => FetchMetadataCoreAsync(id, cacheKey, ct)).ConfigureAwait(false);
+    }
 
-        _logger.LogDebug("Fetching Steam metadata for AppId={AppId}", appId);
-
+    private async Task<GameMetadata?> FetchMetadataCoreAsync(uint appId, string cacheKey, CancellationToken ct)
+    {
         try
         {
+            if (!await ThrottleAsync(ct).ConfigureAwait(false))
+                return null;
+
+            _logger.LogDebug("Fetching Steam metadata for AppId={AppId}", appId);
+
             var url = $"https://store.steampowered.com/api/appdetails?appids={appId}&l=english&cc=US";
-            var response = await _http.GetAsync(url, ct).ConfigureAwait(false);
+            using var response = await _http.GetAsync(url, ct).ConfigureAwait(false);
 
             if (response.StatusCode is System.Net.HttpStatusCode.TooManyRequests or System.Net.HttpStatusCode.Forbidden)
             {
@@ -165,6 +176,10 @@ public sealed class SteamStoreApiClient : IMetadataProvider
         {
             _logger.LogWarning(ex, "JSON parse error for Steam metadata AppId={AppId}", appId);
             return null;
+        }
+        finally
+        {
+            _inFlightMetadata.TryRemove(appId, out _);
         }
     }
 
@@ -581,10 +596,15 @@ public sealed class SteamStoreApiClient : IMetadataProvider
             catch { }
         }
 
+        return await _inFlightDepotInfo.GetOrAdd(appId, id => FetchAppDepotInfoCoreAsync(id, cacheKey, ct)).ConfigureAwait(false);
+    }
+
+    private async Task<SteamAppDepotInfo?> FetchAppDepotInfoCoreAsync(uint appId, string cacheKey, CancellationToken ct)
+    {
         try
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.steamcmd.net/v1/info/{appId}");
-            var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.steamcmd.net/v1/info/{appId}");
+            using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
@@ -668,6 +688,10 @@ public sealed class SteamStoreApiClient : IMetadataProvider
         {
             _logger.LogDebug(ex, "Failed to get SteamCMD AppInfo for AppId={AppId}", appId);
         }
+        finally
+        {
+            _inFlightDepotInfo.TryRemove(appId, out _);
+        }
 
         return null;
     }
@@ -682,13 +706,13 @@ public sealed class SteamStoreApiClient : IMetadataProvider
 
         try
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.steamcmd.net/v1/info/{appId}");
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.steamcmd.net/v1/info/{appId}");
             if (!_http.DefaultRequestHeaders.Contains("User-Agent"))
             {
-                request.Headers.UserAgent.ParseAdd("BlueStar/1.1.2");
+                request.Headers.UserAgent.ParseAdd("BlueStar/1.2.0");
             }
 
-            var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+            using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode) return [];
 
             var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
@@ -796,73 +820,105 @@ public sealed class SteamStoreApiClient : IMetadataProvider
     {
         if (appId == 0) return null;
 
-        // 1. Try exact depot/build date first
-        var depotInfo = await GetAppDepotInfoAsync(appId, ct).ConfigureAwait(false);
-        if (depotInfo?.LatestBuildDate != null)
+        var cacheKey = $"steam_latest_update_{appId}_v3";
+        if (_cache != null)
         {
-            return depotInfo.LatestBuildDate;
+            try
+            {
+                var cached = await _cache.GetAsync<DateTimeOffset?>(cacheKey, ct).ConfigureAwait(false);
+                if (cached.HasValue) return cached.Value;
+            }
+            catch { }
         }
 
-        // 2. Fallback to Steam News API
+        return await _inFlightUpdateDates.GetOrAdd(appId, id => FetchLatestAppUpdateDateCoreAsync(id, cacheKey, ct)).ConfigureAwait(false);
+    }
+
+    private async Task<DateTimeOffset?> FetchLatestAppUpdateDateCoreAsync(uint appId, string cacheKey, CancellationToken ct)
+    {
         try
         {
-            await ThrottleAsync(ct).ConfigureAwait(false);
-
-            var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid={appId}&count=5&maxlength=300");
-            if (!_http.DefaultRequestHeaders.Contains("User-Agent"))
+            // 1. Try exact depot/build date first
+            var depotInfo = await GetAppDepotInfoAsync(appId, ct).ConfigureAwait(false);
+            if (depotInfo?.LatestBuildDate != null)
             {
-                request.Headers.UserAgent.ParseAdd("BlueStar/1.1.2");
+                if (_cache != null)
+                {
+                    try { await _cache.SetAsync(cacheKey, (DateTimeOffset?)depotInfo.LatestBuildDate, TimeSpan.FromDays(3), ct).ConfigureAwait(false); } catch { }
+                }
+                return depotInfo.LatestBuildDate;
             }
 
-            var newsResponse = await _http.SendAsync(request, ct).ConfigureAwait(false);
-            if (newsResponse.IsSuccessStatusCode)
+            // 2. Fallback to Steam News API
+            try
             {
-                var newsJson = await newsResponse.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                using var newsDoc = JsonDocument.Parse(newsJson);
-                if (newsDoc.RootElement.TryGetProperty("appnews", out var appNews) &&
-                    appNews.TryGetProperty("newsitems", out var newsItems) &&
-                    newsItems.ValueKind == JsonValueKind.Array &&
-                    newsItems.GetArrayLength() > 0)
-                {
-                    long maxUnix = 0;
-                    foreach (var item in newsItems.EnumerateArray())
-                    {
-                        if (item.TryGetProperty("date", out var dateEl))
-                        {
-                            long dateUnix = 0;
-                            if (dateEl.ValueKind == JsonValueKind.Number)
-                            {
-                                dateEl.TryGetInt64(out dateUnix);
-                            }
-                            else if (dateEl.ValueKind == JsonValueKind.String && long.TryParse(dateEl.GetString(), out var parsed))
-                            {
-                                dateUnix = parsed;
-                            }
+                await ThrottleAsync(ct).ConfigureAwait(false);
 
-                            if (dateUnix > maxUnix)
+                using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid={appId}&count=5&maxlength=300");
+                if (!_http.DefaultRequestHeaders.Contains("User-Agent"))
+                {
+                    request.Headers.UserAgent.ParseAdd("BlueStar/1.2.0");
+                }
+
+                using var newsResponse = await _http.SendAsync(request, ct).ConfigureAwait(false);
+                if (newsResponse.IsSuccessStatusCode)
+                {
+                    var newsJson = await newsResponse.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    using var newsDoc = JsonDocument.Parse(newsJson);
+                    if (newsDoc.RootElement.TryGetProperty("appnews", out var appNews) &&
+                        appNews.TryGetProperty("newsitems", out var newsItems) &&
+                        newsItems.ValueKind == JsonValueKind.Array &&
+                        newsItems.GetArrayLength() > 0)
+                    {
+                        long maxUnix = 0;
+                        foreach (var item in newsItems.EnumerateArray())
+                        {
+                            if (item.TryGetProperty("date", out var dateEl))
                             {
-                                maxUnix = dateUnix;
+                                long dateUnix = 0;
+                                if (dateEl.ValueKind == JsonValueKind.Number)
+                                {
+                                    dateEl.TryGetInt64(out dateUnix);
+                                }
+                                else if (dateEl.ValueKind == JsonValueKind.String && long.TryParse(dateEl.GetString(), out var parsed))
+                                {
+                                    dateUnix = parsed;
+                                }
+
+                                if (dateUnix > maxUnix)
+                                {
+                                    maxUnix = dateUnix;
+                                }
                             }
                         }
-                    }
 
-                    if (maxUnix > 0)
-                    {
-                        return DateTimeOffset.FromUnixTimeSeconds(maxUnix);
+                        if (maxUnix > 0)
+                        {
+                            var updateDate = DateTimeOffset.FromUnixTimeSeconds(maxUnix);
+                            if (_cache != null)
+                            {
+                                try { await _cache.SetAsync(cacheKey, (DateTimeOffset?)updateDate, TimeSpan.FromDays(3), ct).ConfigureAwait(false); } catch { }
+                            }
+                            return updateDate;
+                        }
                     }
                 }
+                else
+                {
+                    _logger.LogWarning("Steam News API returned {StatusCode} for AppId={AppId}", newsResponse.StatusCode, appId);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                _logger.LogWarning("Steam News API returned {StatusCode} for AppId={AppId}", newsResponse.StatusCode, appId);
+                _logger.LogDebug(ex, "Failed to fetch latest update date for AppId={AppId}", appId);
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Failed to fetch latest update date for AppId={AppId}", appId);
-        }
 
-        return null;
+            return null;
+        }
+        finally
+        {
+            _inFlightUpdateDates.TryRemove(appId, out _);
+        }
     }
 
     /// <inheritdoc />
@@ -964,8 +1020,8 @@ public sealed class SteamStoreApiClient : IMetadataProvider
 
         try
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.steamcmd.net/v1/info/{appId}");
-            var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.steamcmd.net/v1/info/{appId}");
+            using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
                 return new Dictionary<uint, SteamDepotMeta>();
 

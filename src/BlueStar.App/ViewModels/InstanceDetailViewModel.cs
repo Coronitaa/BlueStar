@@ -234,7 +234,7 @@ public partial class DepotUpdateItem : ObservableObject
 /// <summary>
 /// ViewModel for the complete Instance Dashboard (Overview, Depots, DLCs, Mods, Emulator, Settings, Logs).
 /// </summary>
-public partial class InstanceDetailViewModel : ObservableObject
+public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 {
     private readonly IInstanceManager _instanceManager;
     private readonly IDlcInstaller _dlcInstaller;
@@ -249,6 +249,9 @@ public partial class InstanceDetailViewModel : ObservableObject
     private readonly IMetadataProvider? _metadataProvider;
     private readonly ILogger<InstanceDetailViewModel> _logger;
     private readonly SynchronizationContext _uiContext;
+    private readonly CancellationTokenSource _cts = new();
+    private bool _isDisposed;
+    private readonly EventHandler _settingsChangedHandler;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HeroTags))]
@@ -846,10 +849,11 @@ public partial class InstanceDetailViewModel : ObservableObject
         _gameLauncher.LogReceived += OnGameLogReceived;
 
         EnableAdvancedBuildOptions = _appSettings.EnableAdvancedBuildOptions;
-        _appSettings.SettingsChanged += (_, _) =>
+        _settingsChangedHandler = (_, _) =>
         {
             App.Current?.Dispatcher?.Invoke(() =>
             {
+                if (_isDisposed) return;
                 EnableAdvancedBuildOptions = _appSettings.EnableAdvancedBuildOptions;
                 SupportsMods = _appSettings.EnableExperimentalMods;
                 OnPropertyChanged(nameof(IsModsTabVisible));
@@ -859,21 +863,24 @@ public partial class InstanceDetailViewModel : ObservableObject
                 }
             });
         };
+        _appSettings.SettingsChanged += _settingsChangedHandler;
     }
 
 
     private void OnQueueChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (Instance is null) return;
+        if (_isDisposed || Instance is null) return;
         ActiveJob = _downloadQueueManager.Queue.FirstOrDefault(j => j.Instance.Id == Instance.Id);
     }
 
     private void OnGameRunningStateChanged(object? sender, (Guid InstanceId, bool IsRunning) e)
     {
+        if (_isDisposed) return;
         if (Instance?.Id == e.InstanceId)
         {
             _uiContext.Post(_ =>
             {
+                if (_isDisposed) return;
                 bool wasRunning = IsGameRunning;
                 IsGameRunning = e.IsRunning;
                 Instance = Instance with { Status = e.IsRunning ? InstanceStatus.Running : InstanceStatus.Ready };
@@ -890,7 +897,7 @@ public partial class InstanceDetailViewModel : ObservableObject
 
     private void CheckAndPromptEmulatorFeedback()
     {
-        if (Instance == null) return;
+        if (_isDisposed || Instance == null) return;
         var isInstalled = ReFixEmulator.IsEmulatorInstalled(Instance.InstallPath) || !string.IsNullOrWhiteSpace(Instance.EmulatorId);
         if (!isInstalled) return;
 
@@ -923,10 +930,12 @@ public partial class InstanceDetailViewModel : ObservableObject
 
     private void OnGameLogReceived(object? sender, (Guid InstanceId, string LogLine) e)
     {
+        if (_isDisposed) return;
         if (Instance?.Id == e.InstanceId)
         {
             _uiContext.Post(_ =>
             {
+                if (_isDisposed) return;
                 ConsoleLogs.Add($"[{DateTime.Now:HH:mm:ss}] {e.LogLine}");
                 if (ConsoleLogs.Count > 1000) ConsoleLogs.RemoveAt(0);
             }, null);
@@ -1336,13 +1345,15 @@ public partial class InstanceDetailViewModel : ObservableObject
 
     private async Task CheckSteamVersionDateAsync()
     {
-        if (Instance == null || Instance.AppId == 0) return;
+        if (_isDisposed || Instance == null || Instance.AppId == 0) return;
         try
         {
             if (_metadataProvider is BlueStar.Infrastructure.Metadata.SteamStoreApiClient steamClient)
             {
-                var (hasUpdate, _, latestDate, latestDateText, installedDate, installedDateText) =
-                    await BlueStar.Infrastructure.Services.GameUpdateDetectionHelper.CheckInstanceUpdateDetailsAsync(Instance, steamClient, CancellationToken.None).ConfigureAwait(true);
+                var (status, _, latestDate, latestDateText, installedDate, installedDateText) =
+                    await BlueStar.Infrastructure.Services.GameUpdateDetectionHelper.CheckInstanceUpdateDetailsAsync(Instance, steamClient, _cts.Token).ConfigureAwait(true);
+
+                if (_isDisposed) return;
 
                 if (latestDate.HasValue)
                 {
@@ -1364,12 +1375,25 @@ public partial class InstanceDetailViewModel : ObservableObject
                     InstalledVersionText = installedDateText;
                 }
 
-                HasGameUpdateAvailable = hasUpdate;
-                if (hasUpdate != Instance.HasUpdateAvailable)
+                if (status == UpdateCheckStatus.UpdateAvailable)
                 {
-                    Instance = Instance with { HasUpdateAvailable = hasUpdate };
-                    await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+                    HasGameUpdateAvailable = true;
+                    if (!Instance.HasUpdateAvailable)
+                    {
+                        Instance = Instance with { HasUpdateAvailable = true };
+                        await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+                    }
                 }
+                else if (status == UpdateCheckStatus.UpToDate)
+                {
+                    HasGameUpdateAvailable = false;
+                    if (Instance.HasUpdateAvailable)
+                    {
+                        Instance = Instance with { HasUpdateAvailable = false };
+                        await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+                    }
+                }
+                // When status is UpdateCheckStatus.Unknown, preserve existing known state
             }
         }
         catch { }
@@ -4730,5 +4754,34 @@ public partial class InstanceDetailViewModel : ObservableObject
                 name = name[p.Length..].Trim();
         }
         return name;
+    }
+
+    /// <summary>
+    /// Releases all event subscriptions and cancels active operations.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_isDisposed) return;
+        _isDisposed = true;
+
+        try
+        {
+            _cts.Cancel();
+            _cts.Dispose();
+        }
+        catch { }
+
+        _downloadQueueManager.Queue.CollectionChanged -= OnQueueChanged;
+        _gameLauncher.RunningStateChanged -= OnGameRunningStateChanged;
+        _gameLauncher.LogReceived -= OnGameLogReceived;
+        if (_settingsChangedHandler != null)
+        {
+            _appSettings.SettingsChanged -= _settingsChangedHandler;
+        }
+
+        if (ActiveJob != null)
+        {
+            ActiveJob.PropertyChanged -= OnActiveJobPropertyChanged;
+        }
     }
 }

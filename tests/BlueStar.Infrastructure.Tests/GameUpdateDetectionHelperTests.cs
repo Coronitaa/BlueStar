@@ -30,7 +30,7 @@ public class GameUpdateDetectionHelperTests
     }
 
     [Fact]
-    public async Task CheckInstanceUpdateAsync_WhenAppIdZero_ReturnsFalse()
+    public async Task CheckInstanceUpdateAsync_WhenAppIdZero_ReturnsUnknown()
     {
         using var http = new HttpClient();
         var steamClient = new SteamStoreApiClient(http, NullLogger<SteamStoreApiClient>.Instance);
@@ -42,8 +42,28 @@ public class GameUpdateDetectionHelperTests
             InstallPath = Path.GetTempPath()
         };
 
-        var (hasUpdate, desc) = await GameUpdateDetectionHelper.CheckInstanceUpdateAsync(instance, steamClient, CancellationToken.None);
-        hasUpdate.Should().BeFalse();
+        var (status, desc) = await GameUpdateDetectionHelper.CheckInstanceUpdateAsync(instance, steamClient, CancellationToken.None);
+        status.Should().Be(UpdateCheckStatus.Unknown);
         desc.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task CheckInstanceUpdateAsync_WhenCancelled_ReturnsUnknown()
+    {
+        using var http = new HttpClient();
+        var steamClient = new SteamStoreApiClient(http, NullLogger<SteamStoreApiClient>.Instance);
+
+        var instance = new GameInstance
+        {
+            AppId = 1245620,
+            Name = "Elden Ring",
+            InstallPath = Path.GetTempPath()
+        };
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var (status, desc) = await GameUpdateDetectionHelper.CheckInstanceUpdateAsync(instance, steamClient, cts.Token);
+        status.Should().Be(UpdateCheckStatus.Unknown);
     }
 }

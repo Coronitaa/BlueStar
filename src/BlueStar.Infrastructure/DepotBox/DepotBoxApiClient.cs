@@ -17,6 +17,11 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
     private readonly BlueStar.Infrastructure.Storage.AppSettingsService? _appSettings;
     private readonly ILogger<DepotBoxApiClient> _logger;
 
+    private IReadOnlyList<GameFixInfo>? _cachedFixesCatalog;
+    private DateTimeOffset _catalogExpiresAt = DateTimeOffset.MinValue;
+    private Task<IReadOnlyList<GameFixInfo>>? _inFlightCatalogTask;
+    private readonly SemaphoreSlim _catalogLock = new(1, 1);
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -288,6 +293,70 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
         return filePath;
     }
 
+    /// <summary>
+    /// Retrieves the entire game fixes catalog from DepotBox, using L1 memory cache and single-flight request deduplication.
+    /// </summary>
+    public async Task<IReadOnlyList<GameFixInfo>> GetFullGameFixesCatalogAsync(CancellationToken ct = default)
+    {
+        if (_cachedFixesCatalog != null && DateTimeOffset.UtcNow < _catalogExpiresAt)
+        {
+            return _cachedFixesCatalog;
+        }
+
+        Task<IReadOnlyList<GameFixInfo>> task;
+        await _catalogLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (_cachedFixesCatalog != null && DateTimeOffset.UtcNow < _catalogExpiresAt)
+            {
+                return _cachedFixesCatalog;
+            }
+
+            if (_inFlightCatalogTask == null)
+            {
+                _inFlightCatalogTask = FetchFullGameFixesCatalogCoreAsync(ct);
+            }
+            task = _inFlightCatalogTask;
+        }
+        finally
+        {
+            _catalogLock.Release();
+        }
+
+        return await task.ConfigureAwait(false);
+    }
+
+    private async Task<IReadOnlyList<GameFixInfo>> FetchFullGameFixesCatalogCoreAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var requestAll = await CreateRequestAsync(HttpMethod.Get, "/api/game-fixes", ct).ConfigureAwait(false);
+            using var responseAll = await SendWithErrorHandlingAsync(requestAll, ct).ConfigureAwait(false);
+            var allJson = await responseAll.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            var allFixes = ParseGameFixes(allJson);
+            _cachedFixesCatalog = allFixes;
+            _catalogExpiresAt = DateTimeOffset.UtcNow.AddMinutes(30);
+            return allFixes;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed querying full game fixes list");
+            return _cachedFixesCatalog ?? [];
+        }
+        finally
+        {
+            await _catalogLock.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+            try
+            {
+                _inFlightCatalogTask = null;
+            }
+            finally
+            {
+                _catalogLock.Release();
+            }
+        }
+    }
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<GameFixInfo>> GetGameFixesAsync(string? query = null, string? tags = null, CancellationToken ct = default)
     {
@@ -317,29 +386,19 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
             _logger.LogDebug(ex, "Failed querying game fixes at {Endpoint}", endpoint);
         }
 
-        // Fallback: If querying with parameter returned nothing, query without parameters to get all available fixes and match locally
+        // Fallback: If querying with parameter returned nothing, query cached catalog and match locally
         if (!string.IsNullOrWhiteSpace(query))
         {
-            try
-            {
-                using var requestAll = await CreateRequestAsync(HttpMethod.Get, "/api/game-fixes", ct).ConfigureAwait(false);
-                using var responseAll = await SendWithErrorHandlingAsync(requestAll, ct).ConfigureAwait(false);
-                var allJson = await responseAll.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                var allFixes = ParseGameFixes(allJson);
-                var q = query.Trim();
-                var filtered = allFixes.Where(f =>
-                    f.Id.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                    f.Name.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                    f.DownloadName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                    (f.Description != null && f.Description.Contains(q, StringComparison.OrdinalIgnoreCase)) ||
-                    f.Tags.Any(t => t.Contains(q, StringComparison.OrdinalIgnoreCase))
-                ).ToList();
-                if (filtered.Count > 0) return filtered.AsReadOnly();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Failed querying full game fixes list");
-            }
+            var allFixes = await GetFullGameFixesCatalogAsync(ct).ConfigureAwait(false);
+            var q = query.Trim();
+            var filtered = allFixes.Where(f =>
+                f.Id.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                f.Name.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                f.DownloadName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                (f.Description != null && f.Description.Contains(q, StringComparison.OrdinalIgnoreCase)) ||
+                f.Tags.Any(t => t.Contains(q, StringComparison.OrdinalIgnoreCase))
+            ).ToList();
+            if (filtered.Count > 0) return filtered.AsReadOnly();
         }
 
         return [];
@@ -362,7 +421,7 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
         if (fixIdOrFilename.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
             fixIdOrFilename.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
-            var directReq = new HttpRequestMessage(HttpMethod.Get, fixIdOrFilename);
+            using var directReq = new HttpRequestMessage(HttpMethod.Get, fixIdOrFilename);
             response = await _http.SendAsync(directReq, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
             await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
         }

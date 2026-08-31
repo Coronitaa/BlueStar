@@ -8,9 +8,9 @@
     <RootNamespace>BlueStar.App</RootNamespace>
     <AssemblyName>BlueStar</AssemblyName>
     <ApplicationIcon>Assets\bluestar.ico</ApplicationIcon>
-    <Version>1.1.2</Version>
-    <AssemblyVersion>1.1.2.0</AssemblyVersion>
-    <FileVersion>1.1.2.0</FileVersion>
+    <Version>1.2.0</Version>
+    <AssemblyVersion>1.2.0.0</AssemblyVersion>
+    <FileVersion>1.2.0.0</FileVersion>
     <Company>Corøna (BlueStar Developers)</Company>
     <Product>BlueStar</Product>
     <Copyright>Copyright (C) 2026 Corøna</Copyright>

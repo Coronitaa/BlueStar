@@ -24,7 +24,7 @@ namespace BlueStar.App.ViewModels;
 /// <summary>
 /// Unified ViewModel for the Home Dashboard Hub (recent/active instances, direct catalog discovery & search, 1-click instance creation, active downloads, stats).
 /// </summary>
-public partial class HomeViewModel : ObservableObject
+public partial class HomeViewModel : ObservableObject, IDisposable
 {
     private readonly IInstanceManager _instanceManager;
     private readonly DownloadQueueManager _downloadQueueManager;
@@ -37,6 +37,11 @@ public partial class HomeViewModel : ObservableObject
     private readonly INotificationService? _notificationService;
     private readonly BlueStar.Infrastructure.Storage.AppSettingsService? _settingsService;
     private readonly ILogger<HomeViewModel> _logger;
+    private readonly CancellationTokenSource _cts = new();
+    private bool _isDisposed;
+
+    private readonly EventHandler? _settingsChangedHandler;
+    private readonly System.Collections.Specialized.NotifyCollectionChangedEventHandler _queueCollectionChangedHandler;
 
     [ObservableProperty]
     private string _greetingText = "Welcome to BlueStar";
@@ -225,17 +230,24 @@ public partial class HomeViewModel : ObservableObject
 
         if (_settingsService != null)
         {
-            _settingsService.SettingsChanged += (_, _) =>
+            _settingsChangedHandler = (_, _) =>
             {
                 App.Current?.Dispatcher?.Invoke(() =>
                 {
+                    if (_isDisposed) return;
                     _ = LoadCategoryFeedsAsync();
                 });
             };
+            _settingsService.SettingsChanged += _settingsChangedHandler;
         }
 
         SetTimeBasedGreeting();
-        _downloadQueueManager.Queue.CollectionChanged += (_, _) => UpdateActiveDownload();
+        _queueCollectionChangedHandler = (_, _) =>
+        {
+            if (_isDisposed) return;
+            UpdateActiveDownload();
+        };
+        _downloadQueueManager.Queue.CollectionChanged += _queueCollectionChangedHandler;
 
         _ = LoadDashboardDataAsync();
         _ = LoadCategoryFeedsAsync();
@@ -497,9 +509,9 @@ public partial class HomeViewModel : ObservableObject
         var allowNsfw = _settingsService?.ShowNsfwContent ?? false;
         var allowDrm = _settingsService?.ShowDrmContent ?? true;
 
-        await Parallel.ForEachAsync(items, new ParallelOptions { MaxDegreeOfParallelism = 1 }, async (result, ct) =>
-
+        await Parallel.ForEachAsync(items, new ParallelOptions { MaxDegreeOfParallelism = 4 }, async (result, ct) =>
         {
+            if (_isDisposed) return;
             try
             {
                 if (_metadataProvider != null && result.AppId > 0)
@@ -1601,5 +1613,28 @@ public partial class HomeViewModel : ObservableObject
         {
             _logger.LogWarning("Launch failed: {Message}", result.Message);
         }
+    }
+
+    /// <summary>
+    /// Releases all event subscriptions and cancels active operations.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_isDisposed) return;
+        _isDisposed = true;
+
+        try
+        {
+            _cts.Cancel();
+            _cts.Dispose();
+        }
+        catch { }
+
+        if (_settingsService != null && _settingsChangedHandler != null)
+        {
+            _settingsService.SettingsChanged -= _settingsChangedHandler;
+        }
+
+        _downloadQueueManager.Queue.CollectionChanged -= _queueCollectionChangedHandler;
     }
 }

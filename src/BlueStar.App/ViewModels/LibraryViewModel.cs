@@ -22,7 +22,7 @@ namespace BlueStar.App.ViewModels;
 /// <summary>
 /// ViewModel for the instance library view with search, compact dropdown filters, and unified expandable Add Instance modal.
 /// </summary>
-public partial class LibraryViewModel : ObservableObject
+public partial class LibraryViewModel : ObservableObject, IDisposable
 {
     private readonly IInstanceManager _instanceManager;
     private readonly IDepotBoxArchiveParser _archiveParser;
@@ -36,6 +36,8 @@ public partial class LibraryViewModel : ObservableObject
     private readonly INotificationService? _notificationService;
     private readonly ILogger<LibraryViewModel> _logger;
     private readonly SynchronizationContext _uiContext;
+    private readonly CancellationTokenSource _cts = new();
+    private bool _isDisposed;
 
     [ObservableProperty]
     private ObservableCollection<GameInstance> _instances = [];
@@ -278,8 +280,10 @@ public partial class LibraryViewModel : ObservableObject
 
     private void OnRunningStateChanged(object? sender, (Guid InstanceId, bool IsRunning) e)
     {
+        if (_isDisposed) return;
         _uiContext.Post(_ =>
         {
+            if (_isDisposed) return;
             var inst = Instances.FirstOrDefault(i => i.Id == e.InstanceId);
             if (inst != null)
             {
@@ -1649,6 +1653,24 @@ public partial class LibraryViewModel : ObservableObject
                 name = name[p.Length..].Trim();
         }
         return name;
+    }
+
+    /// <summary>
+    /// Releases all event subscriptions and cancels active operations.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_isDisposed) return;
+        _isDisposed = true;
+
+        try
+        {
+            _cts.Cancel();
+            _cts.Dispose();
+        }
+        catch { }
+
+        _gameLauncher.RunningStateChanged -= OnRunningStateChanged;
     }
 }
 

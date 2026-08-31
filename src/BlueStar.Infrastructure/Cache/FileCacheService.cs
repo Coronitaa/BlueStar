@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -7,12 +8,14 @@ using Microsoft.Extensions.Logging;
 namespace BlueStar.Infrastructure.Cache;
 
 /// <summary>
-/// File-system based cache service storing serialized JSON entries with expiration support.
+/// Multi-tier cache service storing in-memory L1 entries with persistent L2 file-system backing and expiration support.
 /// </summary>
 public sealed class FileCacheService : ICacheService
 {
     private readonly string _cachePath;
     private readonly ILogger<FileCacheService> _logger;
+    private readonly ConcurrentDictionary<string, CacheEntry<object>> _memoryCache = new(StringComparer.Ordinal);
+    private const int MaxL1Entries = 1000;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -30,7 +33,11 @@ public sealed class FileCacheService : ICacheService
         _cachePath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "BlueStar", "cache");
-        Directory.CreateDirectory(_cachePath);
+        try
+        {
+            Directory.CreateDirectory(_cachePath);
+        }
+        catch { }
     }
 
     /// <inheritdoc />
@@ -38,6 +45,39 @@ public sealed class FileCacheService : ICacheService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
 
+        var now = DateTimeOffset.UtcNow;
+
+        // 1. Check L1 Memory Cache
+        if (_memoryCache.TryGetValue(key, out var memEntry))
+        {
+            if (memEntry.ExpiresAt.HasValue && memEntry.ExpiresAt.Value < now)
+            {
+                _memoryCache.TryRemove(key, out _);
+                var expiredPath = GetFilePath(key);
+                try { if (File.Exists(expiredPath)) File.Delete(expiredPath); } catch { }
+                return default;
+            }
+
+            if (memEntry.Value is T typedValue)
+            {
+                return typedValue;
+            }
+            if (memEntry.Value is JsonElement jsonElement)
+            {
+                try
+                {
+                    var converted = jsonElement.Deserialize<T>(JsonOptions);
+                    if (converted is not null)
+                    {
+                        _memoryCache[key] = new CacheEntry<object> { Value = converted, ExpiresAt = memEntry.ExpiresAt };
+                        return converted;
+                    }
+                }
+                catch { }
+            }
+        }
+
+        // 2. Check L2 Disk Cache
         var filePath = GetFilePath(key);
         if (!File.Exists(filePath))
             return default;
@@ -51,11 +91,22 @@ public sealed class FileCacheService : ICacheService
                 return default;
 
             // Check expiration
-            if (entry.ExpiresAt.HasValue && entry.ExpiresAt.Value < DateTimeOffset.UtcNow)
+            if (entry.ExpiresAt.HasValue && entry.ExpiresAt.Value < now)
             {
                 _logger.LogDebug("Cache entry expired for key: {Key}", key);
-                File.Delete(filePath);
+                _memoryCache.TryRemove(key, out _);
+                try { File.Delete(filePath); } catch { }
                 return default;
+            }
+
+            // Populate L1 cache
+            if (entry.Value is not null)
+            {
+                if (_memoryCache.Count >= MaxL1Entries)
+                {
+                    PruneL1Cache();
+                }
+                _memoryCache[key] = new CacheEntry<object> { Value = entry.Value, ExpiresAt = entry.ExpiresAt };
             }
 
             return entry.Value;
@@ -72,17 +123,40 @@ public sealed class FileCacheService : ICacheService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
 
+        var expiresAt = expiry.HasValue ? DateTimeOffset.UtcNow.Add(expiry.Value) : (DateTimeOffset?)null;
+
+        // 1. Update L1 Memory Cache
+        if (value is not null)
+        {
+            if (_memoryCache.Count >= MaxL1Entries)
+            {
+                PruneL1Cache();
+            }
+            _memoryCache[key] = new CacheEntry<object> { Value = value, ExpiresAt = expiresAt };
+        }
+
+        // 2. Persist to L2 Disk Cache atomically
         var entry = new CacheEntry<T>
         {
             Value = value,
-            ExpiresAt = expiry.HasValue ? DateTimeOffset.UtcNow.Add(expiry.Value) : null
+            ExpiresAt = expiresAt
         };
 
         var json = JsonSerializer.Serialize(entry, JsonOptions);
         var filePath = GetFilePath(key);
+        var tempFilePath = $"{filePath}.{Guid.NewGuid():N}.tmp";
 
-        await File.WriteAllTextAsync(filePath, json, ct).ConfigureAwait(false);
-        _logger.LogDebug("Cached entry for key: {Key}, expires: {Expiry}", key, entry.ExpiresAt);
+        try
+        {
+            await File.WriteAllTextAsync(tempFilePath, json, ct).ConfigureAwait(false);
+            File.Move(tempFilePath, filePath, overwrite: true);
+            _logger.LogDebug("Cached entry for key: {Key}, expires: {Expiry}", key, entry.ExpiresAt);
+        }
+        catch (Exception ex)
+        {
+            try { if (File.Exists(tempFilePath)) File.Delete(tempFilePath); } catch { }
+            _logger.LogWarning(ex, "Failed writing cache file for key: {Key}", key);
+        }
     }
 
     /// <inheritdoc />
@@ -91,9 +165,15 @@ public sealed class FileCacheService : ICacheService
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
         ct.ThrowIfCancellationRequested();
 
+        _memoryCache.TryRemove(key, out _);
+
         var filePath = GetFilePath(key);
-        if (File.Exists(filePath))
-            File.Delete(filePath);
+        try
+        {
+            if (File.Exists(filePath))
+                File.Delete(filePath);
+        }
+        catch { }
 
         return Task.CompletedTask;
     }
@@ -103,17 +183,78 @@ public sealed class FileCacheService : ICacheService
     {
         ct.ThrowIfCancellationRequested();
 
+        _memoryCache.Clear();
+
         if (Directory.Exists(_cachePath))
         {
             foreach (var file in Directory.GetFiles(_cachePath, "*.json"))
             {
                 ct.ThrowIfCancellationRequested();
-                File.Delete(file);
+                try
+                {
+                    File.Delete(file);
+                }
+                catch { }
             }
         }
 
         _logger.LogInformation("Cache cleared.");
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Performs non-blocking cleanup of expired disk cache files.
+    /// </summary>
+    public async Task SweepExpiredEntriesAsync(CancellationToken ct = default)
+    {
+        if (!Directory.Exists(_cachePath)) return;
+
+        var now = DateTimeOffset.UtcNow;
+        var files = Directory.GetFiles(_cachePath, "*.json");
+
+        foreach (var file in files)
+        {
+            if (ct.IsCancellationRequested) break;
+
+            try
+            {
+                var json = await File.ReadAllTextAsync(file, ct).ConfigureAwait(false);
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("expiresAt", out var expEl) &&
+                    expEl.ValueKind == JsonValueKind.String &&
+                    DateTimeOffset.TryParse(expEl.GetString(), out var expiresAt) &&
+                    expiresAt < now)
+                {
+                    File.Delete(file);
+                }
+            }
+            catch { }
+        }
+    }
+
+    private void PruneL1Cache()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var expiredKeys = _memoryCache
+            .Where(kvp => kvp.Value.ExpiresAt.HasValue && kvp.Value.ExpiresAt.Value < now)
+            .Select(kvp => kvp.Key)
+            .Take(100)
+            .ToList();
+
+        foreach (var k in expiredKeys)
+        {
+            _memoryCache.TryRemove(k, out _);
+        }
+
+        // If still over limit, drop oldest entries
+        if (_memoryCache.Count >= MaxL1Entries)
+        {
+            var excessKeys = _memoryCache.Keys.Take(200).ToList();
+            foreach (var k in excessKeys)
+            {
+                _memoryCache.TryRemove(k, out _);
+            }
+        }
     }
 
     private string GetFilePath(string key)

@@ -19,7 +19,7 @@ namespace BlueStar.App.ViewModels;
 /// <summary>
 /// ViewModel for searching and exploring games in DepotBox catalog with live Steam/SteamDB enrichment and instance installation notifications.
 /// </summary>
-public partial class BrowseViewModel : ObservableObject
+public partial class BrowseViewModel : ObservableObject, IDisposable
 {
     private readonly IDepotBoxApiClient _apiClient;
     private readonly IInstanceManager _instanceManager;
@@ -30,6 +30,9 @@ public partial class BrowseViewModel : ObservableObject
     private readonly ICommunityStatsService? _statsService;
     private readonly BlueStar.Infrastructure.Storage.AppSettingsService? _settingsService;
     private readonly ILogger<BrowseViewModel> _logger;
+    private readonly CancellationTokenSource _cts = new();
+    private bool _isDisposed;
+    private readonly EventHandler? _settingsChangedHandler;
 
     [ObservableProperty]
     private string _searchQuery = string.Empty;
@@ -89,14 +92,16 @@ public partial class BrowseViewModel : ObservableObject
 
         if (_settingsService != null)
         {
-            _settingsService.SettingsChanged += (_, _) =>
+            _settingsChangedHandler = (_, _) =>
             {
                 App.Current?.Dispatcher?.Invoke(() =>
                 {
+                    if (_isDisposed) return;
                     _ = LoadCategoryFeedsAsync();
                     ApplyFilter();
                 });
             };
+            _settingsService.SettingsChanged += _settingsChangedHandler;
         }
 
         _ = LoadCategoryFeedsAsync();
@@ -373,9 +378,9 @@ public partial class BrowseViewModel : ObservableObject
         var allowNsfw = _settingsService?.ShowNsfwContent ?? false;
         var allowDrm = _settingsService?.ShowDrmContent ?? true;
 
-        await Parallel.ForEachAsync(items, new ParallelOptions { MaxDegreeOfParallelism = 1 }, async (result, ct) =>
-
+        await Parallel.ForEachAsync(items, new ParallelOptions { MaxDegreeOfParallelism = 4 }, async (result, ct) =>
         {
+            if (_isDisposed) return;
             try
             {
                 // 1. Enrich from Steam Store / Web API (DLC count, OS compatibility, high-res artwork, release/update date, app type, NSFW, DRM)
@@ -816,5 +821,26 @@ public partial class BrowseViewModel : ObservableObject
                 name = name[p.Length..].Trim();
         }
         return name;
+    }
+
+    /// <summary>
+    /// Releases all event subscriptions and cancels active operations.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_isDisposed) return;
+        _isDisposed = true;
+
+        try
+        {
+            _cts.Cancel();
+            _cts.Dispose();
+        }
+        catch { }
+
+        if (_settingsService != null && _settingsChangedHandler != null)
+        {
+            _settingsService.SettingsChanged -= _settingsChangedHandler;
+        }
     }
 }
