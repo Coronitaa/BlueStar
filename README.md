@@ -12,6 +12,14 @@
 
 BlueStar is an all-in-one desktop game management and launcher ecosystem designed for modern PC gaming. It seamlessly integrates Steam depot downloads, manifest staging, automated engine detection, multi-engine emulation, DLC unlocking, prerequisite management, and mod injection into a clean, modern, and dark-themed interface.
 
+<img width="1441" height="882" alt="image" src="https://github.com/user-attachments/assets/676715de-f206-4924-b81e-8e119f5a60e6" />
+<img width="1441" height="880" alt="image" src="https://github.com/user-attachments/assets/6ecb0fd0-bd65-40e5-a1ad-ed125e60003e" />
+<img width="1437" height="867" alt="image" src="https://github.com/user-attachments/assets/add5b36b-2a93-4149-8110-c6ab8fd96586" />
+<img width="1430" height="874" alt="image" src="https://github.com/user-attachments/assets/d5c2f015-0f7b-4e4d-b61d-8d6e0ee57b64" />
+<img width="1434" height="949" alt="image" src="https://github.com/user-attachments/assets/a41cbe5c-3dbb-42aa-b335-33b3481d693c" />
+
+
+
 ---
 
 ## ⚡ Quick Download
