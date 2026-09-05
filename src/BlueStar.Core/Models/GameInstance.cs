@@ -121,13 +121,40 @@ public record GameInstance
 
     /// <summary>
     /// Gets or sets the origin and management type of this instance.
+    /// Default is DepotBox for backward compatibility with pre-1.3 instances.
     /// </summary>
     public InstanceOrigin Origin { get; init; } = InstanceOrigin.DepotBox;
 
     /// <summary>
-    /// Gets or sets whether an imported folder instance has been successfully associated with DepotBox.
+    /// Gets or sets the build identifier currently active/installed on this instance (e.g. "15961492").
+    /// </summary>
+    public string? ActiveBuildId { get; init; }
+
+    /// <summary>
+    /// Gets or sets the branch currently active/installed on this instance (e.g. "public").
+    /// </summary>
+    public string? ActiveBranch { get; init; }
+
+    /// <summary>
+    /// Gets or sets the map of DepotId -> installed ManifestId for differential update detection.
+    /// </summary>
+    public IReadOnlyDictionary<uint, ulong> InstalledManifestMap { get; init; } = new Dictionary<uint, ulong>();
+
+    /// <summary>
+    /// Gets or sets the release or creation date of the currently installed build/patch.
+    /// </summary>
+    public DateTimeOffset? InstalledVersionDate { get; init; }
+
+
+    /// <summary>
+    /// Gets or sets whether an imported folder instance has been successfully associated with a manifest provider.
     /// </summary>
     public bool IsDepotBoxAssociated { get; init; } = false;
+
+    /// <summary>
+    /// Gets or sets whether advanced build, manifest, and technical depot options are enabled for this instance.
+    /// </summary>
+    public bool EnableAdvancedBuildOptions { get; init; } = false;
 
     /// <summary>
     /// Gets or sets whether a DLC unlocker (SmokeAPI/CreamAPI) is installed for this instance.
@@ -156,9 +183,15 @@ public record GameInstance
     public bool IsImportedFolder => Origin == InstanceOrigin.ImportedFolder;
 
     /// <summary>
+    /// Gets whether depot files and manifest downloads can be managed for this instance.
+    /// </summary>
+    public bool CanManageDepots => Origin != InstanceOrigin.Steam;
+
+    /// <summary>
     /// Gets the Steam header image URL for this game instance.
     /// </summary>
     public string HeaderImageUrl => !string.IsNullOrWhiteSpace(Metadata?.HeaderImageUrl)
         ? Metadata.HeaderImageUrl
         : $"https://cdn.cloudflare.steamstatic.com/steam/apps/{AppId}/header.jpg";
 }
+

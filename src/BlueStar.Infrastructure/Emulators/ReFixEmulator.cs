@@ -159,9 +159,7 @@ public sealed class ReFixEmulator : IEmulator
         {
             var hasReFixIni = Directory.GetFiles(installPath, "ReFix.ini", SafeEnumOptions).Length > 0;
             var hasValveBackup = Directory.GetFiles(installPath, "steam_api64_valve.dll", SafeEnumOptions).Length > 0 ||
-                                 Directory.GetFiles(installPath, "steam_api_valve.dll", SafeEnumOptions).Length > 0 ||
-                                 Directory.GetFiles(installPath, "steam_api64_o.dll", SafeEnumOptions).Length > 0 ||
-                                 Directory.GetFiles(installPath, "steam_api_o.dll", SafeEnumOptions).Length > 0;
+                                 Directory.GetFiles(installPath, "steam_api_valve.dll", SafeEnumOptions).Length > 0;
 
             var hasGoldbergBinary = Directory.GetFiles(installPath, "goldberg_steam_api64.dll", SafeEnumOptions).Length > 0 ||
                                     Directory.GetFiles(installPath, "goldberg_steam_api.dll", SafeEnumOptions).Length > 0 ||
@@ -181,17 +179,48 @@ public sealed class ReFixEmulator : IEmulator
 
         try
         {
-            var hasReFixIni = Directory.GetFiles(installPath, "ReFix.ini", SafeEnumOptions).Length > 0;
-            var hasValveBackup = Directory.GetFiles(installPath, "steam_api64_valve.dll", SafeEnumOptions).Length > 0 ||
-                                 Directory.GetFiles(installPath, "steam_api_valve.dll", SafeEnumOptions).Length > 0;
-            if (hasReFixIni || hasValveBackup) return "ReFix Online (Steam)";
+            // 1. If ReFix.ini exists, parse configured [Online] Mode
+            var refixInis = Directory.GetFiles(installPath, "ReFix.ini", SafeEnumOptions);
+            if (refixInis.Length > 0)
+            {
+                foreach (var iniFile in refixInis)
+                {
+                    try
+                    {
+                        var lines = File.ReadAllLines(iniFile);
+                        foreach (var line in lines)
+                        {
+                            var trimmed = line.Trim();
+                            if (trimmed.StartsWith("Mode=", StringComparison.OrdinalIgnoreCase))
+                            {
+                                var modeVal = trimmed.Substring(5).Trim();
+                                if (modeVal.Equals("goldberg", StringComparison.OrdinalIgnoreCase) ||
+                                    modeVal.Equals("offline", StringComparison.OrdinalIgnoreCase) ||
+                                    modeVal.Equals("lan", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    return "Re:Goldberg LAN";
+                                }
+                                if (modeVal.Equals("valve", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    return "ReFix Online (Steam)";
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+                }
+            }
 
-            var hasGoldberg = Directory.GetFiles(installPath, "steam_api64_o.dll", SafeEnumOptions).Length > 0 ||
-                              Directory.GetFiles(installPath, "steam_api_o.dll", SafeEnumOptions).Length > 0 ||
-                              Directory.GetFiles(installPath, "goldberg_steam_api64.dll", SafeEnumOptions).Length > 0 ||
+            // 2. Check for explicit Goldberg indicators
+            var hasGoldberg = Directory.GetFiles(installPath, "goldberg_steam_api64.dll", SafeEnumOptions).Length > 0 ||
                               Directory.GetFiles(installPath, "goldberg_steam_api.dll", SafeEnumOptions).Length > 0 ||
                               Directory.GetFiles(installPath, "local_save.txt", SafeEnumOptions).Length > 0;
             if (hasGoldberg) return "Re:Goldberg LAN";
+
+            // 3. Check for ReFix / Valve indicators
+            var hasValveBackup = Directory.GetFiles(installPath, "steam_api64_valve.dll", SafeEnumOptions).Length > 0 ||
+                                 Directory.GetFiles(installPath, "steam_api_valve.dll", SafeEnumOptions).Length > 0;
+            if (refixInis.Length > 0 || hasValveBackup) return "ReFix Online (Steam)";
         }
         catch { }
 

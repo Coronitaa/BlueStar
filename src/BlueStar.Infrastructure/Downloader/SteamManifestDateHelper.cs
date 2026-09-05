@@ -19,6 +19,17 @@ public static class SteamManifestDateHelper
         if (string.IsNullOrWhiteSpace(manifestFilePath) || !File.Exists(manifestFilePath))
             return null;
 
+        // 1. Try official SteamKit2 DepotManifest parser first
+        try
+        {
+            var manifest = SteamKit2.DepotManifest.LoadFromFile(manifestFilePath);
+            if (manifest != null && manifest.CreationTime.Year >= 2005 && manifest.CreationTime <= DateTime.UtcNow.AddDays(2))
+            {
+                return new DateTimeOffset(manifest.CreationTime);
+            }
+        }
+        catch { }
+
         try
         {
             using var fs = new FileStream(manifestFilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -26,8 +37,9 @@ public static class SteamManifestDateHelper
 
             using var reader = new BinaryReader(fs);
             uint magic = reader.ReadUInt32();
+            ushort magic16 = (ushort)(magic & 0xFFFF);
 
-            // Steam Protobuf Manifest Magic: 0x71F617D0
+            // 2. Steam Protobuf Manifest Magic: 0x71F617D0
             if (magic == 0x71F617D0)
             {
                 try
@@ -47,15 +59,48 @@ public static class SteamManifestDateHelper
                 catch { }
             }
 
-            // Fallback 1: inspect raw bytes for valid Protobuf varint tag 4 (0x20)
+            // 3. Gzip-compressed manifest: magic 0x8B1F
+            if (magic16 == 0x8B1F)
+            {
+                try
+                {
+                    fs.Position = 0;
+                    using var gzip = new GZipStream(fs, CompressionMode.Decompress, leaveOpen: true);
+                    using var ms = new MemoryStream();
+                    gzip.CopyTo(ms);
+                    var payload = ms.ToArray();
+
+                    var date = ExtractProtobufCreationTime(payload);
+                    if (date.HasValue)
+                        return date;
+                }
+                catch { }
+            }
+
+            // 4. Raw Deflate payload without header
+            try
+            {
+                fs.Position = 0;
+                using var deflate = new DeflateStream(fs, CompressionMode.Decompress, leaveOpen: true);
+                using var ms = new MemoryStream();
+                deflate.CopyTo(ms);
+                var payload = ms.ToArray();
+
+                var date = ExtractProtobufCreationTime(payload);
+                if (date.HasValue)
+                    return date;
+            }
+            catch { }
+
+            // 5. Fallback: inspect raw bytes for valid Protobuf varint tag 3 (0x18) or tag 4 (0x20)
             fs.Position = 0;
-            var buffer = new byte[Math.Min(fs.Length, 4096)];
+            var buffer = new byte[Math.Min(fs.Length, 8192)];
             int read = fs.Read(buffer, 0, buffer.Length);
             var rawDate = ExtractProtobufCreationTime(buffer[..read]);
             if (rawDate.HasValue)
                 return rawDate;
 
-            // Fallback 2: check file last write time if within reasonable range (not today or invalid)
+            // 6. Fallback: check file last write time if within reasonable range
             var lastWrite = File.GetLastWriteTimeUtc(manifestFilePath);
             if (lastWrite.Year >= 2005 && lastWrite <= DateTime.UtcNow)
             {
@@ -71,10 +116,12 @@ public static class SteamManifestDateHelper
     {
         if (payload == null || payload.Length < 5) return null;
 
+        // Tag 3 wire type 0 (varint): (3 << 3) | 0 = 24 = 0x18 (Steam Protobuf creation_time)
         // Tag 4 wire type 0 (varint): (4 << 3) | 0 = 32 = 0x20
         for (int i = 0; i < payload.Length - 5; i++)
         {
-            if (payload[i] == 0x20) // tag 4
+            byte tag = payload[i];
+            if (tag == 0x18 || tag == 0x20)
             {
                 long value = 0;
                 int shift = 0;

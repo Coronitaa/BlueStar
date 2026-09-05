@@ -148,18 +148,21 @@
                                          CommandParameter="Home"/>
 
                             <!-- 2. Explore Catalog -->
-                            <RadioButton Style="{StaticResource CompactSidebarNavButton}"
+                            <RadioButton AutomationProperties.AutomationId="NavExploreButton"
+                                         Style="{StaticResource CompactSidebarNavButton}"
                                          Tag="{StaticResource IconExplore}" ToolTip="{DynamicResource String_NavExplore}"
                                          IsChecked="{Binding SelectedNavigation, Converter={StaticResource StringMatchConverter}, ConverterParameter=Explore}"
                                          Command="{Binding NavigateCommand}"
                                          CommandParameter="Explore"/>
 
                             <!-- 3. Instances Library -->
-                            <RadioButton Style="{StaticResource CompactSidebarNavButton}"
+                            <RadioButton AutomationProperties.AutomationId="NavLibraryButton"
+                                         Style="{StaticResource CompactSidebarNavButton}"
                                          Tag="{StaticResource IconGamepad}" ToolTip="{DynamicResource String_NavLibrary}"
                                          IsChecked="{Binding SelectedNavigation, Converter={StaticResource StringMatchConverter}, ConverterParameter=Library}"
                                          Command="{Binding NavigateCommand}"
                                          CommandParameter="Library"/>
+
 
                             <!-- Divider Line -->
                             <Border Height="1" Background="{StaticResource SubtleBorderBrush}" Width="36" Margin="0,6"/>

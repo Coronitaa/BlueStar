@@ -412,10 +412,11 @@
                                         <TextBlock Text="{DynamicResource String_NewVersionDetectedTitle}" Style="{StaticResource H3}" Foreground="{StaticResource AccentBrush}"/>
                                     </StackPanel>
                                     <TextBlock Text="{DynamicResource String_NewVersionDetectedDesc}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,10"/>
-                                    <Button Content="{DynamicResource String_CheckDepotBoxUpdatesBtn}"
+                                    <Button Content="{DynamicResource String_CheckForUpdatesBtn}"
                                             Style="{StaticResource PrimaryButton}"
                                             Command="{Binding CheckAndOpenDepotUpdateModalCommand}"
                                             IsEnabled="{Binding IsCheckingGameUpdate, Converter={StaticResource InverseBoolConverter}}"/>
+
                                 </StackPanel>
                             </Border>
 
@@ -536,33 +537,85 @@
                                                     <TextBlock Text="{Binding Depot.DepotId, StringFormat='Depot ID: {0}'}" Style="{StaticResource Caption}"
                                                                Visibility="{Binding DataContext.EnableAdvancedBuildOptions, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
 
-                                                    <!-- Advanced User Mode (Manifest details & inline edit) -->
-                                                    <StackPanel Visibility="{Binding DataContext.EnableAdvancedBuildOptions, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                        <!-- Normal Manifest View -->
-                                                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0"
-                                                                    Visibility="{Binding IsEditingManifest, Converter={StaticResource InverseBoolToVisibilityConverter}}">
-                                                            <TextBlock Text="{Binding Depot.DepotId, StringFormat='Depot: {0}'}" Style="{StaticResource Caption}"/>
-                                                            <TextBlock Text=" • Manifest: " Style="{StaticResource Caption}" Margin="4,0,0,0"/>
-                                                            <TextBlock Text="{Binding ManifestIdText}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}"/>
-                                                            <Button Content="✏" ToolTip="{DynamicResource String_EditManifestTooltip}"
-                                                                    Style="{StaticResource GhostButton}"
-                                                                    Padding="5,0" Margin="6,0,0,0" FontSize="11"
-                                                                    Command="{Binding StartEditManifestCommand}"/>
-                                                        </StackPanel>
+                                                    <!-- Advanced Technical Mode (Editable Manifest Dropdown, Availability Status, Lock & Key Info) -->
+                                                    <StackPanel Visibility="{Binding DataContext.EnableAdvancedBuildOptions, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                                Margin="0,6,0,0">
+                                                        <!-- Version Selector & Verification Row -->
+                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding Depot.DepotId, StringFormat='Depot {0}:'}"
+                                                                       Style="{StaticResource CaptionBold}"
+                                                                       VerticalAlignment="Center"
+                                                                       Margin="0,0,8,0"/>
 
-                                                        <!-- Inline Edit Mode -->
-                                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0"
-                                                                    Visibility="{Binding IsEditingManifest, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                            <TextBlock Text="Manifest ID:" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                            <TextBox Text="{Binding EditingManifestId, UpdateSourceTrigger=PropertyChanged}"
-                                                                     Style="{StaticResource DarkTextBox}"
-                                                                     Width="180" Height="24" Padding="4,2" FontSize="12"/>
-                                                            <Button Content="✓" Style="{StaticResource PrimaryButton}"
-                                                                    Padding="8,2" Margin="6,0,2,0" Height="24"
-                                                                    Command="{Binding SaveEditManifestCommand}"/>
-                                                            <Button Content="✕" Style="{StaticResource GhostButton}"
-                                                                    Padding="6,2" Height="24"
-                                                                    Command="{Binding CancelEditManifestCommand}"/>
+                                                            <!-- Editable ComboBox with known manifest versions from Steam/SteamDB/Providers/Local -->
+                                                            <ComboBox Style="{StaticResource CompactDarkComboBox}"
+                                                                      IsEditable="True"
+                                                                      Width="270"
+                                                                      ItemsSource="{Binding KnownManifestVersions}"
+                                                                      SelectedItem="{Binding SelectedManifestOption}"
+                                                                      Text="{Binding ManifestInputText, UpdateSourceTrigger=LostFocus}"
+                                                                      ToolTip="{DynamicResource String_SelectManifestVersion}">
+                                                                <ComboBox.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <TextBlock Text="{Binding DisplayText}" FontSize="11" TextTrimming="CharacterEllipsis"/>
+                                                                    </DataTemplate>
+                                                                </ComboBox.ItemTemplate>
+                                                            </ComboBox>
+
+                                                            <!-- Verify Availability Button -->
+                                                            <Button Content="🔍"
+                                                                    Style="{StaticResource GhostButton}"
+                                                                    ToolTip="{DynamicResource String_VerifyManifestAvailabilityTooltip}"
+                                                                    Padding="6,2"
+                                                                    Margin="4,0,0,0"
+                                                                    Height="28"
+                                                                    FontSize="11"
+                                                                    Command="{Binding VerifyAvailabilityCommand}"/>
+
+                                                            <!-- Lock / Pin Manifest Button -->
+                                                            <Button Content="{Binding LockIcon}"
+                                                                    Style="{StaticResource GhostButton}"
+                                                                    ToolTip="{Binding LockTooltip}"
+                                                                    Padding="6,2"
+                                                                    Margin="2,0,0,0"
+                                                                    Height="28"
+                                                                    FontSize="11"
+                                                                    Command="{Binding ToggleManifestLockCommand}"/>
+
+                                                            <!-- Dynamic Provider Availability Badge -->
+                                                            <Border Background="{StaticResource SurfaceCardBrush}"
+                                                                    BorderBrush="{Binding AvailabilityBadgeColor}"
+                                                                    BorderThickness="1"
+                                                                    CornerRadius="{StaticResource RadiusSm}"
+                                                                    Padding="8,3"
+                                                                    Margin="8,0,0,0"
+                                                                    VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding AvailabilityStatus}"
+                                                                           FontSize="10"
+                                                                           FontWeight="SemiBold"
+                                                                           Foreground="{Binding AvailabilityBadgeColor}"/>
+                                                            </Border>
+
+                                                            <!-- AES Key Badge -->
+                                                            <Border Background="{StaticResource SurfaceCardBrush}"
+                                                                    BorderBrush="{StaticResource SubtleBorderBrush}"
+                                                                    BorderThickness="1"
+                                                                    CornerRadius="{StaticResource RadiusSm}"
+                                                                    Padding="8,3"
+                                                                    Margin="6,0,0,0"
+                                                                    VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding KeyStatusBadge}"
+                                                                           FontSize="10"
+                                                                           FontWeight="SemiBold"
+                                                                           Foreground="{StaticResource AccentBrush}"/>
+                                                            </Border>
+
+                                                            <!-- Manifest Hex Representation -->
+                                                            <TextBlock Text="{Binding ManifestIdHex, StringFormat='({0})'}"
+                                                                       Style="{StaticResource Caption}"
+                                                                       Margin="8,0,0,0"
+                                                                       VerticalAlignment="Center"
+                                                                       Foreground="{StaticResource SecondaryTextBrush}"/>
                                                         </StackPanel>
                                                     </StackPanel>
                                                 </StackPanel>
@@ -750,6 +803,7 @@
                 <StackPanel Visibility="{Binding SelectedTab, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Dlcs}">
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
+                            <!-- DLC Header & Selection Controls -->
                             <Grid Margin="0,0,0,16">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -761,11 +815,28 @@
                                     <TextBlock Text="{DynamicResource String_DlcsHeaderDesc}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
                                 </StackPanel>
 
-                                <Button Grid.Column="1"
-                                        Content="{Binding IsDlcUnlocked, Converter={StaticResource DlcUnlockButtonTextConverter}}"
-                                        Style="{StaticResource PrimaryButton}"
-                                        Padding="16,10"
-                                        Command="{Binding UnlockDlcsCommand}"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Content="{DynamicResource String_SelectAllDlcs}"
+                                            Style="{StaticResource SecondaryButton}"
+                                            Padding="10,6" Margin="0,0,6,0" FontSize="11"
+                                            Command="{Binding SelectAllDlcsCommand}"/>
+                                    <Button Content="{DynamicResource String_DeselectAllDlcs}"
+                                            Style="{StaticResource SecondaryButton}"
+                                            Padding="10,6" Margin="0,0,8,0" FontSize="11"
+                                            Command="{Binding DeselectAllDlcsCommand}"/>
+                                    <Button Content="{Binding DlcActionButtonText}"
+                                            Style="{StaticResource PrimaryButton}"
+                                            Padding="14,6" FontSize="11"
+                                            Command="{Binding DownloadAndInstallDlcsCommand}"
+                                            IsEnabled="{Binding CanDownloadAndInstallDlcs}"
+                                            Visibility="{Binding IsDlcUnlocked, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                    <Button Content="{DynamicResource String_Uninstall}"
+                                            Style="{StaticResource DangerButton}"
+                                            Padding="14,6" FontSize="11"
+                                            Command="{Binding UninstallDlcUnlockerCommand}"
+                                            IsEnabled="{Binding IsProcessing, Converter={StaticResource InverseBoolConverter}}"
+                                            Visibility="{Binding IsDlcUnlocked, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                </StackPanel>
                             </Grid>
 
                             <!-- DLCs List -->
@@ -792,13 +863,24 @@
 
                                                 <StackPanel Grid.Column="3" VerticalAlignment="Center">
                                                     <TextBlock Text="{Binding DisplayName}" Style="{StaticResource BodyMedium}"/>
-                                                    <TextBlock Text="{Binding Dlc.AppId, StringFormat='DLC AppID: {0}'}" Style="{StaticResource Caption}"/>
+                                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                                        <TextBlock Text="{Binding Dlc.AppId, StringFormat='DLC AppID: {0}'}" Style="{StaticResource Caption}" Margin="0,0,10,0"/>
+                                                        <Border Background="{StaticResource SurfaceCardBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusXs}" Padding="6,1" Margin="0,0,6,0">
+                                                            <TextBlock Text="{Binding CategoryTag}" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                        </Border>
+                                                    </StackPanel>
                                                 </StackPanel>
 
                                                 <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <Border Background="{StaticResource SuccessBgBrush}" BorderBrush="{StaticResource SuccessBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,2" Margin="0,0,10,0"
+                                                    <!-- Installed Status Badge -->
+                                                    <Border Background="{StaticResource SuccessBgBrush}" BorderBrush="{StaticResource SuccessBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,2" Margin="0,0,8,0"
                                                             Visibility="{Binding IsDownloaded, Converter={StaticResource BoolToVisibilityConverter}}">
                                                         <TextBlock Text="✓ Installed" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource SuccessBrush}"/>
+                                                    </Border>
+                                                    <!-- Unlocked Status Badge -->
+                                                    <Border Background="{StaticResource AccentBgBrush}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,2" Margin="0,0,10,0"
+                                                            Visibility="{Binding IsUnlocked, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                        <TextBlock Text="{DynamicResource String_DlcUnlockedBadge}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
                                                     </Border>
                                                     <TextBlock Text="{Binding FormattedSize}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource PurpleBrush}"/>
                                                 </StackPanel>
@@ -807,6 +889,40 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+
+                            <!-- DLC Bottom Summary & Primary Action -->
+                            <Border Height="1" Background="{StaticResource SubtleBorderBrush}" Margin="0,16,0,16"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource BodyMedium}">
+                                        <Run Text="{Binding SelectedDlcsCount, Mode=OneWay}"/>
+                                        <Run Text=" DLC(s) selected — "/>
+                                        <Run Text="{Binding SelectedDlcsSize, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
+                                    </TextBlock>
+                                    <TextBlock Text="{DynamicResource String_DlcsBottomNotice}" Style="{StaticResource Caption}" Margin="0,2,0,0"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Content="{Binding DlcActionButtonText}"
+                                            Style="{StaticResource PrimaryButton}"
+                                            Padding="18,10"
+                                            Command="{Binding DownloadAndInstallDlcsCommand}"
+                                            IsEnabled="{Binding CanDownloadAndInstallDlcs}"
+                                            Visibility="{Binding IsDlcUnlocked, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                    <Button Content="{DynamicResource String_Uninstall}"
+                                            Style="{StaticResource DangerButton}"
+                                            Padding="18,10"
+                                            Command="{Binding UninstallDlcUnlockerCommand}"
+                                            IsEnabled="{Binding IsProcessing, Converter={StaticResource InverseBoolConverter}}"
+                                            Visibility="{Binding IsDlcUnlocked, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                </StackPanel>
+                            </Grid>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -1700,6 +1816,25 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- ═══ PER-INSTANCE ADVANCED FILES & MANIFESTS CONFIGURATION ═══ -->
+                    <Border Style="{StaticResource Card}" Margin="0,20,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                <TextBlock Text="{DynamicResource String_InstanceAdvancedFilesTitle}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{DynamicResource String_InstanceAdvancedFilesDesc}"
+                                           Style="{StaticResource BodySmall}" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1"
+                                      IsChecked="{Binding EnableAdvancedBuildOptions, Mode=TwoWay}"
+                                      Style="{StaticResource DarkCheckBox}"
+                                      VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+
                     <!-- Danger Zone & Storage Management -->
                     <Border Style="{StaticResource Card}" Margin="0,20,0,0" BorderBrush="{StaticResource DangerBorderBrush}" BorderThickness="1">
                         <StackPanel>
@@ -2071,15 +2206,25 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <Button Grid.Column="0" Content="{DynamicResource String_FeedbackYesWorked}"
+                        <Button Grid.Column="0"
                                 Style="{StaticResource PrimaryButton}"
                                 Padding="16,12"
-                                Command="{Binding SubmitFeedbackPositiveCommand}"/>
+                                Command="{Binding SubmitFeedbackPositiveCommand}">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Path Data="{StaticResource IconThumbUp}" Fill="White" Width="16" Height="16" Stretch="Uniform" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="{DynamicResource String_FeedbackYesWorked}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                            </StackPanel>
+                        </Button>
 
-                        <Button Grid.Column="2" Content="{DynamicResource String_FeedbackNoIssues}"
+                        <Button Grid.Column="2"
                                 Style="{StaticResource DangerButton}"
                                 Padding="16,12"
-                                Command="{Binding SubmitFeedbackNegativeCommand}"/>
+                                Command="{Binding SubmitFeedbackNegativeCommand}">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Path Data="{StaticResource IconThumbDown}" Fill="White" Width="16" Height="16" Stretch="Uniform" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="{DynamicResource String_FeedbackNoIssues}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                            </StackPanel>
+                        </Button>
                     </Grid>
 
                     <!-- Negative Feedback Followup: Option to Uninstall & Try Another -->
@@ -2428,7 +2573,10 @@
                                                 <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
                                                     <TextBlock Text="{Binding DepotId, StringFormat='Depot ID: {0}'}" Style="{StaticResource Muted}" Margin="0,0,12,0"/>
                                                     <TextBlock Text="{Binding DisplayCurrentManifest, StringFormat='Current: {0}'}" Style="{StaticResource Muted}" Margin="0,0,12,0"/>
-                                                    <TextBlock Text="{Binding DisplayNewManifest, StringFormat='New: {0}'}" Style="{StaticResource Muted}" Foreground="{StaticResource AccentBrush}"/>
+                                                    <TextBlock Text="{Binding DisplayNewManifest, StringFormat='New: {0}'}" Style="{StaticResource Muted}" Foreground="{StaticResource AccentBrush}" Margin="0,0,12,0"/>
+                                                    <Border Background="{StaticResource SurfaceCardBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="6,1" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding SourceProvider, StringFormat='Source: {0}'}" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                    </Border>
                                                 </StackPanel>
                                             </StackPanel>
 
@@ -2456,6 +2604,12 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
+
+                    <!-- Differential Update Banner -->
+                    <Border Background="{StaticResource InfoBgBrush}" BorderBrush="{StaticResource InfoBrush}" BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusSm}" Padding="10,6" Margin="0,0,0,12">
+                        <TextBlock Text="{DynamicResource String_DifferentialUpdateBanner}" Style="{StaticResource Caption}" Foreground="{StaticResource InfoBrush}"/>
+                    </Border>
 
                     <Border Background="{StaticResource WarningBgBrush}"
                             BorderBrush="{StaticResource WarningBorderBrush}"

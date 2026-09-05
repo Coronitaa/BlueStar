@@ -58,8 +58,12 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        DataContext = App.Services.GetRequiredService<ViewModels.MainViewModel>();
+        if (App.Services != null)
+        {
+            DataContext = App.Services.GetRequiredService<ViewModels.MainViewModel>();
+        }
     }
+
 
     protected override void OnSourceInitialized(EventArgs e)
     {

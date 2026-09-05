@@ -30,6 +30,8 @@ public partial class BrowseViewModel : ObservableObject, IDisposable
     private readonly ICommunityStatsService? _statsService;
     private readonly BlueStar.Infrastructure.Storage.AppSettingsService? _settingsService;
     private readonly IBackgroundTaskService? _backgroundTaskService;
+    private readonly IGameCatalogProvider? _catalogProvider;
+    private readonly IBuildResolver? _buildResolver;
     private readonly ILogger<BrowseViewModel> _logger;
     private readonly CancellationTokenSource _cts = new();
     private bool _isDisposed;
@@ -80,7 +82,9 @@ public partial class BrowseViewModel : ObservableObject, IDisposable
         IMetadataProvider? metadataProvider = null,
         INotificationService? notificationService = null,
         BlueStar.Infrastructure.Storage.AppSettingsService? settingsService = null,
-        IBackgroundTaskService? backgroundTaskService = null)
+        IBackgroundTaskService? backgroundTaskService = null,
+        IGameCatalogProvider? catalogProvider = null,
+        IBuildResolver? buildResolver = null)
     {
         _apiClient = apiClient;
         _instanceManager = instanceManager;
@@ -92,6 +96,9 @@ public partial class BrowseViewModel : ObservableObject, IDisposable
         _notificationService = notificationService;
         _settingsService = settingsService;
         _backgroundTaskService = backgroundTaskService;
+        _catalogProvider = catalogProvider;
+        _buildResolver = buildResolver;
+
 
         if (_settingsService != null)
         {
@@ -346,8 +353,26 @@ public partial class BrowseViewModel : ObservableObject, IDisposable
 
         try
         {
-            _logger.LogInformation("Searching DepotBox for: {Query}", SearchQuery);
-            var searchResults = await _apiClient.SearchGamesAsync(SearchQuery, CancellationToken.None).ConfigureAwait(true);
+            _logger.LogInformation("Searching catalog for: {Query}", SearchQuery);
+            IReadOnlyList<SearchResult> searchResults = [];
+
+            if (_catalogProvider != null)
+            {
+                try
+                {
+                    searchResults = await _catalogProvider.SearchGamesAsync(SearchQuery, CancellationToken.None).ConfigureAwait(true);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Catalog provider search failed, falling back to DepotBox");
+                }
+            }
+
+            if (searchResults.Count == 0 && _apiClient != null)
+            {
+                searchResults = await _apiClient.SearchGamesAsync(SearchQuery, CancellationToken.None).ConfigureAwait(true);
+            }
+
             Results = new ObservableCollection<SearchResult>(searchResults);
             ApplyFilter();
             _logger.LogInformation("Found {Count} results", Results.Count);
@@ -355,6 +380,7 @@ public partial class BrowseViewModel : ObservableObject, IDisposable
             // Enrich search results in parallel (DLCs, OS, Depot Version)
             _ = EnrichResultsAsync(searchResults);
         }
+
         catch (UnauthorizedAccessException)
         {
             ErrorMessage = "Invalid or missing API key. Please configure your DepotBox API key in Settings.";
@@ -762,19 +788,6 @@ public partial class BrowseViewModel : ObservableObject, IDisposable
             _logger.LogWarning(ex, "Could not pre-download DepotBox archive for {AppId}", result.AppId);
         }
 
-        // Verify if depots exist in DepotBox for this game
-        bool hasDepots = archive != null && archive.Games.Count > 0 && archive.Games.Any(g => g.Depots.Count > 0);
-        if (!hasDepots)
-        {
-            _logger.LogWarning("No depots found in DepotBox for {Name} ({AppId})", result.Name, result.AppId);
-            App.Current?.Dispatcher?.Invoke(() =>
-            {
-                ErrorMessage = $"No depots found for \"{result.Name}\" (AppID: {result.AppId}) in DepotBox.";
-            });
-            _notificationService?.ShowError("Depots Not Found", $"No depots were found for \"{result.Name}\" (AppID: {result.AppId}) in DepotBox.");
-            throw new InvalidOperationException($"No depots found for \"{result.Name}\" (AppID: {result.AppId}) in DepotBox.");
-        }
-
         progress.Report(new BackgroundTaskProgress(94, "Configuring game instance and depots...", "Configuring"));
 
         // Generate unique instance name and non-colliding installation path
@@ -782,21 +795,24 @@ public partial class BrowseViewModel : ObservableObject, IDisposable
         var existingNames = allExisting.Select(i => i.Name).ToList();
         var existingPaths = allExisting.Select(i => i.InstallPath).Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
 
-        var mainGame = archive!.Games.FirstOrDefault(g => !g.IsDlc) ?? archive.Games[0];
-        var rawName = CleanName(mainGame.Name) ?? result.Name;
+        var rawName = result.Name;
+        if (archive != null && archive.Games.Count > 0)
+        {
+            var mainGame = archive.Games.FirstOrDefault(g => !g.IsDlc) ?? archive.Games[0];
+            rawName = CleanName(mainGame.Name) ?? result.Name;
+        }
+
         var uniqueName = PathHelper.GenerateUniqueInstanceName(existingNames, rawName);
         var uniqueInstallPath = PathHelper.GenerateUniqueInstallPath(defaultRoot, uniqueName, existingPaths);
 
-        var newInstance = new GameInstance
+        IReadOnlyList<DepotInfo> depots = [];
+        IReadOnlyList<DlcInfo> dlcs = [];
+        string? activeBuildId = null;
+        string? activeBranch = null;
+
+        if (archive != null && archive.Games.Count > 0 && archive.Games.Any(g => g.Depots.Count > 0))
         {
-            Name = uniqueName,
-            AppId = result.AppId,
-            InstallPath = uniqueInstallPath,
-            SourceArchivePath = archivePath,
-            Status = InstanceStatus.NotInstalled,
-            Metadata = meta,
-            Engine = engine,
-            Depots = archive.Games.SelectMany(g => g.Depots.Select(d => new DepotInfo
+            depots = archive.Games.SelectMany(g => g.Depots.Select(d => new DepotInfo
             {
                 DepotId = d.DepotId,
                 ManifestId = d.ManifestId,
@@ -807,8 +823,9 @@ public partial class BrowseViewModel : ObservableObject, IDisposable
                 Platform = d.Platform,
                 Architecture = d.Architecture,
                 IsSharedDepot = false
-            })).DistinctBy(d => d.DepotId).ToList().AsReadOnly(),
-            Dlcs = archive.Games.Where(g => g.IsDlc).Select(dlc => new DlcInfo
+            })).DistinctBy(d => d.DepotId).ToList().AsReadOnly();
+
+            dlcs = archive.Games.Where(g => g.IsDlc).Select(dlc => new DlcInfo
             {
                 AppId = dlc.AppId,
                 Name = CleanName(dlc.Name) ?? $"DLC {dlc.AppId}",
@@ -827,8 +844,52 @@ public partial class BrowseViewModel : ObservableObject, IDisposable
                     IsSharedDepot = false
                 }).ToList().AsReadOnly(),
                 IsInstalled = false
-            }).ToList().AsReadOnly()
+            }).ToList().AsReadOnly();
+        }
+        else if (_buildResolver != null)
+        {
+            try
+            {
+                progress.Report(new BackgroundTaskProgress(92, "Resolving builds and manifests across providers...", "Resolving"));
+                var recommendedVersion = await _buildResolver.ResolveRecommendedVersionAsync(result.AppId, ct).ConfigureAwait(false);
+                if (recommendedVersion != null && recommendedVersion.Depots.Count > 0)
+                {
+                    depots = recommendedVersion.Depots.Select(d => d.ToDepotInfo()).ToList().AsReadOnly();
+                    activeBuildId = recommendedVersion.BuildId;
+                    activeBranch = recommendedVersion.BranchName;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not resolve build automatically for AppId {AppId}", result.AppId);
+            }
+        }
+
+        // If DLCs not yet populated and metadata provider is available, fetch them
+        if (dlcs.Count == 0 && _metadataProvider != null)
+        {
+            try
+            {
+                dlcs = await _metadataProvider.GetDlcListAsync(result.AppId, ct).ConfigureAwait(false);
+            }
+            catch { }
+        }
+
+        var newInstance = new GameInstance
+        {
+            Name = uniqueName,
+            AppId = result.AppId,
+            InstallPath = uniqueInstallPath,
+            SourceArchivePath = archivePath,
+            Status = InstanceStatus.NotInstalled,
+            Metadata = meta,
+            Engine = engine,
+            ActiveBuildId = activeBuildId,
+            ActiveBranch = activeBranch,
+            Depots = depots,
+            Dlcs = dlcs
         };
+
 
         var created = await _instanceManager.CreateAsync(newInstance, ct).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(archivePath) && File.Exists(archivePath))

@@ -737,6 +737,20 @@
                                           ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
                                           ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"/>
 
+                        <!-- Editable TextBox when IsEditable="True" -->
+                        <TextBox x:Name="PART_EditableTextBox"
+                                 Background="Transparent"
+                                 Foreground="{TemplateBinding Foreground}"
+                                 CaretBrush="{StaticResource AccentBrush}"
+                                 BorderThickness="0"
+                                 FontFamily="{TemplateBinding FontFamily}"
+                                 FontSize="{TemplateBinding FontSize}"
+                                 VerticalAlignment="Center"
+                                 HorizontalAlignment="Stretch"
+                                 Margin="10,0,30,0"
+                                 Visibility="Collapsed"
+                                 IsReadOnly="{TemplateBinding IsReadOnly}"/>
+
                         <!-- Floating Pop-over Dropdown Menu -->
                         <Popup x:Name="PART_Popup"
                                AllowsTransparency="True"
@@ -767,6 +781,11 @@
                         </Popup>
                     </Grid>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="IsEditable" Value="True">
+                            <Setter Property="IsTabStop" Value="False"/>
+                            <Setter TargetName="contentPresenter" Property="Visibility" Value="Collapsed"/>
+                            <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible"/>
+                        </Trigger>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
                             <Setter TargetName="toggleButton" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
                         </Trigger>
@@ -777,6 +796,14 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <!-- Compact Dark ComboBox for inline tables and technical forms -->
+    <Style x:Key="CompactDarkComboBox" TargetType="ComboBox" BasedOn="{StaticResource DarkComboBox}">
+        <Setter Property="MinHeight" Value="28"/>
+        <Setter Property="Height" Value="28"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Padding" Value="8,3"/>
     </Style>
 
     <!-- ── 3. CARDS & CONTAINERS ── -->

@@ -222,6 +222,47 @@ public class VdfBuilderAndUgcBridgeTests : IDisposable
     }
 
     [Fact]
+    public void IsEmulatorInstalled_ReturnsFalse_WhenOnlySmokeApiDlcUnlockerIsInstalled()
+    {
+        var dlcOnlyDir = Path.Combine(_testDir, "DlcOnlyNoEmulator");
+        Directory.CreateDirectory(dlcOnlyDir);
+        File.WriteAllText(Path.Combine(dlcOnlyDir, "steam_api64.dll"), "fake smokeapi dll");
+        File.WriteAllText(Path.Combine(dlcOnlyDir, "steam_api64_o.dll"), "fake backup dll");
+        File.WriteAllText(Path.Combine(dlcOnlyDir, "cream_api.ini"), "[steam]\nappid=1234");
+        File.WriteAllText(Path.Combine(dlcOnlyDir, "SmokeAPI.config.json"), "{}");
+
+        Emulators.ReFixEmulator.IsEmulatorInstalled(dlcOnlyDir).Should().BeFalse();
+        Emulators.ReFixEmulator.GetInstalledMode(dlcOnlyDir).Should().BeNull();
+    }
+
+    [Fact]
+    public void GetInstalledMode_ReturnsReGoldbergLan_WhenReFixIniSpecifiesGoldberg()
+    {
+        var goldbergDir = Path.Combine(_testDir, "GoldbergReFixGame");
+        Directory.CreateDirectory(goldbergDir);
+        File.WriteAllText(Path.Combine(goldbergDir, "steam_api64.dll"), "proxy");
+        File.WriteAllText(Path.Combine(goldbergDir, "steam_api64_valve.dll"), "goldberg backend");
+        File.WriteAllText(Path.Combine(goldbergDir, "local_save.txt"), "saves");
+        File.WriteAllText(Path.Combine(goldbergDir, "ReFix.ini"), "[Online]\nMode=goldberg\n");
+
+        Emulators.ReFixEmulator.IsEmulatorInstalled(goldbergDir).Should().BeTrue();
+        Emulators.ReFixEmulator.GetInstalledMode(goldbergDir).Should().Be("Re:Goldberg LAN");
+    }
+
+    [Fact]
+    public void GetInstalledMode_ReturnsReFixOnline_WhenReFixIniSpecifiesValve()
+    {
+        var valveDir = Path.Combine(_testDir, "ValveReFixGame");
+        Directory.CreateDirectory(valveDir);
+        File.WriteAllText(Path.Combine(valveDir, "steam_api64.dll"), "proxy");
+        File.WriteAllText(Path.Combine(valveDir, "steam_api64_valve.dll"), "original valve");
+        File.WriteAllText(Path.Combine(valveDir, "ReFix.ini"), "[Online]\nMode=valve\n");
+
+        Emulators.ReFixEmulator.IsEmulatorInstalled(valveDir).Should().BeTrue();
+        Emulators.ReFixEmulator.GetInstalledMode(valveDir).Should().Be("ReFix Online (Steam)");
+    }
+
+    [Fact]
     public void FindGameRoot_CorrectlyClimbsUp_FromBinSubdirectory()
     {
         var rootDir = Path.Combine(_testDir, "TrueGameRoot");

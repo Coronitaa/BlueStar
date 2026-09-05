@@ -6,25 +6,29 @@ using BlueStar.Core.Models;
 namespace BlueStar.Core.Interfaces;
 
 /// <summary>
-/// Provides methods to retrieve and download game manifests.
+/// Defines a provider capable of discovering and downloading Steam depot manifests.
 /// </summary>
-public interface IManifestProvider
+public interface IManifestProvider : IProvider
 {
     /// <summary>
-    /// Retrieves the list of manifests for a given application.
+    /// Checks whether this provider has manifests available for the specified AppID.
     /// </summary>
-    /// <param name="appId">The application identifier.</param>
-    /// <param name="ct">A token to monitor for cancellation requests.</param>
-    /// <returns>A task that represents the asynchronous operation. The task result contains a read-only list of manifests.</returns>
-    Task<IReadOnlyList<ManifestInfo>> GetManifestsAsync(uint appId, CancellationToken ct);
+    Task<bool> IsAvailableAsync(uint appId, CancellationToken ct = default);
 
     /// <summary>
-    /// Downloads a specific manifest file.
+    /// Discovers all manifest artifacts known to this provider for the specified AppID.
     /// </summary>
-    /// <param name="depotId">The depot identifier associated with the manifest.</param>
-    /// <param name="manifestId">The manifest identifier.</param>
-    /// <param name="targetPath">The directory path where the manifest should be saved.</param>
-    /// <param name="ct">A token to monitor for cancellation requests.</param>
-    /// <returns>A task that represents the asynchronous operation. The task result contains the file path of the downloaded manifest.</returns>
-    Task<string> DownloadManifestAsync(uint depotId, ulong manifestId, string targetPath, CancellationToken ct);
+    Task<IReadOnlyList<ManifestArtifact>> DiscoverManifestsAsync(uint appId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Downloads or acquires a specific manifest artifact file to the specified target directory.
+    /// Returns the absolute path to the downloaded .manifest file.
+    /// When appId is known, it should be provided to allow branch-scoped lookup.
+    /// </summary>
+    Task<string> DownloadManifestAsync(uint depotId, ulong manifestId, string targetDirectory, uint appId = 0, CancellationToken ct = default);
+
+    /// <summary>
+    /// Legacy compatibility method for existing callers.
+    /// </summary>
+    Task<IReadOnlyList<ManifestInfo>> GetManifestsAsync(uint appId, CancellationToken ct = default);
 }

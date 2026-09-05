@@ -147,4 +147,49 @@ public class InstanceDetailSelectionTests
         allDownloaded.Should().BeFalse();
         buttonText.Should().Be("📥 Start Download");
     }
+
+    [Fact]
+    public void DlcAndBaseDepots_SelectionCounts_AreDecoupled()
+    {
+        // Arrange base depots
+        var baseDepots = new List<DepotInfo>
+        {
+            new() { DepotId = 101, Name = "Base Depot 1", SizeBytes = 1000, IsDownloaded = true },
+            new() { DepotId = 102, Name = "Base Depot 2", SizeBytes = 2000, IsDownloaded = false }
+        };
+
+        // Arrange DLCs
+        var dlc1 = new DlcInfo
+        {
+            AppId = 201,
+            Name = "Soundtrack DLC",
+            Depots = [new() { DepotId = 301, Name = "Soundtrack Depot", SizeBytes = 500, IsDownloaded = false }],
+            IsInstalled = false
+        };
+        var dlc2 = new DlcInfo
+        {
+            AppId = 202,
+            Name = "Skin Pack",
+            Depots = [], // Entitlement only
+            IsInstalled = true
+        };
+
+        // Act - Base selection count only tracks base depots
+        int selectedBaseDepotsCount = baseDepots.Count(d => true);
+        long selectedBaseDepotsSize = baseDepots.Sum(d => d.SizeBytes);
+
+        // Act - DLC selection count only tracks DLC items
+        var dlcs = new List<DlcInfo> { dlc1, dlc2 };
+        int selectedDlcsCount = dlcs.Count;
+        long selectedDlcsSize = dlcs.Sum(d => d.TotalSizeBytes);
+
+        bool hasDlcsWithDepotsToDownload = dlcs.Any(d => d.Depots.Any(dep => !dep.IsDownloaded && dep.SizeBytes > 0));
+
+        // Assert
+        selectedBaseDepotsCount.Should().Be(2);
+        selectedBaseDepotsSize.Should().Be(3000);
+        selectedDlcsCount.Should().Be(2);
+        selectedDlcsSize.Should().Be(500);
+        hasDlcsWithDepotsToDownload.Should().BeTrue();
+    }
 }

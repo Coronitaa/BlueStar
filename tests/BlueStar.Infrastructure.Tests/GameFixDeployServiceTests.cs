@@ -317,14 +317,15 @@ public class GameFixDeployServiceTests : IDisposable
             => Task.FromResult<IReadOnlyList<GameFixInfo>>([]);
 
         public Task<IReadOnlyList<SearchResult>> SearchGamesAsync(string query, CancellationToken ct) => throw new NotImplementedException();
-        public Task<GameMetadata?> GetGameAsync(uint appId, CancellationToken ct) => throw new NotImplementedException();
-        public Task<IReadOnlyList<ManifestInfo>> GetManifestsAsync(uint appId, CancellationToken ct) => throw new NotImplementedException();
-        public Task<bool> CheckAvailabilityAsync(uint appId, CancellationToken ct) => throw new NotImplementedException();
-        public Task<IDictionary<uint, bool>> BatchCheckAvailabilityAsync(IEnumerable<uint> appIds, CancellationToken ct) => throw new NotImplementedException();
+        public Task<GameMetadata?> GetGameAsync(uint appId, CancellationToken ct = default, bool forceRefresh = false) => throw new NotImplementedException();
+        public Task<IReadOnlyList<ManifestInfo>> GetManifestsAsync(uint appId, CancellationToken ct = default, bool forceRefresh = false) => throw new NotImplementedException();
+        public Task<bool> CheckAvailabilityAsync(uint appId, CancellationToken ct = default, bool forceRefresh = false) => throw new NotImplementedException();
+        public Task<IDictionary<uint, bool>> BatchCheckAvailabilityAsync(IEnumerable<uint> appIds, CancellationToken ct = default, bool forceRefresh = false) => throw new NotImplementedException();
         public Task<string> DownloadArchiveAsync(uint appId, string targetPath, IProgress<DownloadProgress>? progress, CancellationToken ct) => throw new NotImplementedException();
         public Task<string> StartAsyncDownloadAsync(uint appId, CancellationToken ct) => throw new NotImplementedException();
         public Task<DownloadProgress> CheckDownloadStatusAsync(string downloadToken, CancellationToken ct) => throw new NotImplementedException();
         public Task<string> DownloadCompletedArchiveAsync(string downloadToken, string targetPath, CancellationToken ct) => throw new NotImplementedException();
+        public void InvalidateAppCache(uint appId) { }
     }
 
     private class MockInstanceManager : IInstanceManager

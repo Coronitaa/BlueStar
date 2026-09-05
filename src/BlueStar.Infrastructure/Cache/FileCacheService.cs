@@ -27,12 +27,14 @@ public sealed class FileCacheService : ICacheService
     /// Initializes a new instance of the <see cref="FileCacheService"/> class.
     /// </summary>
     /// <param name="logger">Logger instance.</param>
-    public FileCacheService(ILogger<FileCacheService> logger)
+    public FileCacheService(ILogger<FileCacheService> logger, string? cachePath = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _cachePath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "BlueStar", "cache");
+        _cachePath = !string.IsNullOrWhiteSpace(cachePath)
+            ? cachePath
+            : Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "BlueStar", "cache");
         try
         {
             Directory.CreateDirectory(_cachePath);

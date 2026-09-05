@@ -21,24 +21,33 @@ namespace BlueStar.Infrastructure.Downloader;
 public partial class DepotDownloaderProvider : IDownloadProvider
 {
     private readonly AppSettingsService? _appSettings;
+    private readonly IManifestCacheService? _manifestCache;
+    private readonly IDepotKeyRepository? _keyRepository;
     private readonly ILogger<DepotDownloaderProvider> _logger;
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _activeDownloads = new();
 
     public DepotDownloaderProvider(
         ILogger<DepotDownloaderProvider> logger,
-        AppSettingsService? appSettings = null)
+        AppSettingsService? appSettings = null,
+        IManifestCacheService? manifestCache = null,
+        IDepotKeyRepository? keyRepository = null)
     {
         _logger = logger;
         _appSettings = appSettings;
+        _manifestCache = manifestCache;
+        _keyRepository = keyRepository;
     }
 
     // Overload preserved for backward compatibility with DI registrations that pass executablePath
     public DepotDownloaderProvider(
         string executablePath,
         ILogger<DepotDownloaderProvider> logger,
-        AppSettingsService? appSettings = null) : this(logger, appSettings)
+        AppSettingsService? appSettings = null,
+        IManifestCacheService? manifestCache = null,
+        IDepotKeyRepository? keyRepository = null) : this(logger, appSettings, manifestCache, keyRepository)
     {
     }
+
 
     /// <inheritdoc />
     public async Task DownloadAsync(GameInstance instance, IProgress<DownloadProgress>? progress, CancellationToken ct)
@@ -80,14 +89,25 @@ public partial class DepotDownloaderProvider : IDownloadProvider
             // Step 1: Ensure manifests are extracted and valid
             await EnsureValidManifestsAsync(instance, instanceManifestDir, workingDir, linkedCts.Token).ConfigureAwait(false);
 
-            // Step 2: Write the depot keys file
+            // Step 2: Write the depot keys file (resolving missing keys from repository if needed)
+            var depotsWithKeys = new List<DepotInfo>();
+            foreach (var depot in instance.Depots)
+            {
+                var key = depot.DepotKey;
+                if (string.IsNullOrWhiteSpace(key) && _keyRepository != null)
+                {
+                    key = await _keyRepository.GetKeyAsync(depot.DepotId, linkedCts.Token).ConfigureAwait(false);
+                }
+                depotsWithKeys.Add(depot with { DepotKey = key });
+            }
+
             var keyFilePath = Path.Combine(workingDir, "depotkeys.txt");
-            await WriteDepotKeysFile(instance.Depots, keyFilePath, linkedCts.Token).ConfigureAwait(false);
+            await WriteDepotKeysFile(depotsWithKeys, keyFilePath, linkedCts.Token).ConfigureAwait(false);
 
             // Step 3: Build the request with manifest file paths
-            var depotItems = instance.Depots.Select(depot =>
+            var depotItems = depotsWithKeys.Select(depot =>
             {
-                var manifestFile = FindValidManifestFile(workingDir, instanceManifestDir, depot.DepotId, depot.ManifestId);
+                var manifestFile = FindValidManifestFile(workingDir, instanceManifestDir, depot.DepotId, depot.ManifestId, _manifestCache);
                 return new DepotDownloadItem
                 {
                     DepotId = depot.DepotId,
@@ -98,6 +118,7 @@ public partial class DepotDownloaderProvider : IDownloadProvider
                     ManifestFilePath = manifestFile,
                 };
             }).ToList();
+
 
             var request = new DepotDownloadRequest
             {
@@ -347,8 +368,8 @@ public partial class DepotDownloaderProvider : IDownloadProvider
         await File.WriteAllLinesAsync(keyFilePath, lines, ct).ConfigureAwait(false);
     }
 
-    /// <summary>Finds a valid non-empty manifest file in the working directory or persistent instance storage.</summary>
-    private static string? FindValidManifestFile(string workingDir, string instanceManifestDir, uint depotId, ulong manifestId)
+    /// <summary>Finds a valid non-empty manifest file in the working directory, persistent instance storage, or global manifest cache.</summary>
+    private static string? FindValidManifestFile(string workingDir, string instanceManifestDir, uint depotId, ulong manifestId, IManifestCacheService? manifestCache = null)
     {
         var exactName = $"{depotId}_{manifestId}.manifest";
 
@@ -388,6 +409,19 @@ public partial class DepotDownloaderProvider : IDownloadProvider
             }
         }
 
+        // 3. Check persistent global manifest cache
+        if (manifestCache != null && manifestCache.HasManifest(depotId, manifestId))
+        {
+            var cached = manifestCache.GetManifestPath(depotId, manifestId);
+            if (!string.IsNullOrWhiteSpace(cached) && File.Exists(cached))
+            {
+                var copyDest = Path.Combine(workingDir, exactName);
+                File.Copy(cached, copyDest, overwrite: true);
+                return copyDest;
+            }
+        }
+
         return null;
     }
 }
+

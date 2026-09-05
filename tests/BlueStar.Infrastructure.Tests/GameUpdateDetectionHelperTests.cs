@@ -66,4 +66,44 @@ public class GameUpdateDetectionHelperTests
         var (status, desc) = await GameUpdateDetectionHelper.CheckInstanceUpdateAsync(instance, steamClient, cts.Token);
         status.Should().Be(UpdateCheckStatus.Unknown);
     }
+
+    [Fact]
+    public void GetInstalledManifestDate_WhenInstalledVersionDatePresent_ReturnsItDirectly()
+    {
+        var expectedDate = new DateTimeOffset(2024, 6, 20, 15, 30, 0, TimeSpan.Zero);
+        var instance = new GameInstance
+        {
+            Name = "Elden Ring Shadow of the Erdtree",
+            InstallPath = Path.GetTempPath(),
+            InstalledVersionDate = expectedDate,
+            Metadata = new GameMetadata
+            {
+                Name = "Elden Ring",
+                ReleaseDate = "2022-02-25" // Base game release date
+            }
+        };
+
+        var date = GameUpdateDetectionHelper.GetInstalledManifestDate(instance);
+        date.Should().Be(expectedDate);
+    }
+
+    [Fact]
+    public void GetInstalledManifestDate_WhenNoManifestsAndOnlyMetadataReleaseDate_DoesNotFallbackToReleaseDate()
+    {
+        var instance = new GameInstance
+        {
+            Name = "The Witcher 3: Wild Hunt",
+            InstallPath = Path.Combine(Path.GetTempPath(), "NonExistentWitcherPath_" + Guid.NewGuid().ToString("N")),
+            InstalledVersionDate = null,
+            Metadata = new GameMetadata
+            {
+                Name = "The Witcher 3",
+                ReleaseDate = "2015-05-18" // Old release date of base game
+            }
+        };
+
+        var date = GameUpdateDetectionHelper.GetInstalledManifestDate(instance);
+        // It must NOT return the 2015 base game release date!
+        date.Should().BeNull();
+    }
 }

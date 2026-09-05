@@ -57,46 +57,60 @@ public class SteamStoreUpdateDateCacheTests
     [Fact]
     public async Task GetLatestAppUpdateDateAsync_CachesResult_AvoidsDuplicateNewsApiRequests()
     {
-        var handler = new MockSteamNewsHandler();
-        using var httpClient = new HttpClient(handler);
-        var cache = new FileCacheService(NullLogger<FileCacheService>.Instance);
-        await cache.ClearAsync();
+        var testDir = Path.Combine(Path.GetTempPath(), "BlueStarTests_SteamNews1_" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var handler = new MockSteamNewsHandler();
+            using var httpClient = new HttpClient(handler);
+            var cache = new FileCacheService(NullLogger<FileCacheService>.Instance, testDir);
 
-        var client = new SteamStoreApiClient(httpClient, NullLogger<SteamStoreApiClient>.Instance, cache);
+            var client = new SteamStoreApiClient(httpClient, NullLogger<SteamStoreApiClient>.Instance, cache);
 
-        var first = await client.GetLatestAppUpdateDateAsync(1245620);
-        var second = await client.GetLatestAppUpdateDateAsync(1245620);
+            var first = await client.GetLatestAppUpdateDateAsync(1245620);
+            var second = await client.GetLatestAppUpdateDateAsync(1245620);
 
-        first.Should().NotBeNull();
-        second.Should().NotBeNull();
-        first.Should().Be(second);
+            first.Should().NotBeNull();
+            second.Should().NotBeNull();
+            first.Should().Be(second);
 
-        handler.NewsRequestCount.Should().Be(1);
+            handler.NewsRequestCount.Should().Be(1);
+        }
+        finally
+        {
+            try { Directory.Delete(testDir, true); } catch { }
+        }
     }
 
     [Fact]
     public async Task GetLatestAppUpdateDateAsync_ConcurrentRequests_DeduplicatesInFlightTasks()
     {
-        var handler = new MockSteamNewsHandler();
-        using var httpClient = new HttpClient(handler);
-        var cache = new FileCacheService(NullLogger<FileCacheService>.Instance);
-        await cache.ClearAsync();
-
-        var client = new SteamStoreApiClient(httpClient, NullLogger<SteamStoreApiClient>.Instance, cache);
-
-        var tasks = new Task<DateTimeOffset?>[5];
-        for (int i = 0; i < 5; i++)
+        var testDir = Path.Combine(Path.GetTempPath(), "BlueStarTests_SteamNews2_" + Guid.NewGuid().ToString("N"));
+        try
         {
-            tasks[i] = Task.Run(() => client.GetLatestAppUpdateDateAsync(1245620));
-        }
+            var handler = new MockSteamNewsHandler();
+            using var httpClient = new HttpClient(handler);
+            var cache = new FileCacheService(NullLogger<FileCacheService>.Instance, testDir);
 
-        var results = await Task.WhenAll(tasks);
-        foreach (var r in results)
+            var client = new SteamStoreApiClient(httpClient, NullLogger<SteamStoreApiClient>.Instance, cache);
+
+            var tasks = new Task<DateTimeOffset?>[5];
+            for (int i = 0; i < 5; i++)
+            {
+                tasks[i] = Task.Run(() => client.GetLatestAppUpdateDateAsync(1245620));
+            }
+
+            var results = await Task.WhenAll(tasks);
+            foreach (var r in results)
+            {
+                r.Should().NotBeNull();
+                r.Should().Be(results[0]);
+            }
+
+            handler.NewsRequestCount.Should().Be(1);
+        }
+        finally
         {
-            r.Should().NotBeNull();
-            r.Should().Be(results[0]);
+            try { Directory.Delete(testDir, true); } catch { }
         }
-
-        handler.NewsRequestCount.Should().Be(1);
     }
 }

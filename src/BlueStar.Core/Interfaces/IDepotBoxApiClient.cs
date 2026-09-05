@@ -24,32 +24,36 @@ public interface IDepotBoxApiClient
     /// </summary>
     /// <param name="appId">The application identifier of the game.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
+    /// <param name="forceRefresh">Whether to bypass and overwrite the local cache.</param>
     /// <returns>A task that represents the asynchronous operation. The task result contains the game metadata, or null if it was not found.</returns>
-    Task<GameMetadata?> GetGameAsync(uint appId, CancellationToken ct);
+    Task<GameMetadata?> GetGameAsync(uint appId, CancellationToken ct = default, bool forceRefresh = false);
 
     /// <summary>
     /// Retrieves a list of manifests for a specific game.
     /// </summary>
     /// <param name="appId">The application identifier of the game.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
+    /// <param name="forceRefresh">Whether to bypass and overwrite the local cache.</param>
     /// <returns>A task that represents the asynchronous operation. The task result contains a read-only list of manifests.</returns>
-    Task<IReadOnlyList<ManifestInfo>> GetManifestsAsync(uint appId, CancellationToken ct);
+    Task<IReadOnlyList<ManifestInfo>> GetManifestsAsync(uint appId, CancellationToken ct = default, bool forceRefresh = false);
 
     /// <summary>
     /// Checks whether a specific game is available.
     /// </summary>
     /// <param name="appId">The application identifier of the game.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
+    /// <param name="forceRefresh">Whether to bypass and overwrite the local cache.</param>
     /// <returns>A task that represents the asynchronous operation. The task result is true if the game is available; otherwise, false.</returns>
-    Task<bool> CheckAvailabilityAsync(uint appId, CancellationToken ct);
+    Task<bool> CheckAvailabilityAsync(uint appId, CancellationToken ct = default, bool forceRefresh = false);
 
     /// <summary>
     /// Checks the availability of multiple games in a single request.
     /// </summary>
     /// <param name="appIds">A collection of application identifiers to check.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
+    /// <param name="forceRefresh">Whether to bypass and overwrite the local cache.</param>
     /// <returns>A task that represents the asynchronous operation. The task result is a dictionary mapping application identifiers to their availability status.</returns>
-    Task<IDictionary<uint, bool>> BatchCheckAvailabilityAsync(IEnumerable<uint> appIds, CancellationToken ct);
+    Task<IDictionary<uint, bool>> BatchCheckAvailabilityAsync(IEnumerable<uint> appIds, CancellationToken ct = default, bool forceRefresh = false);
 
     /// <summary>
     /// Downloads an archive for a specific game synchronously.
@@ -105,4 +109,10 @@ public interface IDepotBoxApiClient
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     /// <returns>The path to the downloaded archive file.</returns>
     Task<string> DownloadGameFixAsync(string fixIdOrFilename, string targetPath, IProgress<DownloadProgress>? progress = null, string? downloadName = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Invalidates all cached entries (manifests, availability, game details) for the given AppId.
+    /// </summary>
+    /// <param name="appId">The application identifier to invalidate in cache.</param>
+    void InvalidateAppCache(uint appId);
 }

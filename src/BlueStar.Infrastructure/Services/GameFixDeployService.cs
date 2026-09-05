@@ -19,7 +19,8 @@ namespace BlueStar.Infrastructure.Services;
 /// </summary>
 public sealed class GameFixDeployService : IGameFixDeployService
 {
-    private readonly IDepotBoxApiClient _apiClient;
+    private readonly IDepotBoxApiClient? _apiClient;
+    private readonly IEnumerable<IFixProvider> _fixProviders;
     private readonly IInstanceManager _instanceManager;
     private readonly IDlcInstaller _dlcInstaller;
     private readonly IEngineDetector? _engineDetector;
@@ -34,18 +35,31 @@ public sealed class GameFixDeployService : IGameFixDeployService
     };
 
     public GameFixDeployService(
+        IInstanceManager instanceManager,
+        IDlcInstaller dlcInstaller,
+        ILogger<GameFixDeployService> logger,
+        IEnumerable<IFixProvider>? fixProviders = null,
+        IDepotBoxApiClient? apiClient = null,
+        IEngineDetector? engineDetector = null)
+    {
+        _instanceManager = instanceManager ?? throw new ArgumentNullException(nameof(instanceManager));
+        _dlcInstaller = dlcInstaller ?? throw new ArgumentNullException(nameof(dlcInstaller));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _fixProviders = fixProviders ?? [];
+        _apiClient = apiClient;
+        _engineDetector = engineDetector;
+    }
+
+    public GameFixDeployService(
         IDepotBoxApiClient apiClient,
         IInstanceManager instanceManager,
         IDlcInstaller dlcInstaller,
         ILogger<GameFixDeployService> logger,
         IEngineDetector? engineDetector = null)
+        : this(instanceManager, dlcInstaller, logger, null, apiClient, engineDetector)
     {
-        _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
-        _instanceManager = instanceManager ?? throw new ArgumentNullException(nameof(instanceManager));
-        _dlcInstaller = dlcInstaller ?? throw new ArgumentNullException(nameof(dlcInstaller));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _engineDetector = engineDetector;
     }
+
 
     /// <inheritdoc />
     public async Task<bool> DeployFixAsync(
@@ -122,7 +136,24 @@ public sealed class GameFixDeployService : IGameFixDeployService
                 });
             });
 
-            var zipPath = await _apiClient.DownloadGameFixAsync(fix.Id, cacheDir, downloadProgress, fix.DownloadName, ct).ConfigureAwait(false);
+            string zipPath;
+            var provider = _fixProviders.FirstOrDefault(p =>
+                fix.Id.StartsWith(p.ProviderId, StringComparison.OrdinalIgnoreCase) ||
+                (p.Capabilities.HasFlag(ProviderCapabilities.FixDownload) && !string.IsNullOrWhiteSpace(fix.DownloadUrl)));
+
+            if (provider != null)
+            {
+                zipPath = await provider.DownloadFixAsync(fix, cacheDir, downloadProgress, ct).ConfigureAwait(false);
+            }
+            else if (_apiClient != null)
+            {
+                zipPath = await _apiClient.DownloadGameFixAsync(fix.Id, cacheDir, downloadProgress, fix.DownloadName, ct).ConfigureAwait(false);
+            }
+            else
+            {
+                throw new InvalidOperationException($"No fix provider available to download fix '{fix.Name}' (ID: {fix.Id}).");
+            }
+
 
             if (!File.Exists(zipPath))
             {

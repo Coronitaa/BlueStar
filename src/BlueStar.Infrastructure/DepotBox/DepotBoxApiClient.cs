@@ -15,6 +15,7 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
     private readonly HttpClient _http;
     private readonly IDepotBoxAuthService _authService;
     private readonly BlueStar.Infrastructure.Storage.AppSettingsService? _appSettings;
+    private readonly ICacheService? _cacheService;
     private readonly ILogger<DepotBoxApiClient> _logger;
 
     private IReadOnlyList<GameFixInfo>? _cachedFixesCatalog;
@@ -38,19 +39,21 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
     /// <param name="authService">Authentication service for effective API key resolution.</param>
     /// <param name="logger">Logger instance.</param>
     /// <param name="appSettings">Application settings service for custom API URLs.</param>
+    /// <param name="cacheService">Cache service for persistent L1/L2 caching across sessions.</param>
     public DepotBoxApiClient(
         HttpClient http,
         IDepotBoxAuthService authService,
         ILogger<DepotBoxApiClient> logger,
-        BlueStar.Infrastructure.Storage.AppSettingsService? appSettings = null)
+        BlueStar.Infrastructure.Storage.AppSettingsService? appSettings = null,
+        ICacheService? cacheService = null)
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _authService = authService ?? throw new ArgumentNullException(nameof(authService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _appSettings = appSettings;
+        _cacheService = cacheService;
     }
 
-    /// <inheritdoc />
     /// <inheritdoc />
     public async Task<IReadOnlyList<SearchResult>> SearchGamesAsync(string query, CancellationToken ct)
     {
@@ -67,61 +70,171 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
     }
 
     /// <inheritdoc />
-    public async Task<GameMetadata?> GetGameAsync(uint appId, CancellationToken ct)
+    public async Task<GameMetadata?> GetGameAsync(uint appId, CancellationToken ct = default, bool forceRefresh = false)
     {
+        if (appId == 0) return null;
+
+        var cacheKey = $"depotbox_game_{appId}";
+        if (!forceRefresh && _cacheService != null)
+        {
+            try
+            {
+                var cached = await _cacheService.GetAsync<GameMetadata>(cacheKey, ct).ConfigureAwait(false);
+                if (cached != null)
+                    return cached;
+            }
+            catch { }
+        }
+
         using var request = await CreateRequestAsync(HttpMethod.Get, $"/api/games/{appId}", ct).ConfigureAwait(false);
 
         using var response = await SendWithErrorHandlingAsync(request, ct).ConfigureAwait(false);
         var jsonString = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
 
-        return ParseGameDetails(jsonString, appId);
+        var game = ParseGameDetails(jsonString, appId);
+        if (game != null && _cacheService != null)
+        {
+            try
+            {
+                await _cacheService.SetAsync(cacheKey, game, TimeSpan.FromDays(30), ct).ConfigureAwait(false);
+            }
+            catch { }
+        }
+
+        return game;
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<ManifestInfo>> GetManifestsAsync(uint appId, CancellationToken ct)
+    public async Task<IReadOnlyList<ManifestInfo>> GetManifestsAsync(uint appId, CancellationToken ct = default, bool forceRefresh = false)
     {
+        if (appId == 0) return [];
+
+        var cacheKey = $"depotbox_manifests_{appId}";
+        if (!forceRefresh && _cacheService != null)
+        {
+            try
+            {
+                var cached = await _cacheService.GetAsync<List<ManifestInfo>>(cacheKey, ct).ConfigureAwait(false);
+                if (cached != null && cached.Count > 0)
+                {
+                    _logger.LogDebug("DepotBox manifests for AppId {AppId} retrieved from cache ({Count} items)", appId, cached.Count);
+                    return cached;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to read manifests cache for AppId {AppId}", appId);
+            }
+        }
+
         using var request = await CreateRequestAsync(HttpMethod.Get, $"/api/manifests/{appId}", ct).ConfigureAwait(false);
 
         using var response = await SendWithErrorHandlingAsync(request, ct).ConfigureAwait(false);
         var jsonString = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
 
-        return ParseManifests(jsonString);
+        var manifests = ParseManifests(jsonString);
+
+        if (manifests.Count > 0 && _cacheService != null)
+        {
+            try
+            {
+                await _cacheService.SetAsync(cacheKey, manifests.ToList(), TimeSpan.FromDays(30), ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to persist manifests cache for AppId {AppId}", appId);
+            }
+        }
+
+        return manifests;
     }
 
     /// <inheritdoc />
-    public async Task<bool> CheckAvailabilityAsync(uint appId, CancellationToken ct)
+    public async Task<bool> CheckAvailabilityAsync(uint appId, CancellationToken ct = default, bool forceRefresh = false)
     {
+        if (appId == 0) return false;
+
+        var cacheKey = $"depotbox_avail_{appId}";
+        if (!forceRefresh && _cacheService != null)
+        {
+            try
+            {
+                var cached = await _cacheService.GetAsync<bool?>(cacheKey, ct).ConfigureAwait(false);
+                if (cached.HasValue)
+                    return cached.Value;
+            }
+            catch { }
+        }
+
         using var request = await CreateRequestAsync(HttpMethod.Get, $"/api/games/{appId}/availability", ct).ConfigureAwait(false);
 
         using var response = await SendWithErrorHandlingAsync(request, ct).ConfigureAwait(false);
         var jsonString = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
 
+        bool isAvail = false;
         try
         {
             using var doc = JsonDocument.Parse(jsonString);
             var root = doc.RootElement;
             if (TryGetBool(root, out var avail, "isAvailable", "available", "is_available", "success"))
-                return avail;
+                isAvail = avail;
         }
         catch { }
 
-        return false;
+        if (_cacheService != null)
+        {
+            try
+            {
+                await _cacheService.SetAsync(cacheKey, (bool?)isAvail, TimeSpan.FromDays(30), ct).ConfigureAwait(false);
+            }
+            catch { }
+        }
+
+        return isAvail;
     }
 
     /// <inheritdoc />
-    public async Task<IDictionary<uint, bool>> BatchCheckAvailabilityAsync(IEnumerable<uint> appIds, CancellationToken ct)
+    public async Task<IDictionary<uint, bool>> BatchCheckAvailabilityAsync(IEnumerable<uint> appIds, CancellationToken ct = default, bool forceRefresh = false)
     {
         var idList = appIds.ToList();
         if (idList.Count == 0)
             return new Dictionary<uint, bool>();
 
+        var result = new Dictionary<uint, bool>();
+        var pendingIds = new List<uint>();
+
+        if (!forceRefresh && _cacheService != null)
+        {
+            foreach (var id in idList)
+            {
+                var cacheKey = $"depotbox_avail_{id}";
+                try
+                {
+                    var cached = await _cacheService.GetAsync<bool?>(cacheKey, ct).ConfigureAwait(false);
+                    if (cached.HasValue)
+                    {
+                        result[id] = cached.Value;
+                        continue;
+                    }
+                }
+                catch { }
+                pendingIds.Add(id);
+            }
+        }
+        else
+        {
+            pendingIds = idList;
+        }
+
+        if (pendingIds.Count == 0)
+            return result;
+
         using var request = await CreateRequestAsync(HttpMethod.Post, "/api/games/batch-availability", ct).ConfigureAwait(false);
-        request.Content = JsonContent.Create(new { appids = idList }, options: JsonOptions);
+        request.Content = JsonContent.Create(new { appids = pendingIds }, options: JsonOptions);
 
         using var response = await SendWithErrorHandlingAsync(request, ct).ConfigureAwait(false);
         var jsonString = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
 
-        var result = new Dictionary<uint, bool>();
         try
         {
             using var doc = JsonDocument.Parse(jsonString);
@@ -139,11 +252,18 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
                 {
                     if (uint.TryParse(prop.Name, out var parsedAppId))
                     {
-                        if (prop.Value.ValueKind == JsonValueKind.True) result[parsedAppId] = true;
-                        else if (prop.Value.ValueKind == JsonValueKind.False) result[parsedAppId] = false;
-                        else if (prop.Value.ValueKind == JsonValueKind.Number) result[parsedAppId] = prop.Value.GetInt32() != 0;
+                        bool avail = false;
+                        if (prop.Value.ValueKind == JsonValueKind.True) avail = true;
+                        else if (prop.Value.ValueKind == JsonValueKind.False) avail = false;
+                        else if (prop.Value.ValueKind == JsonValueKind.Number) avail = prop.Value.GetInt32() != 0;
                         else if (prop.Value.ValueKind == JsonValueKind.Object && TryGetBool(prop.Value, out var a, "isAvailable", "available"))
-                            result[parsedAppId] = a;
+                            avail = a;
+
+                        result[parsedAppId] = avail;
+                        if (_cacheService != null)
+                        {
+                            _ = _cacheService.SetAsync($"depotbox_avail_{parsedAppId}", (bool?)avail, TimeSpan.FromDays(30), ct);
+                        }
                     }
                 }
             }
@@ -154,6 +274,23 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
         }
 
         return result;
+    }
+
+    /// <inheritdoc />
+    public void InvalidateAppCache(uint appId)
+    {
+        if (appId == 0 || _cacheService == null) return;
+        try
+        {
+            _ = _cacheService.RemoveAsync($"depotbox_manifests_{appId}");
+            _ = _cacheService.RemoveAsync($"depotbox_avail_{appId}");
+            _ = _cacheService.RemoveAsync($"depotbox_game_{appId}");
+            _logger.LogDebug("Invalidated DepotBox cache for AppId {AppId}", appId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to invalidate DepotBox cache for AppId {AppId}", appId);
+        }
     }
 
     /// <inheritdoc />

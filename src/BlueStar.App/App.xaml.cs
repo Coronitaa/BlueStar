@@ -60,13 +60,13 @@ public partial class App : Application
                 // Ignore Win32 errors
             }
 
-            Shutdown();
+            Environment.Exit(0);
             return;
         }
 
-        base.OnStartup(e);
 
         // Configure Serilog
+
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug()
             .WriteTo.File(
@@ -181,8 +181,41 @@ public partial class App : Application
         services.AddSingleton<IGameFixDeployService, BlueStar.Infrastructure.Services.GameFixDeployService>();
         services.AddSingleton<IGameLauncher, BlueStar.Infrastructure.Launcher.GameLauncherService>();
 
+        // Provider-Agnostic Multi-Source Architecture Services
+        services.AddSingleton<IManifestCacheService, BlueStar.Infrastructure.Cache.ManifestCacheService>();
+        services.AddSingleton<IDepotKeyRepository, BlueStar.Infrastructure.Storage.DepotKeyRepository>();
+
+        // Manifest Providers
+        services.AddSingleton<BlueStar.Infrastructure.Providers.Manifest.LocalCacheManifestProvider>();
+        services.AddSingleton<BlueStar.Infrastructure.Providers.Manifest.DepotBoxManifestProvider>();
+        services.AddSingleton<BlueStar.Infrastructure.Providers.Manifest.ManifestHubProvider>();
+
+        // Multi-Provider Manifest Registry
+        services.AddSingleton<IManifestRegistry>(sp =>
+        {
+            var logger = sp.GetRequiredService<ILogger<BlueStar.Infrastructure.Services.ManifestRegistry>>();
+            var cache = sp.GetRequiredService<IManifestCacheService>();
+            var providers = new IManifestProvider[]
+            {
+                sp.GetRequiredService<BlueStar.Infrastructure.Providers.Manifest.LocalCacheManifestProvider>(),
+                sp.GetRequiredService<BlueStar.Infrastructure.Providers.Manifest.DepotBoxManifestProvider>(),
+                sp.GetRequiredService<BlueStar.Infrastructure.Providers.Manifest.ManifestHubProvider>()
+            };
+            return new BlueStar.Infrastructure.Services.ManifestRegistry(providers, cache, logger);
+        });
+
+
+        // Provider-Agnostic Catalog, Curation, Builds & Planner
+        services.AddSingleton<IGameCatalogProvider, BlueStar.Infrastructure.Providers.Catalog.SteamStoreCatalogProvider>();
+        services.AddSingleton<IRecommendationProvider, BlueStar.Infrastructure.Providers.Curation.CommunityCurationProvider>();
+        services.AddSingleton<IBuildResolver, BlueStar.Infrastructure.Services.BuildResolver>();
+        services.AddSingleton<IInstallationPlanner, BlueStar.Infrastructure.Services.InstallationPlanner>();
+        services.AddHttpClient<BlueStar.Infrastructure.Providers.Fixes.OnlineFixProvider>();
+        services.AddSingleton<IFixProvider>(sp => sp.GetRequiredService<BlueStar.Infrastructure.Providers.Fixes.OnlineFixProvider>());
+
         // ViewModels
         services.AddSingleton<DownloadQueueManager>();
+
         services.AddTransient<ViewModels.MainViewModel>();
         services.AddTransient<ViewModels.HomeViewModel>();
         services.AddTransient<ViewModels.LibraryViewModel>();
@@ -214,7 +247,10 @@ public partial class App : Application
             }
         };
 
+        base.OnStartup(e);
+
         // Initialize dynamic localization
+
         try
         {
             _ = Services.GetRequiredService<ILocalizationService>();

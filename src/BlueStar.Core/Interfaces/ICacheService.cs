@@ -16,7 +16,7 @@ public interface ICacheService
     /// <param name="key">The cache key.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the asynchronous operation. The task result contains the cached object, or null if it was not found.</returns>
-    Task<T?> GetAsync<T>(string key, CancellationToken ct);
+    Task<T?> GetAsync<T>(string key, CancellationToken ct = default);
 
     /// <summary>
     /// Stores an object in the cache with the specified key.
@@ -27,7 +27,7 @@ public interface ICacheService
     /// <param name="expiry">An optional time-to-live for the cached item. If null, the item might not expire.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
-    Task SetAsync<T>(string key, T value, TimeSpan? expiry, CancellationToken ct);
+    Task SetAsync<T>(string key, T value, TimeSpan? expiry = null, CancellationToken ct = default);
 
     /// <summary>
     /// Removes an item from the cache by its key.
@@ -35,12 +35,12 @@ public interface ICacheService
     /// <param name="key">The cache key.</param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
-    Task RemoveAsync(string key, CancellationToken ct);
+    Task RemoveAsync(string key, CancellationToken ct = default);
 
     /// <summary>
     /// Clears all items from the cache.
     /// </summary>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
-    Task ClearAsync(CancellationToken ct);
+    Task ClearAsync(CancellationToken ct = default);
 }

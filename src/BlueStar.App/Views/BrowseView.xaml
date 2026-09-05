@@ -82,7 +82,8 @@
                                                FontSize="13" VerticalAlignment="Center" Margin="2,0,0,0"
                                                IsHitTestVisible="False"
                                                Visibility="{Binding SearchQuery, Converter={StaticResource InverseNullToVisibilityConverter}}"/>
-                                    <TextBox Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                                    <TextBox AutomationProperties.AutomationId="CatalogSearchTextBox"
+                                             Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                                              Background="Transparent"
                                              BorderThickness="0"
                                              Foreground="{StaticResource PrimaryTextBrush}"
@@ -106,7 +107,8 @@
                             </Grid>
                         </Border>
 
-                        <Button Grid.Column="2" Content="{DynamicResource String_SearchCatalogBtn}"
+                        <Button AutomationProperties.AutomationId="CatalogSearchButton"
+                                Grid.Column="2" Content="{DynamicResource String_SearchCatalogBtn}"
                                 Style="{StaticResource PrimaryButton}"
                                 Padding="24,10"
                                 FontSize="13"

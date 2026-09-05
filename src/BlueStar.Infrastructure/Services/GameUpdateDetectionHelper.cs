@@ -21,7 +21,9 @@ public static class GameUpdateDetectionHelper
     /// </summary>
     public static DateTimeOffset? GetInstalledManifestDate(GameInstance instance)
     {
-        if (instance == null || instance.Depots.Count == 0) return null;
+        if (instance == null) return null;
+        if (instance.InstalledVersionDate.HasValue) return instance.InstalledVersionDate.Value;
+        if (instance.Depots.Count == 0) return null;
 
         var searchDirs = new List<string>();
         if (!string.IsNullOrWhiteSpace(instance.InstallPath) && Directory.Exists(instance.InstallPath))
@@ -29,16 +31,27 @@ public static class GameUpdateDetectionHelper
             searchDirs.Add(instance.InstallPath);
             searchDirs.Add(Path.Combine(instance.InstallPath, ".depots"));
             searchDirs.Add(Path.Combine(instance.InstallPath, "depots"));
+            searchDirs.Add(Path.Combine(instance.InstallPath, ".DepotDownloader"));
         }
 
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         if (!string.IsNullOrWhiteSpace(appData))
         {
-            searchDirs.Add(Path.Combine(appData, "BlueStar", "manifests"));
+            searchDirs.Add(Path.Combine(appData, "BlueStar", "instances", instance.Id.ToString(), "manifests"));
             searchDirs.Add(Path.Combine(appData, "BlueStar", "instances", instance.Id.ToString()));
+            searchDirs.Add(Path.Combine(appData, "BlueStar", "cache", "manifests"));
+            searchDirs.Add(Path.Combine(appData, "BlueStar", "manifests"));
+        }
+
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (!string.IsNullOrWhiteSpace(localAppData))
+        {
+            searchDirs.Add(Path.Combine(localAppData, "BlueStar", "DepotWork", instance.Id.ToString()));
         }
 
         DateTimeOffset? latestDepotDate = null;
+
+        // Check instance depots in search directories
         foreach (var dir in searchDirs)
         {
             if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir)) continue;
@@ -55,6 +68,30 @@ public static class GameUpdateDetectionHelper
                     if (date.HasValue && (latestDepotDate == null || date.Value > latestDepotDate.Value))
                     {
                         latestDepotDate = date.Value;
+                    }
+                }
+            }
+
+            // Also check depot subdirectories inside global cache (e.g. cache/manifests/{depotId}/*.manifest)
+            if (dir.EndsWith("manifests", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var depot in instance.Depots)
+                {
+                    var subDepotDir = Path.Combine(dir, depot.DepotId.ToString());
+                    if (Directory.Exists(subDepotDir))
+                    {
+                        var manifestFiles = Directory.GetFiles(subDepotDir, $"*{depot.DepotId}*.manifest", SearchOption.TopDirectoryOnly)
+                            .Concat(Directory.GetFiles(subDepotDir, $"*{depot.ManifestId}*.manifest", SearchOption.TopDirectoryOnly))
+                            .Distinct();
+
+                        foreach (var mf in manifestFiles)
+                        {
+                            var date = SteamManifestDateHelper.GetManifestCreationDate(mf);
+                            if (date.HasValue && (latestDepotDate == null || date.Value > latestDepotDate.Value))
+                            {
+                                latestDepotDate = date.Value;
+                            }
+                        }
                     }
                 }
             }
@@ -105,24 +142,45 @@ public static class GameUpdateDetectionHelper
             }
 
             var latestDateText = latestDate.HasValue ? $"{latestDate.Value:d MMM yyyy}" : instance.Metadata?.ReleaseDate;
-            var installedDate = GetInstalledManifestDate(instance);
-            if (!installedDate.HasValue && instance.Metadata != null && !string.IsNullOrWhiteSpace(instance.Metadata.ReleaseDate))
-            {
-                if (DateTimeOffset.TryParse(instance.Metadata.ReleaseDate, out var relDate))
-                {
-                    installedDate = relDate;
-                }
-            }
-            var installedDateText = installedDate.HasValue ? $"{installedDate.Value:d MMM yyyy}" : null;
 
-            // 1. Date consistency check: If installed date and latest date are the same (or latest <= installed + 24h), no update is available
-            if (installedDate.HasValue && latestDate.HasValue)
+            // 1. Resolve authentic installed patch/version date:
+            // Priority: Instance.InstalledVersionDate -> Local manifest files -> SteamCMD matching -> Local installation time
+            DateTimeOffset? installedDate = instance.InstalledVersionDate;
+            if (!installedDate.HasValue)
             {
-                if (Math.Abs((latestDate.Value - installedDate.Value).TotalHours) <= 36.0 || latestDate.Value <= installedDate.Value.AddDays(1))
+                installedDate = GetInstalledManifestDate(instance);
+            }
+
+            // If no local manifest file exists on disk, check if installed depots match public or SteamCMD builds
+            if (!installedDate.HasValue && depotInfo != null && instance.Depots.Count > 0)
+            {
+                bool allMatch = true;
+                bool hasCheck = false;
+                foreach (var depot in instance.Depots)
                 {
-                    return (UpdateCheckStatus.UpToDate, null, latestDate, latestDateText, installedDate, installedDateText ?? latestDateText);
+                    if (depot.ManifestId > 0 && depotInfo.PublicManifests.TryGetValue(depot.DepotId, out var pubGid) && pubGid > 0)
+                    {
+                        hasCheck = true;
+                        if (depot.ManifestId != pubGid)
+                        {
+                            allMatch = false;
+                            break;
+                        }
+                    }
+                }
+                if (hasCheck && allMatch && depotInfo.LatestBuildDate.HasValue)
+                {
+                    installedDate = depotInfo.LatestBuildDate.Value;
                 }
             }
+
+            // Fallback: use instance local installation timestamp instead of the game's initial release date
+            if (!installedDate.HasValue)
+            {
+                installedDate = instance.UpdatedAt > DateTimeOffset.MinValue ? instance.UpdatedAt : instance.CreatedAt;
+            }
+
+            var installedDateText = installedDate.HasValue ? $"{installedDate.Value:d MMM yyyy}" : null;
 
             // 2. Direct Depot Manifest ID comparison
             if (instance.Status == InstanceStatus.Ready && depotInfo != null && instance.Depots.Count > 0)
@@ -156,7 +214,18 @@ public static class GameUpdateDetectionHelper
                 }
                 else if (hasCheckedDepot && allDepotsMatch)
                 {
-                    return (UpdateCheckStatus.UpToDate, null, latestDate, latestDateText, latestDate, latestDateText);
+                    var confirmedDate = installedDate ?? latestDate;
+                    var confirmedText = installedDateText ?? latestDateText;
+                    return (UpdateCheckStatus.UpToDate, null, latestDate, latestDateText, confirmedDate, confirmedText);
+                }
+            }
+
+            // 3. Date consistency check: If installed date and latest date are within threshold, up to date
+            if (installedDate.HasValue && latestDate.HasValue)
+            {
+                if (Math.Abs((latestDate.Value - installedDate.Value).TotalHours) <= 36.0 || latestDate.Value <= installedDate.Value.AddDays(1))
+                {
+                    return (UpdateCheckStatus.UpToDate, null, latestDate, latestDateText, installedDate, installedDateText ?? latestDateText);
                 }
             }
 

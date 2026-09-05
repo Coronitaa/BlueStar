@@ -667,12 +667,16 @@ public class DownloadQueueManager
 
                     bool anyDepotNotDownloaded = updatedDepots.Any(d => !d.IsDownloaded);
 
+                    var installedManifestDate = BlueStar.Infrastructure.Services.GameUpdateDetectionHelper.GetInstalledManifestDate(existing);
+                    var versionDate = installedManifestDate ?? existing.InstalledVersionDate ?? DateTimeOffset.UtcNow;
+
                     var updatedInstance = existing with
                     {
                         Status = InstanceStatus.Ready,
                         Depots = updatedDepots.AsReadOnly(),
                         Dlcs = updatedDlcs.AsReadOnly(),
                         UpdatedAt = DateTimeOffset.UtcNow,
+                        InstalledVersionDate = versionDate,
                         SourceArchivePath = (anyDepotNotDownloaded && !string.IsNullOrWhiteSpace(existing.SourceArchivePath))
                             ? existing.SourceArchivePath
                             : null
