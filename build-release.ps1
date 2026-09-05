@@ -74,7 +74,7 @@ $releaseSettings | ConvertTo-Json -Depth 5 | Set-Content -Path $settingsJsonPath
 
 # 2.2 Bundle Visual C++ and Windows system runtime dependencies for zero-dependency portable mode
 Write-Host "  Bundling VC++ runtimes and system dependencies for zero-dependency execution..." -ForegroundColor Gray
-$sys32 = [Environment]::GetFolderPath([Environment.SpecialFolder]::System)
+$sys32 = "$env:WINDIR\System32"
 $vcDlls = @(
     "msvcp140.dll",
     "msvcp140_1.dll",
