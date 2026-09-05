@@ -13,7 +13,7 @@ namespace BlueStar.App.ViewModels;
 public partial class AboutViewModel : ObservableObject
 {
     [ObservableProperty]
-    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.2.3";
+    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.3.0";
 
     [ObservableProperty]
     private ObservableCollection<ProjectCredit> _projects = [];
@@ -30,9 +30,9 @@ public partial class AboutViewModel : ObservableObject
             new ProjectCredit
             {
                 Name = "BlueStar Launcher",
-                Role = "Core Application",
-                Description = "Universal Steam game instance manager, depot staging, manifest resolver, and multi-engine launcher.",
-                Author = "Coronitaa & Contributors",
+                Role = "Core Application & Instance Manager",
+                Description = "Universal Steam game instance manager, depot staging, manifest resolver, multi-layer fix pipeline, and multi-engine launcher.",
+                Author = "Corøna & Contributors",
                 License = "GPL-3.0",
                 GitHubUrl = "https://github.com/Coronitaa/BlueStar",
                 CategoryBadge = "Core App",
@@ -51,10 +51,46 @@ public partial class AboutViewModel : ObservableObject
             },
             new ProjectCredit
             {
-                Name = "DepotDownloader",
+                Name = "OnlineFix Community",
+                Role = "Steamworks Online Multiplayer Emulation Fixes",
+                Description = "Community network of multiplayer fixes, dedicated Steamworks bypasses, and cross-client online lobbies with multi-layer composition.",
+                Author = "OnlineFix Community",
+                License = "Community Service",
+                GitHubUrl = "https://onlinefix.manifesthub.uk",
+                WebsiteUrl = "https://onlinefix.manifesthub.uk",
+                CategoryBadge = "Multiplayer",
+                IsCore = true
+            },
+            new ProjectCredit
+            {
+                Name = "ManifestHub2",
+                Role = "Community Steam Manifest & Key Repository",
+                Description = "Community Steam manifest repository, branch manifest GIDs, and depot AES decryption keys provider.",
+                Author = "SSMGAlt",
+                License = "Community Repository",
+                GitHubUrl = "https://github.com/SSMGAlt/ManifestHub2",
+                WebsiteUrl = "https://github.com/SSMGAlt/ManifestHub2",
+                CategoryBadge = "Manifests",
+                IsCore = true
+            },
+            new ProjectCredit
+            {
+                Name = "DepotBox",
+                Role = "Depots & Metadata Service",
+                Description = "Manifest archive index, game availability status, and metadata REST API service.",
+                Author = "DepotBox Team",
+                License = "Web Service",
+                GitHubUrl = "https://depotbox.org",
+                WebsiteUrl = "https://depotbox.org",
+                CategoryBadge = "Service",
+                IsCore = true
+            },
+            new ProjectCredit
+            {
+                Name = "DepotDownloader & Mod Fork",
                 Role = "Steam Depot & Manifest Downloader",
-                Description = "Cross-platform CLI tool to download content and manifests directly from Steam depots via SteamKit2.",
-                Author = "SteamRE",
+                Description = "High-performance CLI and library tool to download content, chunks, and manifests directly from Steam depots via SteamKit2.",
+                Author = "SteamRE & Coronitaa",
                 License = "GPL-2.0",
                 GitHubUrl = "https://github.com/SteamRE/DepotDownloader",
                 CategoryBadge = "Downloader",
@@ -128,13 +164,13 @@ public partial class AboutViewModel : ObservableObject
             },
             new ProjectCredit
             {
-                Name = "QRCoder",
-                Role = "Pure C# QR Code Generator",
-                Description = "High performance, zero-dependency pure C# QR code library used for mobile companion links.",
-                Author = "codebude",
-                License = "MIT",
-                GitHubUrl = "https://github.com/codebude/QRCoder",
-                CategoryBadge = "Utility",
+                Name = "Polly",
+                Role = "Resilience & Transient Fault-Handling Pipeline",
+                Description = "Resilience and transient fault-handling library providing retry policies and circuit breakers for robust network operations.",
+                Author = "App-vNext / .NET Foundation",
+                License = "BSD-3-Clause",
+                GitHubUrl = "https://github.com/App-vNext/Polly",
+                CategoryBadge = "Resilience",
                 IsCore = false
             },
             new ProjectCredit
@@ -161,27 +197,14 @@ public partial class AboutViewModel : ObservableObject
             },
             new ProjectCredit
             {
-                Name = "ManifestHub2",
-                Role = "Community Manifest & Key Repository",
-                Description = "Community Steam manifest repository, branch manifest GIDs, and depot AES decryption keys provider.",
-                Author = "SSMGAlt",
-                License = "Community Repository",
-                GitHubUrl = "https://github.com/SSMGAlt/ManifestHub2",
-                WebsiteUrl = "https://github.com/SSMGAlt/ManifestHub2",
-                CategoryBadge = "Manifests",
-                IsCore = true
-            },
-            new ProjectCredit
-            {
-                Name = "DepotBox",
-                Role = "Depots & Metadata Service",
-                Description = "Manifest archive index, game availability status, and metadata REST API service.",
-                Author = "DepotBox Team",
-                License = "Web Service",
-                GitHubUrl = "https://depotbox.org",
-                WebsiteUrl = "https://depotbox.org",
-                CategoryBadge = "Service",
-                IsCore = true
+                Name = "QRCoder",
+                Role = "Pure C# QR Code Generator",
+                Description = "High performance, zero-dependency pure C# QR code library used for mobile companion links.",
+                Author = "codebude",
+                License = "MIT",
+                GitHubUrl = "https://github.com/codebude/QRCoder",
+                CategoryBadge = "Utility",
+                IsCore = false
             }
         ];
     }

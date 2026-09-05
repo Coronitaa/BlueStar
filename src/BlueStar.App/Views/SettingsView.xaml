@@ -480,6 +480,8 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="12"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="12"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <!-- 1. ReFix -->
@@ -687,6 +689,58 @@
                                         Padding="8,4" FontSize="11" VerticalAlignment="Center"
                                         Command="{Binding OpenUrlCommand}"
                                         CommandParameter="https://github.com/App-vNext/Polly"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- 9. ManifestHub2 -->
+                        <Border Grid.Row="8" Grid.Column="0" Background="{StaticResource SurfaceInputBrush}"
+                                BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                                CornerRadius="{StaticResource RadiusMd}" Padding="14,12">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                        <TextBlock Text="ManifestHub2" FontWeight="Bold" FontSize="13" Foreground="{StaticResource AccentBrush}" Margin="0,0,8,0"/>
+                                        <Border Background="{StaticResource SurfaceCardBrush}" CornerRadius="4" Padding="5,1">
+                                            <TextBlock Text="by SSMGAlt" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="Community Steam manifest repository, branch manifest GIDs, and depot AES decryption keys provider."
+                                               Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="GitHub ↗" Style="{StaticResource GhostButton}"
+                                        Padding="8,4" FontSize="11" VerticalAlignment="Center"
+                                        Command="{Binding OpenUrlCommand}"
+                                        CommandParameter="https://github.com/SSMGAlt/ManifestHub2"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- 10. OnlineFix Community -->
+                        <Border Grid.Row="8" Grid.Column="2" Background="{StaticResource SurfaceInputBrush}"
+                                BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                                CornerRadius="{StaticResource RadiusMd}" Padding="14,12">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                        <TextBlock Text="OnlineFix" FontWeight="Bold" FontSize="13" Foreground="{StaticResource AccentBrush}" Margin="0,0,8,0"/>
+                                        <Border Background="{StaticResource SurfaceCardBrush}" CornerRadius="4" Padding="5,1">
+                                            <TextBlock Text="Community Service" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="Multiplayer and Steamworks online emulation fixes for cross-client co-op lobbies."
+                                               Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="Web ↗" Style="{StaticResource GhostButton}"
+                                        Padding="8,4" FontSize="11" VerticalAlignment="Center"
+                                        Command="{Binding OpenUrlCommand}"
+                                        CommandParameter="https://onlinefix.manifesthub.uk"/>
                             </Grid>
                         </Border>
                     </Grid>

@@ -49,4 +49,11 @@ public sealed class ProjectCredit
     /// Whether this is a core primary component of BlueStar.
     /// </summary>
     public bool IsCore { get; init; }
+
+    /// <summary>
+    /// Display text for the external link button (e.g. "GitHub ↗", "GitLab ↗", "Website ↗").
+    /// </summary>
+    public string LinkButtonText =>
+        GitHubUrl.Contains("github.com", StringComparison.OrdinalIgnoreCase) ? "GitHub ↗" :
+        GitHubUrl.Contains("gitlab.com", StringComparison.OrdinalIgnoreCase) ? "GitLab ↗" : "Website ↗";
 }

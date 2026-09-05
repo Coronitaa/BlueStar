@@ -153,13 +153,14 @@
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
 
-                                        <TextBlock Grid.Column="0" Text="{Binding Author, StringFormat='Author: {0}'}"
+                                        <TextBlock Grid.Column="0" Text="{Binding Author}"
                                                    Style="{StaticResource Caption}"
+                                                   Foreground="{StaticResource SecondaryTextBrush}"
                                                    VerticalAlignment="Center"
                                                    TextTrimming="CharacterEllipsis"/>
 
                                         <Button Grid.Column="1"
-                                                Content="{DynamicResource String_ViewOnGitHub}"
+                                                Content="{Binding LinkButtonText}"
                                                 Style="{StaticResource SecondaryButton}"
                                                 Padding="12,6"
                                                 FontSize="11"
