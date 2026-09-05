@@ -24,9 +24,20 @@ public sealed class AppSettingsService
     public AppSettingsService(ILogger<AppSettingsService> logger, string? settingsPath = null)
     {
         _logger = logger;
-        _settingsPath = settingsPath ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "BlueStar", "settings.json");
+
+        if (settingsPath != null)
+        {
+            _settingsPath = settingsPath;
+        }
+        else
+        {
+            var localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
+            var appDataPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "BlueStar", "settings.json");
+
+            _settingsPath = File.Exists(localPath) ? localPath : appDataPath;
+        }
 
         Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
         LoadSettings();
@@ -50,10 +61,41 @@ public sealed class AppSettingsService
     public bool DeleteDepotsAfterInstall => _current.DeleteDepotsAfterInstall;
 
     /// <summary>Default backend API base URL.</summary>
-    public string DefaultApiUrl => string.IsNullOrWhiteSpace(_current.DefaultApiUrl) ? "https://depotbox.org" : _current.DefaultApiUrl;
+    public string DefaultApiUrl
+    {
+        get
+        {
+            var envUrl = Environment.GetEnvironmentVariable("BLUESTAR_DEPOTBOX_API_URL")
+                         ?? Environment.GetEnvironmentVariable("DEPOTBOX_API_URL");
+            if (!string.IsNullOrWhiteSpace(envUrl))
+            {
+                return envUrl.Trim().TrimEnd('/');
+            }
+
+            return string.IsNullOrWhiteSpace(_current.DefaultApiUrl) ? "https://depotbox.org" : _current.DefaultApiUrl;
+        }
+    }
 
     /// <summary>Default backend API key configured in backend.</summary>
-    public string? DefaultApiKey => _current.DefaultApiKey;
+    public string? DefaultApiKey
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(_current.DefaultApiKey) && _current.DefaultApiKey != "YOUR-API-KEY")
+            {
+                return _current.DefaultApiKey;
+            }
+
+            var envKey = Environment.GetEnvironmentVariable("BLUESTAR_DEPOTBOX_API_KEY")
+                         ?? Environment.GetEnvironmentVariable("DEPOTBOX_API_KEY");
+            if (!string.IsNullOrWhiteSpace(envKey))
+            {
+                return envKey.Trim();
+            }
+
+            return _current.DefaultApiKey;
+        }
+    }
 
     /// <summary>Whether to show NSFW / adult content in catalogs and searches (default false).</summary>
     public bool ShowNsfwContent => _current.ShowNsfwContent;

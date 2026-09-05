@@ -75,3 +75,8 @@ src/BlueStar.App/tools/depots/
 *.pem
 *.lock
 *.log
+settings.json
+**/settings.json
+*.env
+*.env.*
+*.token

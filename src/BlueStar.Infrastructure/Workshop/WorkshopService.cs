@@ -648,6 +648,7 @@ public sealed class WorkshopService : IWorkshopService
                     CreateNoWindow = true,
                     WorkingDirectory = Path.GetDirectoryName(ddPath)
                 };
+                psi.EnvironmentVariables["DOTNET_ROOT"] = AppContext.BaseDirectory;
 
                 using var proc = new System.Diagnostics.Process { StartInfo = psi };
                 proc.OutputDataReceived += (_, e) =>

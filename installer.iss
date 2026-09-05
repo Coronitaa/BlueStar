@@ -2,8 +2,8 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "BlueStar"
-#define MyAppVersion "1.2.3"
-#define MyAppPublisher "Corøna"
+#define MyAppVersion "1.3.0"
+#define MyAppPublisher "BlueStar Devs"
 #define MyAppURL "https://github.com/Coronitaa/BlueStar"
 #define MyAppExeName "BlueStar.exe"
 
@@ -20,6 +20,8 @@ AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 UninstallDisplayIcon={app}\{#MyAppExeName}
 DisableProgramGroupPage=yes
+; Language selection dialog
+ShowLanguageDialog=yes
 ; Architecture
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -50,3 +52,52 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  SettingsFile: String;
+  AppDataFile: String;
+  SelectedLang: String;
+  FileContent: AnsiString;
+  ContentStr: String;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    if ActiveLanguage = 'spanish' then
+      SelectedLang := 'es'
+    else
+      SelectedLang := 'en';
+
+    SettingsFile := ExpandConstant('{app}\settings.json');
+    if FileExists(SettingsFile) then
+    begin
+      if LoadStringFromFile(SettingsFile, FileContent) then
+      begin
+        ContentStr := String(FileContent);
+        StringChange(ContentStr, '"language": "en"', '"language": "' + SelectedLang + '"');
+        StringChange(ContentStr, '"language": "es"', '"language": "' + SelectedLang + '"');
+        SaveStringToFile(SettingsFile, AnsiString(ContentStr), False);
+      end;
+    end;
+
+    AppDataFile := ExpandConstant('{userappdata}\BlueStar\settings.json');
+    if not DirExists(ExpandConstant('{userappdata}\BlueStar')) then
+      CreateDir(ExpandConstant('{userappdata}\BlueStar'));
+
+    if FileExists(AppDataFile) then
+    begin
+      if LoadStringFromFile(AppDataFile, FileContent) then
+      begin
+        ContentStr := String(FileContent);
+        StringChange(ContentStr, '"language": "en"', '"language": "' + SelectedLang + '"');
+        StringChange(ContentStr, '"language": "es"', '"language": "' + SelectedLang + '"');
+        SaveStringToFile(AppDataFile, AnsiString(ContentStr), False);
+      end;
+    end
+    else if FileExists(SettingsFile) then
+    begin
+      FileCopy(SettingsFile, AppDataFile, False);
+    end;
+  end;
+end;

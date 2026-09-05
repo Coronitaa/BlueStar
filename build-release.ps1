@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "1.2.3"
+    [string]$Version = "1.3.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,6 +13,7 @@ $distDir = Join-Path $rootDir "dist"
 $publishDir = Join-Path $distDir "publish"
 $portableZip = Join-Path $distDir ('BlueStar-v' + $Version + '-Portable-win-x64.zip')
 $setupExe = Join-Path $distDir ('BlueStar-v' + $Version + '-Setup-win-x64.exe')
+$timestampServer = "http://timestamp.digicert.com"
 
 # 1. Clean previous dist output
 if (Test-Path $distDir) {
@@ -32,10 +33,84 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+# 2.1 Inject bundled configuration and API keys into publish directory (dynamically retrieved, NEVER committed to git)
+Write-Host "  Configuring bundled release settings and API key from local environment..." -ForegroundColor Gray
+$appDataSettingsPath = Join-Path $env:APPDATA "BlueStar\settings.json"
+$discoveredApiKey = $null
+$discoveredApiUrl = "https://depotbox.org"
+
+if (Test-Path $appDataSettingsPath) {
+    try {
+        $existingConfig = Get-Content $appDataSettingsPath -Raw | ConvertFrom-Json
+        if ($existingConfig.defaultApiKey -and $existingConfig.defaultApiKey -ne "YOUR-API-KEY") {
+            $discoveredApiKey = $existingConfig.defaultApiKey
+        }
+        if ($existingConfig.defaultApiUrl) {
+            $discoveredApiUrl = $existingConfig.defaultApiUrl
+        }
+    } catch { }
+}
+
+if ([string]::IsNullOrWhiteSpace($discoveredApiKey)) {
+    $discoveredApiKey = $env:BLUESTAR_DEPOTBOX_API_KEY
+    if ([string]::IsNullOrWhiteSpace($discoveredApiKey)) {
+        $discoveredApiKey = $env:DEPOTBOX_API_KEY
+    }
+}
+
+$releaseSettings = [ordered]@{
+    language = "en"
+    defaultApiUrl = $discoveredApiUrl
+    defaultApiKey = $discoveredApiKey
+    deleteDepotsAfterInstall = $true
+    showNsfwContent = $false
+    showDrmContent = $true
+    enableAdvancedBuildOptions = $false
+    enableExperimentalMods = $false
+    checkSystemRequirementsOnStartup = $true
+}
+$settingsJsonPath = Join-Path $publishDir "settings.json"
+$releaseSettings | ConvertTo-Json -Depth 5 | Set-Content -Path $settingsJsonPath -Encoding UTF8
+
+# 2.2 Bundle Visual C++ and Windows system runtime dependencies for zero-dependency portable mode
+Write-Host "  Bundling VC++ runtimes and system dependencies for zero-dependency execution..." -ForegroundColor Gray
+$sys32 = [Environment]::GetFolderPath([Environment.SpecialFolder]::System)
+$vcDlls = @(
+    "msvcp140.dll",
+    "msvcp140_1.dll",
+    "msvcp140_2.dll",
+    "msvcp140_atomic_wait.dll",
+    "msvcp140_codecvt_ids.dll",
+    "vcruntime140.dll",
+    "vcruntime140_1.dll",
+    "vcruntime140_threads.dll",
+    "vcomp140.dll",
+    "ucrtbase.dll"
+)
+$toolsDir = Join-Path $publishDir "tools"
+foreach ($dll in $vcDlls) {
+    $srcPath = Join-Path $sys32 $dll
+    if (Test-Path $srcPath) {
+        Copy-Item -Path $srcPath -Destination $publishDir -Force
+        if (Test-Path $toolsDir) {
+            Copy-Item -Path $srcPath -Destination $toolsDir -Force
+        }
+    }
+}
+
+# 2.3 Copy .NET host runtime libraries to tools directory for DepotDownloaderMod standalone operation
+$dotnetHostDlls = @("hostfxr.dll", "hostpolicy.dll", "coreclr.dll", "clrjit.dll")
+foreach ($dDll in $dotnetHostDlls) {
+    $srcHost = Join-Path $publishDir $dDll
+    if (Test-Path $srcHost) {
+        Copy-Item -Path $srcHost -Destination $toolsDir -Force
+    }
+}
+
 # 3. Setup Code Signing Certificate ("BlueStar Devs")
 Write-Host "[3/6] Configuring code signing certificate ('BlueStar Devs')..." -ForegroundColor Yellow
 $certSubject = "CN=BlueStar Devs"
-$cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -eq $certSubject } | Select-Object -First 1
+$cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -eq $certSubject -or $_.Subject -like "*BlueStar*Devs*" } | Select-Object -First 1
 
 if (-not $cert) {
     Write-Host "  Creating new Code Signing Certificate '$certSubject'..." -ForegroundColor Gray
@@ -48,20 +123,26 @@ if ($cert) {
     # Export public certificate (.cer)
     $cerPath = Join-Path $distDir "BlueStar_Certificate.cer"
     [System.IO.File]::WriteAllBytes($cerPath, $cert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+    Copy-Item -Path $cerPath -Destination $publishDir -Force
+
+    # Create certificate install batch script for distribution
+    $installBatContent = "@echo off`r`necho Installing BlueStar Digital Certificate into Windows Certificate Store...`r`ncertutil -user -f -addstore Root `"%~dp0BlueStar_Certificate.cer`"`r`ncertutil -user -f -addstore TrustedPublisher `"%~dp0BlueStar_Certificate.cer`"`r`necho Certificate installed successfully.`r`npause"
+    Set-Content -Path (Join-Path $distDir "install-cert.bat") -Value $installBatContent -Encoding ASCII
+    Set-Content -Path (Join-Path $publishDir "install-cert.bat") -Value $installBatContent -Encoding ASCII
     
     # Sign main executable and key libraries
-    Write-Host "  Signing application binaries in publish directory..." -ForegroundColor Gray
+    Write-Host "  Signing application binaries with DigiCert timestamp..." -ForegroundColor Gray
     $filesToSign = Get-ChildItem -Path $publishDir -Include *.exe, *.dll -Recurse
     foreach ($file in $filesToSign) {
         try {
-            Set-AuthenticodeSignature -FilePath $file.FullName -Certificate $cert -HashAlgorithm SHA256 -ErrorAction SilentlyContinue | Out-Null
+            Set-AuthenticodeSignature -FilePath $file.FullName -Certificate $cert -TimestampServer $timestampServer -HashAlgorithm SHA256 -ErrorAction SilentlyContinue | Out-Null
         } catch { }
     }
     
     $mainExe = Join-Path $publishDir "BlueStar.exe"
     if (Test-Path $mainExe) {
         $sig = Get-AuthenticodeSignature -FilePath $mainExe
-        Write-Host "  Verification for BlueStar.exe: $($sig.Status) (Signer: $($sig.SignerCertificate.Subject))" -ForegroundColor Cyan
+        Write-Host "  Verification for BlueStar.exe: $($sig.Status) (Signer: $($sig.SignerCertificate.Subject), Timestamp: $($sig.TimeStamperCertificate -ne $null))" -ForegroundColor Cyan
     }
 } else {
     Write-Warning "Could not obtain code signing certificate for '$certSubject'."
@@ -103,12 +184,12 @@ if (-not $isccExe) {
     }
 
     if (Test-Path $setupExe) {
-        # Sign the generated installer executable
+        # Sign the generated installer executable with RFC 3161 Timestamp
         if ($cert) {
-            Write-Host "  Signing Installer executable ($setupExe)..." -ForegroundColor Gray
-            Set-AuthenticodeSignature -FilePath $setupExe -Certificate $cert -HashAlgorithm SHA256 -ErrorAction SilentlyContinue | Out-Null
+            Write-Host "  Signing Installer executable ($setupExe) with DigiCert timestamp..." -ForegroundColor Gray
+            Set-AuthenticodeSignature -FilePath $setupExe -Certificate $cert -TimestampServer $timestampServer -HashAlgorithm SHA256 -ErrorAction SilentlyContinue | Out-Null
             $setupSig = Get-AuthenticodeSignature -FilePath $setupExe
-            Write-Host "  Verification for Installer: $($setupSig.Status) (Signer: $($setupSig.SignerCertificate.Subject))" -ForegroundColor Cyan
+            Write-Host "  Verification for Installer: $($setupSig.Status) (Signer: $($setupSig.SignerCertificate.Subject), Timestamp: $($setupSig.TimeStamperCertificate -ne $null))" -ForegroundColor Cyan
         }
         
         $setupItem = Get-Item $setupExe
