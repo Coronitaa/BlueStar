@@ -90,7 +90,10 @@ public sealed class FileCacheService : ICacheService
             var entry = JsonSerializer.Deserialize<CacheEntry<T>>(json, JsonOptions);
 
             if (entry is null)
+            {
+                try { if (File.Exists(filePath)) File.Delete(filePath); } catch { }
                 return default;
+            }
 
             // Check expiration
             if (entry.ExpiresAt.HasValue && entry.ExpiresAt.Value < now)
@@ -113,9 +116,16 @@ public sealed class FileCacheService : ICacheService
 
             return entry.Value;
         }
-        catch (Exception ex) when (ex is JsonException or IOException)
+        catch (JsonException ex)
         {
-            _logger.LogWarning(ex, "Failed to read cache entry for key: {Key}", key);
+            _logger.LogWarning(ex, "Corrupt cache file detected for key: {Key}. Safely discarding corrupt cache.", key);
+            _memoryCache.TryRemove(key, out _);
+            try { if (File.Exists(filePath)) File.Delete(filePath); } catch { }
+            return default;
+        }
+        catch (IOException ex)
+        {
+            _logger.LogWarning(ex, "IO error reading cache entry for key: {Key}", key);
             return default;
         }
     }

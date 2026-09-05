@@ -1302,31 +1302,10 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
         }
     }
 
-    private static async Task<string> ResolveBannerUrlAsync(uint appId, CancellationToken ct = default)
+    private static Task<string> ResolveBannerUrlAsync(uint appId, CancellationToken ct = default)
     {
-        if (appId == 0) return string.Empty;
-
-        var urls = new[]
-        {
-            $"https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/{appId}/header.jpg",
-            $"https://cdn.akamai.steamstatic.com/steam/apps/{appId}/header.jpg",
-            $"https://cdn.cloudflare.steamstatic.com/steam/apps/{appId}/header.jpg",
-            $"https://steamcdn-a.akamaihd.net/steam/apps/{appId}/header.jpg"
-        };
-
-        using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(4) };
-        foreach (var url in urls)
-        {
-            try
-            {
-                using var resp = await http.GetAsync(url, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-                if (resp.IsSuccessStatusCode)
-                    return url;
-            }
-            catch { }
-        }
-
-        return $"https://cdn.cloudflare.steamstatic.com/steam/apps/{appId}/header.jpg";
+        if (appId == 0) return Task.FromResult(string.Empty);
+        return Task.FromResult($"https://cdn.cloudflare.steamstatic.com/steam/apps/{appId}/header.jpg");
     }
 
     /// <summary>

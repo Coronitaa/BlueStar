@@ -45,12 +45,34 @@ public sealed class ManifestCacheService : IManifestCacheService
     /// <inheritdoc />
     public bool HasManifest(uint depotId, ulong manifestId)
     {
-        var path = GetManifestPath(depotId, manifestId);
-        return !string.IsNullOrWhiteSpace(path) && File.Exists(path) && ValidateManifest(path);
+        var path = GetCandidateManifestPath(depotId, manifestId);
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return false;
+
+        if (ValidateManifest(path))
+            return true;
+
+        _logger.LogWarning("Corrupt manifest file detected at {Path} for DepotId={DepotId}, ManifestId={ManifestId}. Safely discarding.", path, depotId, manifestId);
+        try { File.Delete(path); } catch { }
+        return false;
     }
 
     /// <inheritdoc />
     public string? GetManifestPath(uint depotId, ulong manifestId)
+    {
+        var path = GetCandidateManifestPath(depotId, manifestId);
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return null;
+
+        if (ValidateManifest(path))
+            return path;
+
+        _logger.LogWarning("Corrupt manifest file detected at {Path} for DepotId={DepotId}, ManifestId={ManifestId}. Safely discarding.", path, depotId, manifestId);
+        try { File.Delete(path); } catch { }
+        return null;
+    }
+
+    private string? GetCandidateManifestPath(uint depotId, ulong manifestId)
     {
         var depotDir = Path.Combine(_cacheRoot, depotId.ToString());
         var exactFile = Path.Combine(depotDir, $"{depotId}_{manifestId}.manifest");

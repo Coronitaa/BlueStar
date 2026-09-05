@@ -185,6 +185,10 @@ public partial class App : Application
         services.AddSingleton<IManifestCacheService, BlueStar.Infrastructure.Cache.ManifestCacheService>();
         services.AddSingleton<IDepotKeyRepository, BlueStar.Infrastructure.Storage.DepotKeyRepository>();
 
+        // Network coordination & observability
+        services.AddSingleton<IRequestCoordinator, BlueStar.Infrastructure.Services.RequestCoordinator>();
+        services.AddSingleton<INetworkMetricsObserver, BlueStar.Infrastructure.Services.NetworkMetricsObserver>();
+
         // Manifest Providers
         services.AddSingleton<BlueStar.Infrastructure.Providers.Manifest.LocalCacheManifestProvider>();
         services.AddSingleton<BlueStar.Infrastructure.Providers.Manifest.DepotBoxManifestProvider>();
@@ -195,20 +199,32 @@ public partial class App : Application
         {
             var logger = sp.GetRequiredService<ILogger<BlueStar.Infrastructure.Services.ManifestRegistry>>();
             var cache = sp.GetRequiredService<IManifestCacheService>();
+            var coordinator = sp.GetRequiredService<IRequestCoordinator>();
+            var metrics = sp.GetService<INetworkMetricsObserver>();
             var providers = new IManifestProvider[]
             {
                 sp.GetRequiredService<BlueStar.Infrastructure.Providers.Manifest.LocalCacheManifestProvider>(),
                 sp.GetRequiredService<BlueStar.Infrastructure.Providers.Manifest.DepotBoxManifestProvider>(),
                 sp.GetRequiredService<BlueStar.Infrastructure.Providers.Manifest.ManifestHubProvider>()
             };
-            return new BlueStar.Infrastructure.Services.ManifestRegistry(providers, cache, logger);
+            return new BlueStar.Infrastructure.Services.ManifestRegistry(providers, cache, logger, coordinator, metrics);
         });
 
 
         // Provider-Agnostic Catalog, Curation, Builds & Planner
         services.AddSingleton<IGameCatalogProvider, BlueStar.Infrastructure.Providers.Catalog.SteamStoreCatalogProvider>();
         services.AddSingleton<IRecommendationProvider, BlueStar.Infrastructure.Providers.Curation.CommunityCurationProvider>();
-        services.AddSingleton<IBuildResolver, BlueStar.Infrastructure.Services.BuildResolver>();
+        services.AddSingleton<IBuildResolver>(sp =>
+        {
+            var steamClient = sp.GetRequiredService<SteamStoreApiClient>();
+            var registry = sp.GetRequiredService<IManifestRegistry>();
+            var logger = sp.GetRequiredService<ILogger<BlueStar.Infrastructure.Services.BuildResolver>>();
+            var curation = sp.GetService<IRecommendationProvider>();
+            var keys = sp.GetService<IDepotKeyRepository>();
+            var coordinator = sp.GetRequiredService<IRequestCoordinator>();
+            var cache = sp.GetService<ICacheService>();
+            return new BlueStar.Infrastructure.Services.BuildResolver(steamClient, registry, logger, curation, keys, coordinator, cache);
+        });
         services.AddSingleton<IInstallationPlanner, BlueStar.Infrastructure.Services.InstallationPlanner>();
         services.AddHttpClient<BlueStar.Infrastructure.Providers.Fixes.OnlineFixProvider>();
         services.AddSingleton<IFixProvider>(sp => sp.GetRequiredService<BlueStar.Infrastructure.Providers.Fixes.OnlineFixProvider>());

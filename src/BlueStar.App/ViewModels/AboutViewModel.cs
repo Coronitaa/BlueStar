@@ -161,6 +161,18 @@ public partial class AboutViewModel : ObservableObject
             },
             new ProjectCredit
             {
+                Name = "ManifestHub2",
+                Role = "Community Manifest & Key Repository",
+                Description = "Community Steam manifest repository, branch manifest GIDs, and depot AES decryption keys provider.",
+                Author = "SSMGAlt",
+                License = "Community Repository",
+                GitHubUrl = "https://github.com/SSMGAlt/ManifestHub2",
+                WebsiteUrl = "https://github.com/SSMGAlt/ManifestHub2",
+                CategoryBadge = "Manifests",
+                IsCore = true
+            },
+            new ProjectCredit
+            {
                 Name = "DepotBox",
                 Role = "Depots & Metadata Service",
                 Description = "Manifest archive index, game availability status, and metadata REST API service.",

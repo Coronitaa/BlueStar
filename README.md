@@ -173,6 +173,7 @@ BlueStar proudly relies on and thanks the following open-source projects:
 - **Goldberg Emulator** by [Mr_Goldberg](https://gitlab.com/Mr_Goldberg/goldberg_emulator) & [Detanup01](https://github.com/Detanup01/gbe_fork) — Steam LAN emulator
 - **SteamKit2** by [SteamRE](https://github.com/SteamRE/SteamKit) — .NET library for Steam network communication
 - **DepotBox** — Depots and manifest index service
+- **ManifestHub2** by [SSMGAlt](https://github.com/SSMGAlt/ManifestHub2) — Community Steam manifest repository and AES decryption key source
 
 ---
 

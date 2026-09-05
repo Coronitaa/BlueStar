@@ -21,19 +21,25 @@ public sealed class BuildResolver : IBuildResolver
     private readonly IManifestRegistry _manifestRegistry;
     private readonly IDepotKeyRepository? _keyRepository;
     private readonly ILogger<BuildResolver> _logger;
+    private readonly IRequestCoordinator _coordinator;
+    private readonly ICacheService? _cache;
 
     public BuildResolver(
         SteamStoreApiClient steamClient,
         IManifestRegistry manifestRegistry,
         ILogger<BuildResolver> logger,
         IRecommendationProvider? curationProvider = null,
-        IDepotKeyRepository? keyRepository = null)
+        IDepotKeyRepository? keyRepository = null,
+        IRequestCoordinator? coordinator = null,
+        ICacheService? cache = null)
     {
         _steamClient = steamClient ?? throw new ArgumentNullException(nameof(steamClient));
         _manifestRegistry = manifestRegistry ?? throw new ArgumentNullException(nameof(manifestRegistry));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _curationProvider = curationProvider;
         _keyRepository = keyRepository;
+        _coordinator = coordinator ?? RequestCoordinator.Instance;
+        _cache = cache;
     }
 
     /// <inheritdoc />
@@ -41,93 +47,132 @@ public sealed class BuildResolver : IBuildResolver
     {
         if (appId == 0) return [];
 
-        var versions = new List<GameVersion>();
-
-        try
+        var cacheKey = $"build_versions_{appId}";
+        if (_cache != null)
         {
-            // 1. Query canonical SteamCMD branches and builds
-            var steamBuilds = await _steamClient.GetAppBuildsAsync(appId, ct).ConfigureAwait(false);
-
-            // 2. Discover manifests across all registered providers
-            var discoveredManifests = await _manifestRegistry.DiscoverManifestsAsync(appId, ct).ConfigureAwait(false);
-            var manifestMap = discoveredManifests.ToDictionary(m => m.DepotId, m => m.ManifestId);
-
-            // 3. Resolve depot keys if key repository is available
-            var allDepotIds = steamBuilds.SelectMany(b => b.DepotManifests.Keys)
-                .Concat(discoveredManifests.Select(m => m.DepotId))
-                .Distinct()
-                .ToList();
-
-            IReadOnlyDictionary<uint, string> knownKeys = _keyRepository != null
-                ? await _keyRepository.GetKeysAsync(allDepotIds, ct).ConfigureAwait(false)
-                : new Dictionary<uint, string>();
-
-            // 4. Map SteamCMD builds into GameVersion snapshots
-            foreach (var build in steamBuilds)
+            try
             {
-                var depots = new List<DepotVersion>();
-                foreach (var (depotId, manifestId) in build.DepotManifests)
+                var cached = await _cache.GetAsync<List<GameVersion>>(cacheKey, ct).ConfigureAwait(false);
+                if (cached != null)
                 {
-                    knownKeys.TryGetValue(depotId, out var key);
-                    depots.Add(new DepotVersion
+                    return cached;
+                }
+            }
+            catch { }
+        }
+
+        return await _coordinator.ExecuteAsync($"build_versions_{appId}", async innerCt =>
+        {
+            if (_cache != null)
+            {
+                try
+                {
+                    var cached = await _cache.GetAsync<List<GameVersion>>(cacheKey, innerCt).ConfigureAwait(false);
+                    if (cached != null)
                     {
-                        DepotId = depotId,
-                        ManifestId = manifestId,
-                        Name = $"Depot {depotId}",
-                        DepotKey = key,
-                        IsRecommended = true
+                        return (IReadOnlyList<GameVersion>)cached;
+                    }
+                }
+                catch { }
+            }
+
+            var versions = new List<GameVersion>();
+
+            try
+            {
+                // 1. Query canonical SteamCMD branches and builds
+                var steamBuilds = await _steamClient.GetAppBuildsAsync(appId, innerCt).ConfigureAwait(false);
+
+                // 2. Discover manifests across all registered providers
+                var discoveredManifests = await _manifestRegistry.DiscoverManifestsAsync(appId, innerCt).ConfigureAwait(false);
+                var manifestMap = discoveredManifests.ToDictionary(m => m.DepotId, m => m.ManifestId);
+
+                // 3. Resolve depot keys if key repository is available
+                var allDepotIds = steamBuilds.SelectMany(b => b.DepotManifests.Keys)
+                    .Concat(discoveredManifests.Select(m => m.DepotId))
+                    .Distinct()
+                    .ToList();
+
+                IReadOnlyDictionary<uint, string> knownKeys = _keyRepository != null
+                    ? await _keyRepository.GetKeysAsync(allDepotIds, innerCt).ConfigureAwait(false)
+                    : new Dictionary<uint, string>();
+
+                // 4. Map SteamCMD builds into GameVersion snapshots
+                foreach (var build in steamBuilds)
+                {
+                    var depots = new List<DepotVersion>();
+                    foreach (var (depotId, manifestId) in build.DepotManifests)
+                    {
+                        knownKeys.TryGetValue(depotId, out var key);
+                        depots.Add(new DepotVersion
+                        {
+                            DepotId = depotId,
+                            ManifestId = manifestId,
+                            Name = $"Depot {depotId}",
+                            DepotKey = key,
+                            IsRecommended = true
+                        });
+                    }
+
+                    versions.Add(new GameVersion
+                    {
+                        BuildId = build.BuildId,
+                        BranchName = build.BranchName,
+                        DisplayName = build.DisplayName,
+                        UpdatedAt = build.UpdatedAt,
+                        Description = build.Description,
+                        Source = build.Source,
+                        IsInferred = false,
+                        Depots = depots.AsReadOnly()
                     });
                 }
 
-                versions.Add(new GameVersion
+                // 5. If no formal builds returned from SteamCMD, synthesize an inferred version from discovered provider manifests
+                if (versions.Count == 0 && discoveredManifests.Count > 0)
                 {
-                    BuildId = build.BuildId,
-                    BranchName = build.BranchName,
-                    DisplayName = build.DisplayName,
-                    UpdatedAt = build.UpdatedAt,
-                    Description = build.Description,
-                    Source = build.Source,
-                    IsInferred = false,
-                    Depots = depots.AsReadOnly()
-                });
-            }
-
-            // 5. If no formal builds returned from SteamCMD, synthesize an inferred version from discovered provider manifests
-            if (versions.Count == 0 && discoveredManifests.Count > 0)
-            {
-                var inferredDepots = discoveredManifests.Select(m =>
-                {
-                    knownKeys.TryGetValue(m.DepotId, out var key);
-                    return new DepotVersion
+                    var inferredDepots = discoveredManifests.Select(m =>
                     {
-                        DepotId = m.DepotId,
-                        ManifestId = m.ManifestId,
-                        Name = $"Depot {m.DepotId}",
-                        SizeBytes = m.SizeBytes,
-                        DepotKey = key,
-                        IsRecommended = true
-                    };
-                }).ToList();
+                        knownKeys.TryGetValue(m.DepotId, out var key);
+                        return new DepotVersion
+                        {
+                            DepotId = m.DepotId,
+                            ManifestId = m.ManifestId,
+                            Name = $"Depot {m.DepotId}",
+                            SizeBytes = m.SizeBytes,
+                            DepotKey = key,
+                            IsRecommended = true
+                        };
+                    }).ToList();
 
-                versions.Add(new GameVersion
+                    versions.Add(new GameVersion
+                    {
+                        BuildId = "Discovered",
+                        BranchName = "public",
+                        DisplayName = "Latest Discovered Provider Build",
+                        UpdatedAt = DateTimeOffset.UtcNow,
+                        Description = $"{discoveredManifests.Count} verified manifests discovered across providers",
+                        Source = "MultiProvider",
+                        IsInferred = true,
+                        Depots = inferredDepots.AsReadOnly()
+                    });
+                }
+
+                if (_cache != null && versions.Count > 0)
                 {
-                    BuildId = "Discovered",
-                    BranchName = "public",
-                    DisplayName = "Latest Discovered Provider Build",
-                    UpdatedAt = DateTimeOffset.UtcNow,
-                    Description = $"{discoveredManifests.Count} verified manifests discovered across providers",
-                    Source = "MultiProvider",
-                    IsInferred = true,
-                    Depots = inferredDepots.AsReadOnly()
-                });
+                    try
+                    {
+                        await _cache.SetAsync(cacheKey, versions, TimeSpan.FromHours(1), innerCt).ConfigureAwait(false);
+                    }
+                    catch { }
+                }
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to resolve available versions for AppId {AppId}", appId);
-        }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to resolve available versions for AppId {AppId}", appId);
+            }
 
-        return versions.AsReadOnly();
+            return (IReadOnlyList<GameVersion>)versions.AsReadOnly();
+        }, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />

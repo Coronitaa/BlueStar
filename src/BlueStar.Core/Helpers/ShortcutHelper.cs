@@ -21,6 +21,15 @@ public record ShortcutCreationResult(bool Success, string Message, IReadOnlyList
 /// </summary>
 public static class ShortcutHelper
 {
+    private static readonly HttpClient SharedHttpClient = new()
+    {
+        Timeout = TimeSpan.FromSeconds(10),
+        DefaultRequestHeaders =
+        {
+            { "User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
+        }
+    };
+
     private static readonly string[] ExcludedExePrefixes =
     [
         "unitycrashhandler",
@@ -384,12 +393,7 @@ public static class ShortcutHelper
             string idSigned32 = unchecked((int)shortcutAppId32).ToString();
             string id64 = appId64.ToString();
 
-            using var http = new HttpClient();
-            http.Timeout = TimeSpan.FromSeconds(10);
-            if (!http.DefaultRequestHeaders.Contains("User-Agent"))
-            {
-                http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-            }
+            var http = SharedHttpClient;
 
             async Task<byte[]?> DownloadFirstAvailableAsset(IEnumerable<string?> sourceUrls)
             {

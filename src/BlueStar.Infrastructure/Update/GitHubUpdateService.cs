@@ -23,7 +23,12 @@ public class GitHubUpdateService : IUpdateService
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<GitHubUpdateService> _logger;
+    private readonly ICacheService? _cacheService;
+    private readonly IRequestCoordinator _coordinator;
+    private readonly INetworkMetricsObserver? _metrics;
     private const string GitHubReleasesUrl = "https://api.github.com/repos/Coronitaa/BlueStar/releases/latest";
+
+    private sealed record CachedUpdateCheck(UpdateInfo? Update, bool HasUpdate);
 
     private static string UpdatesDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -34,10 +39,18 @@ public class GitHubUpdateService : IUpdateService
     /// <summary>
     /// Initializes a new instance of the <see cref="GitHubUpdateService"/> class.
     /// </summary>
-    public GitHubUpdateService(HttpClient httpClient, ILogger<GitHubUpdateService> logger)
+    public GitHubUpdateService(
+        HttpClient httpClient,
+        ILogger<GitHubUpdateService> logger,
+        ICacheService? cacheService = null,
+        IRequestCoordinator? coordinator = null,
+        INetworkMetricsObserver? metrics = null)
     {
         _httpClient = httpClient;
         _logger = logger;
+        _cacheService = cacheService;
+        _coordinator = coordinator ?? BlueStar.Infrastructure.Services.RequestCoordinator.Instance;
+        _metrics = metrics;
     }
 
     /// <summary>
@@ -68,69 +81,125 @@ public class GitHubUpdateService : IUpdateService
     /// <inheritdoc />
     public async Task<UpdateInfo?> CheckForUpdatesAsync(CancellationToken ct)
     {
-        try
+        const string cacheKey = "github_update_check_latest";
+
+        if (_cacheService != null)
         {
-            _logger.LogInformation("Checking for updates from GitHub Releases...");
-
-            var request = new HttpRequestMessage(HttpMethod.Get, GitHubReleasesUrl);
-            request.Headers.UserAgent.ParseAdd("BlueStar-Updater/1.2.3");
-
-            var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
+            try
             {
-                _logger.LogWarning("GitHub Releases API returned status {StatusCode}", response.StatusCode);
-                return null;
-            }
-
-            var release = await response.Content.ReadFromJsonAsync<GitHubRelease>(cancellationToken: ct).ConfigureAwait(false);
-            if (release is null || string.IsNullOrWhiteSpace(release.TagName))
-                return null;
-
-            var latestVersionStr = release.TagName.Trim().TrimStart('v').Trim();
-            if (!Version.TryParse(latestVersionStr, out var latestVersion))
-                return null;
-
-            var rawCurrent = Assembly.GetEntryAssembly()?.GetName().Version
-                          ?? Assembly.GetExecutingAssembly().GetName().Version
-                          ?? typeof(GitHubUpdateService).Assembly.GetName().Version
-                          ?? new Version(1, 2, 3);
-
-            var currentVersion = new Version(
-                Math.Max(0, rawCurrent.Major),
-                Math.Max(0, rawCurrent.Minor),
-                Math.Max(0, rawCurrent.Build));
-
-            var normalizedLatest = new Version(
-                Math.Max(0, latestVersion.Major),
-                Math.Max(0, latestVersion.Minor),
-                Math.Max(0, latestVersion.Build));
-
-            if (normalizedLatest > currentVersion)
-            {
-                var asset = release.Assets?.FirstOrDefault(a =>
-                    a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
-                    a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
-
-                _logger.LogInformation("New update available: v{Version} (Current: v{CurrentVersion})", latestVersion, currentVersion);
-
-                return new UpdateInfo
+                var cached = await _cacheService.GetAsync<CachedUpdateCheck>(cacheKey, ct).ConfigureAwait(false);
+                if (cached != null)
                 {
-                    Version = latestVersion.ToString(),
-                    ReleaseNotes = release.Body ?? string.Empty,
-                    DownloadUrl = asset?.BrowserDownloadUrl ?? string.Empty,
-                    FileSize = asset?.Size ?? 0,
-                    PublishedAt = DateTimeOffset.UtcNow
-                };
+                    _metrics?.OnCacheHit("GitHub", GitHubReleasesUrl);
+                    return cached.Update;
+                }
+            }
+            catch { }
+        }
+
+        return await _coordinator.ExecuteAsync(cacheKey, async innerCt =>
+        {
+            if (_cacheService != null)
+            {
+                try
+                {
+                    var cached = await _cacheService.GetAsync<CachedUpdateCheck>(cacheKey, innerCt).ConfigureAwait(false);
+                    if (cached != null)
+                    {
+                        _metrics?.OnCacheHit("GitHub", GitHubReleasesUrl);
+                        return cached.Update;
+                    }
+                }
+                catch { }
             }
 
-            _logger.LogInformation("BlueStar is up to date (Version: v{CurrentVersion})", currentVersion);
-            return null;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to check for updates");
-            return null;
-        }
+            try
+            {
+                _logger.LogInformation("Checking for updates from GitHub Releases...");
+                _metrics?.OnProviderRequest("GitHub", GitHubReleasesUrl);
+
+                var request = new HttpRequestMessage(HttpMethod.Get, GitHubReleasesUrl);
+                request.Headers.UserAgent.ParseAdd("BlueStar-Updater/1.2.3");
+
+                var response = await _httpClient.SendAsync(request, innerCt).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("GitHub Releases API returned status {StatusCode}", response.StatusCode);
+                    if (_cacheService != null)
+                    {
+                        try { await _cacheService.SetAsync(cacheKey, new CachedUpdateCheck(null, false), TimeSpan.FromHours(1), innerCt).ConfigureAwait(false); } catch { }
+                    }
+                    return null;
+                }
+
+                var release = await response.Content.ReadFromJsonAsync<GitHubRelease>(cancellationToken: innerCt).ConfigureAwait(false);
+                if (release is null || string.IsNullOrWhiteSpace(release.TagName))
+                {
+                    if (_cacheService != null)
+                    {
+                        try { await _cacheService.SetAsync(cacheKey, new CachedUpdateCheck(null, false), TimeSpan.FromHours(1), innerCt).ConfigureAwait(false); } catch { }
+                    }
+                    return null;
+                }
+
+                var latestVersionStr = release.TagName.Trim().TrimStart('v').Trim();
+                if (!Version.TryParse(latestVersionStr, out var latestVersion))
+                    return null;
+
+                var rawCurrent = Assembly.GetEntryAssembly()?.GetName().Version
+                              ?? Assembly.GetExecutingAssembly().GetName().Version
+                              ?? typeof(GitHubUpdateService).Assembly.GetName().Version
+                              ?? new Version(1, 2, 3);
+
+                var currentVersion = new Version(
+                    Math.Max(0, rawCurrent.Major),
+                    Math.Max(0, rawCurrent.Minor),
+                    Math.Max(0, rawCurrent.Build));
+
+                var normalizedLatest = new Version(
+                    Math.Max(0, latestVersion.Major),
+                    Math.Max(0, latestVersion.Minor),
+                    Math.Max(0, latestVersion.Build));
+
+                if (normalizedLatest > currentVersion)
+                {
+                    var asset = release.Assets?.FirstOrDefault(a =>
+                        a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                        a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+
+                    _logger.LogInformation("New update available: v{Version} (Current: v{CurrentVersion})", latestVersion, currentVersion);
+
+                    var updateInfo = new UpdateInfo
+                    {
+                        Version = latestVersion.ToString(),
+                        ReleaseNotes = release.Body ?? string.Empty,
+                        DownloadUrl = asset?.BrowserDownloadUrl ?? string.Empty,
+                        FileSize = asset?.Size ?? 0,
+                        PublishedAt = DateTimeOffset.UtcNow
+                    };
+
+                    if (_cacheService != null)
+                    {
+                        try { await _cacheService.SetAsync(cacheKey, new CachedUpdateCheck(updateInfo, true), TimeSpan.FromHours(4), innerCt).ConfigureAwait(false); } catch { }
+                    }
+
+                    return updateInfo;
+                }
+
+                _logger.LogInformation("BlueStar is up to date (Version: v{CurrentVersion})", currentVersion);
+                if (_cacheService != null)
+                {
+                    try { await _cacheService.SetAsync(cacheKey, new CachedUpdateCheck(null, false), TimeSpan.FromHours(4), innerCt).ConfigureAwait(false); } catch { }
+                }
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to check for updates");
+                return null;
+            }
+        }, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />

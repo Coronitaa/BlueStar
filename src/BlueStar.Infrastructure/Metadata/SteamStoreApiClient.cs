@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
+using BlueStar.Infrastructure.Services;
 using Microsoft.Extensions.Logging;
 
 namespace BlueStar.Infrastructure.Metadata;
@@ -15,10 +16,8 @@ public sealed class SteamStoreApiClient : IMetadataProvider
     private readonly HttpClient _http;
     private readonly ILogger<SteamStoreApiClient> _logger;
     private readonly ICacheService? _cache;
-
-    private readonly ConcurrentDictionary<uint, Lazy<Task<GameMetadata?>>> _inFlightMetadata = new();
-    private readonly ConcurrentDictionary<uint, Lazy<Task<SteamAppDepotInfo?>>> _inFlightDepotInfo = new();
-    private readonly ConcurrentDictionary<uint, Lazy<Task<DateTimeOffset?>>> _inFlightUpdateDates = new();
+    private readonly IRequestCoordinator _coordinator;
+    private readonly INetworkMetricsObserver? _metrics;
 
     private static readonly SemaphoreSlim _throttleSemaphore = new(1, 1);
     private static DateTimeOffset _lastRequest = DateTimeOffset.MinValue;
@@ -38,11 +37,20 @@ public sealed class SteamStoreApiClient : IMetadataProvider
     /// <param name="http">HTTP client configured for Steam Store API.</param>
     /// <param name="logger">Logger instance.</param>
     /// <param name="cache">Optional persistent cache service.</param>
-    public SteamStoreApiClient(HttpClient http, ILogger<SteamStoreApiClient> logger, ICacheService? cache = null)
+    /// <param name="coordinator">Optional request coordinator for in-flight deduplication.</param>
+    /// <param name="metrics">Optional network metrics observer.</param>
+    public SteamStoreApiClient(
+        HttpClient http,
+        ILogger<SteamStoreApiClient> logger,
+        ICacheService? cache = null,
+        IRequestCoordinator? coordinator = null,
+        INetworkMetricsObserver? metrics = null)
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _cache = cache;
+        _coordinator = coordinator ?? RequestCoordinator.Instance;
+        _metrics = metrics;
     }
 
     private async Task<bool> ThrottleAsync(CancellationToken ct)
@@ -91,24 +99,41 @@ public sealed class SteamStoreApiClient : IMetadataProvider
             try
             {
                 var cached = await _cache.GetAsync<GameMetadata>(cacheKey, ct).ConfigureAwait(false);
-                if (cached != null) return cached;
+                if (cached != null)
+                {
+                    _metrics?.OnCacheHit("SteamStore", $"meta/{appId}");
+                    return cached;
+                }
             }
             catch { }
         }
 
-        // Deduplicate concurrent requests for the same AppId
-        var lazyTask = _inFlightMetadata.GetOrAdd(appId, id => new Lazy<Task<GameMetadata?>>(() => FetchMetadataCoreAsync(id, cacheKey, ct)));
-        return await lazyTask.Value.ConfigureAwait(false);
+        return await _coordinator.ExecuteAsync($"steam_meta_{appId}", innerCt => FetchMetadataCoreAsync(appId, cacheKey, innerCt), ct).ConfigureAwait(false);
     }
 
     private async Task<GameMetadata?> FetchMetadataCoreAsync(uint appId, string cacheKey, CancellationToken ct)
     {
+        if (_cache != null)
+        {
+            try
+            {
+                var cached = await _cache.GetAsync<GameMetadata>(cacheKey, ct).ConfigureAwait(false);
+                if (cached != null)
+                {
+                    _metrics?.OnCacheHit("SteamStore", $"meta/{appId}");
+                    return cached;
+                }
+            }
+            catch { }
+        }
+
         try
         {
             if (!await ThrottleAsync(ct).ConfigureAwait(false))
                 return null;
 
             _logger.LogDebug("Fetching Steam metadata for AppId={AppId}", appId);
+            _metrics?.OnProviderRequest("SteamStore", $"https://store.steampowered.com/api/appdetails?appids={appId}");
 
             var url = $"https://store.steampowered.com/api/appdetails?appids={appId}&l=english&cc=US";
             using var response = await _http.GetAsync(url, ct).ConfigureAwait(false);
@@ -164,6 +189,27 @@ public sealed class SteamStoreApiClient : IMetadataProvider
             if (_cache != null)
             {
                 try { await _cache.SetAsync(cacheKey, meta, TimeSpan.FromDays(7), ct).ConfigureAwait(false); } catch { }
+
+                // Pre-populate or negative cache DLC list from same appdetails payload
+                var dlcCacheKey = $"steam_dlcs_{appId}_v3";
+                var prePopulatedDlcs = new List<DlcInfo>();
+                if (data.TryGetProperty("dlc", out var dlcArray) && dlcArray.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var dlcElement in dlcArray.EnumerateArray())
+                    {
+                        if (dlcElement.TryGetUInt32(out var dlcAppId))
+                        {
+                            prePopulatedDlcs.Add(new DlcInfo
+                            {
+                                AppId = dlcAppId,
+                                Name = $"DLC {dlcAppId}",
+                                Depots = [],
+                                IsInstalled = false
+                            });
+                        }
+                    }
+                }
+                try { await _cache.SetAsync(dlcCacheKey, prePopulatedDlcs, TimeSpan.FromDays(7), ct).ConfigureAwait(false); } catch { }
             }
 
             return meta;
@@ -177,10 +223,6 @@ public sealed class SteamStoreApiClient : IMetadataProvider
         {
             _logger.LogWarning(ex, "JSON parse error for Steam metadata AppId={AppId}", appId);
             return null;
-        }
-        finally
-        {
-            _inFlightMetadata.TryRemove(appId, out _);
         }
     }
 
@@ -196,75 +238,39 @@ public sealed class SteamStoreApiClient : IMetadataProvider
             try
             {
                 var cached = await _cache.GetAsync<List<DlcInfo>>(cacheKey, ct).ConfigureAwait(false);
-                if (cached != null) return cached.AsReadOnly();
+                if (cached != null)
+                {
+                    if (cached.Count == 0)
+                    {
+                        _metrics?.OnNegativeCacheHit("SteamStore", $"dlcs/{appId}");
+                    }
+                    else
+                    {
+                        _metrics?.OnCacheHit("SteamStore", $"dlcs/{appId}");
+                    }
+                    return cached.AsReadOnly();
+                }
             }
             catch { }
         }
 
-        if (!await ThrottleAsync(ct).ConfigureAwait(false))
-            return [];
+        // Delegate to GetMetadataAsync which queries appdetails and pre-populates steam_dlcs_{appId}_v3 under coordinated in-flight lock
+        await GetMetadataAsync(appId, ct).ConfigureAwait(false);
 
-        try
+        if (_cache != null)
         {
-            var url = $"https://store.steampowered.com/api/appdetails?appids={appId}&l=english&cc=US";
-            var response = await _http.GetAsync(url, ct).ConfigureAwait(false);
-
-            if (response.StatusCode is System.Net.HttpStatusCode.TooManyRequests or System.Net.HttpStatusCode.Forbidden)
+            try
             {
-                ReportRateLimitEncountered(response.StatusCode);
-                return [];
-            }
-
-            if (!response.IsSuccessStatusCode)
-                return [];
-
-            var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            if (json.Contains("Access Denied", StringComparison.OrdinalIgnoreCase) ||
-                json.Contains("edgesuite.net", StringComparison.OrdinalIgnoreCase))
-            {
-                ReportRateLimitEncountered(System.Net.HttpStatusCode.Forbidden);
-                return [];
-            }
-
-            using var doc = JsonDocument.Parse(json);
-
-            var appKey = appId.ToString();
-            if (!doc.RootElement.TryGetProperty(appKey, out var appElement) ||
-                !appElement.TryGetProperty("success", out var s) || !s.GetBoolean() ||
-                !appElement.TryGetProperty("data", out var data) ||
-                !data.TryGetProperty("dlc", out var dlcArray))
-            {
-                return [];
-            }
-
-            var dlcList = new List<DlcInfo>();
-            foreach (var dlcElement in dlcArray.EnumerateArray())
-            {
-                if (dlcElement.TryGetUInt32(out var dlcAppId))
+                var cached = await _cache.GetAsync<List<DlcInfo>>(cacheKey, ct).ConfigureAwait(false);
+                if (cached != null)
                 {
-                    dlcList.Add(new DlcInfo
-                    {
-                        AppId = dlcAppId,
-                        Name = $"DLC {dlcAppId}", // Resolved later with individual appdetails calls
-                        Depots = [],
-                        IsInstalled = false
-                    });
+                    return cached.AsReadOnly();
                 }
             }
-
-            if (_cache != null && dlcList.Count > 0)
-            {
-                try { await _cache.SetAsync(cacheKey, dlcList, TimeSpan.FromDays(7), ct).ConfigureAwait(false); } catch { }
-            }
-
-            _logger.LogDebug("Found {Count} DLCs for AppId={AppId}", dlcList.Count, appId);
-            return dlcList.AsReadOnly();
+            catch { }
         }
-        catch (Exception ex) when (ex is HttpRequestException or JsonException)
-        {
-            _logger.LogWarning(ex, "Error fetching DLC list for AppId={AppId}", appId);
-            return [];
-        }
+
+        return [];
     }
 
     /// <summary>
@@ -580,6 +586,281 @@ public sealed class SteamStoreApiClient : IMetadataProvider
     }
 
     /// <summary>
+    /// Consolidated model holding SteamCMD depots, builds, and per-depot enrichment metadata.
+    /// </summary>
+    public sealed record SteamCmdUnifiedInfo(
+        SteamAppDepotInfo? DepotInfo,
+        IReadOnlyList<GameBuildInfo> Builds,
+        IReadOnlyDictionary<uint, SteamDepotMeta> DepotEnrichment
+    );
+
+    /// <summary>
+    /// Fetches all SteamCMD data (depots, builds, enrichment) in a SINGLE network request, cached and coordinated.
+    /// </summary>
+    public async Task<SteamCmdUnifiedInfo?> GetAppUnifiedInfoAsync(uint appId, CancellationToken ct = default)
+    {
+        if (appId == 0) return null;
+
+        var cacheKey = $"steamcmd_unified_{appId}_v3";
+        if (_cache != null)
+        {
+            try
+            {
+                var cached = await _cache.GetAsync<SteamCmdUnifiedInfo>(cacheKey, ct).ConfigureAwait(false);
+                if (cached != null)
+                {
+                    _metrics?.OnCacheHit("SteamCMD", $"unified/{appId}");
+                    return cached;
+                }
+            }
+            catch { }
+        }
+
+        return await _coordinator.ExecuteAsync($"steamcmd_unified_{appId}", async innerCt =>
+        {
+            if (_cache != null)
+            {
+                try
+                {
+                    var cached = await _cache.GetAsync<SteamCmdUnifiedInfo>(cacheKey, innerCt).ConfigureAwait(false);
+                    if (cached != null)
+                    {
+                        _metrics?.OnCacheHit("SteamCMD", $"unified/{appId}");
+                        return cached;
+                    }
+                }
+                catch { }
+            }
+
+            try
+            {
+                _metrics?.OnProviderRequest("SteamCMD", $"https://api.steamcmd.net/v1/info/{appId}");
+
+                using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.steamcmd.net/v1/info/{appId}");
+                if (!_http.DefaultRequestHeaders.Contains("User-Agent"))
+                {
+                    request.Headers.UserAgent.ParseAdd("BlueStar/1.2.3");
+                }
+
+                using var response = await _http.SendAsync(request, innerCt).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogDebug("SteamCMD API returned {StatusCode} for AppId={AppId}", response.StatusCode, appId);
+                    return null;
+                }
+
+                var json = await response.Content.ReadAsStringAsync(innerCt).ConfigureAwait(false);
+                using var doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("data", out var dataEl) ||
+                    !dataEl.TryGetProperty(appId.ToString(), out var appEl))
+                {
+                    return null;
+                }
+
+                string? appType = null;
+                if (appEl.TryGetProperty("common", out var commonEl) &&
+                    commonEl.TryGetProperty("type", out var typeProp))
+                {
+                    appType = typeProp.GetString();
+                }
+
+                SteamAppDepotInfo? depotInfo = null;
+                var builds = new List<GameBuildInfo>();
+                var depotEnrichment = new Dictionary<uint, SteamDepotMeta>();
+
+                if (appEl.TryGetProperty("depots", out var depotsEl))
+                {
+                    // 1. Build SteamAppDepotInfo
+                    DateTimeOffset? latestDate = null;
+                    string? buildId = null;
+
+                    if (depotsEl.TryGetProperty("branches", out var branchesEl) &&
+                        branchesEl.TryGetProperty("public", out var publicEl))
+                    {
+                        if (publicEl.TryGetProperty("buildid", out var bIdProp))
+                            buildId = bIdProp.GetString();
+
+                        long unix = 0;
+                        if (publicEl.TryGetProperty("timeupdated", out var tuProp))
+                        {
+                            if (tuProp.ValueKind == JsonValueKind.Number) tuProp.TryGetInt64(out unix);
+                            else if (tuProp.ValueKind == JsonValueKind.String) long.TryParse(tuProp.GetString(), out unix);
+                        }
+
+                        if (unix == 0 && publicEl.TryGetProperty("timebuildupdated", out var tbuProp))
+                        {
+                            if (tbuProp.ValueKind == JsonValueKind.Number) tbuProp.TryGetInt64(out unix);
+                            else if (tbuProp.ValueKind == JsonValueKind.String) long.TryParse(tbuProp.GetString(), out unix);
+                        }
+
+                        if (unix > 0)
+                        {
+                            latestDate = DateTimeOffset.FromUnixTimeSeconds(unix);
+                        }
+                    }
+
+                    var manifests = new Dictionary<ulong, ulong>();
+                    foreach (var depotProp in depotsEl.EnumerateObject())
+                    {
+                        if (ulong.TryParse(depotProp.Name, out var depotId) &&
+                            depotProp.Value.TryGetProperty("manifests", out var mEl) &&
+                            mEl.TryGetProperty("public", out var pManEl) &&
+                            pManEl.TryGetProperty("gid", out var gidProp))
+                        {
+                            var gidStr = gidProp.GetString();
+                            if (ulong.TryParse(gidStr, out var gid))
+                            {
+                                manifests[depotId] = gid;
+                            }
+                        }
+                    }
+
+                    depotInfo = new SteamAppDepotInfo(latestDate, buildId, manifests, appType);
+
+                    // 2. Build GameBuildInfo list
+                    if (depotsEl.TryGetProperty("branches", out var allBranchesEl))
+                    {
+                        foreach (var branchProp in allBranchesEl.EnumerateObject())
+                        {
+                            var branchName = branchProp.Name;
+                            var branchObj = branchProp.Value;
+
+                            string branchBuildId = string.Empty;
+                            if (branchObj.TryGetProperty("buildid", out var bIdProp))
+                            {
+                                branchBuildId = bIdProp.GetString() ?? string.Empty;
+                            }
+
+                            string? desc = null;
+                            if (branchObj.TryGetProperty("description", out var descProp))
+                            {
+                                desc = descProp.GetString();
+                            }
+
+                            DateTimeOffset? updateDate = null;
+                            long unix = 0;
+                            if (branchObj.TryGetProperty("timeupdated", out var tuProp))
+                            {
+                                if (tuProp.ValueKind == JsonValueKind.Number) tuProp.TryGetInt64(out unix);
+                                else if (tuProp.ValueKind == JsonValueKind.String) long.TryParse(tuProp.GetString(), out unix);
+                            }
+                            if (unix == 0 && branchObj.TryGetProperty("timebuildupdated", out var tbuProp))
+                            {
+                                if (tbuProp.ValueKind == JsonValueKind.Number) tbuProp.TryGetInt64(out unix);
+                                else if (tbuProp.ValueKind == JsonValueKind.String) long.TryParse(tbuProp.GetString(), out unix);
+                            }
+                            if (unix > 0)
+                            {
+                                updateDate = DateTimeOffset.FromUnixTimeSeconds(unix);
+                            }
+
+                            var depotManifests = new Dictionary<uint, ulong>();
+                            foreach (var depotProp in depotsEl.EnumerateObject())
+                            {
+                                if (uint.TryParse(depotProp.Name, out var dId) &&
+                                    depotProp.Value.TryGetProperty("manifests", out var mEl) &&
+                                    mEl.TryGetProperty(branchName, out var pManEl) &&
+                                    pManEl.TryGetProperty("gid", out var gidProp))
+                                {
+                                    var gidStr = gidProp.GetString();
+                                    if (ulong.TryParse(gidStr, out var gid))
+                                    {
+                                        depotManifests[dId] = gid;
+                                    }
+                                }
+                            }
+
+                            var displayName = branchName.Equals("public", StringComparison.OrdinalIgnoreCase)
+                                ? (string.IsNullOrWhiteSpace(branchBuildId) ? "Latest Public Release" : $"Latest Build {branchBuildId} (public)")
+                                : $"{branchName} (Build {branchBuildId})";
+
+                            if (!string.IsNullOrWhiteSpace(desc))
+                            {
+                                displayName += $" - {desc}";
+                            }
+
+                            builds.Add(new GameBuildInfo
+                            {
+                                BuildId = branchBuildId,
+                                BranchName = branchName,
+                                DisplayName = displayName,
+                                UpdatedAt = updateDate,
+                                Description = desc,
+                                IsCurrentBuild = false,
+                                Source = "Steam",
+                                DepotManifests = depotManifests
+                            });
+                        }
+                    }
+
+                    // 3. Build SteamDepotMeta enrichment
+                    foreach (var depotProp in depotsEl.EnumerateObject())
+                    {
+                        if (!uint.TryParse(depotProp.Name, out var depotId))
+                            continue;
+
+                        var depotEl = depotProp.Value;
+                        string? name = null;
+                        if (depotEl.TryGetProperty("name", out var nameProp))
+                            name = nameProp.GetString()?.Trim();
+
+                        string? osList = null;
+                        bool isOptional = false;
+                        bool isShared = false;
+
+                        if (depotEl.TryGetProperty("config", out var configEl))
+                        {
+                            if (configEl.TryGetProperty("oslist", out var osListProp))
+                                osList = osListProp.GetString()?.Trim().ToLowerInvariant();
+
+                            if (configEl.TryGetProperty("optional", out var optProp))
+                                isOptional = optProp.GetString() == "1" || (optProp.ValueKind == JsonValueKind.Number && optProp.GetInt32() == 1);
+
+                            if (configEl.TryGetProperty("SharedInstall", out var sharedProp))
+                                isShared = sharedProp.GetString() == "1" || (sharedProp.ValueKind == JsonValueKind.Number && sharedProp.GetInt32() == 1);
+                        }
+
+                        if (!isShared && depotEl.TryGetProperty("sharedinstall", out var si))
+                            isShared = si.GetString() == "1" || (si.ValueKind == JsonValueKind.Number && si.GetInt32() == 1);
+
+                        depotEnrichment[depotId] = new SteamDepotMeta(depotId, name, osList, isOptional, isShared);
+                    }
+                }
+                else if (!string.IsNullOrWhiteSpace(appType))
+                {
+                    depotInfo = new SteamAppDepotInfo(null, null, new Dictionary<ulong, ulong>(), appType);
+                }
+
+                var orderedBuilds = builds.OrderByDescending(b => b.BranchName == "public")
+                                          .ThenByDescending(b => b.UpdatedAt ?? DateTimeOffset.MinValue)
+                                          .ToList();
+
+                var unified = new SteamCmdUnifiedInfo(depotInfo, orderedBuilds, depotEnrichment);
+
+                if (_cache != null)
+                {
+                    try
+                    {
+                        await _cache.SetAsync(cacheKey, unified, TimeSpan.FromDays(7), innerCt).ConfigureAwait(false);
+                        if (depotInfo != null)
+                            await _cache.SetAsync($"steamcmd_depotinfo_{appId}_v3", depotInfo, TimeSpan.FromDays(7), innerCt).ConfigureAwait(false);
+                        if (depotEnrichment.Count > 0)
+                            await _cache.SetAsync($"steamcmd_depot_enrich_{appId}_v3", depotEnrichment, TimeSpan.FromDays(7), innerCt).ConfigureAwait(false);
+                    }
+                    catch { }
+                }
+
+                return unified;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to get SteamCMD AppInfo for AppId={AppId}", appId);
+                return null;
+            }
+        }, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Gets detailed depot and branch information from the SteamCMD/SteamDB app info catalog.
     /// </summary>
     public async Task<SteamAppDepotInfo?> GetAppDepotInfoAsync(uint appId, CancellationToken ct = default)
@@ -592,227 +873,28 @@ public sealed class SteamStoreApiClient : IMetadataProvider
             try
             {
                 var cached = await _cache.GetAsync<SteamAppDepotInfo>(cacheKey, ct).ConfigureAwait(false);
-                if (cached != null) return cached;
+                if (cached != null)
+                {
+                    _metrics?.OnCacheHit("SteamCMD", $"depotinfo/{appId}");
+                    return cached;
+                }
             }
             catch { }
         }
 
-        var lazyTask = _inFlightDepotInfo.GetOrAdd(appId, id => new Lazy<Task<SteamAppDepotInfo?>>(() => FetchAppDepotInfoCoreAsync(id, cacheKey, ct)));
-        return await lazyTask.Value.ConfigureAwait(false);
-    }
-
-    private async Task<SteamAppDepotInfo?> FetchAppDepotInfoCoreAsync(uint appId, string cacheKey, CancellationToken ct)
-    {
-        try
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.steamcmd.net/v1/info/{appId}");
-            using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
-            if (response.IsSuccessStatusCode)
-            {
-                var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                using var doc = JsonDocument.Parse(json);
-                if (doc.RootElement.TryGetProperty("data", out var dataEl) &&
-                    dataEl.TryGetProperty(appId.ToString(), out var appEl))
-                {
-                    string? appType = null;
-                    if (appEl.TryGetProperty("common", out var commonEl) &&
-                        commonEl.TryGetProperty("type", out var typeProp))
-                    {
-                        appType = typeProp.GetString();
-                    }
-
-                    if (appEl.TryGetProperty("depots", out var depotsEl))
-                    {
-                        DateTimeOffset? latestDate = null;
-                        string? buildId = null;
-
-                        if (depotsEl.TryGetProperty("branches", out var branchesEl) &&
-                            branchesEl.TryGetProperty("public", out var publicEl))
-                        {
-                            if (publicEl.TryGetProperty("buildid", out var bIdProp))
-                                buildId = bIdProp.GetString();
-
-                            long unix = 0;
-                            if (publicEl.TryGetProperty("timeupdated", out var tuProp))
-                            {
-                                if (tuProp.ValueKind == JsonValueKind.Number) tuProp.TryGetInt64(out unix);
-                                else if (tuProp.ValueKind == JsonValueKind.String) long.TryParse(tuProp.GetString(), out unix);
-                            }
-
-                            if (unix == 0 && publicEl.TryGetProperty("timebuildupdated", out var tbuProp))
-                            {
-                                if (tbuProp.ValueKind == JsonValueKind.Number) tbuProp.TryGetInt64(out unix);
-                                else if (tbuProp.ValueKind == JsonValueKind.String) long.TryParse(tbuProp.GetString(), out unix);
-                            }
-
-                            if (unix > 0)
-                            {
-                                latestDate = DateTimeOffset.FromUnixTimeSeconds(unix);
-                            }
-                        }
-
-                        var manifests = new Dictionary<ulong, ulong>();
-                        foreach (var depotProp in depotsEl.EnumerateObject())
-                        {
-                            if (ulong.TryParse(depotProp.Name, out var depotId) &&
-                                depotProp.Value.TryGetProperty("manifests", out var mEl) &&
-                                mEl.TryGetProperty("public", out var pManEl) &&
-                                pManEl.TryGetProperty("gid", out var gidProp))
-                            {
-                                var gidStr = gidProp.GetString();
-                                if (ulong.TryParse(gidStr, out var gid))
-                                {
-                                    manifests[depotId] = gid;
-                                }
-                            }
-                        }
-
-                        var info = new SteamAppDepotInfo(latestDate, buildId, manifests, appType);
-                        if (_cache != null)
-                        {
-                            try { await _cache.SetAsync(cacheKey, info, TimeSpan.FromDays(7), ct).ConfigureAwait(false); } catch { }
-                        }
-                        return info;
-                    }
-                    else if (!string.IsNullOrWhiteSpace(appType))
-                    {
-                        var info = new SteamAppDepotInfo(null, null, new Dictionary<ulong, ulong>(), appType);
-                        if (_cache != null)
-                        {
-                            try { await _cache.SetAsync(cacheKey, info, TimeSpan.FromDays(7), ct).ConfigureAwait(false); } catch { }
-                        }
-                        return info;
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Failed to get SteamCMD AppInfo for AppId={AppId}", appId);
-        }
-        finally
-        {
-            _inFlightDepotInfo.TryRemove(appId, out _);
-        }
-
-        return null;
+        var unified = await GetAppUnifiedInfoAsync(appId, ct).ConfigureAwait(false);
+        return unified?.DepotInfo;
     }
 
     /// <summary>
-
     /// Gets all available game branches and builds from SteamCMD / Steam app info.
     /// </summary>
     public async Task<IReadOnlyList<GameBuildInfo>> GetAppBuildsAsync(uint appId, CancellationToken ct = default)
     {
         if (appId == 0) return [];
 
-        try
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.steamcmd.net/v1/info/{appId}");
-            if (!_http.DefaultRequestHeaders.Contains("User-Agent"))
-            {
-                request.Headers.UserAgent.ParseAdd("BlueStar/1.2.3");
-            }
-
-            using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode) return [];
-
-            var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            using var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.TryGetProperty("data", out var dataEl) ||
-                !dataEl.TryGetProperty(appId.ToString(), out var appEl) ||
-                !appEl.TryGetProperty("depots", out var depotsEl))
-            {
-                return [];
-            }
-
-            var builds = new List<GameBuildInfo>();
-
-            if (depotsEl.TryGetProperty("branches", out var branchesEl))
-            {
-                foreach (var branchProp in branchesEl.EnumerateObject())
-                {
-                    var branchName = branchProp.Name;
-                    var branchObj = branchProp.Value;
-
-                    string buildId = string.Empty;
-                    if (branchObj.TryGetProperty("buildid", out var bIdProp))
-                    {
-                        buildId = bIdProp.GetString() ?? string.Empty;
-                    }
-
-                    string? desc = null;
-                    if (branchObj.TryGetProperty("description", out var descProp))
-                    {
-                        desc = descProp.GetString();
-                    }
-
-                    DateTimeOffset? updateDate = null;
-                    long unix = 0;
-                    if (branchObj.TryGetProperty("timeupdated", out var tuProp))
-                    {
-                        if (tuProp.ValueKind == JsonValueKind.Number) tuProp.TryGetInt64(out unix);
-                        else if (tuProp.ValueKind == JsonValueKind.String) long.TryParse(tuProp.GetString(), out unix);
-                    }
-                    if (unix == 0 && branchObj.TryGetProperty("timebuildupdated", out var tbuProp))
-                    {
-                        if (tbuProp.ValueKind == JsonValueKind.Number) tbuProp.TryGetInt64(out unix);
-                        else if (tbuProp.ValueKind == JsonValueKind.String) long.TryParse(tbuProp.GetString(), out unix);
-                    }
-                    if (unix > 0)
-                    {
-                        updateDate = DateTimeOffset.FromUnixTimeSeconds(unix);
-                    }
-
-                    // Extract depot manifests for this specific branch
-                    var depotManifests = new Dictionary<uint, ulong>();
-                    foreach (var depotProp in depotsEl.EnumerateObject())
-                    {
-                        if (uint.TryParse(depotProp.Name, out var depotId) &&
-                            depotProp.Value.TryGetProperty("manifests", out var mEl) &&
-                            mEl.TryGetProperty(branchName, out var pManEl) &&
-                            pManEl.TryGetProperty("gid", out var gidProp))
-                        {
-                            var gidStr = gidProp.GetString();
-                            if (ulong.TryParse(gidStr, out var gid))
-                            {
-                                depotManifests[depotId] = gid;
-                            }
-                        }
-                    }
-
-                    var displayName = branchName.Equals("public", StringComparison.OrdinalIgnoreCase)
-                        ? (string.IsNullOrWhiteSpace(buildId) ? "Latest Public Release" : $"Latest Build {buildId} (public)")
-                        : $"{branchName} (Build {buildId})";
-
-                    if (!string.IsNullOrWhiteSpace(desc))
-                    {
-                        displayName += $" - {desc}";
-                    }
-
-                    builds.Add(new GameBuildInfo
-                    {
-                        BuildId = buildId,
-                        BranchName = branchName,
-                        DisplayName = displayName,
-                        UpdatedAt = updateDate,
-                        Description = desc,
-                        IsCurrentBuild = false,
-                        Source = "Steam",
-                        DepotManifests = depotManifests
-                    });
-                }
-            }
-
-            return builds.OrderByDescending(b => b.BranchName == "public")
-                         .ThenByDescending(b => b.UpdatedAt ?? DateTimeOffset.MinValue)
-                         .ToList();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Failed to get SteamCMD branches and builds for AppId={AppId}", appId);
-            return [];
-        }
+        var unified = await GetAppUnifiedInfoAsync(appId, ct).ConfigureAwait(false);
+        return unified?.Builds ?? [];
     }
 
     /// <summary>
@@ -828,13 +910,16 @@ public sealed class SteamStoreApiClient : IMetadataProvider
             try
             {
                 var cached = await _cache.GetAsync<DateTimeOffset?>(cacheKey, ct).ConfigureAwait(false);
-                if (cached.HasValue) return cached.Value;
+                if (cached.HasValue)
+                {
+                    _metrics?.OnCacheHit("SteamStore", $"latest_update/{appId}");
+                    return cached.Value;
+                }
             }
             catch { }
         }
 
-        var lazyTask = _inFlightUpdateDates.GetOrAdd(appId, id => new Lazy<Task<DateTimeOffset?>>(() => FetchLatestAppUpdateDateCoreAsync(id, cacheKey, ct)));
-        return await lazyTask.Value.ConfigureAwait(false);
+        return await _coordinator.ExecuteAsync($"steam_update_date_{appId}", innerCt => FetchLatestAppUpdateDateCoreAsync(appId, cacheKey, innerCt), ct).ConfigureAwait(false);
     }
 
     private async Task<DateTimeOffset?> FetchLatestAppUpdateDateCoreAsync(uint appId, string cacheKey, CancellationToken ct)
@@ -918,9 +1003,10 @@ public sealed class SteamStoreApiClient : IMetadataProvider
 
             return null;
         }
-        finally
+        catch (Exception ex)
         {
-            _inFlightUpdateDates.TryRemove(appId, out _);
+            _logger.LogDebug(ex, "Failed in FetchLatestAppUpdateDateCoreAsync for {AppId}", appId);
+            return null;
         }
     }
 
@@ -1016,76 +1102,17 @@ public sealed class SteamStoreApiClient : IMetadataProvider
             try
             {
                 var cached = await _cache.GetAsync<Dictionary<uint, SteamDepotMeta>>(cacheKey, ct).ConfigureAwait(false);
-                if (cached != null) return cached;
+                if (cached != null)
+                {
+                    _metrics?.OnCacheHit("SteamCMD", $"depot_enrich/{appId}");
+                    return cached;
+                }
             }
             catch { }
         }
 
-        try
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.steamcmd.net/v1/info/{appId}");
-            using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
-                return new Dictionary<uint, SteamDepotMeta>();
-
-            var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            using var doc = JsonDocument.Parse(json);
-
-            if (!doc.RootElement.TryGetProperty("data", out var dataEl) ||
-                !dataEl.TryGetProperty(appId.ToString(), out var appEl) ||
-                !appEl.TryGetProperty("depots", out var depotsEl))
-                return new Dictionary<uint, SteamDepotMeta>();
-
-            var result = new Dictionary<uint, SteamDepotMeta>();
-
-            foreach (var depotProp in depotsEl.EnumerateObject())
-            {
-                // Skip non-numeric keys like "branches", "overrides", "baselanguages"
-                if (!uint.TryParse(depotProp.Name, out var depotId))
-                    continue;
-
-                var depotEl = depotProp.Value;
-
-                // Depot name (may be at root or under "config")
-                string? name = null;
-                if (depotEl.TryGetProperty("name", out var nameProp))
-                    name = nameProp.GetString()?.Trim();
-
-                string? osList = null;
-                bool isOptional = false;
-                bool isShared = false;
-
-                if (depotEl.TryGetProperty("config", out var configEl))
-                {
-                    if (configEl.TryGetProperty("oslist", out var osListProp))
-                        osList = osListProp.GetString()?.Trim().ToLowerInvariant();
-
-                    if (configEl.TryGetProperty("optional", out var optProp))
-                        isOptional = optProp.GetString() == "1" || (optProp.ValueKind == JsonValueKind.Number && optProp.GetInt32() == 1);
-
-                    if (configEl.TryGetProperty("SharedInstall", out var sharedProp))
-                        isShared = sharedProp.GetString() == "1" || (sharedProp.ValueKind == JsonValueKind.Number && sharedProp.GetInt32() == 1);
-                }
-
-                // Some depots mark shared via a top-level flag
-                if (!isShared && depotEl.TryGetProperty("sharedinstall", out var si))
-                    isShared = si.GetString() == "1" || (si.ValueKind == JsonValueKind.Number && si.GetInt32() == 1);
-
-                result[depotId] = new SteamDepotMeta(depotId, name, osList, isOptional, isShared);
-            }
-
-            if (_cache != null && result.Count > 0)
-            {
-                try { await _cache.SetAsync(cacheKey, result, TimeSpan.FromDays(7), ct).ConfigureAwait(false); } catch { }
-            }
-
-            return result;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Failed to get depot enrichment for AppId={AppId}", appId);
-            return new Dictionary<uint, SteamDepotMeta>();
-        }
+        var unified = await GetAppUnifiedInfoAsync(appId, ct).ConfigureAwait(false);
+        return unified?.DepotEnrichment ?? new Dictionary<uint, SteamDepotMeta>();
     }
 
 

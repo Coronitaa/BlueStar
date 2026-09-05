@@ -1613,7 +1613,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
         try
         {
-            var fetchedDlcs = await _metadataProvider.GetDlcListAsync(Instance.AppId, CancellationToken.None).ConfigureAwait(true);
+            var fetchedDlcs = await _metadataProvider.GetDlcListAsync(Instance.AppId, _cts.Token).ConfigureAwait(true);
             if (fetchedDlcs != null && fetchedDlcs.Count > 0)
             {
                 var selectableDlcs = fetchedDlcs.Select(d => new SelectableDlcItem
@@ -1633,7 +1633,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                     if (Dlcs.Count > 0)
                     {
                         IsDlcUnlocked = Instance.DlcUnlockerInstalled ||
-                            await _dlcInstaller.IsDlcInstalledAsync(Instance, Dlcs[0].Dlc, CancellationToken.None).ConfigureAwait(true);
+                            await _dlcInstaller.IsDlcInstalledAsync(Instance, Dlcs[0].Dlc, _cts.Token).ConfigureAwait(true);
                     }
                     else
                     {
@@ -1647,7 +1647,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
                     try
                     {
-                        await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(false);
+                        await _instanceManager.UpdateAsync(Instance, _cts.Token).ConfigureAwait(false);
                     }
                     catch { }
                 }, null);
@@ -1680,7 +1680,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
         try
         {
-            var enrichment = await steamClient.GetDepotEnrichmentAsync(Instance.AppId, CancellationToken.None)
+            var enrichment = await steamClient.GetDepotEnrichmentAsync(Instance.AppId, _cts.Token)
                                               .ConfigureAwait(false);
 
             if (enrichment.Count == 0) return;
@@ -5606,7 +5606,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             {
                 try
                 {
-                    var resolvedVersions = await _buildResolver.GetAvailableVersionsAsync(Instance.AppId, CancellationToken.None).ConfigureAwait(true);
+                    var resolvedVersions = await _buildResolver.GetAvailableVersionsAsync(Instance.AppId, _cts.Token).ConfigureAwait(true);
                     foreach (var v in resolvedVersions)
                     {
                         var map = v.Depots.ToDictionary(d => d.DepotId, d => d.ManifestId);
@@ -5629,7 +5629,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             }
             else if (_metadataProvider is BlueStar.Infrastructure.Metadata.SteamStoreApiClient steamClient)
             {
-                var steamBuilds = await steamClient.GetAppBuildsAsync(Instance.AppId, CancellationToken.None).ConfigureAwait(true);
+                var steamBuilds = await steamClient.GetAppBuildsAsync(Instance.AppId, _cts.Token).ConfigureAwait(true);
                 list.AddRange(steamBuilds);
             }
 
@@ -5639,7 +5639,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             {
                 try
                 {
-                    var depotBoxManifests = await _apiClient.GetManifestsAsync(Instance.AppId, CancellationToken.None).ConfigureAwait(true);
+                    var depotBoxManifests = await _apiClient.GetManifestsAsync(Instance.AppId, _cts.Token).ConfigureAwait(true);
                     if (depotBoxManifests.Count > 0)
                     {
                         var map = depotBoxManifests.ToDictionary(m => m.DepotId, m => m.ManifestId);

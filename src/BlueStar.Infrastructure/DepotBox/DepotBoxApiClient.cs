@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
+using BlueStar.Infrastructure.Services;
 using Microsoft.Extensions.Logging;
 
 namespace BlueStar.Infrastructure.DepotBox;
@@ -17,6 +18,8 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
     private readonly BlueStar.Infrastructure.Storage.AppSettingsService? _appSettings;
     private readonly ICacheService? _cacheService;
     private readonly ILogger<DepotBoxApiClient> _logger;
+    private readonly IRequestCoordinator _coordinator;
+    private readonly INetworkMetricsObserver? _metrics;
 
     private IReadOnlyList<GameFixInfo>? _cachedFixesCatalog;
     private DateTimeOffset _catalogExpiresAt = DateTimeOffset.MinValue;
@@ -40,18 +43,24 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
     /// <param name="logger">Logger instance.</param>
     /// <param name="appSettings">Application settings service for custom API URLs.</param>
     /// <param name="cacheService">Cache service for persistent L1/L2 caching across sessions.</param>
+    /// <param name="coordinator">Request coordinator for in-flight deduplication.</param>
+    /// <param name="metrics">Network metrics observer.</param>
     public DepotBoxApiClient(
         HttpClient http,
         IDepotBoxAuthService authService,
         ILogger<DepotBoxApiClient> logger,
         BlueStar.Infrastructure.Storage.AppSettingsService? appSettings = null,
-        ICacheService? cacheService = null)
+        ICacheService? cacheService = null,
+        IRequestCoordinator? coordinator = null,
+        INetworkMetricsObserver? metrics = null)
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _authService = authService ?? throw new ArgumentNullException(nameof(authService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _appSettings = appSettings;
         _cacheService = cacheService;
+        _coordinator = coordinator ?? RequestCoordinator.Instance;
+        _metrics = metrics;
     }
 
     /// <inheritdoc />
@@ -81,27 +90,55 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
             {
                 var cached = await _cacheService.GetAsync<GameMetadata>(cacheKey, ct).ConfigureAwait(false);
                 if (cached != null)
+                {
+                    _metrics?.OnCacheHit("DepotBox", $"/api/games/{appId}");
                     return cached;
+                }
             }
             catch { }
         }
 
-        using var request = await CreateRequestAsync(HttpMethod.Get, $"/api/games/{appId}", ct).ConfigureAwait(false);
-
-        using var response = await SendWithErrorHandlingAsync(request, ct).ConfigureAwait(false);
-        var jsonString = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-
-        var game = ParseGameDetails(jsonString, appId);
-        if (game != null && _cacheService != null)
+        return await _coordinator.ExecuteAsync($"depotbox_game_{appId}", async innerCt =>
         {
+            if (!forceRefresh && _cacheService != null)
+            {
+                try
+                {
+                    var cached = await _cacheService.GetAsync<GameMetadata>(cacheKey, innerCt).ConfigureAwait(false);
+                    if (cached != null)
+                    {
+                        _metrics?.OnCacheHit("DepotBox", $"/api/games/{appId}");
+                        return cached;
+                    }
+                }
+                catch { }
+            }
+
             try
             {
-                await _cacheService.SetAsync(cacheKey, game, TimeSpan.FromDays(30), ct).ConfigureAwait(false);
-            }
-            catch { }
-        }
+                _metrics?.OnProviderRequest("DepotBox", $"/api/games/{appId}");
+                using var request = await CreateRequestAsync(HttpMethod.Get, $"/api/games/{appId}", innerCt).ConfigureAwait(false);
+                using var response = await SendWithErrorHandlingAsync(request, innerCt).ConfigureAwait(false);
+                var jsonString = await response.Content.ReadAsStringAsync(innerCt).ConfigureAwait(false);
 
-        return game;
+                var game = ParseGameDetails(jsonString, appId);
+                if (game != null && _cacheService != null)
+                {
+                    try
+                    {
+                        await _cacheService.SetAsync(cacheKey, game, TimeSpan.FromDays(30), innerCt).ConfigureAwait(false);
+                    }
+                    catch { }
+                }
+
+                return game;
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                _logger.LogDebug("DepotBox returned 404 for game details AppId {AppId}", appId);
+                return null;
+            }
+        }, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -115,9 +152,17 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
             try
             {
                 var cached = await _cacheService.GetAsync<List<ManifestInfo>>(cacheKey, ct).ConfigureAwait(false);
-                if (cached != null && cached.Count > 0)
+                if (cached != null)
                 {
                     _logger.LogDebug("DepotBox manifests for AppId {AppId} retrieved from cache ({Count} items)", appId, cached.Count);
+                    if (cached.Count == 0)
+                    {
+                        _metrics?.OnNegativeCacheHit("DepotBox", $"/api/manifests/{appId}");
+                    }
+                    else
+                    {
+                        _metrics?.OnCacheHit("DepotBox", $"/api/manifests/{appId}");
+                    }
                     return cached;
                 }
             }
@@ -127,26 +172,64 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
             }
         }
 
-        using var request = await CreateRequestAsync(HttpMethod.Get, $"/api/manifests/{appId}", ct).ConfigureAwait(false);
-
-        using var response = await SendWithErrorHandlingAsync(request, ct).ConfigureAwait(false);
-        var jsonString = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-
-        var manifests = ParseManifests(jsonString);
-
-        if (manifests.Count > 0 && _cacheService != null)
+        return await _coordinator.ExecuteAsync($"depotbox_manifests_{appId}", async innerCt =>
         {
+            if (!forceRefresh && _cacheService != null)
+            {
+                try
+                {
+                    var cached = await _cacheService.GetAsync<List<ManifestInfo>>(cacheKey, innerCt).ConfigureAwait(false);
+                    if (cached != null)
+                    {
+                        if (cached.Count == 0)
+                        {
+                            _metrics?.OnNegativeCacheHit("DepotBox", $"/api/manifests/{appId}");
+                        }
+                        else
+                        {
+                            _metrics?.OnCacheHit("DepotBox", $"/api/manifests/{appId}");
+                        }
+                        return (IReadOnlyList<ManifestInfo>)cached;
+                    }
+                }
+                catch { }
+            }
+
             try
             {
-                await _cacheService.SetAsync(cacheKey, manifests.ToList(), TimeSpan.FromDays(30), ct).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Failed to persist manifests cache for AppId {AppId}", appId);
-            }
-        }
+                _metrics?.OnProviderRequest("DepotBox", $"/api/manifests/{appId}");
+                using var request = await CreateRequestAsync(HttpMethod.Get, $"/api/manifests/{appId}", innerCt).ConfigureAwait(false);
+                using var response = await SendWithErrorHandlingAsync(request, innerCt).ConfigureAwait(false);
+                var jsonString = await response.Content.ReadAsStringAsync(innerCt).ConfigureAwait(false);
 
-        return manifests;
+                var manifests = ParseManifests(jsonString);
+
+                if (_cacheService != null)
+                {
+                    try
+                    {
+                        // 7 days for positive manifests, 24 hours for negative caching of empty lists
+                        var ttl = manifests.Count > 0 ? TimeSpan.FromDays(7) : TimeSpan.FromHours(24);
+                        await _cacheService.SetAsync(cacheKey, manifests.ToList(), ttl, innerCt).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Failed to persist manifests cache for AppId {AppId}", appId);
+                    }
+                }
+
+                return manifests;
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                _logger.LogDebug("DepotBox returned 404 for AppId {AppId}, negative caching empty manifest list for 24h", appId);
+                if (_cacheService != null)
+                {
+                    try { await _cacheService.SetAsync(cacheKey, new List<ManifestInfo>(), TimeSpan.FromHours(24), innerCt).ConfigureAwait(false); } catch { }
+                }
+                return (IReadOnlyList<ManifestInfo>)[];
+            }
+        }, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -161,36 +244,67 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
             {
                 var cached = await _cacheService.GetAsync<bool?>(cacheKey, ct).ConfigureAwait(false);
                 if (cached.HasValue)
+                {
+                    _metrics?.OnCacheHit("DepotBox", $"/api/games/{appId}/availability");
                     return cached.Value;
+                }
             }
             catch { }
         }
 
-        using var request = await CreateRequestAsync(HttpMethod.Get, $"/api/games/{appId}/availability", ct).ConfigureAwait(false);
-
-        using var response = await SendWithErrorHandlingAsync(request, ct).ConfigureAwait(false);
-        var jsonString = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-
-        bool isAvail = false;
-        try
+        return await _coordinator.ExecuteAsync($"depotbox_avail_{appId}", async innerCt =>
         {
-            using var doc = JsonDocument.Parse(jsonString);
-            var root = doc.RootElement;
-            if (TryGetBool(root, out var avail, "isAvailable", "available", "is_available", "success"))
-                isAvail = avail;
-        }
-        catch { }
+            if (!forceRefresh && _cacheService != null)
+            {
+                try
+                {
+                    var cached = await _cacheService.GetAsync<bool?>(cacheKey, innerCt).ConfigureAwait(false);
+                    if (cached.HasValue)
+                    {
+                        _metrics?.OnCacheHit("DepotBox", $"/api/games/{appId}/availability");
+                        return cached.Value;
+                    }
+                }
+                catch { }
+            }
 
-        if (_cacheService != null)
-        {
             try
             {
-                await _cacheService.SetAsync(cacheKey, (bool?)isAvail, TimeSpan.FromDays(30), ct).ConfigureAwait(false);
-            }
-            catch { }
-        }
+                _metrics?.OnProviderRequest("DepotBox", $"/api/games/{appId}/availability");
+                using var request = await CreateRequestAsync(HttpMethod.Get, $"/api/games/{appId}/availability", innerCt).ConfigureAwait(false);
+                using var response = await SendWithErrorHandlingAsync(request, innerCt).ConfigureAwait(false);
+                var jsonString = await response.Content.ReadAsStringAsync(innerCt).ConfigureAwait(false);
 
-        return isAvail;
+                bool isAvail = false;
+                try
+                {
+                    using var doc = JsonDocument.Parse(jsonString);
+                    var root = doc.RootElement;
+                    if (TryGetBool(root, out var avail, "isAvailable", "available", "is_available", "success"))
+                        isAvail = avail;
+                }
+                catch { }
+
+                if (_cacheService != null)
+                {
+                    try
+                    {
+                        await _cacheService.SetAsync(cacheKey, (bool?)isAvail, TimeSpan.FromDays(30), innerCt).ConfigureAwait(false);
+                    }
+                    catch { }
+                }
+
+                return isAvail;
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                if (_cacheService != null)
+                {
+                    try { await _cacheService.SetAsync(cacheKey, (bool?)false, TimeSpan.FromDays(7), innerCt).ConfigureAwait(false); } catch { }
+                }
+                return false;
+            }
+        }, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />

@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
+using BlueStar.Infrastructure.Services;
 using Microsoft.Extensions.Logging;
 
 namespace BlueStar.Infrastructure.Providers.Fixes;
@@ -20,6 +21,9 @@ public sealed class OnlineFixProvider : IFixProvider
 {
     private readonly HttpClient _http;
     private readonly ILogger<OnlineFixProvider> _logger;
+    private readonly ICacheService? _cache;
+    private readonly IRequestCoordinator _coordinator;
+    private readonly INetworkMetricsObserver? _metrics;
 
     public string ProviderId => "onlinefix";
     public string DisplayName => "OnlineFix (Multiplayer)";
@@ -31,10 +35,16 @@ public sealed class OnlineFixProvider : IFixProvider
 
     public OnlineFixProvider(
         HttpClient http,
-        ILogger<OnlineFixProvider> logger)
+        ILogger<OnlineFixProvider> logger,
+        ICacheService? cache = null,
+        IRequestCoordinator? coordinator = null,
+        INetworkMetricsObserver? metrics = null)
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _cache = cache;
+        _coordinator = coordinator ?? RequestCoordinator.Instance;
+        _metrics = metrics;
     }
 
     /// <inheritdoc />
@@ -49,14 +59,53 @@ public sealed class OnlineFixProvider : IFixProvider
     {
         if (appId == 0) return [];
 
-        try
+        var cacheKey = $"onlinefix_fixes_{appId}";
+        if (_cache != null)
         {
-            var url = $"https://onlinefix.manifesthub.uk/api/games?search={appId}";
-            using var resp = await _http.GetAsync(url, ct).ConfigureAwait(false);
-            if (!resp.IsSuccessStatusCode) return [];
+            try
+            {
+                var cached = await _cache.GetAsync<List<GameFixInfo>>(cacheKey, ct).ConfigureAwait(false);
+                if (cached != null)
+                {
+                    _metrics?.OnCacheHit("OnlineFix", $"api/games?search={appId}");
+                    return cached;
+                }
+            }
+            catch { }
+        }
 
-            var json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            using var doc = JsonDocument.Parse(json);
+        return await _coordinator.ExecuteAsync($"onlinefix_{appId}", async innerCt =>
+        {
+            if (_cache != null)
+            {
+                try
+                {
+                    var cached = await _cache.GetAsync<List<GameFixInfo>>(cacheKey, innerCt).ConfigureAwait(false);
+                    if (cached != null)
+                    {
+                        _metrics?.OnCacheHit("OnlineFix", $"api/games?search={appId}");
+                        return (IReadOnlyList<GameFixInfo>)cached;
+                    }
+                }
+                catch { }
+            }
+
+            try
+            {
+                _metrics?.OnProviderRequest("OnlineFix", $"https://onlinefix.manifesthub.uk/api/games?search={appId}");
+                var url = $"https://onlinefix.manifesthub.uk/api/games?search={appId}";
+                using var resp = await _http.GetAsync(url, innerCt).ConfigureAwait(false);
+                if (!resp.IsSuccessStatusCode)
+                {
+                    if (_cache != null)
+                    {
+                        try { await _cache.SetAsync(cacheKey, new List<GameFixInfo>(), TimeSpan.FromDays(1), innerCt).ConfigureAwait(false); } catch { }
+                    }
+                    return [];
+                }
+
+                var json = await resp.Content.ReadAsStringAsync(innerCt).ConfigureAwait(false);
+                using var doc = JsonDocument.Parse(json);
 
             var list = new List<GameFixInfo>();
 
@@ -114,14 +163,24 @@ public sealed class OnlineFixProvider : IFixProvider
                 });
             }
 
-            return list.AsReadOnly();
+            if (_cache != null)
+            {
+                try
+                {
+                    await _cache.SetAsync(cacheKey, list, list.Count > 0 ? TimeSpan.FromDays(7) : TimeSpan.FromDays(1), innerCt).ConfigureAwait(false);
+                }
+                catch { }
+            }
+
+            return (IReadOnlyList<GameFixInfo>)list.AsReadOnly();
         }
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "Failed to query OnlineFix API for AppId {AppId}", appId);
             return [];
         }
-    }
+    }, ct).ConfigureAwait(false);
+}
 
     /// <inheritdoc />
     public async Task<string> DownloadFixAsync(GameFixInfo fix, string targetDirectory, IProgress<DownloadProgress>? progress = null, CancellationToken ct = default)
