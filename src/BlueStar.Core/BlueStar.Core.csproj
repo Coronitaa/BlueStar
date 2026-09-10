@@ -7,4 +7,7 @@
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="BlueStar.Infrastructure.Tests" />
+  </ItemGroup>
 </Project>

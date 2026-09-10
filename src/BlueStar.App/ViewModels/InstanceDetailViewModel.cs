@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -1111,6 +1111,792 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private bool _isShortcutStatusSuccess;
+
+    // ── One-Click Install Modal State ──
+
+    [ObservableProperty]
+    private bool _isInstallModalOpen;
+
+    [ObservableProperty]
+    private string _installModalPath = string.Empty;
+
+    [ObservableProperty]
+    private string _installModalFreeSpaceText = string.Empty;
+
+    [ObservableProperty]
+    private bool _installModalHasEnoughSpace = true;
+
+    [ObservableProperty]
+    private string _installModalRequiredSpaceText = string.Empty;
+
+    [ObservableProperty]
+    private string _installModalSelectedBranch = "public";
+
+    [ObservableProperty]
+    private string _installModalTargetVersionMode = "Latest";
+
+    public bool InstallModalHasRecommendedVersion => HasCurationRecommendation;
+
+    public bool IsInstallModalVersionRecommended
+    {
+        get => string.Equals(InstallModalTargetVersionMode, "Recommended", StringComparison.OrdinalIgnoreCase);
+        set
+        {
+            if (value && !string.Equals(InstallModalTargetVersionMode, "Recommended", StringComparison.OrdinalIgnoreCase))
+            {
+                InstallModalTargetVersionMode = "Recommended";
+                NotifyInstallModalVersionModeChanged();
+            }
+        }
+    }
+
+    public bool IsInstallModalVersionLatest
+    {
+        get => string.Equals(InstallModalTargetVersionMode, "Latest", StringComparison.OrdinalIgnoreCase);
+        set
+        {
+            if (value && !string.Equals(InstallModalTargetVersionMode, "Latest", StringComparison.OrdinalIgnoreCase))
+            {
+                InstallModalTargetVersionMode = "Latest";
+                NotifyInstallModalVersionModeChanged();
+            }
+        }
+    }
+
+    public bool IsInstallModalVersionCustom
+    {
+        get => string.Equals(InstallModalTargetVersionMode, "Custom", StringComparison.OrdinalIgnoreCase);
+        set
+        {
+            if (value && !string.Equals(InstallModalTargetVersionMode, "Custom", StringComparison.OrdinalIgnoreCase))
+            {
+                InstallModalTargetVersionMode = "Custom";
+                NotifyInstallModalVersionModeChanged();
+            }
+        }
+    }
+
+    public void NotifyInstallModalVersionModeChanged()
+    {
+        OnPropertyChanged(nameof(InstallModalTargetVersionMode));
+        OnPropertyChanged(nameof(IsInstallModalVersionRecommended));
+        OnPropertyChanged(nameof(IsInstallModalVersionLatest));
+        OnPropertyChanged(nameof(IsInstallModalVersionCustom));
+        UpdateInstallModalDiskSpace();
+    }
+
+    [ObservableProperty]
+    private ObservableCollection<string> _installModalAvailableBranches = [];
+
+    [ObservableProperty]
+    private ObservableCollection<InstallModalDlcItem> _installModalDlcs = [];
+
+    [ObservableProperty]
+    private bool _installModalSelectAllDlcs = true;
+
+    [ObservableProperty]
+    private string _installModalDlcMethod = "CreamAPI";
+
+    [ObservableProperty]
+    private string _installModalSelectedEmulator = "refix_valve";
+
+    public bool IsInstallModalEmulatorNone
+    {
+        get => string.Equals(InstallModalSelectedEmulator, "none", StringComparison.OrdinalIgnoreCase);
+        set
+        {
+            if (value && !string.Equals(InstallModalSelectedEmulator, "none", StringComparison.OrdinalIgnoreCase))
+            {
+                InstallModalSelectedEmulator = "none";
+                NotifyEmulatorSelectionChanged();
+            }
+        }
+    }
+
+    public bool IsInstallModalEmulatorValve
+    {
+        get => string.Equals(InstallModalSelectedEmulator, "refix_valve", StringComparison.OrdinalIgnoreCase);
+        set
+        {
+            if (value && !string.Equals(InstallModalSelectedEmulator, "refix_valve", StringComparison.OrdinalIgnoreCase))
+            {
+                InstallModalSelectedEmulator = "refix_valve";
+                NotifyEmulatorSelectionChanged();
+            }
+        }
+    }
+
+    public bool IsInstallModalEmulatorGoldberg
+    {
+        get => string.Equals(InstallModalSelectedEmulator, "refix_goldberg", StringComparison.OrdinalIgnoreCase);
+        set
+        {
+            if (value && !string.Equals(InstallModalSelectedEmulator, "refix_goldberg", StringComparison.OrdinalIgnoreCase))
+            {
+                InstallModalSelectedEmulator = "refix_goldberg";
+                NotifyEmulatorSelectionChanged();
+            }
+        }
+    }
+
+    public bool IsInstallModalEmulatorSpecific
+    {
+        get => string.Equals(InstallModalSelectedEmulator, "gamefix_online", StringComparison.OrdinalIgnoreCase);
+        set
+        {
+            if (value && !string.Equals(InstallModalSelectedEmulator, "gamefix_online", StringComparison.OrdinalIgnoreCase))
+            {
+                InstallModalSelectedEmulator = "gamefix_online";
+                NotifyEmulatorSelectionChanged();
+            }
+        }
+    }
+
+    public bool HasModalSpecificOnlineFix => OnlineGameFixes.Count > 0;
+
+    [ObservableProperty]
+    private GameFixInfo? _selectedModalSpecificGameFix;
+
+    public bool IsValveRecommendedForGame =>
+        (CuratedRecommendation != null && !string.IsNullOrWhiteSpace(CuratedRecommendation.RecommendedEmulator) &&
+         (CuratedRecommendation.RecommendedEmulator.Contains("valve", StringComparison.OrdinalIgnoreCase) ||
+          CuratedRecommendation.RecommendedEmulator.Contains("refix", StringComparison.OrdinalIgnoreCase))) ||
+        (RecommendedEmulatorOption?.Id == "refix_valve");
+
+    public bool IsGoldbergRecommendedForGame =>
+        (CuratedRecommendation != null && !string.IsNullOrWhiteSpace(CuratedRecommendation.RecommendedEmulator) &&
+         CuratedRecommendation.RecommendedEmulator.Contains("goldberg", StringComparison.OrdinalIgnoreCase)) ||
+        (RecommendedEmulatorOption?.Id == "refix_goldberg");
+
+    private void NotifyEmulatorSelectionChanged()
+    {
+        InstallModalEnableReFix = !string.Equals(InstallModalSelectedEmulator, "none", StringComparison.OrdinalIgnoreCase);
+        OnPropertyChanged(nameof(InstallModalSelectedEmulator));
+        OnPropertyChanged(nameof(IsInstallModalEmulatorNone));
+        OnPropertyChanged(nameof(IsInstallModalEmulatorValve));
+        OnPropertyChanged(nameof(IsInstallModalEmulatorGoldberg));
+        OnPropertyChanged(nameof(IsInstallModalEmulatorSpecific));
+        OnPropertyChanged(nameof(HasModalSpecificOnlineFix));
+        OnPropertyChanged(nameof(SelectedModalSpecificGameFix));
+        OnPropertyChanged(nameof(InstallModalEnableReFix));
+        OnPropertyChanged(nameof(IsValveRecommendedForGame));
+        OnPropertyChanged(nameof(IsGoldbergRecommendedForGame));
+    }
+
+    [ObservableProperty]
+    private bool _installModalEnableReFix = true;
+
+    [ObservableProperty]
+    private bool _installModalCreateDesktopShortcut = true;
+
+    [ObservableProperty]
+    private bool _installModalCreateStartMenuShortcut = true;
+
+    [ObservableProperty]
+    private bool _installModalInstallPrerequisites = true;
+
+    [ObservableProperty]
+    private ObservableCollection<PrerequisiteItem> _installModalPrerequisites = [];
+
+    [ObservableProperty]
+    private string _installModalPrereqStatusText = string.Empty;
+
+    [ObservableProperty]
+    private bool _isInstallingModalPrerequisites;
+
+    [ObservableProperty]
+    private string _installModalProgressStatusText = string.Empty;
+
+    public string InstallModalGameTitle => CleanName(Instance?.Name) ?? Instance?.Name ?? "Game";
+
+    public string InstallModalHeaderImage => Instance?.HeaderImageUrl ?? string.Empty;
+
+    public string InstallModalSubtitle =>
+        string.Format(GetResourceString("String_InstallModalSubtitle", "Configure and install {0} in one single step."), InstallModalGameTitle);
+
+    public string InstallModalShortDescription
+    {
+        get
+        {
+            var desc = Instance?.Metadata?.Description;
+            if (string.IsNullOrWhiteSpace(desc))
+            {
+                return GetResourceString("String_NoDescriptionProvided", "No description provided for this game.");
+            }
+            // Strip any HTML tags from description snippet
+            var plain = System.Text.RegularExpressions.Regex.Replace(desc, "<.*?>", string.Empty);
+            plain = System.Net.WebUtility.HtmlDecode(plain).Trim();
+            return plain.Length > 240 ? plain[..237] + "..." : plain;
+        }
+    }
+
+    public string InstanceDlcUnlockerMethod
+    {
+        get => Instance?.DlcUnlockerMethod ?? "CreamAPI";
+        set
+        {
+            if (Instance != null && Instance.DlcUnlockerMethod != value)
+            {
+                Instance = Instance with { DlcUnlockerMethod = value };
+                _ = _instanceManager.UpdateAsync(Instance, CancellationToken.None);
+                OnPropertyChanged(nameof(InstanceDlcUnlockerMethod));
+                OnPropertyChanged(nameof(IsCreamApiSelected));
+                OnPropertyChanged(nameof(IsSmokeApiSelected));
+            }
+        }
+    }
+
+    public bool IsCreamApiSelected
+    {
+        get => string.Equals(InstanceDlcUnlockerMethod, "CreamAPI", StringComparison.OrdinalIgnoreCase);
+        set { if (value) InstanceDlcUnlockerMethod = "CreamAPI"; }
+    }
+
+    public bool IsSmokeApiSelected
+    {
+        get => string.Equals(InstanceDlcUnlockerMethod, "SmokeAPI", StringComparison.OrdinalIgnoreCase);
+        set { if (value) InstanceDlcUnlockerMethod = "SmokeAPI"; }
+    }
+
+    public bool IsModalCreamApiSelected
+    {
+        get => string.Equals(InstallModalDlcMethod, "CreamAPI", StringComparison.OrdinalIgnoreCase);
+        set
+        {
+            if (value)
+            {
+                InstallModalDlcMethod = "CreamAPI";
+                OnPropertyChanged(nameof(IsModalCreamApiSelected));
+                OnPropertyChanged(nameof(IsModalSmokeApiSelected));
+            }
+        }
+    }
+
+    public bool IsModalSmokeApiSelected
+    {
+        get => string.Equals(InstallModalDlcMethod, "SmokeAPI", StringComparison.OrdinalIgnoreCase);
+        set
+        {
+            if (value)
+            {
+                InstallModalDlcMethod = "SmokeAPI";
+                OnPropertyChanged(nameof(IsModalCreamApiSelected));
+                OnPropertyChanged(nameof(IsModalSmokeApiSelected));
+            }
+        }
+    }
+
+    partial void OnInstallModalPathChanged(string value)
+    {
+        UpdateInstallModalDiskSpace();
+    }
+
+    partial void OnInstallModalDlcMethodChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsModalCreamApiSelected));
+        OnPropertyChanged(nameof(IsModalSmokeApiSelected));
+    }
+
+    partial void OnInstallModalSelectAllDlcsChanged(bool value)
+    {
+        if (_isUpdatingSelectAllInternally) return;
+        _isUpdatingSelectAllInternally = true;
+        try
+        {
+            foreach (var item in InstallModalDlcs)
+            {
+                item.IsSelected = value;
+            }
+        }
+        finally
+        {
+            _isUpdatingSelectAllInternally = false;
+        }
+        UpdateInstallModalDiskSpace();
+    }
+
+    private bool _isUpdatingSelectAllInternally;
+
+    [RelayCommand]
+    public void ToggleSelectAllModalDlcs()
+    {
+        InstallModalSelectAllDlcs = !InstallModalSelectAllDlcs;
+    }
+
+    private void UpdateModalSelectAllState()
+    {
+        if (_isUpdatingSelectAllInternally) return;
+        _isUpdatingSelectAllInternally = true;
+        try
+        {
+            InstallModalSelectAllDlcs = InstallModalDlcs.Count > 0 && InstallModalDlcs.All(d => d.IsSelected);
+        }
+        finally
+        {
+            _isUpdatingSelectAllInternally = false;
+        }
+    }
+
+    public void UpdateInstallModalDiskSpace()
+    {
+        if (Instance == null) return;
+
+        long requiredBytes = 0;
+        if (Instance.Depots != null)
+        {
+            requiredBytes += Instance.Depots.Where(d => d.SizeBytes > 0).Sum(d => (long)d.SizeBytes);
+        }
+
+        if (InstallModalDlcs != null)
+        {
+            foreach (var dlcItem in InstallModalDlcs.Where(d => d.IsSelected))
+            {
+                if (dlcItem.Dlc.Depots != null)
+                {
+                    requiredBytes += dlcItem.Dlc.Depots.Where(d => d.SizeBytes > 0).Sum(d => (long)d.SizeBytes);
+                }
+            }
+        }
+
+        InstallModalRequiredSpaceText = FormatBytes(requiredBytes);
+
+        try
+        {
+            var path = InstallModalPath;
+            var root = !string.IsNullOrWhiteSpace(path) ? Path.GetPathRoot(path) : null;
+            if (!string.IsNullOrWhiteSpace(root) && Directory.Exists(root))
+            {
+                var drive = new DriveInfo(root);
+                long freeBytes = drive.AvailableFreeSpace;
+                InstallModalHasEnoughSpace = requiredBytes == 0 || freeBytes >= requiredBytes;
+                InstallModalFreeSpaceText = string.Format(
+                    GetResourceString("String_InstallModalFreeSpaceFormat", "Free space: {0} · Required: {1}"),
+                    FormatBytes(freeBytes),
+                    InstallModalRequiredSpaceText);
+            }
+            else
+            {
+                InstallModalHasEnoughSpace = true;
+                InstallModalFreeSpaceText = string.Format(
+                    GetResourceString("String_InstallModalFreeSpaceFormat", "Free space: {0} · Required: {1}"),
+                    "—",
+                    InstallModalRequiredSpaceText);
+            }
+        }
+        catch
+        {
+            InstallModalHasEnoughSpace = true;
+            InstallModalFreeSpaceText = string.Empty;
+        }
+    }
+
+    [RelayCommand]
+    public async Task OpenInstallModalAsync()
+    {
+        if (Instance == null) return;
+
+        var cleanGameName = CleanName(Instance.Name) ?? Instance.Name ?? "Game";
+        var defaultFolder = !string.IsNullOrWhiteSpace(_appSettings.LastInstallDirectory)
+            ? _appSettings.LastInstallDirectory
+            : _appSettings.DefaultDownloadDirectory;
+        InstallModalPath = !string.IsNullOrWhiteSpace(Instance.InstallPath)
+            ? Instance.InstallPath
+            : Path.Combine(defaultFolder, cleanGameName);
+
+        InstallModalAvailableBranches.Clear();
+        if (AvailableBuilds != null && AvailableBuilds.Count > 0)
+        {
+            foreach (var b in AvailableBuilds)
+            {
+                var branch = b.BranchName;
+                if (!string.IsNullOrWhiteSpace(branch) && !InstallModalAvailableBranches.Contains(branch))
+                {
+                    InstallModalAvailableBranches.Add(branch);
+                }
+            }
+        }
+        if (!InstallModalAvailableBranches.Contains("public"))
+        {
+            InstallModalAvailableBranches.Insert(0, "public");
+        }
+        InstallModalSelectedBranch = !string.IsNullOrWhiteSpace(Instance.ActiveBranch) && InstallModalAvailableBranches.Contains(Instance.ActiveBranch)
+            ? Instance.ActiveBranch
+            : "public";
+
+        InstallModalDlcs.Clear();
+        if (Instance.Dlcs != null && Instance.Dlcs.Count > 0)
+        {
+            foreach (var dlc in Instance.Dlcs)
+            {
+                var item = new InstallModalDlcItem
+                {
+                    Dlc = dlc,
+                    IsSelected = true,
+                    OnSelectionChanged = () =>
+                    {
+                        UpdateInstallModalDiskSpace();
+                        UpdateModalSelectAllState();
+                    }
+                };
+                InstallModalDlcs.Add(item);
+            }
+        }
+        InstallModalSelectAllDlcs = true;
+
+        InstallModalDlcMethod = !string.IsNullOrWhiteSpace(Instance.DlcUnlockerMethod) ? Instance.DlcUnlockerMethod : "CreamAPI";
+        OnPropertyChanged(nameof(IsModalCreamApiSelected));
+        OnPropertyChanged(nameof(IsModalSmokeApiSelected));
+        InstallModalEnableReFix = Instance.EmulatorEnabled;
+
+        if (_recommendationProvider != null && Instance.AppId > 0 && CuratedRecommendation == null)
+        {
+            try
+            {
+                await LoadCurationRecommendationAsync().ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to load curation recommendation for install modal");
+            }
+        }
+
+        if (HasCurationRecommendation)
+        {
+            InstallModalTargetVersionMode = "Recommended";
+        }
+        else if (!string.IsNullOrWhiteSpace(Instance.ActiveBranch) && !string.Equals(Instance.ActiveBranch, "public", StringComparison.OrdinalIgnoreCase))
+        {
+            InstallModalTargetVersionMode = "Custom";
+        }
+        else
+        {
+            InstallModalTargetVersionMode = "Latest";
+        }
+        NotifyInstallModalVersionModeChanged();
+
+        // Query game-specific fixes (Online-Fix / DepotBox catalog) for this title
+        if (_apiClient != null && OnlineGameFixes.Count == 0)
+        {
+            try
+            {
+                await LoadGameFixesCoreAsync().ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to load game fixes for install modal");
+            }
+        }
+
+        if (OnlineGameFixes.Count > 0 && SelectedModalSpecificGameFix == null)
+        {
+            SelectedModalSpecificGameFix = OnlineGameFixes[0];
+        }
+
+        // Initialize specific emulator selection
+        if (Instance.EmulatorEnabled && !string.IsNullOrWhiteSpace(Instance.EmulatorId))
+        {
+            if (string.Equals(Instance.EmulatorId, "gamefix_online", StringComparison.OrdinalIgnoreCase) ||
+                Instance.InstalledFixLayers?.Any(l => l.IsOnline) == true)
+            {
+                InstallModalSelectedEmulator = "gamefix_online";
+            }
+            else
+            {
+                InstallModalSelectedEmulator = Instance.EmulatorId.Contains("goldberg", StringComparison.OrdinalIgnoreCase)
+                    ? "refix_goldberg"
+                    : "refix_valve";
+            }
+        }
+        else if (!Instance.EmulatorEnabled && Instance.Status != InstanceStatus.NotInstalled)
+        {
+            InstallModalSelectedEmulator = "none";
+        }
+        else if (CuratedRecommendation != null && !string.IsNullOrWhiteSpace(CuratedRecommendation.RecommendedEmulator))
+        {
+            if (CuratedRecommendation.RecommendedEmulator.Contains("goldberg", StringComparison.OrdinalIgnoreCase))
+                InstallModalSelectedEmulator = "refix_goldberg";
+            else if (string.Equals(CuratedRecommendation.RecommendedEmulator, "none", StringComparison.OrdinalIgnoreCase))
+                InstallModalSelectedEmulator = "none";
+            else if (CuratedRecommendation.RecommendedEmulator.Contains("onlinefix", StringComparison.OrdinalIgnoreCase) && OnlineGameFixes.Count > 0)
+                InstallModalSelectedEmulator = "gamefix_online";
+            else
+                InstallModalSelectedEmulator = "refix_valve";
+        }
+        else if (RecommendedEmulatorOption != null)
+        {
+            InstallModalSelectedEmulator = string.Equals(RecommendedEmulatorOption.Id, "refix_goldberg", StringComparison.OrdinalIgnoreCase)
+                ? "refix_goldberg"
+                : "refix_valve";
+        }
+        else
+        {
+            InstallModalSelectedEmulator = "refix_valve";
+        }
+        NotifyEmulatorSelectionChanged();
+
+        InstallModalCreateDesktopShortcut = true;
+        InstallModalCreateStartMenuShortcut = true;
+
+        UpdateInstallModalDiskSpace();
+
+        InstallModalInstallPrerequisites = true;
+        InstallModalPrerequisites.Clear();
+        IsInstallingModalPrerequisites = false;
+        InstallModalProgressStatusText = string.Empty;
+        InstallModalPrereqStatusText = GetResourceString("String_ScanningPrerequisites", "Scanning prerequisites...");
+
+        IsInstallModalOpen = true;
+
+        if (_prerequisiteService != null)
+        {
+            try
+            {
+                var detected = await _prerequisiteService.DetectPrerequisitesAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+                InstallModalPrerequisites = new ObservableCollection<PrerequisiteItem>(detected);
+                var missing = detected.Count(p => p.Status != PrerequisiteStatus.InstalledInSystem && p.Status != PrerequisiteStatus.InstalledSuccess);
+                if (missing == 0)
+                {
+                    InstallModalPrereqStatusText = GetResourceString("String_InstallModalPrereqsAllGood", "All required components are installed on your system ✅");
+                }
+                else
+                {
+                    InstallModalPrereqStatusText = string.Format(
+                        GetResourceString("String_InstallModalPrereqsMissingCountFormat", "{0} missing component(s) detected and will be configured automatically."),
+                        missing);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to scan prerequisites in install modal");
+                InstallModalPrereqStatusText = "Prerequisites scanning completed.";
+            }
+        }
+        else
+        {
+            InstallModalPrereqStatusText = string.Empty;
+        }
+    }
+
+    [RelayCommand]
+    public void CloseInstallModal()
+    {
+        if (IsInstallingModalPrerequisites) return;
+        IsInstallModalOpen = false;
+    }
+
+    [RelayCommand]
+    public void BrowseInstallModalPath()
+    {
+        if (Instance == null) return;
+
+        var initialDir = !string.IsNullOrWhiteSpace(InstallModalPath) && Directory.Exists(Path.GetDirectoryName(InstallModalPath))
+            ? Path.GetDirectoryName(InstallModalPath)!
+            : Directory.Exists(_appSettings.LastInstallDirectory)
+                ? _appSettings.LastInstallDirectory
+                : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = GetResourceString("String_SelectFolderTitle", "Select Installation Directory"),
+            InitialDirectory = initialDir
+        };
+
+        if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.FolderName))
+        {
+            var cleanGameName = CleanName(Instance.Name) ?? Instance.Name;
+            var selectedRoot = dialog.FolderName;
+            InstallModalPath = PathHelper.EnsureGameSubfolder(selectedRoot, cleanGameName);
+        }
+    }
+
+    [RelayCommand]
+    public async Task StartOneClickInstallAsync()
+    {
+        if (Instance == null || IsInstallingModalPrerequisites) return;
+
+        if (string.IsNullOrWhiteSpace(InstallModalPath))
+        {
+            StatusMessage = "⚠ Please specify a valid installation folder.";
+            return;
+        }
+
+        // 1. Install missing prerequisites if selected
+        if (InstallModalInstallPrerequisites && _prerequisiteService != null)
+        {
+            IsInstallingModalPrerequisites = true;
+            InstallModalProgressStatusText = GetResourceString("String_InstallModalInstallingPrereqs", "⚙️ Installing prerequisites...");
+            try
+            {
+                var progress = new Progress<string>(msg =>
+                {
+                    InstallModalProgressStatusText = msg;
+                    StatusMessage = msg;
+                    _uiContext.Post(_ => ConsoleLogs.Add($"[{DateTime.Now:HH:mm:ss}] {msg}"), null);
+                });
+
+                await _prerequisiteService.InstallAllPrerequisitesAsync(Instance, progress, CancellationToken.None).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error installing prerequisites during One-Click Install for {Game}", Instance.Name);
+            }
+            finally
+            {
+                IsInstallingModalPrerequisites = false;
+            }
+        }
+
+        // 2. Configure target installation directory and instance parameters
+        var targetPath = InstallModalPath.Trim();
+        try
+        {
+            Directory.CreateDirectory(targetPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not pre-create directory {Path}", targetPath);
+        }
+
+        var selectedDlcIds = InstallModalDlcs.Where(d => d.IsSelected).Select(d => d.AppId).ToHashSet();
+        bool hasSelectedDlcs = selectedDlcIds.Count > 0;
+
+        // Base game depots + selected DLC depots
+        var selectedDepots = new List<DepotInfo>();
+        if (Instance.Depots != null)
+        {
+            selectedDepots.AddRange(Instance.Depots);
+        }
+        if (Instance.Dlcs != null)
+        {
+            foreach (var dlc in Instance.Dlcs)
+            {
+                if (selectedDlcIds.Contains(dlc.AppId) && dlc.Depots != null)
+                {
+                    selectedDepots.AddRange(dlc.Depots);
+                }
+            }
+        }
+        var distinctDepots = selectedDepots.DistinctBy(d => d.DepotId).ToList();
+
+        var targetBranch = "public";
+        string? targetBuildId = null;
+        bool isBuildPinned = false;
+        bool disableUpdates = false;
+        var manifestMap = new Dictionary<uint, ulong>(Instance.InstalledManifestMap ?? new Dictionary<uint, ulong>());
+
+        if (IsInstallModalVersionRecommended && CuratedRecommendation != null)
+        {
+            var rec = CuratedRecommendation;
+            targetBranch = rec.RecommendedBranch ?? "public";
+            targetBuildId = rec.RecommendedBuildId;
+            isBuildPinned = true;
+            disableUpdates = true;
+
+            // Pin base game and DLC depots to the community-verified manifests
+            distinctDepots = distinctDepots.Select(d =>
+                rec.PinnedManifests.TryGetValue(d.DepotId, out var pinned) && pinned > 0
+                    ? d with { ManifestId = pinned, IsDownloaded = false }
+                    : d).ToList();
+
+            foreach (var kv in rec.PinnedManifests)
+            {
+                manifestMap[kv.Key] = kv.Value;
+            }
+        }
+        else if (IsInstallModalVersionCustom)
+        {
+            targetBranch = !string.IsNullOrWhiteSpace(InstallModalSelectedBranch)
+                ? InstallModalSelectedBranch.Trim()
+                : "public";
+            targetBuildId = Instance.ActiveBuildId;
+            isBuildPinned = !string.Equals(targetBranch, "public", StringComparison.OrdinalIgnoreCase);
+            disableUpdates = isBuildPinned;
+        }
+        else
+        {
+            targetBranch = "public";
+            targetBuildId = null;
+            isBuildPinned = false;
+            disableUpdates = false;
+        }
+
+        // Update depots and dlcs in the viewmodel
+        foreach (var dep in distinctDepots)
+        {
+            var existing = Depots.FirstOrDefault(d => d.Depot.DepotId == dep.DepotId);
+            if (existing != null)
+            {
+                existing.Depot = dep;
+                existing.IsSelected = true;
+                existing.ManifestInputText = dep.ManifestId > 0 ? dep.ManifestId.ToString() : string.Empty;
+            }
+            else
+            {
+                Depots.Add(new SelectableDepotItem
+                {
+                    Depot = dep,
+                    IsSelected = true,
+                    IsKeyAvailable = !string.IsNullOrWhiteSpace(dep.DepotKey),
+                    IsCachedLocally = _manifestCacheService?.HasManifest(dep.DepotId, dep.ManifestId) ?? false,
+                    SourceProviderName = "Auto",
+                    ManifestInputText = dep.ManifestId > 0 ? dep.ManifestId.ToString() : string.Empty,
+                    AvailabilityChecker = CheckDepotManifestAvailabilityAsync,
+                    OnSelectionChanged = RecalculateSelectedSize,
+                    OnManifestUpdated = HandleDepotManifestUpdated,
+                    OnManifestTextChanged = RecomputeCustomBuildValidation
+                });
+            }
+        }
+
+        foreach (var d in Dlcs)
+        {
+            d.IsSelected = selectedDlcIds.Contains(d.Dlc.AppId);
+        }
+
+        bool isSpecificFix = string.Equals(InstallModalSelectedEmulator, "gamefix_online", StringComparison.OrdinalIgnoreCase);
+        bool enableEmulator = !string.Equals(InstallModalSelectedEmulator, "none", StringComparison.OrdinalIgnoreCase);
+        string? emulatorId = enableEmulator ? InstallModalSelectedEmulator : null;
+        string? pendingFixId = isSpecificFix ? SelectedModalSpecificGameFix?.Id : null;
+        string? installedEmulatorVersion = isSpecificFix
+            ? (SelectedModalSpecificGameFix?.Name ?? "Online Fix")
+            : (enableEmulator ? "1.0" : null);
+
+        var updatedInstance = Instance with
+        {
+            InstallPath = targetPath,
+            ActiveBranch = targetBranch,
+            ActiveBuildId = targetBuildId ?? Instance.ActiveBuildId,
+            InstalledManifestMap = manifestMap,
+            IsBuildPinned = isBuildPinned,
+            DisableUpdateChecks = disableUpdates,
+            DlcUnlockerMethod = InstallModalDlcMethod,
+            PendingCreateDesktopShortcut = InstallModalCreateDesktopShortcut,
+            PendingCreateStartMenuShortcut = InstallModalCreateStartMenuShortcut,
+            AwaitingPostUpdateRedeploy = true,
+            PendingRedeployDlcUnlocker = hasSelectedDlcs || InstallModalDlcs.Count > 0,
+            PendingRedeployEmulatorId = isSpecificFix ? null : emulatorId,
+            PendingRedeployGameFixId = pendingFixId,
+            PendingRedeployFixLayerIds = pendingFixId != null ? [pendingFixId] : [],
+            EmulatorEnabled = enableEmulator,
+            EmulatorId = emulatorId,
+            InstalledEmulatorVersion = installedEmulatorVersion,
+            UnlockedDlcIds = selectedDlcIds.ToList(),
+            Depots = distinctDepots.AsReadOnly(),
+            Status = InstanceStatus.NotInstalled // Strictly remain NotInstalled until download completes!
+        };
+
+        await _instanceManager.UpdateAsync(updatedInstance, CancellationToken.None).ConfigureAwait(true);
+        Instance = updatedInstance;
+
+        // Remember directory for future installs
+        _ = _appSettings.SetLastInstallDirectoryAsync(Directory.GetParent(targetPath)?.FullName ?? targetPath);
+
+        // Close modal
+        IsInstallModalOpen = false;
+
+        // 3. Initiate download
+        await StartDownloadAsync().ConfigureAwait(true);
+    }
 
     // ── Prerequisites State ──
     [ObservableProperty]
@@ -3115,6 +3901,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasCurationRecommendation))]
+    [NotifyPropertyChangedFor(nameof(InstallModalHasRecommendedVersion))]
     [NotifyPropertyChangedFor(nameof(CuratedBuildIdText))]
     [NotifyPropertyChangedFor(nameof(CuratedSummaryText))]
     [NotifyPropertyChangedFor(nameof(CuratedNotesText))]
@@ -3737,9 +4524,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     {
         if (Instance == null) return;
 
-        if (Instance.Status == InstanceStatus.NotInstalled && Instance.Origin != InstanceOrigin.Steam)
+        if (Instance.Status == InstanceStatus.NotInstalled)
         {
-            SelectedTab = "Files";
+            await OpenInstallModalAsync().ConfigureAwait(true);
             return;
         }
 
@@ -3751,9 +4538,13 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }
 
         // Check if emulator is online and Steam is not running
-        var isOnlineEmulator = Instance.EmulatorEnabled &&
+        var isOnlineEmulator = (Instance.EmulatorEnabled || (Instance.InstalledFixLayers != null && Instance.InstalledFixLayers.Count > 0)) &&
             (string.Equals(Instance.EmulatorId, "refix_valve", StringComparison.OrdinalIgnoreCase) ||
-             string.Equals(Instance.EmulatorId, "refix", StringComparison.OrdinalIgnoreCase));
+             string.Equals(Instance.EmulatorId, "refix", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(Instance.EmulatorId, "gamefix_online", StringComparison.OrdinalIgnoreCase) ||
+             (Instance.EmulatorId != null && Instance.EmulatorId.Contains("online", StringComparison.OrdinalIgnoreCase)) ||
+             (Instance.InstalledEmulatorVersion != null && Instance.InstalledEmulatorVersion.Contains("online", StringComparison.OrdinalIgnoreCase)) ||
+             (Instance.InstalledFixLayers != null && Instance.InstalledFixLayers.Count > 0));
 
         if (isOnlineEmulator && _steamStatusService != null && !_steamStatusService.CurrentStatus.IsRunning)
         {
@@ -3768,9 +4559,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     public async Task StartSteamAndLaunchAsync()
     {
         IsStartingSteam = true;
-        SteamLaunchStatusText = "Starting Steam and waiting for user profile to load...";
-        StatusMessage = "⏳ Starting Steam and waiting for user profile to load...";
+        SteamLaunchStatusText = GetResourceString("String_SteamStartingAndWaiting", "Iniciando Steam y esperando a que cargue por completo...");
+        StatusMessage = "⏳ Iniciando Steam y esperando a que cargue por completo...";
 
+        bool steamLoaded = false;
         try
         {
             if (_steamStatusService != null)
@@ -3781,8 +4573,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                     StatusMessage = $"⏳ {msg}";
                 });
 
-                await _steamStatusService.LaunchAndWaitForSteamFullyLoadedAsync(
-                    TimeSpan.FromSeconds(50),
+                steamLoaded = await _steamStatusService.LaunchAndWaitForSteamFullyLoadedAsync(
+                    TimeSpan.FromSeconds(60),
                     progress,
                     CancellationToken.None).ConfigureAwait(true);
             }
@@ -3802,7 +4594,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                     Process.Start(new ProcessStartInfo("steam://open/main") { UseShellExecute = true });
                 }
 
-                await Task.Delay(3000).ConfigureAwait(true);
+                await Task.Delay(4000).ConfigureAwait(true);
+                steamLoaded = true;
             }
         }
         catch (Exception ex)
@@ -3815,7 +4608,17 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             IsSteamRequiredModalOpen = false;
         }
 
-        await LaunchGameInternalAsync().ConfigureAwait(true);
+        if (steamLoaded)
+        {
+            await LaunchGameInternalAsync().ConfigureAwait(true);
+        }
+        else
+        {
+            StatusMessage = "❌ Steam no terminó de cargar a tiempo. Ejecución cancelada.";
+            _notificationService?.ShowWarning(
+                GetResourceString("String_SteamRequiredModalTitle", "Steam Necesario"),
+                "Steam no completó su carga o inicio de sesión a tiempo. Asegúrate de que Steam esté abierto y vuelve a intentar.");
+        }
     }
 
     [RelayCommand]
@@ -5905,6 +6708,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             }
 
             // 2. Install / Configure DLC unlocker for selected DLCs (SmokeAPI / CreamAPI / emulator config)
+            var selectedIds = selectedDlcs.Select(d => d.Dlc.AppId).ToList();
+            Instance = Instance with { UnlockedDlcIds = selectedIds };
+            await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+
             var targetDlc = selectedDlcs[0].Dlc;
             StatusMessage = "⏳ Configuring DLC unlocker & emulator integration...";
             var success = await _dlcInstaller
@@ -5914,7 +6721,6 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             IsDlcUnlocked = success;
             if (success)
             {
-                var selectedIds = selectedDlcs.Select(d => d.Dlc.AppId).ToList();
                 Instance = Instance with { DlcUnlockerInstalled = true, UnlockedDlcIds = selectedIds };
                 await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
 

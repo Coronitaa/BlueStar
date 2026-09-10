@@ -1,4 +1,4 @@
-﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="clr-namespace:System;assembly=mscorlib">
 
@@ -527,6 +527,14 @@
     <sys:String x:Key="String_ExperimentalModdingDesc">Desbloquea la pestaña de gestión de Mods y carpetas automáticas. Mantén desactivado para una experiencia limpia.</sys:String>
     <sys:String x:Key="String_AdvancedBuildsLabel">Habilitar gestión avanzada de versiones y depots</sys:String>
     <sys:String x:Key="String_AdvancedBuildsDesc">Muestra selectores de versiones y ramas, edición personalizada de manifiestos por depot e importador ZIP en la pestaña Archivos y Depots.</sys:String>
+    <sys:String x:Key="String_DebugSystemLabel">Sistema de Depuración y Diagnóstico</sys:String>
+    <sys:String x:Key="String_DebugSystemDesc">Captura logs detallados en tiempo real, abre la consola en vivo y genera reportes limpios y estructurados para soporte técnico y GitHub Issues.</sys:String>
+    <sys:String x:Key="String_OpenDebugConsoleBtn">Abrir Consola de Logs</sys:String>
+    <sys:String x:Key="String_GenerateDiagnosticReportBtn">Generar Reporte de Diagnóstico</sys:String>
+    <sys:String x:Key="String_OpenLogFolderBtn">Abrir Carpeta de Logs</sys:String>
+    <sys:String x:Key="String_CopyPathBtn">Copiar Ruta</sys:String>
+    <sys:String x:Key="String_DebugConsoleTitle">Consola de Depuración y Diagnóstico</sys:String>
+    <sys:String x:Key="String_DebugConsoleSubtitle">Monitor en tiempo real de eventos internos, solicitudes y errores de BlueStar</sys:String>
     <sys:String x:Key="String_EngineEcosystemTitle">Ecosistema de Motores y Modding</sys:String>
     <sys:String x:Key="String_EngineEcosystemDesc">Escáneres de motores de juego y gestores de mods registrados.</sys:String>
     <sys:String x:Key="String_CreditsTitle">Ecosistema de Código Abierto y Créditos</sys:String>
@@ -692,5 +700,64 @@
 
 
     <sys:String x:Key="String_DepotUpdatePendingFormat">{0} depot(s) tienen manifiestos más nuevos disponibles.</sys:String>
+
+    <!-- ═══ ONE-CLICK INSTALL MODAL ═══ -->
+    <sys:String x:Key="String_InstallModalTitle">Instalación Rápida</sys:String>
+    <sys:String x:Key="String_InstallModalSubtitle">Configura e instala {0} en un solo paso.</sys:String>
+    <sys:String x:Key="String_InstallModalGameInfo">Información del Juego</sys:String>
+    <sys:String x:Key="String_InstallModalLocationTitle">Ubicación de Instalación</sys:String>
+    <sys:String x:Key="String_InstallModalFreeSpaceFormat">Espacio libre: {0} · Necesario: {1}</sys:String>
+    <sys:String x:Key="String_InstallModalDiskWarning">⚠️ Advertencia: El espacio en la unidad seleccionada es inferior al requerido ({0}).</sys:String>
+    <sys:String x:Key="String_InstallModalVersionTitle">Versión a Instalar</sys:String>
+    <sys:String x:Key="String_InstallModalBranchPublic">Última versión disponible (public)</sys:String>
+    <sys:String x:Key="String_InstallModalDlcsTitle">DLCs Opcionales</sys:String>
+    <sys:String x:Key="String_InstallModalSelectAllDlcs">Seleccionar todos los DLCs</sys:String>
+    <sys:String x:Key="String_InstallModalNoDlcs">Este juego no posee DLCs adicionales registrados.</sys:String>
+    <sys:String x:Key="String_InstallModalDlcsCountFormat">{0} DLC(s) disponibles</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorTitle">Emulador y Desbloqueador de DLCs</sys:String>
+    <sys:String x:Key="String_InstallModalDlcMethodLabel">Método de desbloqueo de DLC:</sys:String>
+    <sys:String x:Key="String_InstallModalCreamApiDesc">CreamAPI (Por defecto / Recomendado)</sys:String>
+    <sys:String x:Key="String_InstallModalSmokeApiDesc">SmokeAPI (Emulación moderna Steam)</sys:String>
+    <sys:String x:Key="String_InstallModalEnableReFix">Activar Emulador ReFix (Modo Sin Conexión / Steam Fix)</sys:String>
+    <sys:String x:Key="String_InstallModalShortcutsTitle">Accesos Directos</sys:String>
+    <sys:String x:Key="String_InstallModalDesktopShortcut">Crear acceso directo en el Escritorio</sys:String>
+    <sys:String x:Key="String_InstallModalStartMenuShortcut">Crear acceso en el Menú Inicio</sys:String>
+    <sys:String x:Key="String_InstallModalPrereqsTitle">Requisitos Previos del Sistema</sys:String>
+    <sys:String x:Key="String_InstallModalInstallPrereqsCheck">Instalar automáticamente los requisitos que falten (Visual C++, DirectX, etc.)</sys:String>
+    <sys:String x:Key="String_InstallModalPrereqsAllGood">Todos los componentes necesarios están instalados en tu sistema ✅</sys:String>
+    <sys:String x:Key="String_InstallModalPrereqsMissingCountFormat">Se detectaron {0} componente(s) faltante(s) que se configurarán automáticamente.</sys:String>
+    <sys:String x:Key="String_InstallModalStartBtn">🚀 Iniciar Instalación</sys:String>
+    <sys:String x:Key="String_InstallModalInstallingPrereqs">⚙️ Instalando componentes previos...</sys:String>
+    <sys:String x:Key="String_InstallModalReadyToDownload">Listo para descargar</sys:String>
+    <sys:String x:Key="String_DlcMethodSettingTitle">Método Desbloqueador de DLCs</sys:String>
+    <sys:String x:Key="String_DlcMethodSettingDesc">Selecciona si prefieres usar CreamAPI o SmokeAPI para desbloquear contenidos DLC en este juego.</sys:String>
+    <sys:String x:Key="String_SteamStartingAndWaiting">Iniciando Steam y esperando a que cargue por completo...</sys:String>
+    <sys:String x:Key="String_InstallModalVersionRecommended">Recomendada</sys:String>
+    <sys:String x:Key="String_InstallModalVersionRecommendedDesc">Versión verificada y estable por la comunidad.</sys:String>
+    <sys:String x:Key="String_InstallModalVersionLatest">Última</sys:String>
+    <sys:String x:Key="String_InstallModalVersionLatestDesc">La más reciente de Steam (rama pública).</sys:String>
+    <sys:String x:Key="String_InstallModalVersionCustom">Personalizada</sys:String>
+    <sys:String x:Key="String_InstallModalVersionCustomDesc">Elegir rama o versión específica.</sys:String>
+    <sys:String x:Key="String_InstallModalRecommendedBadge">VERIFICADA</sys:String>
+    <sys:String x:Key="String_InstallModalCustomBranchLabel">Seleccionar o escribir rama de descarga:</sys:String>
+    <sys:String x:Key="String_InstallModalLatestInfo">Se descargará la versión más reciente de la rama pública y se mantendrá actualizada.</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorSelectorTitle">Emulador de Juego</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorNone">Ninguno</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorNoneDesc">Original Steam (sin emulador).</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorNoneInfo">No se instalará ningún emulador. El juego se mantendrá en su versión original de Steam (requiere licencia oficial).</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorValve">ReFix Online</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorValveDesc">Steam Spacewar (AppID 480).</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorValveInfo">Permite jugar online e invitar amigos mediante Steam utilizando Spacewar (AppID 480). Compatible con guardado en la nube.</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorGoldberg">Re:Goldberg LAN</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorGoldbergDesc">Offline / LAN (Steam-Free).</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorGoldbergInfo">100% independiente de Steam. Permite multijugador en red local (LAN) y guarda las partidas localmente sin requerir que Steam esté abierto.</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorBadgeOnline">Online</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorBadgeLan">LAN / Offline</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorBadgeVanilla">Vanilla</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorSpecific">Específico</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorSpecificDesc">Online-Fix especializado de este juego.</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorSpecificBadge">ONLINE FIX</sys:String>
+    <sys:String x:Key="String_InstallModalSpecificFixSelectLabel">Seleccionar parche o emulador específico:</sys:String>
+    <sys:String x:Key="String_InstallModalSpecificFixInfo">Se descargará e instalará automáticamente el parche especializado ({0}) tras finalizar la descarga.</sys:String>
 
 </ResourceDictionary>

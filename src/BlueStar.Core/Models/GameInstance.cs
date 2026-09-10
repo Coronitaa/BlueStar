@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace BlueStar.Core.Models;
@@ -165,6 +165,26 @@ public record GameInstance
     public bool DlcUnlockerInstalled { get; init; } = false;
 
     /// <summary>
+    /// Gets or sets the DLC unlocker method to use for this instance ("CreamAPI" or "SmokeAPI"). Default is "CreamAPI".
+    /// </summary>
+    public string DlcUnlockerMethod { get; init; } = "CreamAPI";
+
+    /// <summary>
+    /// Gets or sets whether to create a Desktop shortcut upon completion of the game download.
+    /// </summary>
+    public bool PendingCreateDesktopShortcut { get; init; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to create a Start Menu shortcut upon completion of the game download.
+    /// </summary>
+    public bool PendingCreateStartMenuShortcut { get; init; } = false;
+
+    /// <summary>
+    /// Gets or sets whether advanced build options are enabled for this instance.
+    /// </summary>
+    public bool EnableAdvancedBuildOptions { get; init; } = false;
+
+    /// <summary>
     /// Gets or sets the list of DLC AppIDs that are actively unlocked.
     /// </summary>
     public IReadOnlyList<uint> UnlockedDlcIds { get; init; } = [];
@@ -212,6 +232,11 @@ public record GameInstance
     /// Gets or sets the fix layer ids that must be redeployed after the pending game update completes.
     /// </summary>
     public IReadOnlyList<string> PendingRedeployFixLayerIds { get; init; } = [];
+
+    /// <summary>
+    /// Gets or sets the specific game fix ID to download and deploy automatically after download completes.
+    /// </summary>
+    public string? PendingRedeployGameFixId { get; init; }
 
     /// <summary>
     /// Gets or sets the active fix and emulator layers installed on this instance.

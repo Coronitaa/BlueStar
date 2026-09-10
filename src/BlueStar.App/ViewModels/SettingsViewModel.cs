@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -23,6 +23,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly AppSettingsService _appSettings;
     private readonly ILocalizationService _localizationService;
     private readonly ILogger<SettingsViewModel> _logger;
+    private readonly IDebugLogService _debugLogService;
 
     public Action<string>? OnNavigateRequested { get; set; }
 
@@ -123,6 +124,23 @@ public partial class SettingsViewModel : ObservableObject
         _ = _appSettings.SetCheckSystemRequirementsOnStartupAsync(value);
     }
 
+    [ObservableProperty]
+    private bool _enableDebugSystem;
+
+    partial void OnEnableDebugSystemChanged(bool value)
+    {
+        _ = _appSettings.SetEnableDebugSystemAsync(value);
+    }
+
+    [ObservableProperty]
+    private string? _diagnosticStatusMessage;
+
+    [ObservableProperty]
+    private string? _lastDiagnosticFilePath;
+
+    [ObservableProperty]
+    private bool _isGeneratingReport;
+
     // ── System Prerequisites in Settings ──
     private readonly IPrerequisiteService? _prerequisiteService;
 
@@ -155,7 +173,8 @@ public partial class SettingsViewModel : ObservableObject
         AppSettingsService appSettings,
         ILocalizationService localizationService,
         ILogger<SettingsViewModel> logger,
-        IPrerequisiteService? prerequisiteService = null)
+        IPrerequisiteService? prerequisiteService = null,
+        IDebugLogService? debugLogService = null)
     {
         _authService = authService ?? throw new ArgumentNullException(nameof(authService));
         _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
@@ -165,6 +184,7 @@ public partial class SettingsViewModel : ObservableObject
         _localizationService = localizationService ?? throw new ArgumentNullException(nameof(localizationService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _prerequisiteService = prerequisiteService;
+        _debugLogService = debugLogService ?? new BlueStar.Infrastructure.Services.DebugLogService(_appSettings);
 
         _selectedLanguageOption = _localizationService.CurrentLanguage == "es" ? "Español (Latinoamérica)" : "English";
 
@@ -172,6 +192,7 @@ public partial class SettingsViewModel : ObservableObject
         ShowNsfwContent = _appSettings.ShowNsfwContent;
         ShowDrmContent = _appSettings.ShowDrmContent;
         EnableExperimentalMods = _appSettings.EnableExperimentalMods;
+        EnableDebugSystem = _appSettings.EnableDebugSystem;
         CheckSystemRequirementsOnStartup = _appSettings.CheckSystemRequirementsOnStartup;
 
         DefaultApiUrl = _appSettings.DefaultApiUrl;
@@ -490,5 +511,120 @@ public partial class SettingsViewModel : ObservableObject
         {
             _logger.LogWarning(ex, "Failed to open URL: {Url}", url);
         }
+    }
+
+    private static Views.DebugConsoleWindow? _activeConsoleWindow;
+
+    /// <summary>
+    /// Opens or brings to front the live Debug Console window.
+    /// </summary>
+    [RelayCommand]
+    private void OpenDebugConsole()
+    {
+        try
+        {
+            if (_activeConsoleWindow != null && _activeConsoleWindow.IsLoaded)
+            {
+                if (_activeConsoleWindow.WindowState == System.Windows.WindowState.Minimized)
+                {
+                    _activeConsoleWindow.WindowState = System.Windows.WindowState.Normal;
+                }
+                _activeConsoleWindow.Activate();
+                _activeConsoleWindow.Focus();
+                return;
+            }
+
+            var vm = new DebugConsoleViewModel(_debugLogService, _notificationService);
+            _activeConsoleWindow = new Views.DebugConsoleWindow(vm);
+            _activeConsoleWindow.Closed += (s, e) => _activeConsoleWindow = null;
+            _activeConsoleWindow.Show();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to open debug console window");
+            _notificationService.ShowError("Console Error", $"Could not open debug console: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Generates a structured diagnostic log report for GitHub issues and troubleshooting.
+    /// </summary>
+    [RelayCommand]
+    private async Task GenerateDiagnosticReportAsync()
+    {
+        if (IsGeneratingReport) return;
+
+        IsGeneratingReport = true;
+        DiagnosticStatusMessage = "Generando log de diagnóstico estructurado...";
+
+        try
+        {
+            var filePath = await _debugLogService.GenerateDiagnosticReportAsync(CancellationToken.None).ConfigureAwait(true);
+            var fileName = System.IO.Path.GetFileName(filePath);
+
+            LastDiagnosticFilePath = filePath;
+            DiagnosticStatusMessage = $"✅ Log de diagnóstico generado: {fileName}";
+
+            try
+            {
+                System.Windows.Clipboard.SetDataObject(filePath, true);
+            }
+            catch { }
+
+            _notificationService.ShowSuccess(
+                "Diagnóstico Generado",
+                $"Archivo de diagnóstico listo para GitHub:\n{fileName}\n(Ruta copiada al portapapeles)");
+        }
+        catch (Exception ex)
+        {
+            DiagnosticStatusMessage = $"❌ Error: {ex.Message}";
+            _notificationService.ShowError("Error al generar diagnóstico", ex.Message);
+            _logger.LogError(ex, "Failed to generate diagnostic report");
+        }
+        finally
+        {
+            IsGeneratingReport = false;
+        }
+    }
+
+    /// <summary>
+    /// Opens the logs directory in Windows Explorer.
+    /// </summary>
+    [RelayCommand]
+    private void OpenLogFolder()
+    {
+        try
+        {
+            var path = _debugLogService.LogsDirectoryPath;
+            if (!System.IO.Directory.Exists(path))
+            {
+                System.IO.Directory.CreateDirectory(path);
+            }
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = path,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to open logs directory in Explorer");
+        }
+    }
+
+    /// <summary>
+    /// Copies the generated diagnostic file path to clipboard.
+    /// </summary>
+    [RelayCommand]
+    private void CopyDiagnosticPath()
+    {
+        if (string.IsNullOrWhiteSpace(LastDiagnosticFilePath)) return;
+        try
+        {
+            System.Windows.Clipboard.SetDataObject(LastDiagnosticFilePath, true);
+            _notificationService.ShowInfo("Ruta Copiada", "Ruta del archivo copiada al portapapeles.");
+        }
+        catch { }
     }
 }

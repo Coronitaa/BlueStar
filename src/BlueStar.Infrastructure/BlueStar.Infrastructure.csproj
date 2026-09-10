@@ -19,4 +19,7 @@
     <ProjectReference Include="..\BlueStar.Core\BlueStar.Core.csproj" />
     <ProjectReference Include="..\BlueStar.DepotDownloader\DepotDownloader\DepotDownloaderMod.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="BlueStar.Infrastructure.Tests" />
+  </ItemGroup>
 </Project>

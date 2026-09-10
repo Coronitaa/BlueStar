@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
 namespace BlueStar.Infrastructure.Storage;
@@ -222,6 +222,26 @@ public sealed class AppSettingsService
         await SaveAsync().ConfigureAwait(false);
     }
 
+    /// <summary>Whether advanced build/manifest options are enabled.</summary>
+    public bool EnableAdvancedBuildOptions => _current.EnableAdvancedBuildOptions;
+
+    /// <summary>Sets and persists whether advanced build/manifest options are enabled.</summary>
+    public async Task SetEnableAdvancedBuildOptionsAsync(bool enabled)
+    {
+        _current = _current with { EnableAdvancedBuildOptions = enabled };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Whether the advanced debug system and live diagnostics are enabled (default false).</summary>
+    public bool EnableDebugSystem => _current.EnableDebugSystem;
+
+    /// <summary>Sets and persists whether the debug system is enabled.</summary>
+    public async Task SetEnableDebugSystemAsync(bool enabled)
+    {
+        _current = _current with { EnableDebugSystem = enabled };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
     private sealed record AppSettings
     {
         public string? Language { get; init; } = "en";
@@ -232,6 +252,8 @@ public sealed class AppSettingsService
         public bool ShowDrmContent { get; init; } = true;
         public bool EnableExperimentalMods { get; init; } = false;
         public bool CheckSystemRequirementsOnStartup { get; init; } = true;
+        public bool EnableAdvancedBuildOptions { get; init; } = false;
+        public bool EnableDebugSystem { get; init; } = false;
 
         public string? DefaultApiUrl { get; init; } = "https://depotbox.org";
         public string? DefaultApiKey { get; init; } = "YOUR-API-KEY";

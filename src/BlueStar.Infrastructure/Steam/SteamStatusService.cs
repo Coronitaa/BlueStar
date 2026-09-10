@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using BlueStar.Core.Helpers;
@@ -133,11 +134,11 @@ public sealed class SteamStatusService : ISteamStatusService
         }
     }
 
-    private static (string? PersonaName, string? AccountName) ParseLoginUsers(string vdfPath, ulong? activeSteamId64)
+    internal static (string? PersonaName, string? AccountName) ParseLoginUsers(string vdfPath, ulong? activeSteamId64)
     {
         try
         {
-            var content = File.ReadAllText(vdfPath);
+            var content = File.ReadAllText(vdfPath, Encoding.UTF8);
 
             // If we have a specific SteamId64, try finding its block
             if (activeSteamId64.HasValue)
@@ -153,7 +154,7 @@ public sealed class SteamStatusService : ISteamStatusService
                 }
             }
 
-            // Fallback: look for block with "mostrecent"\s+"1"
+            // Fallback 1: look for block with "mostrecent"\s+"1"
             var recentMatch = Regex.Match(content, "\"([0-9]{17})\"[\\s\\r\\n]*\\{([^\\}]+)\"mostrecent\"[\\s\\t]+\"1\"([^\\}]*)\\}", RegexOptions.Singleline | RegexOptions.IgnoreCase);
             if (recentMatch.Success)
             {
@@ -161,6 +162,42 @@ public sealed class SteamStatusService : ISteamStatusService
                 var persona = Regex.Match(fullBlock, "\"PersonaName\"[\\s\\t]+\"([^\"]+)\"", RegexOptions.IgnoreCase).Groups[1].Value;
                 var account = Regex.Match(fullBlock, "\"AccountName\"[\\s\\t]+\"([^\"]+)\"", RegexOptions.IgnoreCase).Groups[1].Value;
                 return (string.IsNullOrWhiteSpace(persona) ? null : persona, string.IsNullOrWhiteSpace(account) ? null : account);
+            }
+
+            // Fallback 2: look for block with "AutoLogin"\s+"1"
+            var autoLoginMatch = Regex.Match(content, "\"([0-9]{17})\"[\\s\\r\\n]*\\{([^\\}]+)\"AutoLogin\"[\\s\\t]+\"1\"([^\\}]*)\\}", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+            if (autoLoginMatch.Success)
+            {
+                var fullBlock = autoLoginMatch.Groups[2].Value + autoLoginMatch.Groups[3].Value;
+                var persona = Regex.Match(fullBlock, "\"PersonaName\"[\\s\\t]+\"([^\"]+)\"", RegexOptions.IgnoreCase).Groups[1].Value;
+                var account = Regex.Match(fullBlock, "\"AccountName\"[\\s\\t]+\"([^\"]+)\"", RegexOptions.IgnoreCase).Groups[1].Value;
+                return (string.IsNullOrWhiteSpace(persona) ? null : persona, string.IsNullOrWhiteSpace(account) ? null : account);
+            }
+
+            // Fallback 3: pick the user block with highest "Timestamp"
+            var allBlocks = Regex.Matches(content, "\"([0-9]{17})\"[\\s\\r\\n]*\\{([^\\}]+)\\}", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+            long highestTs = -1;
+            string? bestPersona = null;
+            string? bestAccount = null;
+
+            foreach (Match m in allBlocks)
+            {
+                var block = m.Groups[2].Value;
+                var tsStr = Regex.Match(block, "\"Timestamp\"[\\s\\t]+\"([0-9]+)\"", RegexOptions.IgnoreCase).Groups[1].Value;
+                long ts = long.TryParse(tsStr, out var val) ? val : 0;
+                if (ts >= highestTs)
+                {
+                    highestTs = ts;
+                    var p = Regex.Match(block, "\"PersonaName\"[\\s\\t]+\"([^\"]+)\"", RegexOptions.IgnoreCase).Groups[1].Value;
+                    var a = Regex.Match(block, "\"AccountName\"[\\s\\t]+\"([^\"]+)\"", RegexOptions.IgnoreCase).Groups[1].Value;
+                    if (!string.IsNullOrWhiteSpace(p)) bestPersona = p;
+                    if (!string.IsNullOrWhiteSpace(a)) bestAccount = a;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(bestPersona) || !string.IsNullOrWhiteSpace(bestAccount))
+            {
+                return (bestPersona, bestAccount);
             }
         }
         catch { }
@@ -214,7 +251,7 @@ public sealed class SteamStatusService : ISteamStatusService
         }
 
         // 3. Poll until Steam process is alive AND user data is fully loaded (ActiveUser > 0 in ActiveProcess)
-        var maxWait = timeout ?? TimeSpan.FromSeconds(50);
+        var maxWait = timeout ?? TimeSpan.FromSeconds(60);
         var stopwatch = Stopwatch.StartNew();
 
         while (stopwatch.Elapsed < maxWait && !cancellationToken.IsCancellationRequested)
@@ -241,7 +278,7 @@ public sealed class SteamStatusService : ISteamStatusService
                 // Brief stabilization delay to ensure IPC pipes and overlay hooks are fully ready
                 try
                 {
-                    await Task.Delay(1500, cancellationToken).ConfigureAwait(false);
+                    await Task.Delay(2500, cancellationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) { }
 
@@ -255,7 +292,7 @@ public sealed class SteamStatusService : ISteamStatusService
         }
 
         EvaluateStatus();
-        return _currentStatus.IsRunning;
+        return IsFullyLoaded();
     }
 
     private static bool IsFullyLoaded()
@@ -271,9 +308,13 @@ public sealed class SteamStatusService : ISteamStatusService
             if (activeKey == null) return false;
 
             var activeUserObj = activeKey.GetValue("ActiveUser");
-            if (activeUserObj is int activeUser32 && activeUser32 > 0)
+            if (activeUserObj != null)
             {
-                return true;
+                long activeUser = Convert.ToInt64(activeUserObj);
+                if (activeUser > 0)
+                {
+                    return true;
+                }
             }
         }
         catch { }

@@ -382,6 +382,70 @@ public sealed class GameFixDeployService : IGameFixDeployService
     }
 
     /// <inheritdoc />
+    public async Task<bool> DeployFixByIdAsync(
+        GameInstance instance,
+        string fixId,
+        IProgress<DeployProgress>? progress = null,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+        if (string.IsNullOrWhiteSpace(fixId)) return false;
+
+        progress?.Report(new DeployProgress
+        {
+            Percentage = 5,
+            Message = "Resolving game fix details...",
+            CurrentStep = "Resolving_Fix"
+        });
+
+        GameFixInfo? targetFix = null;
+
+        // 1. Check fix providers first
+        foreach (var provider in _fixProviders)
+        {
+            try
+            {
+                var fixes = await provider.GetFixesAsync(instance.AppId, ct).ConfigureAwait(false);
+                targetFix = fixes.FirstOrDefault(f => string.Equals(f.Id, fixId, StringComparison.OrdinalIgnoreCase));
+                if (targetFix != null) break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Provider {Provider} failed querying fixes for AppId {AppId}", provider.ProviderId, instance.AppId);
+            }
+        }
+
+        // 2. Query DepotBox API client if not found
+        if (targetFix == null && _apiClient != null)
+        {
+            try
+            {
+                var query = instance.AppId > 0 ? instance.AppId.ToString() : instance.Name;
+                var apiFixes = await _apiClient.GetGameFixesAsync(query: query, ct: ct).ConfigureAwait(false);
+                targetFix = apiFixes.FirstOrDefault(f => string.Equals(f.Id, fixId, StringComparison.OrdinalIgnoreCase));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "API client failed querying game fixes for {Game}", instance.Name);
+            }
+        }
+
+        if (targetFix == null)
+        {
+            _logger.LogError("Game fix {FixId} was not found for game {Game}", fixId, instance.Name);
+            progress?.Report(new DeployProgress
+            {
+                Percentage = 0,
+                Message = $"Game fix {fixId} was not found in catalog.",
+                CurrentStep = "Fix_Not_Found"
+            });
+            return false;
+        }
+
+        return await DeployFixAsync(instance, targetFix, progress, ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async Task<bool> UninstallFixLayerAsync(
         GameInstance instance,
         FixLayerInfo layer,

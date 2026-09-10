@@ -22,7 +22,13 @@ namespace BlueStar.Infrastructure.Dlc;
 public class CreamInstallerService : IDlcInstaller
 {
     // ── Download info ─────────────────────────────────────────────────────────
-    // The release ZIP is named "SmokeAPI-v{version}.zip" — we resolve the URL via GitHub API.
+    // CreamAPI (by deadmau5/punto, bundled in FroggMaster/CreamInstaller)
+    private const string CreamApi64Url =
+        "https://raw.githubusercontent.com/FroggMaster/CreamInstaller/main/CreamInstaller/Resources/CreamAPI/steam_api64.dll";
+    private const string CreamApi32Url =
+        "https://raw.githubusercontent.com/FroggMaster/CreamInstaller/main/CreamInstaller/Resources/CreamAPI/steam_api.dll";
+
+    // SmokeAPI (by acidicoala)
     private const string SmokeApiApiUrl =
         "https://api.github.com/repos/acidicoala/SmokeAPI/releases/latest";
 
@@ -39,14 +45,15 @@ public class CreamInstallerService : IDlcInstaller
     private const string SmokeApiJson   = "SmokeAPI.config.json";
 
     private readonly ILogger<CreamInstallerService> _logger;
-    private readonly string _cacheDir;
+    private readonly string _smokeCacheDir;
+    private readonly string _creamCacheDir;
 
     public CreamInstallerService(ILogger<CreamInstallerService> logger)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _cacheDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "BlueStar", "cache", "smokeapi");
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        _smokeCacheDir = Path.Combine(appData, "BlueStar", "cache", "smokeapi");
+        _creamCacheDir = Path.Combine(appData, "BlueStar", "cache", "creamapi");
     }
 
     // ── IDlcInstaller ─────────────────────────────────────────────────────────
@@ -59,9 +66,17 @@ public class CreamInstallerService : IDlcInstaller
     {
         ArgumentNullException.ThrowIfNull(instance);
 
+        var method = instance.DlcUnlockerMethod ?? "CreamAPI";
         _logger.LogInformation(
-            "[CreamInstaller] Install started for {Game} (AppId={AppId}) at '{Path}'",
-            instance.Name, instance.AppId, instance.InstallPath);
+            "[CreamInstaller] Install started for {Game} (AppId={AppId}, Method={Method}) at '{Path}'",
+            instance.Name, instance.AppId, method, instance.InstallPath);
+
+        // If CreamAPI is selected, bypass ReFix_deploy dlc_unlocker.ps1 because that script deploys SmokeAPI with unlockall=true.
+        // We use our native CreamAPI installer with exact DLC mapping.
+        if (string.Equals(method, "CreamAPI", StringComparison.OrdinalIgnoreCase))
+        {
+            return await InstallCreamApiAsync(instance, dlc, ct, progress).ConfigureAwait(false);
+        }
 
         // 1. Check if ReFix_deploy dlc_unlocker.ps1 script is available
         var deployPath = Emulators.ReFixEmulator.GetReFixDeployPath();
@@ -96,37 +111,127 @@ public class CreamInstallerService : IDlcInstaller
             }
         }
 
-        // 2. Fallback to direct internal SmokeAPI deployment
+        // 2. Select internal deployment method: SmokeAPI vs CreamAPI (default)
+        if (string.Equals(method, "SmokeAPI", StringComparison.OrdinalIgnoreCase))
+        {
+            return await InstallSmokeApiAsync(instance, dlc, ct, progress).ConfigureAwait(false);
+        }
+
+        return await InstallCreamApiAsync(instance, dlc, ct, progress).ConfigureAwait(false);
+    }
+
+    private async Task<bool> InstallCreamApiAsync(
+        GameInstance instance,
+        DlcInfo dlc,
+        CancellationToken ct,
+        IProgress<string>? progress = null)
+    {
         return await Task.Run(async () =>
         {
             try
             {
-                // ── 1. Find the directory that contains a Steam API DLL ───────
-                Report(progress, "🔍 Searching for steam_api64.dll in game folder...");
-
+                Report(progress, "🔍 Searching for Steam API DLLs in game folder...");
                 var gameDir = FindGameDirectory(instance.InstallPath, out bool has64, out bool has32);
                 if (gameDir is null)
                 {
-                    Report(progress, "⚠ steam_api64.dll not found — configuration files will be written regardless.");
+                    Report(progress, "⚠ Steam API DLL not found — configuration files will be written regardless.");
                     _logger.LogWarning("[CreamInstaller] No steam_api DLL found under '{Path}'", instance.InstallPath);
                     gameDir = instance.InstallPath;
+                    has64 = true; // default to x64
                 }
                 else
                 {
-                    _logger.LogInformation("[CreamInstaller] Game dir: {Dir} (x64={x64}, x32={x32})",
-                        gameDir, has64, has32);
+                    _logger.LogInformation("[CreamInstaller] Game dir: {Dir} (x64={x64}, x32={x32})", gameDir, has64, has32);
                 }
 
-                // ── 2. Download + cache the SmokeAPI ZIP ─────────────────────
-                string zipPath = await EnsureSmokeApiZipAsync(ct, progress).ConfigureAwait(false);
-
-                // ── 3. Deploy 64-bit DLL ──────────────────────────────────────
+                // Deploy 64-bit CreamAPI DLL
                 if (has64)
                 {
                     var origDll = Path.Combine(gameDir, SteamApi64);
                     var bakDll  = Path.Combine(gameDir, SteamApi64Orig);
 
-                    Report(progress, "💾 Backing up steam_api64.dll...");
+                    Report(progress, "💾 Backing up original steam_api64.dll...");
+                    BackupDll(origDll, bakDll);
+
+                    Report(progress, "🔧 Deploying CreamAPI (64-bit)...");
+                    string creamDll64 = await EnsureCreamApiDllAsync(is64: true, ct, progress).ConfigureAwait(false);
+                    File.Copy(creamDll64, origDll, overwrite: true);
+                    _logger.LogInformation("[CreamInstaller] Deployed CreamAPI x64 → {Dll}", origDll);
+                }
+
+                // Deploy 32-bit CreamAPI DLL
+                if (has32)
+                {
+                    var origDll = Path.Combine(gameDir, SteamApi32);
+                    var bakDll  = Path.Combine(gameDir, SteamApi32Orig);
+
+                    Report(progress, "💾 Backing up original steam_api.dll...");
+                    BackupDll(origDll, bakDll);
+
+                    Report(progress, "🔧 Deploying CreamAPI (32-bit)...");
+                    string creamDll32 = await EnsureCreamApiDllAsync(is64: false, ct, progress).ConfigureAwait(false);
+                    File.Copy(creamDll32, origDll, overwrite: true);
+                    _logger.LogInformation("[CreamInstaller] Deployed CreamAPI x86 → {Dll}", origDll);
+                }
+
+                // Clean up conflicting SmokeAPI files if switching from SmokeAPI
+                foreach (var cfg in new[] { SmokeApiJson, "SmokeAPI.json", "SmokeAPI.log", "SmokeAPI.cache.json" })
+                {
+                    var p = Path.Combine(gameDir, cfg);
+                    if (File.Exists(p)) try { File.Delete(p); } catch { }
+                }
+
+                // Write standard cream_api.ini
+                Report(progress, "📝 Generating cream_api.ini...");
+                int dlcCount = WriteCreamApiIni(gameDir, instance, dlc);
+
+                Report(progress, $"✅ DLC unlocker (CreamAPI) installed successfully ({dlcCount} DLC(s)).");
+                _logger.LogInformation("[CreamInstaller] Done CreamAPI — {Game} @ {Dir} ({Count} DLCs)", instance.Name, gameDir, dlcCount);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[CreamInstaller] CreamAPI install failed for {Game}", instance.Name);
+                Report(progress, $"❌ Error during CreamAPI installation: {ex.Message}");
+                return false;
+            }
+        }, ct).ConfigureAwait(false);
+    }
+
+    private async Task<bool> InstallSmokeApiAsync(
+        GameInstance instance,
+        DlcInfo dlc,
+        CancellationToken ct,
+        IProgress<string>? progress = null)
+    {
+        return await Task.Run(async () =>
+        {
+            try
+            {
+                Report(progress, "🔍 Searching for Steam API DLLs in game folder...");
+                var gameDir = FindGameDirectory(instance.InstallPath, out bool has64, out bool has32);
+                if (gameDir is null)
+                {
+                    Report(progress, "⚠ Steam API DLL not found — configuration files will be written regardless.");
+                    _logger.LogWarning("[CreamInstaller] No steam_api DLL found under '{Path}'", instance.InstallPath);
+                    gameDir = instance.InstallPath;
+                    has64 = true;
+                }
+                else
+                {
+                    _logger.LogInformation("[CreamInstaller] Game dir: {Dir} (x64={x64}, x32={x32})", gameDir, has64, has32);
+                }
+
+                // Download SmokeAPI ZIP
+                string zipPath = await EnsureSmokeApiZipAsync(ct, progress).ConfigureAwait(false);
+
+                // Deploy 64-bit DLL
+                if (has64)
+                {
+                    var origDll = Path.Combine(gameDir, SteamApi64);
+                    var bakDll  = Path.Combine(gameDir, SteamApi64Orig);
+
+                    Report(progress, "💾 Backing up original steam_api64.dll...");
                     BackupDll(origDll, bakDll);
 
                     Report(progress, "🔧 Deploying SmokeAPI (64-bit)...");
@@ -134,13 +239,13 @@ public class CreamInstallerService : IDlcInstaller
                     _logger.LogInformation("[CreamInstaller] Deployed smoke_api64 → {Dll}", origDll);
                 }
 
-                // ── 4. Deploy 32-bit DLL ──────────────────────────────────────
+                // Deploy 32-bit DLL
                 if (has32)
                 {
                     var origDll = Path.Combine(gameDir, SteamApi32);
                     var bakDll  = Path.Combine(gameDir, SteamApi32Orig);
 
-                    Report(progress, "💾 Backing up steam_api.dll...");
+                    Report(progress, "💾 Backing up original steam_api.dll...");
                     BackupDll(origDll, bakDll);
 
                     Report(progress, "🔧 Deploying SmokeAPI (32-bit)...");
@@ -148,22 +253,21 @@ public class CreamInstallerService : IDlcInstaller
                     _logger.LogInformation("[CreamInstaller] Deployed smoke_api32 → {Dll}", origDll);
                 }
 
-                // ── 5. Write cream_api.ini ────────────────────────────────────
+                // Write configs
                 Report(progress, "📝 Generating cream_api.ini...");
                 WriteCreamApiIni(gameDir, instance);
 
-                // ── 6. Write SmokeAPI.config.json ─────────────────────────────
                 Report(progress, "📝 Generating SmokeAPI.config.json...");
                 WriteSmokeApiConfig(gameDir);
 
-                Report(progress, $"✅ DLC unlocker installed successfully ({instance.Dlcs.Count} DLC(s)).");
-                _logger.LogInformation("[CreamInstaller] Done — {Game} @ {Dir}", instance.Name, gameDir);
+                Report(progress, $"✅ DLC unlocker (SmokeAPI) installed successfully ({instance.Dlcs.Count} DLC(s)).");
+                _logger.LogInformation("[CreamInstaller] Done SmokeAPI — {Game} @ {Dir}", instance.Name, gameDir);
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[CreamInstaller] Install failed for {Game}", instance.Name);
-                Report(progress, $"❌ Error during installation: {ex.Message}");
+                _logger.LogError(ex, "[CreamInstaller] SmokeAPI install failed for {Game}", instance.Name);
+                Report(progress, $"❌ Error during SmokeAPI installation: {ex.Message}");
                 return false;
             }
         }, ct).ConfigureAwait(false);
@@ -271,15 +375,50 @@ public class CreamInstallerService : IDlcInstaller
     }
 
     /// <summary>
+    /// Downloads the CreamAPI DLL (64-bit or 32-bit) from FroggMaster/CreamInstaller repo,
+    /// caches it locally, and returns its path.
+    /// </summary>
+    private async Task<string> EnsureCreamApiDllAsync(bool is64, CancellationToken ct, IProgress<string>? progress)
+    {
+        Directory.CreateDirectory(_creamCacheDir);
+
+        var fileName = is64 ? SteamApi64 : SteamApi32;
+        var cachedPath = Path.Combine(_creamCacheDir, fileName);
+
+        if (File.Exists(cachedPath) && new FileInfo(cachedPath).Length > 10240)
+        {
+            _logger.LogDebug("[CreamInstaller] Using cached CreamAPI DLL: {Path}", cachedPath);
+            return cachedPath;
+        }
+
+        var downloadUrl = is64 ? CreamApi64Url : CreamApi32Url;
+        var archLabel = is64 ? "64-bit" : "32-bit";
+
+        Report(progress, $"⬇ Downloading CreamAPI {archLabel} DLL (FroggMaster/CreamInstaller)...");
+        _logger.LogInformation("[CreamInstaller] Downloading CreamAPI {Arch} from {Url}", archLabel, downloadUrl);
+
+        using var http = new HttpClient();
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar-Launcher/1.0");
+        http.Timeout = TimeSpan.FromMinutes(2);
+
+        var bytes = await http.GetByteArrayAsync(downloadUrl, ct).ConfigureAwait(false);
+        await File.WriteAllBytesAsync(cachedPath, bytes, ct).ConfigureAwait(false);
+
+        _logger.LogInformation("[CreamInstaller] Cached CreamAPI {Arch} DLL at {Path} ({Kb:F0} KB)",
+            archLabel, cachedPath, bytes.Length / 1024.0);
+        return cachedPath;
+    }
+
+    /// <summary>
     /// Downloads the SmokeAPI ZIP from GitHub Releases via the API (to get the versioned filename),
     /// caches it locally, and returns its path.
     /// </summary>
     private async Task<string> EnsureSmokeApiZipAsync(CancellationToken ct, IProgress<string>? progress)
     {
-        Directory.CreateDirectory(_cacheDir);
+        Directory.CreateDirectory(_smokeCacheDir);
 
         // Check for any previously cached ZIP
-        var cached = Directory.GetFiles(_cacheDir, "SmokeAPI-v*.zip").FirstOrDefault();
+        var cached = Directory.GetFiles(_smokeCacheDir, "SmokeAPI-v*.zip").FirstOrDefault();
         if (cached is not null && new FileInfo(cached).Length > 0)
         {
             _logger.LogDebug("[CreamInstaller] Using cached ZIP: {Path}", cached);
@@ -324,7 +463,7 @@ public class CreamInstallerService : IDlcInstaller
 
         var bytes    = await http.GetByteArrayAsync(downloadUrl, ct).ConfigureAwait(false);
         var zipName  = Path.GetFileName(downloadUrl);
-        var zipPath  = Path.Combine(_cacheDir, zipName);
+        var zipPath  = Path.Combine(_smokeCacheDir, zipName);
         await File.WriteAllBytesAsync(zipPath, bytes, ct).ConfigureAwait(false);
 
         _logger.LogInformation("[CreamInstaller] Cached ZIP at {Path} ({Kb:F0} KB)", zipPath, bytes.Length / 1024.0);
@@ -370,7 +509,7 @@ public class CreamInstallerService : IDlcInstaller
 
     // ── Config writers ────────────────────────────────────────────────────────
 
-    private void WriteCreamApiIni(string gameDir, GameInstance instance)
+    internal int WriteCreamApiIni(string gameDir, GameInstance instance, DlcInfo? contextDlc = null)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"; Generated by BlueStar for {instance.Name}");
@@ -387,11 +526,39 @@ public class CreamInstallerService : IDlcInstaller
         sb.AppendLine("disableuserinterface = false");
         sb.AppendLine();
         sb.AppendLine("[dlc]");
-        foreach (var d in instance.Dlcs)
-            sb.AppendLine($"{d.AppId} = {d.Name}");
 
-        File.WriteAllText(Path.Combine(gameDir, CreamApiIni), sb.ToString(), Encoding.UTF8);
-        _logger.LogInformation("[CreamInstaller] Wrote cream_api.ini ({Count} DLCs)", instance.Dlcs.Count);
+        // Filter DLCs: if UnlockedDlcIds is provided, strictly include only selected DLCs.
+        // If UnlockedDlcIds is null, fallback to all known DLCs.
+        List<DlcInfo> activeDlcs;
+        if (instance.UnlockedDlcIds != null)
+        {
+            var allowedIds = instance.UnlockedDlcIds.ToHashSet();
+            activeDlcs = instance.Dlcs.Where(d => allowedIds.Contains(d.AppId)).OrderBy(d => d.AppId).ToList();
+
+            // If UnlockedDlcIds did not match anything in instance.Dlcs but contextDlc is valid and selected, add it
+            if (activeDlcs.Count == 0 && contextDlc != null && contextDlc.AppId > 0 && contextDlc.AppId != instance.AppId && allowedIds.Contains(contextDlc.AppId))
+            {
+                activeDlcs.Add(contextDlc);
+            }
+        }
+        else
+        {
+            activeDlcs = instance.Dlcs.OrderBy(d => d.AppId).ToList();
+            if (activeDlcs.Count == 0 && contextDlc != null && contextDlc.AppId > 0 && contextDlc.AppId != instance.AppId)
+            {
+                activeDlcs.Add(contextDlc);
+            }
+        }
+
+        foreach (var d in activeDlcs)
+        {
+            sb.AppendLine($"{d.AppId} = {d.Name}");
+        }
+
+        var iniPath = Path.Combine(gameDir, CreamApiIni);
+        File.WriteAllText(iniPath, sb.ToString(), new UTF8Encoding(false));
+        _logger.LogInformation("[CreamInstaller] Wrote cream_api.ini ({Count} DLCs) for {Game} at {Path}", activeDlcs.Count, instance.Name, iniPath);
+        return activeDlcs.Count;
     }
 
     private static void WriteSmokeApiConfig(string gameDir)

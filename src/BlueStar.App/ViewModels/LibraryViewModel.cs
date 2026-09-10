@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -425,8 +425,11 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
                 {
                     var cleanName = CleanName(i.Name) ?? i.Name;
                     var exes = ShortcutHelper.FindGameExecutables(i.InstallPath, cleanName);
-                    bool hasDownloadedDepots = i.Depots.Count > 0 && i.Depots.All(d => d.IsDownloaded);
-                    if (exes.Count > 0 || hasDownloadedDepots || (!string.IsNullOrWhiteSpace(i.ExecutablePath) && File.Exists(i.ExecutablePath)))
+                    bool hasDepots = i.Depots.Count > 0;
+                    bool allDepotsDownloaded = hasDepots && i.Depots.All(d => d.IsDownloaded);
+                    bool hasExes = exes.Count > 0 || (!string.IsNullOrWhiteSpace(i.ExecutablePath) && File.Exists(i.ExecutablePath));
+
+                    if (allDepotsDownloaded || (!hasDepots && hasExes))
                     {
                         status = InstanceStatus.Ready;
                         _ = _instanceManager.UpdateAsync(i with { Status = InstanceStatus.Ready }, CancellationToken.None);
@@ -1373,9 +1376,13 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
         }
 
         // Check if emulator is online and Steam is not running
-        var isOnlineEmulator = instance.EmulatorEnabled &&
+        var isOnlineEmulator = (instance.EmulatorEnabled || (instance.InstalledFixLayers != null && instance.InstalledFixLayers.Count > 0)) &&
             (string.Equals(instance.EmulatorId, "refix_valve", StringComparison.OrdinalIgnoreCase) ||
-             string.Equals(instance.EmulatorId, "refix", StringComparison.OrdinalIgnoreCase));
+             string.Equals(instance.EmulatorId, "refix", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(instance.EmulatorId, "gamefix_online", StringComparison.OrdinalIgnoreCase) ||
+             (instance.EmulatorId != null && instance.EmulatorId.Contains("online", StringComparison.OrdinalIgnoreCase)) ||
+             (instance.InstalledEmulatorVersion != null && instance.InstalledEmulatorVersion.Contains("online", StringComparison.OrdinalIgnoreCase)) ||
+             (instance.InstalledFixLayers != null && instance.InstalledFixLayers.Count > 0));
 
         if (isOnlineEmulator && _steamStatusService != null && !_steamStatusService.CurrentStatus.IsRunning)
         {
@@ -1385,6 +1392,17 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
         }
 
         await LaunchInstanceInternalAsync(instance).ConfigureAwait(true);
+    }
+
+    private static string GetResourceString(string key, string fallback)
+    {
+        try
+        {
+            if (System.Windows.Application.Current?.TryFindResource(key) is string s && !string.IsNullOrWhiteSpace(s))
+                return s;
+        }
+        catch { }
+        return fallback;
     }
 
     [RelayCommand]
@@ -1398,8 +1416,9 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
         }
 
         IsStartingSteam = true;
-        SteamLaunchStatusText = "Starting Steam and waiting for user profile to load...";
+        SteamLaunchStatusText = GetResourceString("String_SteamStartingAndWaiting", "Iniciando Steam y esperando a que cargue por completo...");
 
+        bool steamLoaded = false;
         try
         {
             if (_steamStatusService != null)
@@ -1409,8 +1428,8 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
                     SteamLaunchStatusText = msg;
                 });
 
-                await _steamStatusService.LaunchAndWaitForSteamFullyLoadedAsync(
-                    TimeSpan.FromSeconds(50),
+                steamLoaded = await _steamStatusService.LaunchAndWaitForSteamFullyLoadedAsync(
+                    TimeSpan.FromSeconds(60),
                     progress,
                     CancellationToken.None).ConfigureAwait(true);
             }
@@ -1434,7 +1453,8 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
                     Process.Start(new ProcessStartInfo("steam://open/main") { UseShellExecute = true });
                 }
 
-                await Task.Delay(3000).ConfigureAwait(true);
+                await Task.Delay(4000).ConfigureAwait(true);
+                steamLoaded = true;
             }
         }
         catch (Exception ex)
@@ -1447,7 +1467,16 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
             IsSteamRequiredModalOpen = false;
         }
 
-        await LaunchInstanceInternalAsync(inst).ConfigureAwait(true);
+        if (steamLoaded)
+        {
+            await LaunchInstanceInternalAsync(inst).ConfigureAwait(true);
+        }
+        else
+        {
+            _notificationService?.ShowWarning(
+                GetResourceString("String_SteamRequiredModalTitle", "Steam Necesario"),
+                "Steam no completó su carga a tiempo. Asegúrate de que Steam esté iniciado antes de ejecutar el juego.");
+        }
     }
 
     [RelayCommand]

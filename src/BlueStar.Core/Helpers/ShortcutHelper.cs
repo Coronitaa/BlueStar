@@ -148,36 +148,74 @@ public static class ShortcutHelper
         }
     }
 
+    private static bool IsValidSteamDirectory(string? dir)
+    {
+        if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
+            return false;
+
+        return File.Exists(Path.Combine(dir, "steam.exe")) || File.Exists(Path.Combine(dir, "Steam.exe"));
+    }
+
     /// <summary>
-    /// Gets the Steam installation directory from the Windows registry or common directory locations.
+    /// Gets the Steam installation directory from the running process, Windows registry, or common directory locations.
     /// </summary>
     public static string? GetSteamPath()
     {
         if (OperatingSystem.IsWindows())
         {
+            // 1. Live running Steam process is 100% authoritative
+            try
+            {
+                var steamProcesses = Process.GetProcessesByName("steam");
+                if (steamProcesses.Length > 0 && steamProcesses[0].MainModule?.FileName is string exePath)
+                {
+                    var dir = Path.GetDirectoryName(exePath);
+                    if (IsValidSteamDirectory(dir))
+                        return dir;
+                }
+            }
+            catch { }
+
+            // 2. ActiveProcess SteamClientDll
+            try
+            {
+                using var activeKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam\ActiveProcess");
+                var clientDll = activeKey?.GetValue("SteamClientDll")?.ToString() ?? activeKey?.GetValue("SteamClientDll64")?.ToString();
+                if (!string.IsNullOrWhiteSpace(clientDll))
+                {
+                    var dir = Path.GetDirectoryName(clientDll);
+                    if (IsValidSteamDirectory(dir))
+                        return dir;
+                }
+            }
+            catch { }
+
+            // 3. User registry SteamPath (must contain steam.exe to prevent hijacked/emulator paths)
             try
             {
                 using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam");
                 var path = key?.GetValue("SteamPath")?.ToString();
-                if (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+                if (IsValidSteamDirectory(path))
                     return path;
             }
             catch { }
 
+            // 4. Machine 32-bit registry
             try
             {
                 using var keyLM = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Valve\Steam");
                 var pathLM = keyLM?.GetValue("InstallPath")?.ToString();
-                if (!string.IsNullOrWhiteSpace(pathLM) && Directory.Exists(pathLM))
+                if (IsValidSteamDirectory(pathLM))
                     return pathLM;
             }
             catch { }
 
+            // 5. Machine 64-bit registry
             try
             {
                 using var keyLM64 = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Valve\Steam");
                 var pathLM64 = keyLM64?.GetValue("InstallPath")?.ToString();
-                if (!string.IsNullOrWhiteSpace(pathLM64) && Directory.Exists(pathLM64))
+                if (IsValidSteamDirectory(pathLM64))
                     return pathLM64;
             }
             catch { }
@@ -194,6 +232,13 @@ public static class ShortcutHelper
             @"C:\Steam", @"D:\Steam", @"E:\Steam", @"F:\Steam", @"G:\Steam"
         ];
 
+        foreach (var p in commonPaths)
+        {
+            if (IsValidSteamDirectory(p))
+                return p;
+        }
+
+        // Last resort: return any existing directory if steam.exe was not strictly verified
         foreach (var p in commonPaths)
         {
             if (!string.IsNullOrEmpty(p) && Directory.Exists(p))

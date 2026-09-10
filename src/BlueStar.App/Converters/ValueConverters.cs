@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
@@ -801,6 +801,88 @@ public sealed class CachedImageConverter : IValueConverter
         else if (parameter is int intId && intId > 0) appId = (uint)intId;
 
         return BlueStar.App.Services.ImageCacheService.Instance.GetOrLoadImage(url, appId);
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Converts LogSeverity to text foreground SolidColorBrush.
+/// </summary>
+public sealed class LogSeverityToBrushConverter : IValueConverter
+{
+    private static readonly SolidColorBrush VerboseBrush = new(Color.FromRgb(140, 145, 160));
+    private static readonly SolidColorBrush DebugBrush = new(Color.FromRgb(150, 155, 175));
+    private static readonly SolidColorBrush InfoBrush = new(Color.FromRgb(56, 189, 248));
+    private static readonly SolidColorBrush WarningBrush = new(Color.FromRgb(251, 191, 36));
+    private static readonly SolidColorBrush ErrorBrush = new(Color.FromRgb(248, 113, 113));
+    private static readonly SolidColorBrush FatalBrush = new(Color.FromRgb(255, 82, 82));
+
+    static LogSeverityToBrushConverter()
+    {
+        VerboseBrush.Freeze();
+        DebugBrush.Freeze();
+        InfoBrush.Freeze();
+        WarningBrush.Freeze();
+        ErrorBrush.Freeze();
+        FatalBrush.Freeze();
+    }
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is not LogSeverity severity) return InfoBrush;
+        return severity switch
+        {
+            LogSeverity.Verbose => VerboseBrush,
+            LogSeverity.Debug => DebugBrush,
+            LogSeverity.Information => InfoBrush,
+            LogSeverity.Warning => WarningBrush,
+            LogSeverity.Error => ErrorBrush,
+            LogSeverity.Fatal => FatalBrush,
+            _ => InfoBrush
+        };
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Converts LogSeverity to badge background SolidColorBrush.
+/// </summary>
+public sealed class LogSeverityToBgBrushConverter : IValueConverter
+{
+    private static readonly SolidColorBrush VerboseBg = new(Color.FromArgb(35, 140, 145, 160));
+    private static readonly SolidColorBrush DebugBg = new(Color.FromArgb(35, 150, 155, 175));
+    private static readonly SolidColorBrush InfoBg = new(Color.FromArgb(40, 56, 189, 248));
+    private static readonly SolidColorBrush WarningBg = new(Color.FromArgb(45, 251, 191, 36));
+    private static readonly SolidColorBrush ErrorBg = new(Color.FromArgb(50, 248, 113, 113));
+    private static readonly SolidColorBrush FatalBg = new(Color.FromArgb(60, 255, 82, 82));
+
+    static LogSeverityToBgBrushConverter()
+    {
+        VerboseBg.Freeze();
+        DebugBg.Freeze();
+        InfoBg.Freeze();
+        WarningBg.Freeze();
+        ErrorBg.Freeze();
+        FatalBg.Freeze();
+    }
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is not LogSeverity severity) return InfoBg;
+        return severity switch
+        {
+            LogSeverity.Verbose => VerboseBg,
+            LogSeverity.Debug => DebugBg,
+            LogSeverity.Information => InfoBg,
+            LogSeverity.Warning => WarningBg,
+            LogSeverity.Error => ErrorBg,
+            LogSeverity.Fatal => FatalBg,
+            _ => InfoBg
+        };
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

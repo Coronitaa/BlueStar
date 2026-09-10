@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
@@ -65,10 +65,16 @@ public partial class App : Application
         }
 
 
-        // Configure Serilog
+        // Initialize Debug & Diagnostics Service
+        var debugLogService = new BlueStar.Infrastructure.Services.DebugLogService();
 
+        // Configure Serilog with noise suppression for high-frequency framework polling
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug()
+            .MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Warning)
+            .MinimumLevel.Override("System", Serilog.Events.LogEventLevel.Warning)
+            .MinimumLevel.Override("System.Net.Http", Serilog.Events.LogEventLevel.Warning)
+            .MinimumLevel.Override("Microsoft.Extensions.Http", Serilog.Events.LogEventLevel.Warning)
             .WriteTo.File(
                 System.IO.Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -76,6 +82,7 @@ public partial class App : Application
                 rollingInterval: RollingInterval.Day,
                 retainedFileCountLimit: 7)
             .WriteTo.Console()
+            .WriteTo.Sink(new BlueStar.App.Services.DebugLogSink(debugLogService))
             .CreateLogger();
 
         this.DispatcherUnhandledException += (s, args) =>
@@ -95,6 +102,9 @@ public partial class App : Application
 
         // Build DI container
         var services = new ServiceCollection();
+
+        // Diagnostics & Debugging
+        services.AddSingleton<IDebugLogService>(debugLogService);
 
         // Logging
         services.AddLogging(builder =>
@@ -240,7 +250,14 @@ public partial class App : Application
         services.AddTransient<ViewModels.DownloadsViewModel>();
         services.AddTransient<ViewModels.SettingsViewModel>();
         services.AddTransient<ViewModels.AboutViewModel>();
+        services.AddTransient<ViewModels.DebugConsoleViewModel>();
         Services = services.BuildServiceProvider();
+
+        // Attach runtime dependencies to DebugLogService for enriched diagnostics
+        debugLogService.AttachServices(
+            Services.GetService<BlueStar.Infrastructure.Storage.AppSettingsService>(),
+            Services.GetService<ISteamStatusService>(),
+            Services.GetService<IPrerequisiteService>());
 
         // Wire UI dispatchers
         BlueStar.Infrastructure.Services.NotificationService.UiDispatcher = action =>

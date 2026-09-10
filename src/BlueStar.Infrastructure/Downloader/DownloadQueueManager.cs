@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
@@ -241,6 +241,7 @@ public class DownloadQueueManager
     private readonly INotificationService? _notificationService;
     private readonly DownloadStateManager? _stateManager;
     private readonly IEmulatorLifecycleService? _emulatorLifecycleService;
+    private readonly IGameFixDeployService? _gameFixDeployService;
     private readonly ILogger<DownloadQueueManager> _logger;
 
     /// <summary>
@@ -288,7 +289,8 @@ public class DownloadQueueManager
         IInstanceManager? instanceManager = null,
         INotificationService? notificationService = null,
         DownloadStateManager? stateManager = null,
-        IEmulatorLifecycleService? emulatorLifecycleService = null)
+        IEmulatorLifecycleService? emulatorLifecycleService = null,
+        IGameFixDeployService? gameFixDeployService = null)
     {
         _downloadProvider = downloadProvider;
         _logger = logger;
@@ -296,6 +298,7 @@ public class DownloadQueueManager
         _notificationService = notificationService;
         _stateManager = stateManager;
         _emulatorLifecycleService = emulatorLifecycleService;
+        _gameFixDeployService = gameFixDeployService;
         _uiContext = SynchronizationContext.Current;
     }
 
@@ -432,8 +435,7 @@ public class DownloadQueueManager
             _notificationService?.ShowInfo("Download Resumed", $"Resuming download for {instance.Name}.");
         }
 
-        _ = RunDownloadAsync(existing, instance);
-        return Task.CompletedTask;
+        return RunDownloadAsync(existing, instance);
     }
 
 
@@ -788,13 +790,14 @@ public class DownloadQueueManager
             await Task.Run(() => _downloadProvider.DownloadAsync(instance, progress, cts.Token), cts.Token)
                 .ConfigureAwait(false);
 
+            job.JobStatus = DownloadJobStatus.Completed;
+            job.Percentage = 100;
+            job.Phase = "Completed";
+            job.StatusMessage = "Completed ✅";
+            job.CompletedAt = DateTimeOffset.Now;
+
             RunOnUi(() =>
             {
-                job.JobStatus = DownloadJobStatus.Completed;
-                job.Percentage = 100;
-                job.Phase = "Completed";
-                job.StatusMessage = "Completed ✅";
-                job.CompletedAt = DateTimeOffset.Now;
                 job.NotifyMetricsChanged();
                 NotifyQueueChanged();
             });
@@ -843,50 +846,152 @@ public class DownloadQueueManager
 
                     await _instanceManager.UpdateAsync(updatedInstance, CancellationToken.None).ConfigureAwait(false);
 
-                    // The depot files that just landed overwrote the pristine Steam binaries, so any
-                    // emulator / DLC unlocker that the update flow stripped beforehand has to be put
-                    // back on top of the NEW files. Doing it here (instead of in the update flow)
-                    // guarantees it also runs when the app is restarted mid-download and the job is
-                    // resumed later.
-                    if (updatedInstance.AwaitingPostUpdateRedeploy && _emulatorLifecycleService != null)
+                    // If all depots finished and instance is Ready, execute post-install actions in order
+                    if (updatedInstance.Status == InstanceStatus.Ready)
                     {
-                        RunOnUi(() =>
-                        {
-                            job.Phase = "Installing";
-                            job.StatusMessage = "Reinstalling emulator and DLC unlocker...";
-                            job.NotifyMetricsChanged();
-                            NotifyQueueChanged();
-                        });
-
-                        try
-                        {
-                            var redeployProgress = new Progress<DeployProgress>(dp =>
-                                RunOnUi(() =>
-                                {
-                                    if (!string.IsNullOrWhiteSpace(dp.Message)) job.StatusMessage = dp.Message;
-                                    job.NotifyMetricsChanged();
-                                }));
-
-                            updatedInstance = await _emulatorLifecycleService
-                                .RestoreAfterGameUpdateAsync(updatedInstance, redeployProgress, CancellationToken.None)
-                                .ConfigureAwait(false);
-
-                            _logger.LogInformation("Post-update redeploy completed for {Game}", instance.Name);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Post-update redeploy failed for {Game}", instance.Name);
-                            _notificationService?.ShowError(
-                                "Reinstall Required",
-                                $"{instance.Name} was updated, but the emulator/DLC unlocker could not be reinstalled automatically. Reinstall them from the Emulator tab.");
-                        }
-                        finally
+                        // 1. Emulator / DLC unlocker deployment (preserves and layers CreamAPI / SmokeAPI)
+                        if (updatedInstance.AwaitingPostUpdateRedeploy && _emulatorLifecycleService != null)
                         {
                             RunOnUi(() =>
                             {
-                                job.StatusMessage = "Completed \u2705";
+                                job.Phase = "Installing";
+                                job.StatusMessage = "Configuring emulator and DLC unlocker...";
                                 job.NotifyMetricsChanged();
+                                NotifyQueueChanged();
                             });
+
+                            try
+                            {
+                                var redeployProgress = new Progress<DeployProgress>(dp =>
+                                    RunOnUi(() =>
+                                    {
+                                        if (!string.IsNullOrWhiteSpace(dp.Message)) job.StatusMessage = dp.Message;
+                                        job.NotifyMetricsChanged();
+                                    }));
+
+                                updatedInstance = await _emulatorLifecycleService
+                                    .RestoreAfterGameUpdateAsync(updatedInstance, redeployProgress, CancellationToken.None)
+                                    .ConfigureAwait(false);
+
+                                _logger.LogInformation("Post-update redeploy completed for {Game}", instance.Name);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "Post-update redeploy failed for {Game}", instance.Name);
+                                _notificationService?.ShowError(
+                                    "Reinstall Required",
+                                    $"{instance.Name} was updated, but the emulator/DLC unlocker could not be reinstalled automatically. Reinstall them from the Emulator tab.");
+                            }
+                            finally
+                            {
+                                RunOnUi(() =>
+                                {
+                                    job.StatusMessage = "Completed \u2705";
+                                    job.NotifyMetricsChanged();
+                                });
+                            }
+                        }
+
+                        // 1.5. Deploy pending game-specific fix/emulator (Online Fix / DepotBox fix)
+                        if (!string.IsNullOrWhiteSpace(updatedInstance.PendingRedeployGameFixId) && _gameFixDeployService != null &&
+                            !string.IsNullOrWhiteSpace(updatedInstance.InstallPath) && Directory.Exists(updatedInstance.InstallPath))
+                        {
+                            RunOnUi(() =>
+                            {
+                                job.Phase = "Installing";
+                                job.StatusMessage = "Deploying game-specific emulator...";
+                                job.NotifyMetricsChanged();
+                                NotifyQueueChanged();
+                            });
+
+                            try
+                            {
+                                try
+                                {
+                                    await BlueStar.Infrastructure.Services.AntivirusExclusionHelper.AddFolderExclusionAsync([updatedInstance.InstallPath], CancellationToken.None).ConfigureAwait(false);
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogWarning(ex, "Failed adding Windows Defender exclusion for {Path}", updatedInstance.InstallPath);
+                                }
+
+                                var fixProgress = new Progress<DeployProgress>(dp =>
+                                    RunOnUi(() =>
+                                    {
+                                        if (!string.IsNullOrWhiteSpace(dp.Message)) job.StatusMessage = dp.Message;
+                                        job.NotifyMetricsChanged();
+                                    }));
+
+                                var fixSuccess = await _gameFixDeployService.DeployFixByIdAsync(
+                                    updatedInstance,
+                                    updatedInstance.PendingRedeployGameFixId,
+                                    fixProgress,
+                                    CancellationToken.None).ConfigureAwait(false);
+
+                                if (fixSuccess && _instanceManager != null)
+                                {
+                                    var refreshed = await _instanceManager.GetByIdAsync(updatedInstance.Id, CancellationToken.None).ConfigureAwait(false);
+                                    if (refreshed != null)
+                                    {
+                                        updatedInstance = refreshed with { PendingRedeployGameFixId = null };
+                                        await _instanceManager.UpdateAsync(updatedInstance, CancellationToken.None).ConfigureAwait(false);
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "Failed to deploy game fix {FixId} for {Game}", updatedInstance.PendingRedeployGameFixId, updatedInstance.Name);
+                            }
+                            finally
+                            {
+                                RunOnUi(() =>
+                                {
+                                    job.StatusMessage = "Completed \u2705";
+                                    job.NotifyMetricsChanged();
+                                });
+                            }
+                        }
+
+                        // 2. Post-installation shortcuts creation
+                        if ((updatedInstance.PendingCreateDesktopShortcut || updatedInstance.PendingCreateStartMenuShortcut) &&
+                            !string.IsNullOrWhiteSpace(updatedInstance.InstallPath) && Directory.Exists(updatedInstance.InstallPath))
+                        {
+                            try
+                            {
+                                var cleanName = BlueStar.Core.Helpers.PathHelper.SanitizeFolderName(updatedInstance.Name);
+                                var exes = BlueStar.Core.Helpers.ShortcutHelper.FindGameExecutables(updatedInstance.InstallPath, cleanName);
+                                var targetExe = !string.IsNullOrWhiteSpace(updatedInstance.ExecutablePath) && File.Exists(updatedInstance.ExecutablePath)
+                                    ? updatedInstance.ExecutablePath
+                                    : exes.FirstOrDefault();
+
+                                if (!string.IsNullOrWhiteSpace(targetExe))
+                                {
+                                    _logger.LogInformation("Creating post-install shortcuts for {Game} (Desktop={Desktop}, StartMenu={StartMenu})",
+                                        updatedInstance.Name, updatedInstance.PendingCreateDesktopShortcut, updatedInstance.PendingCreateStartMenuShortcut);
+
+                                    await BlueStar.Core.Helpers.ShortcutHelper.CreateShortcutsAsync(
+                                        targetExe,
+                                        updatedInstance.Name,
+                                        createDesktop: updatedInstance.PendingCreateDesktopShortcut,
+                                        createStartMenu: updatedInstance.PendingCreateStartMenuShortcut,
+                                        createSteam: false,
+                                        originalGameAppId: updatedInstance.AppId,
+                                        customHeaderUrl: updatedInstance.HeaderImageUrl,
+                                        ct: CancellationToken.None).ConfigureAwait(false);
+
+                                    updatedInstance = updatedInstance with
+                                    {
+                                        PendingCreateDesktopShortcut = false,
+                                        PendingCreateStartMenuShortcut = false,
+                                        ExecutablePath = targetExe
+                                    };
+                                    await _instanceManager.UpdateAsync(updatedInstance, CancellationToken.None).ConfigureAwait(false);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Failed to create post-install shortcuts for {Game}", updatedInstance.Name);
+                            }
                         }
                     }
 

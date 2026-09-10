@@ -429,7 +429,10 @@ public partial class HomeViewModel : ObservableObject, IDisposable
                     var cleanName = CleanName(i.Name) ?? i.Name;
                     var exes = ShortcutHelper.FindGameExecutables(i.InstallPath, cleanName);
                     bool hasDownloadedDepots = i.Depots.Count > 0 && i.Depots.All(d => d.IsDownloaded);
-                    if (exes.Count > 0 || hasDownloadedDepots || (!string.IsNullOrWhiteSpace(i.ExecutablePath) && File.Exists(i.ExecutablePath)))
+                    bool isDownloading = _downloadQueueManager.Queue.Any(q => q.Instance.Id == i.Id &&
+                        q.JobStatus is DownloadJobStatus.Downloading or DownloadJobStatus.Queued or DownloadJobStatus.Paused);
+
+                    if (!isDownloading && (hasDownloadedDepots || (i.Depots.Count == 0 && (exes.Count > 0 || (!string.IsNullOrWhiteSpace(i.ExecutablePath) && File.Exists(i.ExecutablePath))))))
                     {
                         status = InstanceStatus.Ready;
                         _ = _instanceManager.UpdateAsync(i with { Status = InstanceStatus.Ready }, CancellationToken.None);

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.IO;
 using System.IO.Compression;
@@ -295,6 +295,12 @@ public partial class DepotDownloaderProvider : IDownloadProvider
                             Directory.Delete(dir);
                     }
                     catch { }
+                }
+
+                // If nothing was kept (no manifest/sha state files), drop the staging directory itself.
+                if (!Directory.EnumerateFileSystemEntries(stagingDir).Any())
+                {
+                    try { Directory.Delete(stagingDir); } catch { }
                 }
 
                 _logger.LogInformation(

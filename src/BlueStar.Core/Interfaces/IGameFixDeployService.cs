@@ -29,6 +29,16 @@ public interface IGameFixDeployService
         CancellationToken ct = default);
 
     /// <summary>
+    /// Deploys a game fix by its catalog ID onto the target game instance.
+    /// Resolves the fix details from available providers or DepotBox API, then executes deployment.
+    /// </summary>
+    Task<bool> DeployFixByIdAsync(
+        GameInstance instance,
+        string fixId,
+        IProgress<DeployProgress>? progress = null,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Uninstalls a specific fix layer from the game instance, restoring original files from backup
     /// and removing any deployed artifacts without disturbing other active layers.
     /// </summary>
