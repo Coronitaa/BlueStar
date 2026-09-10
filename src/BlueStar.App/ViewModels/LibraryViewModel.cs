@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -981,10 +981,14 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
             InitialDirectory = Directory.Exists(PreviewInstallPath) ? PreviewInstallPath : null
         };
 
-        if (dialog.ShowDialog() == true)
-        {
-            PreviewInstallPath = dialog.FolderName;
-        }
+        if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.FolderName)) return;
+
+        // The user picks a *library root* (e.g. D:\Games), not the game folder itself.
+        // Without this the game would be extracted straight into the root, mixing its files
+        // with everything else already there. EnsureGameSubfolder is a no-op if the user
+        // already navigated into a folder named after the game.
+        var gameName = string.IsNullOrWhiteSpace(PreviewGameName) ? "Game" : PreviewGameName;
+        PreviewInstallPath = PathHelper.EnsureGameSubfolder(dialog.FolderName, gameName);
     }
 
     [RelayCommand]

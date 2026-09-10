@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.IO;
 using System.IO.Compression;
@@ -246,18 +246,65 @@ public partial class DepotDownloaderProvider : IDownloadProvider
             _logger.LogWarning(ex, "Failed to delete depot working directory {Dir}", workingDir);
         }
 
+        // The .DepotDownloader folder is NOT disposable: it holds the installed .manifest files,
+        // their .sha checksums and depot.config, which is exactly what DepotDownloader diffs
+        // against to download only the changed chunks on the next update. Deleting it turned every
+        // subsequent update into a full re-download, and also removed one of the sources
+        // GameUpdateDetectionHelper.GetInstalledManifestDate() scans to date the installed build.
+        // So prune it instead of deleting it: keep the small state files, drop everything else.
         try
         {
             var stagingDir = Path.Combine(instance.InstallPath, ".DepotDownloader");
             if (Directory.Exists(stagingDir))
             {
-                Directory.Delete(stagingDir, recursive: true);
-                _logger.LogInformation("Deleted .DepotDownloader staging directory: {Dir}", stagingDir);
+                long keptBytes = 0;
+                int removed = 0;
+
+                foreach (var file in Directory.EnumerateFiles(stagingDir, "*", SearchOption.AllDirectories))
+                {
+                    var name = Path.GetFileName(file);
+                    bool isState =
+                        name.EndsWith(".manifest", StringComparison.OrdinalIgnoreCase) ||
+                        name.EndsWith(".sha", StringComparison.OrdinalIgnoreCase) ||
+                        name.Equals("depot.config", StringComparison.OrdinalIgnoreCase);
+
+                    if (isState)
+                    {
+                        try { keptBytes += new FileInfo(file).Length; } catch { }
+                        continue;
+                    }
+
+                    try
+                    {
+                        File.Delete(file);
+                        removed++;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Could not remove staging file {File}", file);
+                    }
+                }
+
+                // Drop directories that ended up empty after the prune.
+                foreach (var dir in Directory.EnumerateDirectories(stagingDir, "*", SearchOption.AllDirectories)
+                                             .OrderByDescending(d => d.Length))
+                {
+                    try
+                    {
+                        if (!Directory.EnumerateFileSystemEntries(dir).Any())
+                            Directory.Delete(dir);
+                    }
+                    catch { }
+                }
+
+                _logger.LogInformation(
+                    "Pruned .DepotDownloader staging directory: removed {Removed} file(s), kept {KeptKb} KB of manifest state for differential updates.",
+                    removed, keptBytes / 1024);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to delete .DepotDownloader staging directory in {InstallPath}", instance.InstallPath);
+            _logger.LogWarning(ex, "Failed to prune .DepotDownloader staging directory in {InstallPath}", instance.InstallPath);
         }
 
         try

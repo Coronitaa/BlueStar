@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
@@ -240,7 +240,6 @@ public partial class App : Application
         services.AddTransient<ViewModels.DownloadsViewModel>();
         services.AddTransient<ViewModels.SettingsViewModel>();
         services.AddTransient<ViewModels.AboutViewModel>();
-
         Services = services.BuildServiceProvider();
 
         // Wire UI dispatchers
@@ -266,12 +265,14 @@ public partial class App : Application
         base.OnStartup(e);
 
         // Initialize dynamic localization
-
         try
         {
             _ = Services.GetRequiredService<ILocalizationService>();
         }
         catch { }
+
+        // Background work — these deliberately run AFTER the window is up, so they never delay
+        // the first frame.
 
         // Restore pending downloads from previous interrupted sessions
         _ = Task.Run(async () =>

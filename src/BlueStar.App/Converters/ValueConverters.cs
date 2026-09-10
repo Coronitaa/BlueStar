@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
@@ -130,6 +130,75 @@ public sealed class StringMatchConverter : IValueConverter
 /// <summary>
 /// Checks whether a string matches the ConverterParameter string and returns <see cref="Visibility"/>.
 /// </summary>
+/// <summary>
+/// Maps an instance-detail tab key ("Overview", "Files", …) to the full localized section name
+/// shown in the breadcrumb above the content. The navigation rail only has room for a short
+/// label, so the breadcrumb is where the section gets named in full.
+/// </summary>
+/// <summary>
+/// Turns a 0-100 percentage into a star <see cref="GridLength"/>, so a Grid can act as a
+/// proportional bar without any code-behind: each segment claims exactly its share of the row.
+/// A zero or negative value yields a zero-width column, which simply disappears.
+/// </summary>
+public sealed class PercentToStarLengthConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        double percent = value switch
+        {
+            double d => d,
+            float f => f,
+            int i => i,
+            long l => l,
+            _ => 0
+        };
+
+        if (double.IsNaN(percent) || double.IsInfinity(percent) || percent <= 0)
+            return new GridLength(0, GridUnitType.Star);
+
+        return new GridLength(percent, GridUnitType.Star);
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+public sealed class TabNameConverter : IValueConverter
+{
+    private static readonly Dictionary<string, string> Keys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Overview"]      = "String_TabOverview",
+        ["Files"]         = "String_TabVersion",
+        ["Dlcs"]          = "String_TabDlcs",
+        ["Mods"]          = "String_TabMods",
+        ["Emulator"]      = "String_TabEmulator",
+        ["Prerequisites"] = "String_TabPrerequisites",
+        ["Settings"]      = "String_TabSettings",
+        ["Logs"]          = "String_TabLogs",
+    };
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        var tab = value as string;
+        if (string.IsNullOrWhiteSpace(tab)) return string.Empty;
+
+        if (!Keys.TryGetValue(tab, out var resourceKey)) return tab;
+
+        try
+        {
+            var text = System.Windows.Application.Current?.TryFindResource(resourceKey) as string;
+            return string.IsNullOrWhiteSpace(text) ? tab : text;
+        }
+        catch
+        {
+            return tab;
+        }
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 public sealed class StringMatchToVisibilityConverter : IValueConverter
 {
     public static readonly StringMatchToVisibilityConverter Instance = new();

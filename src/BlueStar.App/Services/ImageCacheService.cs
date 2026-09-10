@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -317,16 +317,57 @@ public sealed class ImageCacheService
         }
     }
 
+    /// <summary>
+    /// Builds the cache key for an image.
+    /// <para>
+    /// Collapsing every URL that mentions an app id to a single "steam_app_{id}" key is only
+    /// correct for the ONE canonical artwork per game (its header / capsule / library art), which
+    /// is what the sharing was for. Screenshots and videos live under the same
+    /// <c>.../apps/{appid}/...</c> path, so the old rule handed every screenshot of a game the
+    /// cached header image — the whole strip rendered as the same banner over and over. Anything
+    /// that is not the canonical artwork is therefore keyed by its own URL.
+    /// </para>
+    /// </summary>
     private static string BuildKey(string? url, uint appId)
     {
-        if (appId > 0) return $"steam_app_{appId}";
         if (!string.IsNullOrWhiteSpace(url))
         {
-            var match = SteamAppIdRegex.Match(url);
-            if (match.Success) return $"steam_app_{match.Groups["appid"].Value}";
-            return url.Trim();
+            var trimmed = url.Trim();
+
+            if (IsCanonicalArtworkUrl(trimmed))
+            {
+                var match = SteamAppIdRegex.Match(trimmed);
+                if (match.Success) return $"steam_app_{match.Groups["appid"].Value}";
+                if (appId > 0) return $"steam_app_{appId}";
+            }
+
+            // Distinct asset (screenshot, movie thumbnail, custom art): key it by itself.
+            return trimmed;
         }
+
+        if (appId > 0) return $"steam_app_{appId}";
         return "empty_image";
+    }
+
+    /// <summary>
+    /// Returns true for the one image per app that every view is meant to share: the store header,
+    /// the capsule, or the library artwork.
+    /// </summary>
+    private static bool IsCanonicalArtworkUrl(string url)
+    {
+        var fileName = url;
+
+        var query = fileName.IndexOf('?');
+        if (query >= 0) fileName = fileName[..query];
+
+        var lastSlash = fileName.LastIndexOf('/');
+        if (lastSlash >= 0 && lastSlash < fileName.Length - 1) fileName = fileName[(lastSlash + 1)..];
+
+        return fileName.StartsWith("header", StringComparison.OrdinalIgnoreCase)
+            || fileName.StartsWith("capsule", StringComparison.OrdinalIgnoreCase)
+            || fileName.StartsWith("library_", StringComparison.OrdinalIgnoreCase)
+            || fileName.StartsWith("logo", StringComparison.OrdinalIgnoreCase)
+            || fileName.StartsWith("page_bg", StringComparison.OrdinalIgnoreCase);
     }
 
     private string GetDiskCachePath(string key)

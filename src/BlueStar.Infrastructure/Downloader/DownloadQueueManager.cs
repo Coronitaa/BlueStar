@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
@@ -93,6 +93,10 @@ public partial class DownloadJobItem : ObservableObject
         OnPropertyChanged(nameof(CanRetry));
         OnPropertyChanged(nameof(CanCancel));
         OnPropertyChanged(nameof(CanRemove));
+        OnPropertyChanged(nameof(FriendlyPhase));
+        OnPropertyChanged(nameof(PhaseGlyph));
+        OnPropertyChanged(nameof(StageDetail));
+        OnPropertyChanged(nameof(IsIndeterminate));
     }
 
     // ── Formatted display ────────────────────────────────────────────────────
@@ -131,6 +135,77 @@ public partial class DownloadJobItem : ObservableObject
     public string FormattedDepotProgress =>
         TotalDepots > 0 ? $"Depot {CurrentDepotIndex + 1}/{TotalDepots}" : "";
 
+    /// <summary>
+    /// Gets the stage the job is in, in words. An update is a sequence — strip the layers, fetch
+    /// the manifests, download, write, put the layers back — and a bare percentage told the user
+    /// none of that, which made a long "0%" look like a hang.
+    /// </summary>
+    public string FriendlyPhase => JobStatus switch
+    {
+        DownloadJobStatus.Queued    => "Waiting in queue",
+        DownloadJobStatus.Paused    => "Paused",
+        DownloadJobStatus.Completed => "Finished",
+        DownloadJobStatus.Failed    => "Failed",
+        DownloadJobStatus.Canceled  => "Canceled",
+        _ => (Phase ?? string.Empty).ToLowerInvariant() switch
+        {
+            "initializing" => "Connecting to Steam",
+            "preparing"    => "Preparing files",
+            "manifests"    => "Fetching manifests",
+            "downloading"  => "Downloading",
+            "verifying" or "validating" => "Verifying files",
+            "installing"   => "Writing to disk",
+            "completed"    => "Finishing up",
+            "paused"       => "Paused",
+            "failed"       => "Failed",
+            _ => "Working"
+        }
+    };
+
+    /// <summary>Gets the icon that goes with <see cref="FriendlyPhase"/>.</summary>
+    public string PhaseGlyph => JobStatus switch
+    {
+        DownloadJobStatus.Queued    => "\U0001F551",
+        DownloadJobStatus.Paused    => "\u23F8",
+        DownloadJobStatus.Completed => "\u2705",
+        DownloadJobStatus.Failed    => "\u274C",
+        DownloadJobStatus.Canceled  => "\u26A0",
+        _ => "\U0001F4E5"
+    };
+
+    /// <summary>
+    /// Gets the secondary line under the phase: which depot, how many chunks, how fast the disk is
+    /// keeping up. Falls back to the raw status message when there is nothing numeric to say.
+    /// </summary>
+    public string StageDetail
+    {
+        get
+        {
+            if (JobStatus is DownloadJobStatus.Completed or DownloadJobStatus.Failed or DownloadJobStatus.Canceled)
+                return StatusMessage;
+
+            var parts = new List<string>();
+
+            if (TotalDepots > 0)
+                parts.Add($"Depot {Math.Min(CurrentDepotIndex + 1, TotalDepots)} of {TotalDepots}");
+
+            if (TotalChunks > 0)
+                parts.Add($"{CompletedChunks:N0}/{TotalChunks:N0} chunks");
+
+            if (ActiveConnections > 0)
+                parts.Add($"{ActiveConnections} connection{(ActiveConnections == 1 ? "" : "s")}");
+
+            if (WriteBytesPerSec > 0)
+                parts.Add($"disk {FormattedWriteSpeed}");
+
+            return parts.Count > 0 ? string.Join("  \u00B7  ", parts) : StatusMessage;
+        }
+    }
+
+    /// <summary>Gets whether the progress bar should be indeterminate (no measurable total yet).</summary>
+    public bool IsIndeterminate =>
+        JobStatus == DownloadJobStatus.Downloading && TotalBytes <= 0 && Percentage <= 0;
+
     public void NotifyMetricsChanged()
     {
         OnPropertyChanged(nameof(FormattedSpeed));
@@ -139,6 +214,10 @@ public partial class DownloadJobItem : ObservableObject
         OnPropertyChanged(nameof(FormattedProgress));
         OnPropertyChanged(nameof(FormattedTotalSize));
         OnPropertyChanged(nameof(FormattedDepotProgress));
+        OnPropertyChanged(nameof(FriendlyPhase));
+        OnPropertyChanged(nameof(PhaseGlyph));
+        OnPropertyChanged(nameof(StageDetail));
+        OnPropertyChanged(nameof(IsIndeterminate));
     }
 
     private static string FormatBytes(long bytes) => bytes switch
@@ -161,7 +240,26 @@ public class DownloadQueueManager
     private readonly IInstanceManager? _instanceManager;
     private readonly INotificationService? _notificationService;
     private readonly DownloadStateManager? _stateManager;
+    private readonly IEmulatorLifecycleService? _emulatorLifecycleService;
     private readonly ILogger<DownloadQueueManager> _logger;
+
+    /// <summary>
+    /// Serializes actual downloading to one job at a time.
+    /// <para>
+    /// This is not a preference, it is a correctness requirement: DepotDownloader's
+    /// <c>ContentDownloader</c> keeps its configuration in STATIC fields
+    /// (<c>Config.InstallDirectory</c>, <c>CancellationToken</c>, <c>cdnPool</c>, <c>steam3</c>),
+    /// all of which are reassigned on every call. Two concurrent downloads therefore overwrite
+    /// each other's install directory — the second game's files land in the first game's folder —
+    /// and the first one to finish resets the shared cancellation token, leaving the other
+    /// download impossible to cancel.
+    /// </para>
+    /// <para>
+    /// Until ContentDownloader is instance-scoped, jobs wait here. This also makes the
+    /// "Queued" state the UI already shows actually mean something.
+    /// </para>
+    /// </summary>
+    private readonly SemaphoreSlim _downloadGate = new(1, 1);
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _ctsMap = new();
     private readonly ConcurrentDictionary<Guid, Task> _runningTasks = new();
     private readonly ConcurrentDictionary<Guid, bool> _pausedInstances = new();
@@ -189,13 +287,15 @@ public class DownloadQueueManager
         ILogger<DownloadQueueManager> logger,
         IInstanceManager? instanceManager = null,
         INotificationService? notificationService = null,
-        DownloadStateManager? stateManager = null)
+        DownloadStateManager? stateManager = null,
+        IEmulatorLifecycleService? emulatorLifecycleService = null)
     {
         _downloadProvider = downloadProvider;
         _logger = logger;
         _instanceManager = instanceManager;
         _notificationService = notificationService;
         _stateManager = stateManager;
+        _emulatorLifecycleService = emulatorLifecycleService;
         _uiContext = SynchronizationContext.Current;
     }
 
@@ -601,6 +701,57 @@ public class DownloadQueueManager
             NotifyQueueChanged();
         });
 
+        // Wait for our turn in the queue. The job stays visible as "Queued" meanwhile.
+        bool gateTaken = false;
+        try
+        {
+            if (!await _downloadGate.WaitAsync(0).ConfigureAwait(false))
+            {
+                RunOnUi(() =>
+                {
+                    if (job.JobStatus == DownloadJobStatus.Downloading)
+                    {
+                        job.JobStatus = DownloadJobStatus.Queued;
+                        job.StatusMessage = "Waiting for the active download to finish...";
+                        job.NotifyMetricsChanged();
+                        NotifyQueueChanged();
+                    }
+                });
+
+                await _downloadGate.WaitAsync(cts.Token).ConfigureAwait(false);
+            }
+            gateTaken = true;
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancelled or paused while still queued: never started, so just settle the job.
+            bool wasPausedWhileQueued = _pausedInstances.TryRemove(instance.Id, out _) || job.IsPaused;
+            RunOnUi(() =>
+            {
+                job.JobStatus = wasPausedWhileQueued ? DownloadJobStatus.Paused : DownloadJobStatus.Canceled;
+                job.StatusMessage = wasPausedWhileQueued ? "Paused \u2014 click Resume to continue" : "Canceled";
+                job.SpeedBytesPerSec = 0;
+                job.NotifyMetricsChanged();
+                NotifyQueueChanged();
+            });
+            _ctsMap.TryRemove(instance.Id, out _);
+            _runningTasks.TryRemove(instance.Id, out _);
+            tcs.TrySetResult();
+            return;
+        }
+
+        RunOnUi(() =>
+        {
+            if (job.JobStatus == DownloadJobStatus.Queued)
+            {
+                job.JobStatus = DownloadJobStatus.Downloading;
+                job.Phase = "Initializing";
+                job.StatusMessage = "Connecting to Steam and resolving depots...";
+                job.NotifyMetricsChanged();
+                NotifyQueueChanged();
+            }
+        });
+
         var progress = new Progress<DownloadProgress>(p =>
         {
             RunOnUi(() =>
@@ -628,12 +779,20 @@ public class DownloadQueueManager
 
         try
         {
-            await _downloadProvider.DownloadAsync(instance, progress, cts.Token).ConfigureAwait(true);
+            // Task.Run + ConfigureAwait(false): DepotDownloaderProvider.DownloadAsync has a
+            // synchronous path (no SourceArchivePath -> EnsureValidManifestsAsync never really
+            // awaits) that would otherwise run ContentDownloader.InitializeSteam3 on the UI
+            // thread. That call blocks on RunWaitCallbacks and, on a bad connection, on
+            // Thread.Sleep with a backoff of up to 10 retries — freezing the window for ~55s.
+            // Progress<T> and RunOnUi already marshal back to the UI thread, so nothing is lost.
+            await Task.Run(() => _downloadProvider.DownloadAsync(instance, progress, cts.Token), cts.Token)
+                .ConfigureAwait(false);
 
             RunOnUi(() =>
             {
                 job.JobStatus = DownloadJobStatus.Completed;
                 job.Percentage = 100;
+                job.Phase = "Completed";
                 job.StatusMessage = "Completed ✅";
                 job.CompletedAt = DateTimeOffset.Now;
                 job.NotifyMetricsChanged();
@@ -683,6 +842,54 @@ public class DownloadQueueManager
                     };
 
                     await _instanceManager.UpdateAsync(updatedInstance, CancellationToken.None).ConfigureAwait(false);
+
+                    // The depot files that just landed overwrote the pristine Steam binaries, so any
+                    // emulator / DLC unlocker that the update flow stripped beforehand has to be put
+                    // back on top of the NEW files. Doing it here (instead of in the update flow)
+                    // guarantees it also runs when the app is restarted mid-download and the job is
+                    // resumed later.
+                    if (updatedInstance.AwaitingPostUpdateRedeploy && _emulatorLifecycleService != null)
+                    {
+                        RunOnUi(() =>
+                        {
+                            job.Phase = "Installing";
+                            job.StatusMessage = "Reinstalling emulator and DLC unlocker...";
+                            job.NotifyMetricsChanged();
+                            NotifyQueueChanged();
+                        });
+
+                        try
+                        {
+                            var redeployProgress = new Progress<DeployProgress>(dp =>
+                                RunOnUi(() =>
+                                {
+                                    if (!string.IsNullOrWhiteSpace(dp.Message)) job.StatusMessage = dp.Message;
+                                    job.NotifyMetricsChanged();
+                                }));
+
+                            updatedInstance = await _emulatorLifecycleService
+                                .RestoreAfterGameUpdateAsync(updatedInstance, redeployProgress, CancellationToken.None)
+                                .ConfigureAwait(false);
+
+                            _logger.LogInformation("Post-update redeploy completed for {Game}", instance.Name);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Post-update redeploy failed for {Game}", instance.Name);
+                            _notificationService?.ShowError(
+                                "Reinstall Required",
+                                $"{instance.Name} was updated, but the emulator/DLC unlocker could not be reinstalled automatically. Reinstall them from the Emulator tab.");
+                        }
+                        finally
+                        {
+                            RunOnUi(() =>
+                            {
+                                job.StatusMessage = "Completed \u2705";
+                                job.NotifyMetricsChanged();
+                            });
+                        }
+                    }
+
                     job.Instance = updatedInstance;
                 }
                 catch (Exception ex)
@@ -705,10 +912,47 @@ public class DownloadQueueManager
             _logger.LogInformation("Download finished for {Game}", instance.Name);
             _notificationService?.ShowSuccess("Download Completed", $"{instance.Name} downloaded and installed successfully.");
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException oce)
         {
             bool wasPaused = _pausedInstances.TryRemove(instance.Id, out _) || job.IsPaused;
-            if (wasPaused)
+
+            // A cancellation that did NOT come from our own token is not a user action.
+            // DepotDownloader signals unrecoverable failures (manifest unavailable, CDN 403/404,
+            // "failed to find any server with chunk X") by cancelling its *internal* linked token
+            // and rethrowing OperationCanceledException. Reporting those as "canceled by user" is
+            // what makes downloads look like they stopped at 0% for no reason.
+            bool userRequested = wasPaused || cts.IsCancellationRequested;
+
+            if (!userRequested)
+            {
+                var detail = string.IsNullOrWhiteSpace(oce.Message) || oce is TaskCanceledException
+                    ? "The download was aborted by the depot downloader. This usually means a depot manifest or chunk could not be retrieved from the Steam CDN (missing/expired depot key, region block, or a network drop). Check the log for details and retry."
+                    : oce.Message;
+
+                RunOnUi(() =>
+                {
+                    job.JobStatus = DownloadJobStatus.Failed;
+                    job.StatusMessage = "Failed \u274C";
+                    job.ErrorDetail = detail;
+                    job.SpeedBytesPerSec = 0;
+                    job.WriteBytesPerSec = 0;
+                    job.CompletedAt = DateTimeOffset.Now;
+                    job.NotifyMetricsChanged();
+                    NotifyQueueChanged();
+                });
+
+                AddToLog(new DownloadLogEntry
+                {
+                    GameName = instance.Name,
+                    Status = DownloadJobStatus.Failed,
+                    Message = $"Download aborted: {detail}",
+                    Instance = instance
+                });
+
+                _logger.LogError(oce, "Download aborted (not user-initiated) for {Game}", instance.Name);
+                _notificationService?.ShowError("Download Failed", $"{instance.Name} could not be downloaded. {detail}");
+            }
+            else if (wasPaused)
             {
                 // Download was paused by user — do NOT log as canceled in Recent Activity!
                 RunOnUi(() =>
@@ -773,6 +1017,11 @@ public class DownloadQueueManager
         }
         finally
         {
+            if (gateTaken)
+            {
+                try { _downloadGate.Release(); } catch (SemaphoreFullException) { }
+            }
+
             _ctsMap.TryRemove(instance.Id, out _);
             _runningTasks.TryRemove(instance.Id, out _);
             tcs.TrySetResult();

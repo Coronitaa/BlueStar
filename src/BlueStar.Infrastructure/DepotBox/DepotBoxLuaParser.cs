@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using BlueStar.Core.Models;
 using Microsoft.Extensions.Logging;
 
@@ -269,54 +269,70 @@ public sealed partial class DepotBoxLuaParser
     {
         if (string.IsNullOrWhiteSpace(text)) return null;
 
-        if (text.Contains("64-bit", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("64bit", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("x64", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("Win64", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("amd64", StringComparison.OrdinalIgnoreCase))
+        // Whole-word matching, same reason as DetectPlatform: a title should not be able to
+        // smuggle an architecture in as a substring.
+        if (HasPattern(text, @"\b(?:64[\s-]?bit|x64|win64|amd64|x86[_-]64)\b"))
             return "64-bit";
 
-        if (text.Contains("32-bit", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("32bit", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("x86", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("Win32", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("i386", StringComparison.OrdinalIgnoreCase))
+        if (HasPattern(text, @"\b(?:32[\s-]?bit|x86|win32|i386|i686)\b"))
             return "32-bit";
 
         return null;
     }
 
+    /// <summary>
+    /// Infers a depot's platform from its DepotBox comment.
+    /// <para>
+    /// Matching is done on whole words. A naive <c>Contains("Mac")</c> tagged
+    /// "Main Windows Depot Anomalous Coffee Machine 2" as macOS, because "Ma-chine" contains
+    /// "Mac" — and that check ran before the Windows one, so the depot was mislabelled. Any game
+    /// whose title contains "mac" as a substring (Machine, Machinarium, Macabre…) hit this.
+    /// </para>
+    /// <para>
+    /// An explicit depot marker ("Windows Depot", "win64") outranks a bare word match, because a
+    /// title can legitimately mention another platform.
+    /// </para>
+    /// </summary>
     private static string DetectPlatform(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return "Universal";
 
-        if (text.Contains("Linux", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("Ubuntu", StringComparison.OrdinalIgnoreCase))
-            return "Linux";
-
-        if (text.Contains("Mac", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("macOS", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("OSX", StringComparison.OrdinalIgnoreCase))
-            return "macOS";
-
-        if (text.Contains("Windows", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("Win64", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("Win32", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("Win ", StringComparison.OrdinalIgnoreCase))
+        // 1. Explicit depot markers win outright.
+        if (HasPattern(text, @"\b(?:windows|win)\s*(?:depot|build|content|binaries)\b") ||
+            HasPattern(text, @"\bwin(?:32|64)\b"))
             return "Windows";
 
-        if (text.Contains("Shared", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("Common", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("Universal", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("Share", StringComparison.OrdinalIgnoreCase))
+        if (HasPattern(text, @"\b(?:linux|ubuntu|steamos)\s*(?:depot|build|content|binaries)\b"))
+            return "Linux";
+
+        if (HasPattern(text, @"\b(?:mac|macos|osx|darwin)\s*(?:depot|build|content|binaries)\b"))
+            return "macOS";
+
+        // 2. Whole-word platform names.
+        if (HasPattern(text, @"\b(?:linux|ubuntu|steamos)\b"))
+            return "Linux";
+
+        if (HasPattern(text, @"\b(?:mac|macos|mac\s?os|osx|os\s?x|darwin)\b"))
+            return "macOS";
+
+        if (HasPattern(text, @"\bwindows\b"))
+            return "Windows";
+
+        // 3. Shared / common content.
+        if (HasPattern(text, @"\b(?:shared|common|universal|share)\b"))
             return "Universal";
 
-        if (text.Contains("maindepot", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("main depot", StringComparison.OrdinalIgnoreCase))
+        // 4. An unqualified main depot is the Windows one in practice.
+        if (HasPattern(text, @"\bmain\s*depot\b") || HasPattern(text, @"\bmaindepot\b"))
             return "Windows";
 
         return "Universal";
     }
+
+    /// <summary>Case-insensitive whole-word regex test.</summary>
+    private static bool HasPattern(string text, string pattern) =>
+        System.Text.RegularExpressions.Regex.IsMatch(
+            text, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
     private static string? ExtractInlineComment(string line)
     {

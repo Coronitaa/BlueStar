@@ -1,4 +1,4 @@
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="clr-namespace:System;assembly=mscorlib">
 
@@ -270,8 +270,6 @@
     <sys:String x:Key="String_NewVersionDetectedDesc">Se detectó una nueva versión. Compara los manifests de los depósitos entre proveedores disponibles y descarga solo lo que cambió.</sys:String>
     <sys:String x:Key="String_CheckDepotBoxUpdatesBtn">Buscar Actualizaciones</sys:String>
     <sys:String x:Key="String_CheckForUpdatesBtn">Buscar Actualizaciones</sys:String>
-    <sys:String x:Key="String_ToggleTechnicalMode">Modo Técnico</sys:String>
-    <sys:String x:Key="String_ToggleTechnicalModeTooltip">Alternar manifests avanzados, versionado e inspección de claves criptográficas.</sys:String>
     <sys:String x:Key="String_PinManifestTooltip">Fijar versión del manifest para evitar auto-actualizaciones</sys:String>
     <sys:String x:Key="String_UnpinManifestTooltip">Desbloquear versión del manifest</sys:String>
     <sys:String x:Key="String_KeyStatusAvailable">Clave Disponible</sys:String>
@@ -325,8 +323,9 @@
     <sys:String x:Key="String_DeselectAllDlcs">Deseleccionar todo</sys:String>
     <sys:String x:Key="String_DlcsBottomNotice">Descarga archivos de contenido DLC (si son necesarios) y registra los emuladores/SmokeAPI automáticamente.</sys:String>
     <sys:String x:Key="String_DlcUnlockedBadge">🔓 Desbloqueado</sys:String>
-    <sys:String x:Key="String_InstanceAdvancedFilesTitle">Modo Técnico (Archivos y Manifiestos)</sys:String>
-    <sys:String x:Key="String_InstanceAdvancedFilesDesc">Habilita el versionado de manifiestos, inspección de depot keys, rutas de proveedores y selección de builds para esta instancia.</sys:String>
+    <sys:String x:Key="String_InstanceDisableUpdatesTitle">Desactivar búsqueda de actualizaciones</sys:String>
+    <sys:String x:Key="String_InstanceDisableUpdatesDesc">Evita que BlueStar busque nuevas versiones de este juego. El escaneo de la biblioteca lo omitirá, no aparecerá la insignia de actualización y la vista de detalle no comprobará automáticamente. Podés comprobar manualmente desde la pestaña Resumen.</sys:String>
+    <sys:String x:Key="String_InstanceDisableUpdatesOnBadge">Búsqueda de actualizaciones DESACTIVADA en esta instancia</sys:String>
     <sys:String x:Key="String_BepInExLoaderTitle">Cargador de Mods BepInEx</sys:String>
     <sys:String x:Key="String_BepInExDesc">Framework de modding e inyector de plugins para juegos de Unity (IL2CPP y Mono).</sys:String>
     <sys:String x:Key="String_InstallUpdateVersionBtn">Instalar / Actualizar Versión</sys:String>
@@ -444,6 +443,8 @@
     <sys:String x:Key="String_SaveSwitchBuildBtn">Guardar y Cambiar Versión</sys:String>
     <sys:String x:Key="String_DepotUpdatesModalTitle">Actualizaciones de Depots</sys:String>
     <sys:String x:Key="String_DepotUpdatesModalDesc">Se detectaron nuevos manifiestos en DepotBox para este juego.</sys:String>
+    <sys:String x:Key="String_DepotUpdateCurrentLabel">Instalado</sys:String>
+    <sys:String x:Key="String_DepotUpdateNewLabel">Disponible</sys:String>
     <sys:String x:Key="String_SelectDepotsToUpdateLabel">Selecciona los depots que deseas actualizar:</sys:String>
     <sys:String x:Key="String_GameRunningWarning">El juego está en ejecución actualmente. Por favor ciérralo antes de instalar la actualización.</sys:String>
     <sys:String x:Key="String_GameRunningUpdateWarn">El juego está en ejecución actualmente. Por favor ciérralo antes de instalar la actualización.</sys:String>
@@ -555,4 +556,141 @@
     <sys:String x:Key="String_RemoveDownloadModalTitle">Eliminar Descarga</sys:String>
     <sys:String x:Key="String_RemoveDownloadModalDesc">¿Estás seguro de que deseas eliminar esta descarga de la cola? Se limpiarán los archivos temporales incompletos de esta sesión.</sys:String>
     <sys:String x:Key="String_RemoveDownloadConfirmBtn">Eliminar de la Cola</sys:String>
+
+    <!-- ══ Instance detail: navigation rail & version modes ══ -->
+    <sys:String x:Key="String_TabVersion">Versión del juego</sys:String>
+    <sys:String x:Key="String_RailOverview">Resumen</sys:String>
+    <sys:String x:Key="String_RailVersion">Versión</sys:String>
+    <sys:String x:Key="String_RailDlcs">DLCs</sys:String>
+    <sys:String x:Key="String_RailMods">Mods</sys:String>
+    <sys:String x:Key="String_RailEmulator">Emul.</sys:String>
+    <sys:String x:Key="String_RailPrereq">Prereq.</sys:String>
+    <sys:String x:Key="String_RailSettings">Ajustes</sys:String>
+    <sys:String x:Key="String_RailLogs">Log</sys:String>
+    <sys:String x:Key="String_RailBadgeUpdate">Hay una build más reciente disponible</sys:String>
+    <sys:String x:Key="String_RailBadgeEmulator">Hay una capa de emulación activa</sys:String>
+    <sys:String x:Key="String_VersionPaneTitle">¿Qué versión querés instalar?</sys:String>
+    <sys:String x:Key="String_VersionPaneDesc">Elegí un modo. Los DLC se descargan aparte, desde su propia pestaña.</sys:String>
+    <sys:String x:Key="String_VersionModeLatest">Última</sys:String>
+    <sys:String x:Key="String_VersionModeLatestDesc">La build más reciente. Se mantiene actualizada.</sys:String>
+    <sys:String x:Key="String_VersionModeCurated">Recomendada</sys:String>
+    <sys:String x:Key="String_VersionModeCuratedDesc">Build validada por la comunidad. No se actualiza.</sys:String>
+    <sys:String x:Key="String_VersionModeRollback">Anterior</sys:String>
+    <sys:String x:Key="String_VersionModeRollbackDesc">Volver a una build que ya tuviste instalada.</sys:String>
+    <sys:String x:Key="String_VersionModeCustom">Personalizada</sys:String>
+    <sys:String x:Key="String_VersionModeCustomDesc">Elegir el manifiesto de cada depot a mano.</sys:String>
+    <sys:String x:Key="String_VersionAutoBadge">AUTO</sys:String>
+    <sys:String x:Key="String_VersionToggleDetail">Ver detalle</sys:String>
+    <sys:String x:Key="String_VersionUpdatesLabel">Actualizaciones</sys:String>
+    <sys:String x:Key="String_VersionUpdatesOnDesc">BlueStar avisará cuando Steam publique una build nueva.</sys:String>
+    <sys:String x:Key="String_VersionUpdatesOnBadge">ACTIVADAS</sys:String>
+    <sys:String x:Key="String_VersionUpdatesOffDesc">La búsqueda de actualizaciones queda desactivada para no pisar la build fijada.</sys:String>
+    <sys:String x:Key="String_VersionDepotsSelectedSuffix"> depot(s) seleccionados</sys:String>
+    <sys:String x:Key="String_VersionLayersNotice">El emulador y el DLC unlocker se quitan antes de escribir y se reinstalan al terminar la descarga. Los mods, BepInEx y las partidas guardadas no se tocan.</sys:String>
+    <sys:String x:Key="String_VersionAutoSelectedFormat">{0} depot(s) elegidos para {1}</sys:String>
+    <sys:String x:Key="String_VersionAutoSkippedFormat">{0} depot(s) omitidos: otras plataformas, otras arquitecturas y contenido de DLC</sys:String>
+    <sys:String x:Key="String_VersionAutoSkippedNone">Todos los depots de este juego aplican a tu sistema.</sys:String>
+    <sys:String x:Key="String_VersionUnknownBuild">última disponible</sys:String>
+    <sys:String x:Key="String_VersionCuratedBadge">CURADA</sys:String>
+    <sys:String x:Key="String_VersionCuratedEmulatorLabel">Emulador</sys:String>
+    <sys:String x:Key="String_VersionCuratedPinnedLabel">Manifiestos fijados</sys:String>
+    <sys:String x:Key="String_VersionCuratedApplyTitle">Fijar esta instancia en la build curada</sys:String>
+    <sys:String x:Key="String_VersionCuratedApplyDesc">Se desactivará la búsqueda de actualizaciones para que la build quede exactamente donde la dejó el curador.</sys:String>
+    <sys:String x:Key="String_VersionCuratedApplyBtn">Fijar esta versión</sys:String>
+    <sys:String x:Key="String_VersionCuratedNoSummary">Una build que la comunidad verificó como estable para este juego.</sys:String>
+    <sys:String x:Key="String_VersionCuratedNoEmulator">no hace falta ninguno</sys:String>
+    <sys:String x:Key="String_VersionCuratedAppliedTitle">Versión fijada</sys:String>
+    <sys:String x:Key="String_VersionCuratedAppliedFormat">✅ Fijado en la build curada {0}. La búsqueda de actualizaciones quedó desactivada.</sys:String>
+    <sys:String x:Key="String_VersionRollbackDesc">Builds que esta instancia tuvo instaladas. Se reconstruyen con los manifiestos que quedaron en caché.</sys:String>
+    <sys:String x:Key="String_VersionRollbackEmptyTitle">Todavía no hay builds anteriores registradas</sys:String>
+    <sys:String x:Key="String_VersionRollbackEmptyDesc">La primera vez que actualices este juego, la build que deja se registra acá para que puedas volver a ella.</sys:String>
+    <sys:String x:Key="String_VersionRollbackBtn">Volver a esta</sys:String>
+    <sys:String x:Key="String_VersionRollbackHint">Los manifiestos viven en %APPDATA%\BlueStar\instances\{id}\manifests. Una entrada incompleta se puede recuperar buscando el manifiesto desde el modo Personalizada.</sys:String>
+    <sys:String x:Key="String_VersionRollbackStartedTitle">Volviendo atrás</sys:String>
+    <sys:String x:Key="String_VersionRollbackStartedFormat">⏪ Volviendo a la build {0}. Se desactivó la búsqueda de actualizaciones.</sys:String>
+    <sys:String x:Key="String_VersionRollbackFailedTitle">No se pudo volver atrás</sys:String>
+    <sys:String x:Key="String_GameRunningTitle">El juego está abierto</sys:String>
+    <sys:String x:Key="String_GameRunningRollbackDesc">Cerrá el juego antes de volver a otra versión.</sys:String>
+    <sys:String x:Key="String_VersionCustomBuildIdLabel">Build ID</sys:String>
+    <sys:String x:Key="String_VersionCustomBuildNameLabel">Nombre (opcional)</sys:String>
+    <sys:String x:Key="String_VersionCustomColDepot">DEPOT</sys:String>
+    <sys:String x:Key="String_VersionCustomColManifest">MANIFIESTO</sys:String>
+    <sys:String x:Key="String_VersionCustomColState">ESTADO</sys:String>
+    <sys:String x:Key="String_VersionCustomDropHint">Arrastrá archivos .manifest o un .zip de DepotBox acá para rellenar la tabla automáticamente</sys:String>
+    <sys:String x:Key="String_VersionCustomFooterDesc">Guardar conserva la configuración sin descargar nada.</sys:String>
+    <sys:String x:Key="String_VersionCustomSaveBtn">Guardar sin descargar</sys:String>
+    <sys:String x:Key="String_VersionCustomDownloadBtn">Descargar build</sys:String>
+    <sys:String x:Key="String_VersionCustomNoDepots">Esta instancia no tiene depots para configurar.</sys:String>
+    <sys:String x:Key="String_VersionCustomBadIdFormat">Depot {0}: “{1}” no es un id de manifiesto válido.</sys:String>
+    <sys:String x:Key="String_VersionCustomShortIdFormat">Depot {0}: el id de manifiesto tiene {1} dígitos; los de Steam tienen 19. Parece un pegado incompleto.</sys:String>
+    <sys:String x:Key="String_VersionCustomReadyFormat">{0} de {1} depots listos</sys:String>
+    <sys:String x:Key="String_VersionCustomAllValid">Todos los depots tienen un id de manifiesto válido.</sys:String>
+    <sys:String x:Key="String_VersionCustomInvalidTitle">Configuración de manifiestos inválida</sys:String>
+    <sys:String x:Key="String_VersionCustomStartedFormat">⬇ Descargando la build personalizada {0} ({1} depot(s)).</sys:String>
+    <sys:String x:Key="String_VersionCustomFailedTitle">Falló la build personalizada</sys:String>
+    <sys:String x:Key="String_ShieldSafeTitle">Emulador seguro y verificado</sys:String>
+    <sys:String x:Key="String_ShieldSafeB1">• Código 100 % abierto</sys:String>
+    <sys:String x:Key="String_ShieldSafeB2">• Pasa limpio los análisis de los principales antivirus</sys:String>
+    <sys:String x:Key="String_ShieldSafeB3">• Detecciones falsas positivas casi nulas</sys:String>
+    <sys:String x:Key="String_ShieldWarnTitle">Fix de terceros de código cerrado</sys:String>
+    <sys:String x:Key="String_ShieldWarnB1">• Muy popular y ampliamente usado por la comunidad</sys:String>
+    <sys:String x:Key="String_ShieldWarnB2">• Binarios de terceros de código cerrado</sys:String>
+    <sys:String x:Key="String_ShieldWarnB3">• El código está ofuscado / empaquetado</sys:String>
+    <sys:String x:Key="String_ShieldWarnB4">• Requiere una exclusión en Windows Defender para funcionar</sys:String>
+
+
+    <!-- ══ Overview: Steam showcase ══ -->
+    <sys:String x:Key="String_ManifestNeedsFetch">hay que buscarlo</sys:String>
+    <sys:String x:Key="String_OverviewStatusTitle">Estado actual</sys:String>
+    <sys:String x:Key="String_OverviewStatusDesc">Lo que esta instancia tiene instalado ahora mismo.</sys:String>
+    <sys:String x:Key="String_OverviewUpdateBadge">ACTUALIZACIÓN</sys:String>
+    <sys:String x:Key="String_OverviewActiveBadge">ACTIVO</sys:String>
+    <sys:String x:Key="String_OverviewUnlockerLabel">DLC unlocker</sys:String>
+    <sys:String x:Key="String_OverviewNoEmulator">Ninguno instalado</sys:String>
+    <sys:String x:Key="String_OverviewNoUnlocker">No instalado</sys:String>
+    <sys:String x:Key="String_OverviewNoMods">Ninguno instalado</sys:String>
+    <sys:String x:Key="String_OverviewUnlockerFormat">SmokeAPI · {0} de {1} DLC</sys:String>
+    <sys:String x:Key="String_OverviewModsFormat">{0}{1} mod(s)</sys:String>
+    <sys:String x:Key="String_OverviewGenresLabel">Géneros</sys:String>
+    <sys:String x:Key="String_OverviewSizeLabel">En disco</sys:String>
+    <sys:String x:Key="String_OverviewStorePageBtn">Página de Steam ↗</sys:String>
+    <sys:String x:Key="String_OverviewMetacriticLabel">Metacritic</sys:String>
+    <sys:String x:Key="String_OverviewMetacriticTooltip">Puntuación de Metacritic según la página de Steam</sys:String>
+    <sys:String x:Key="String_OverviewMediaTitle">Capturas</sys:String>
+    <sys:String x:Key="String_OverviewMediaDesc">Material de la tienda, directo desde Steam.</sys:String>
+    <sys:String x:Key="String_OverviewNewsTitle">Notas de parche y anuncios</sys:String>
+    <sys:String x:Key="String_OverviewNewsDesc">Lo último que Steam publicó de este juego. Las notas de parche van primero.</sys:String>
+    <sys:String x:Key="String_OverviewPatchNoteBadge">NOTAS DE PARCHE</sys:String>
+    <sys:String x:Key="String_OverviewReadOnSteamBtn">Leer en Steam ↗</sys:String>
+
+
+    <!-- ══ Version: saved custom builds ══ -->
+    <sys:String x:Key="String_VersionPresetsTitle">Tus builds guardadas</sys:String>
+    <sys:String x:Key="String_VersionPresetsDesc">Conjuntos de manifiestos que guardaste. Hacé clic en uno para cargarlo en la tabla de abajo.</sys:String>
+    <sys:String x:Key="String_VersionPresetApplyTooltip">Cargar este conjunto de manifiestos en la tabla</sys:String>
+    <sys:String x:Key="String_VersionPresetDeleteTooltip">Quitar esta build guardada</sys:String>
+    <sys:String x:Key="String_VersionCustomSavedFormat">✅ Build personalizada “{0}” guardada. Podés recuperarla cuando quieras desde las burbujas de arriba.</sys:String>
+    <sys:String x:Key="String_VersionCustomPresetAppliedFormat">📋 Cargada “{0}” — {1} depot(s) completados.</sys:String>
+    <sys:String x:Key="String_VersionCustomPresetDeletedFormat">🗑 Se quitó la build guardada “{0}”.</sys:String>
+
+
+    <!-- ══ Overview: store tags ══ -->
+    <sys:String x:Key="String_OverviewTagsTitle">Etiquetas</sys:String>
+    <sys:String x:Key="String_OverviewTagsDesc">Cómo está clasificado este juego en Steam, agrupado según de dónde viene cada etiqueta.</sys:String>
+    <sys:String x:Key="String_OverviewTagsGenres">Géneros</sys:String>
+    <sys:String x:Key="String_OverviewTagsFeatures">Características de Steam</sys:String>
+    <sys:String x:Key="String_OverviewTagsCommunity">Etiquetas de la comunidad</sys:String>
+
+
+    <!-- ══ Overview: storage & gallery ══ -->
+    <sys:String x:Key="String_OverviewEngineLabel">Motor</sys:String>
+    <sys:String x:Key="String_OverviewStorageTitle">Almacenamiento</sys:String>
+    <sys:String x:Key="String_OverviewMeterThisGame">Este juego</sys:String>
+    <sys:String x:Key="String_OverviewMeterOther">El resto del disco</sys:String>
+    <sys:String x:Key="String_OverviewDriveFreeFormat">{0} libres de {1}</sys:String>
+    <sys:String x:Key="String_OverviewScreenshotTooltip">Ver esta captura</sys:String>
+
+
+    <sys:String x:Key="String_DepotUpdatePendingFormat">{0} depot(s) tienen manifiestos más nuevos disponibles.</sys:String>
+
 </ResourceDictionary>

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -46,7 +46,7 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     [ObservableProperty]
-    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.2.3";
+    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.4.0";
 
     [ObservableProperty]
     private string _defaultApiUrl = "https://depotbox.org";
@@ -105,14 +105,6 @@ public partial class SettingsViewModel : ObservableObject
     partial void OnShowDrmContentChanged(bool value)
     {
         _ = _appSettings.SetShowDrmContentAsync(value);
-    }
-
-    [ObservableProperty]
-    private bool _enableAdvancedBuildOptions;
-
-    partial void OnEnableAdvancedBuildOptionsChanged(bool value)
-    {
-        _ = _appSettings.SetEnableAdvancedBuildOptionsAsync(value);
     }
 
     [ObservableProperty]
@@ -179,7 +171,6 @@ public partial class SettingsViewModel : ObservableObject
         DeleteDepotsAfterInstall = _appSettings.DeleteDepotsAfterInstall;
         ShowNsfwContent = _appSettings.ShowNsfwContent;
         ShowDrmContent = _appSettings.ShowDrmContent;
-        EnableAdvancedBuildOptions = _appSettings.EnableAdvancedBuildOptions;
         EnableExperimentalMods = _appSettings.EnableExperimentalMods;
         CheckSystemRequirementsOnStartup = _appSettings.CheckSystemRequirementsOnStartup;
 

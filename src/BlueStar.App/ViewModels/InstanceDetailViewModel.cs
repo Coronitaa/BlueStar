@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -42,7 +42,51 @@ public partial class CustomDepotManifestItem : ObservableObject
 }
 
 /// <summary>
-/// Represents a known manifest revision option for a depot in technical mode.
+/// A previously installed build offered for rollback, together with whether it can still be
+/// restored from the manifests that remain in the cache.
+/// </summary>
+public partial class RollbackBuildItem : ObservableObject
+{
+    public required InstalledBuildSnapshot Snapshot { get; init; }
+
+    /// <summary>Gets how many of the build's manifests are still available locally.</summary>
+    public int CachedManifestCount { get; init; }
+
+    /// <summary>Gets how many manifests the build needs in total.</summary>
+    public int TotalManifestCount { get; init; }
+
+    /// <summary>Gets whether this entry is the build currently installed.</summary>
+    public bool IsCurrentBuild { get; init; }
+
+    /// <summary>Gets the depots whose manifest could not be found.</summary>
+    public IReadOnlyList<uint> MissingDepotIds { get; init; } = [];
+
+    public string BuildId => Snapshot.BuildId;
+    public string DateText => Snapshot.FormattedDate;
+    public string SizeText => Snapshot.FormattedSize;
+    public string InstalledAtText => Snapshot.InstalledAt.LocalDateTime.ToString("d MMM yyyy");
+
+    public string TitleText => $"{Snapshot.BuildId} · {Snapshot.FormattedDate}";
+
+    /// <summary>Gets whether every manifest this build needs is recoverable.</summary>
+    public bool IsFullyCached => TotalManifestCount > 0 && CachedManifestCount >= TotalManifestCount;
+
+    /// <summary>Gets whether the rollback button is offered for this entry.</summary>
+    public bool CanRestore => IsFullyCached && !IsCurrentBuild;
+
+    public string CacheBadgeText => IsCurrentBuild
+        ? "current"
+        : $"{CachedManifestCount}/{TotalManifestCount} cached";
+
+    public string DetailText => IsCurrentBuild
+        ? $"installed {InstalledAtText} · {TotalManifestCount} depots · {SizeText}"
+        : IsFullyCached
+            ? $"installed {InstalledAtText} · {TotalManifestCount} depots · {SizeText}"
+            : $"missing manifests for depot(s) {string.Join(", ", MissingDepotIds)}";
+}
+
+/// <summary>
+/// Represents a known manifest revision option for a depot in the custom build editor.
 /// </summary>
 public record DepotManifestOption
 {
@@ -51,11 +95,35 @@ public record DepotManifestOption
     public string Source { get; init; } = string.Empty;
     public string BranchName { get; init; } = string.Empty;
     public string BuildId { get; init; } = string.Empty;
-    public override string ToString() => DisplayText;
+
+    /// <summary>
+    /// Gets whether this manifest can be obtained right now — it is in the local cache or some
+    /// provider advertises a route to it. Options WITHOUT backing are still listed on purpose:
+    /// the user can pick one and then go looking for it.
+    /// </summary>
+    public bool IsBacked { get; init; }
+
+    /// <summary>
+    /// Gets the bare numeric id. This is what an editable ComboBox must put in its text box —
+    /// binding the text to <see cref="DisplayText"/> wrote "12345 (Current - Steam)" into the
+    /// field and made every manifest look invalid.
+    /// </summary>
+    public string ManifestIdString => ManifestId.ToString();
+
+    /// <summary>Gets a short note about where the manifest would come from.</summary>
+    public string AvailabilityNote => IsBacked ? Source : "not downloaded yet";
+
+    /// <summary>
+    /// An editable ComboBox falls back to ToString() for the text it puts in its edit box, and
+    /// that text is bound straight to the value we validate. Returning the label here is what made
+    /// a freshly opened Custom tab report "Current build · from Steam" as an invalid manifest id,
+    /// so the bare id is what this returns; the dropdown keeps using DisplayText via its template.
+    /// </summary>
+    public override string ToString() => ManifestIdString;
 }
 
 /// <summary>
-/// Model for a depot item with selection state and technical manifest versioning in the UI.
+/// Model for a depot item with selection state and manifest versioning in the UI.
 /// </summary>
 public partial class SelectableDepotItem : ObservableObject
 {
@@ -118,9 +186,14 @@ public partial class SelectableDepotItem : ObservableObject
         }
     }
 
+    /// <summary>Raised so the owning view model can re-run custom-build validation as you type.</summary>
+    public Action? OnManifestTextChanged { get; set; }
+
     partial void OnManifestInputTextChanged(string value)
     {
-        if (ulong.TryParse(value?.Trim(), out var parsedId))
+        OnManifestTextChanged?.Invoke();
+
+        if (InstanceDetailViewModel.TryParseManifestId(value, out var parsedId))
         {
             var match = KnownManifestVersions.FirstOrDefault(o => o.ManifestId == parsedId);
             if (match != null && SelectedManifestOption != match)
@@ -134,6 +207,14 @@ public partial class SelectableDepotItem : ObservableObject
     public bool IsDownloaded => Depot?.IsDownloaded ?? false;
 
     public void NotifyDownloadedChanged() => OnPropertyChanged(nameof(IsDownloaded));
+
+    /// <summary>Re-raises the platform/architecture badges after a depot correction.</summary>
+    public void NotifyPlatformChanged()
+    {
+        OnPropertyChanged(nameof(PlatformTag));
+        OnPropertyChanged(nameof(ArchitectureTag));
+        OnPropertyChanged(nameof(CategoryTag));
+    }
 
     public ulong ManifestId => Depot?.ManifestId ?? 0;
     public string ManifestIdText => Depot?.ManifestId > 0 ? Depot.ManifestId.ToString() : "Latest";
@@ -586,7 +667,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     private string _installedVersionText = "Not installed";
 
     [ObservableProperty]
-    private string _latestVersionText = "Checking...";
+    private string _latestVersionText = CheckingSentinel;
 
     [ObservableProperty]
     private DateTimeOffset? _installedVersionDate;
@@ -599,6 +680,13 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private bool _isCheckingGameUpdate;
+
+    /// <summary>
+    /// True once a depot scan has found manifests newer than the installed ones. Survives closing
+    /// the update modal, so dismissing the dialog no longer counts as having installed the update.
+    /// </summary>
+    [ObservableProperty]
+    private bool _hasPendingDepotUpdate;
 
     [ObservableProperty]
     private bool _isUpdateModalOpen;
@@ -877,6 +965,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     private ObservableCollection<GameBuildInfo> _availableBuilds = [];
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LatestBuildIdText))]
+    [NotifyPropertyChangedFor(nameof(LatestBuildBranchText))]
+    [NotifyPropertyChangedFor(nameof(LatestBuildDateText))]
     private GameBuildInfo? _selectedBuild;
 
     [ObservableProperty]
@@ -900,32 +991,37 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _isCommunityLinksMenuOpen;
 
+    /// <summary>
+    /// When true, BlueStar stops looking for new builds for this instance (background library scan,
+    /// automatic detail-view checks and update badges). Manual checks stay available.
+    /// </summary>
     [ObservableProperty]
-    private bool _enableAdvancedBuildOptions;
+    private bool _disableUpdateChecks;
 
-    partial void OnEnableAdvancedBuildOptionsChanged(bool value)
+    partial void OnDisableUpdateChecksChanged(bool value)
     {
-        if (Instance != null && Instance.EnableAdvancedBuildOptions != value)
-        {
-            Instance = Instance with { EnableAdvancedBuildOptions = value };
-            _ = _instanceManager.UpdateAsync(Instance, CancellationToken.None);
-        }
-    }
+        if (Instance == null || Instance.DisableUpdateChecks == value) return;
 
-    [RelayCommand]
-    public async Task ToggleTechnicalModeAsync()
-    {
-        EnableAdvancedBuildOptions = !EnableAdvancedBuildOptions;
-        if (Instance != null)
+        Instance = Instance with
         {
-            Instance = Instance with { EnableAdvancedBuildOptions = EnableAdvancedBuildOptions };
-            await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(false);
-        }
-        StatusMessage = EnableAdvancedBuildOptions
-            ? "⚙ Technical Mode enabled: manifest versioning, encryption key inspection, and provider routes active."
-            : "✓ Standard Mode enabled: simplified depot view.";
-    }
+            DisableUpdateChecks = value,
+            // Clearing the flag as soon as checks are disabled stops stale "update available"
+            // badges from sticking around forever in the library.
+            HasUpdateAvailable = value ? false : Instance.HasUpdateAvailable,
+            UpdateDescription = value ? null : Instance.UpdateDescription
+        };
 
+        if (value)
+        {
+            HasGameUpdateAvailable = false;
+        }
+
+        _ = _instanceManager.UpdateAsync(Instance, CancellationToken.None);
+
+        StatusMessage = value
+            ? "🔕 Update checks disabled for this instance."
+            : "🔔 Update checks enabled for this instance.";
+    }
 
     // ── Download progress exposed to UI ──
     [ObservableProperty]
@@ -1046,6 +1142,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     private readonly IDepotKeyRepository? _depotKeyRepository;
     private readonly IManifestCacheService? _manifestCacheService;
     private readonly ICacheService? _cacheService;
+    private readonly IRecommendationProvider? _recommendationProvider;
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, InstanceSessionVerificationState> _verifiedInstancesThisSession = new();
 
@@ -1090,7 +1187,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         IDepotKeyRepository? depotKeyRepository = null,
         IManifestCacheService? manifestCacheService = null,
         ILocalizationService? localizationService = null,
-        ICacheService? cacheService = null)
+        ICacheService? cacheService = null,
+        IRecommendationProvider? recommendationProvider = null)
     {
         _instanceManager = instanceManager;
         _dlcInstaller = dlcInstaller;
@@ -1122,6 +1220,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         _manifestCacheService = manifestCacheService;
         _localizationService = localizationService;
         _cacheService = cacheService;
+        _recommendationProvider = recommendationProvider;
         _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
         if (_localizationService != null)
@@ -1424,7 +1523,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             InstanceAlias = Instance.Name ?? string.Empty;
             CustomLaunchArgs = Instance.LaunchArguments ?? string.Empty;
             IsUnityEngine = Instance.Engine?.Type == EngineType.Unity;
-            EnableAdvancedBuildOptions = Instance.EnableAdvancedBuildOptions;
+            DisableUpdateChecks = Instance.DisableUpdateChecks;
 
             IReadOnlyDictionary<uint, string> knownKeys = new Dictionary<uint, string>();
             if (_depotKeyRepository != null && Instance.Depots.Count > 0)
@@ -1454,7 +1553,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                         AvailabilityBadgeColor = isCached ? "#10B981" : "#94A3B8",
                         AvailabilityChecker = CheckDepotManifestAvailabilityAsync,
                         OnSelectionChanged = RecalculateSelectedSize,
-                        OnManifestUpdated = HandleDepotManifestUpdated
+                        OnManifestUpdated = HandleDepotManifestUpdated,
+                        OnManifestTextChanged = RecomputeCustomBuildValidation
                     };
                 }).ToList();
 
@@ -1542,9 +1642,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                             LatestVersionDate = cachedState.LatestDate.Value;
                             LatestVersionText = cachedState.LatestDateText ?? "Unknown";
                         }
-                        else if (!string.IsNullOrWhiteSpace(cachedState.LatestDateText))
+                        else if (!IsCheckingPlaceholder(cachedState.LatestDateText))
                         {
-                            LatestVersionText = cachedState.LatestDateText;
+                            LatestVersionText = cachedState.LatestDateText!;
                         }
 
                         if (cachedState.InstalledDate.HasValue && !InstalledVersionDate.HasValue)
@@ -1560,13 +1660,21 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             }
 
             // Single verification per instance per session
-            bool alreadyVerifiedThisSession = _verifiedInstancesThisSession.TryGetValue(Instance.Id, out var sessionState);
+            // A session entry without a real date is not a verification — re-check instead of
+            // replaying a placeholder.
+            bool alreadyVerifiedThisSession =
+                _verifiedInstancesThisSession.TryGetValue(Instance.Id, out var sessionState) &&
+                sessionState is { LatestDate: not null } &&
+                !IsCheckingPlaceholder(sessionState.LatestDateText);
+
             if (alreadyVerifiedThisSession && sessionState != null)
             {
                 if (sessionState.LatestDate.HasValue)
                 {
                     LatestVersionDate = sessionState.LatestDate.Value;
-                    LatestVersionText = sessionState.LatestDateText ?? "Unknown";
+                    LatestVersionText = IsCheckingPlaceholder(sessionState.LatestDateText)
+                        ? GetString("String_VersionLookupUnknown", "Unknown")
+                        : sessionState.LatestDateText!;
                 }
                 if (sessionState.InstalledDate.HasValue)
                 {
@@ -1584,7 +1692,32 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             _ = LoadAvailableBuildsAsync();
             _ = EnrichDepotsFromSteamDbAsync();
 
-            if (autoCheckDepotUpdates && !alreadyVerifiedThisSession)
+            // ── Overview: Steam showcase + on-disk size ──
+            _ = LoadSteamShowcaseAsync();
+            _ = RefreshInstalledSizeAsync();
+            NotifyOverviewProps();
+
+            // ── Version tab: prime the four modes ──
+            CustomVersionBuildId = Instance.ActiveBuildId ?? string.Empty;
+            RefreshRollbackBuilds();
+            RefreshSavedCustomBuilds();
+            RecomputeCustomBuildValidation();
+            _ = LoadCurationRecommendationAsync();
+
+            // A pinned instance opens on the mode that pinned it, so the UI reflects reality
+            // instead of offering "Latest" over a build the user deliberately froze.
+            if (Instance.IsBuildPinned && VersionMode == VersionModeLatest)
+            {
+                VersionMode = string.Equals(Instance.ActiveBranch, "custom", StringComparison.OrdinalIgnoreCase)
+                    ? VersionModeCustom
+                    : VersionModeRollback;
+            }
+            else if (VersionMode == VersionModeLatest)
+            {
+                ApplyLatestAutoSelection();
+            }
+
+            if (autoCheckDepotUpdates && !alreadyVerifiedThisSession && !Instance.DisableUpdateChecks)
             {
                 _ = CheckAndOpenDepotUpdateModalAsync();
             }
@@ -1707,15 +1840,28 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
                     string? newSteamDbName = string.IsNullOrWhiteSpace(meta.Name) ? null : meta.Name.Trim();
 
+                    // SteamCMD's config.oslist is authoritative, so let it correct a platform that
+                    // was guessed from the depot's DepotBox comment. This also repairs instances
+                    // saved before the comment parser learned to match whole words.
+                    var newPlatform = MapOsListToPlatform(meta.OsList)
+                        ?? PlatformFromDepotName(newSteamDbName)
+                        ?? PlatformFromDepotName(item.Depot.Name)
+                        ?? item.Depot.Platform;
+
                     // Skip if nothing changed
-                    if (item.Depot.SteamDbName == newSteamDbName && item.Depot.IsRecommended == isRecommended)
+                    if (item.Depot.SteamDbName == newSteamDbName &&
+                        item.Depot.IsRecommended == isRecommended &&
+                        string.Equals(item.Depot.Platform, newPlatform, StringComparison.Ordinal))
                         continue;
 
                     item.Depot = item.Depot with
                     {
                         SteamDbName = newSteamDbName,
-                        IsRecommended = isRecommended
+                        IsRecommended = isRecommended,
+                        Platform = newPlatform
                     };
+
+                    item.NotifyPlatformChanged();
 
                     // Auto-select recommended depots that were not yet selected
                     if (isRecommended && !item.IsSelected)
@@ -1727,7 +1873,21 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 }
 
                 if (anyChange)
+                {
                     RecalculateSelectedSize();
+
+                    // Persist the corrected depot metadata, otherwise the wrong platform comes
+                    // back from storage on the next launch.
+                    if (Instance != null)
+                    {
+                        var corrected = Instance.Depots
+                            .Select(d => Depots.FirstOrDefault(x => x.Depot.DepotId == d.DepotId)?.Depot ?? d)
+                            .ToList();
+
+                        Instance = Instance with { Depots = corrected.AsReadOnly() };
+                        _ = _instanceManager.UpdateAsync(Instance, CancellationToken.None);
+                    }
+                }
 
             }, null);
         }
@@ -1738,9 +1898,24 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     }
 
 
-    private async Task CheckSteamVersionDateAsync()
+    /// <param name="allowClearingUpdateFlag">
+    /// When false the lookup may raise "update available" but never lower it. The depot-manifest
+    /// check is the authoritative source for whether an update can actually be applied; letting
+    /// this coarser date comparison clear the flag is what made opening and closing the update
+    /// modal mark the game as already updated.
+    /// </param>
+    private async Task CheckSteamVersionDateAsync(bool userInitiated = false, bool allowClearingUpdateFlag = true)
     {
         if (_isDisposed || Instance == null || Instance.AppId == 0) return;
+
+        // Per-instance opt-out: never poll providers automatically for this game.
+        if (Instance.DisableUpdateChecks && !userInitiated)
+        {
+            HasGameUpdateAvailable = false;
+            LatestVersionText = GetString("String_VersionLookupDisabled", "Checks disabled");
+            return;
+        }
+
         try
         {
             if (_metadataProvider is BlueStar.Infrastructure.Metadata.SteamStoreApiClient steamClient)
@@ -1787,34 +1962,55 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 }
                 else if (status == UpdateCheckStatus.UpToDate)
                 {
-                    HasGameUpdateAvailable = false;
-                    if (Instance.HasUpdateAvailable)
+                    // Providers can hold newer manifests for a build Steam already dates as
+                    // current, so "same date" does not mean "nothing to download".
+                    bool depotUpdatePending = HasPendingDepotUpdate || UpdateAvailableDepots.Count > 0;
+
+                    if (allowClearingUpdateFlag && !depotUpdatePending)
                     {
-                        Instance = Instance with { HasUpdateAvailable = false };
-                        await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+                        HasGameUpdateAvailable = false;
+                        if (Instance.HasUpdateAvailable)
+                        {
+                            Instance = Instance with { HasUpdateAvailable = false };
+                            await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+                        }
                     }
                 }
                 // When status is UpdateCheckStatus.Unknown, preserve existing known state
 
-                // Record verification state for this session and persist to disk cache
+                // Record verification state for this session and persist to disk cache.
+                // A lookup that produced no date is not an answer worth remembering for 30 days —
+                // caching it is what made the placeholder stick permanently.
+                bool worthCaching = latestDate.HasValue && !IsCheckingPlaceholder(latestDateText);
+
                 var state = new InstanceSessionVerificationState(
                     DateTimeOffset.UtcNow,
                     status,
                     null,
                     latestDate,
-                    LatestVersionText,
+                    latestDate.HasValue ? LatestVersionText : null,
                     installedDate,
                     InstalledVersionText);
 
-                _verifiedInstancesThisSession[Instance.Id] = state;
-
-                if (_cacheService != null)
+                if (worthCaching)
                 {
-                    _ = _cacheService.SetAsync($"instance_update_state_{Instance.Id}", state, TimeSpan.FromDays(30), CancellationToken.None);
+                    _verifiedInstancesThisSession[Instance.Id] = state;
+
+                    if (_cacheService != null)
+                    {
+                        _ = _cacheService.SetAsync($"instance_update_state_{Instance.Id}", state, TimeSpan.FromDays(30), CancellationToken.None);
+                    }
                 }
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Steam version lookup failed for AppId {AppId}", Instance?.AppId);
+        }
+        finally
+        {
+            if (!_isDisposed) SettleVersionTexts();
+        }
     }
 
     /// <summary>
@@ -1834,6 +2030,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             _ = _cacheService.RemoveAsync($"steamcmd_depotinfo_{Instance.AppId}_v3");
             _ = _cacheService.RemoveAsync($"steam_latest_update_{Instance.AppId}_v3");
         }
+
+        // A manual check is always honoured, even when automatic checks are disabled. It refreshes
+        // the version labels only — the depot scan below decides whether an update exists.
+        _ = CheckSteamVersionDateAsync(userInitiated: true, allowClearingUpdateFlag: false);
 
         IsCheckingGameUpdate = true;
         StatusMessage = "🔍 Searching for updates across providers...";
@@ -1989,6 +2189,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                     else
                     {
                         HasGameUpdateAvailable = false;
+                        HasPendingDepotUpdate = false;
+                        UpdateAvailableDepots = [];
                         if (Instance!.HasUpdateAvailable)
                         {
                             Instance = Instance with { HasUpdateAvailable = false, UpdateDescription = null };
@@ -2051,6 +2253,22 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             _uiContext.Post(_ =>
             {
                 UpdateAvailableDepots = new ObservableCollection<DepotUpdateItem>(outdatedDepots);
+                HasPendingDepotUpdate = true;
+                HasGameUpdateAvailable = true;
+
+                // Persist it: the update stays offered after closing the dialog, and across restarts.
+                if (Instance != null && !Instance.HasUpdateAvailable)
+                {
+                    Instance = Instance with
+                    {
+                        HasUpdateAvailable = true,
+                        UpdateDescription = string.Format(
+                            GetString("String_DepotUpdatePendingFormat", "{0} depot(s) have newer manifests available."),
+                            outdatedDepots.Count)
+                    };
+                    _ = _instanceManager.UpdateAsync(Instance, CancellationToken.None);
+                }
+
                 IsUpdateModalOpen = true;
             }, null);
         }
@@ -2219,13 +2437,50 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             updatedManifestMap[item.DepotId] = item.NewManifestId;
         }
 
-        // 2. Prepare differential installation plan
+        // 2. Roll the instance back to a pristine state.
+        //
+        // DepotDownloader writes the official Steam binaries straight over the install folder.
+        // Anything layered on top of steam_api64.dll (ReFix / Re:Goldberg, SmokeAPI/CreamAPI) is
+        // destroyed by that write, while its *_valve.dll / *_o.dll backup still holds the OLD
+        // build's DLL — so a later "uninstall emulator" would restore a stale DLL over the new
+        // game files and corrupt the installation. Strip both cleanly first, then redeploy once
+        // the download finishes (handled by DownloadQueueManager via AwaitingPostUpdateRedeploy).
+        progress.Report(new BackgroundTaskProgress(55, "Removing emulator and DLC unlocker before updating...", "Cleaning"));
+
+        var preparedInstance = Instance;
+        if (_emulatorLifecycleService != null)
+        {
+            try
+            {
+                var deployProgress = new Progress<DeployProgress>(dp =>
+                    progress.Report(new BackgroundTaskProgress(55 + (dp.Percentage * 0.05), dp.Message ?? "Cleaning...", "Cleaning")));
+
+                preparedInstance = await _emulatorLifecycleService
+                    .PrepareForGameUpdateAsync(Instance, deployProgress, ct)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to strip emulator/DLC unlocker before updating {Game}", Instance.Name);
+            }
+        }
+
+        // 3. Prepare differential installation plan
         progress.Report(new BackgroundTaskProgress(60, "Generating differential update plan...", "Planning"));
 
-        var updatedInstance = Instance with
+        // Snapshot the build we are LEAVING before its manifest map is overwritten. Without this
+        // the previous version becomes unreachable: its .manifest files stay on disk, but nothing
+        // records which set of them belonged together.
+        HasPendingDepotUpdate = false;
+
+        var buildHistory = PushBuildHistory(preparedInstance, "update");
+
+        var updatedInstance = preparedInstance with
         {
             Depots = updatedDepots.AsReadOnly(),
             InstalledManifestMap = updatedManifestMap,
+            BuildHistory = buildHistory,
+            IsBuildPinned = false,
             HasUpdateAvailable = false,
             UpdateDescription = null,
             InstalledVersionDate = LatestVersionDate ?? DateTimeOffset.UtcNow
@@ -2292,16 +2547,1185 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             };
 
             _ = _downloadQueueManager.StartDownloadAsync(downloadInstance);
+            var redeployNote = Instance.AwaitingPostUpdateRedeploy
+                ? " The emulator and DLC unlocker were removed and will be reinstalled automatically once the download finishes."
+                : string.Empty;
+
             _notificationService?.ShowSuccess(
                 "Update Download Started",
-                $"Enqueued {selected.Count} depot(s) to update {Instance.Name}. User mods, BepInEx, emulators, and save files will remain intact.");
+                $"Enqueued {selected.Count} depot(s) to update {Instance.Name}. User mods, BepInEx and save files will remain intact.{redeployNote}");
 
             _ = CheckSteamVersionDateAsync();
             ActiveJob = _downloadQueueManager.Queue.FirstOrDefault(j => j.Instance.Id == Instance.Id);
             NotifyDownloadProps();
+            RefreshRollbackBuilds();
         }, null);
 
         progress.Report(new BackgroundTaskProgress(100, $"Updated {selected.Count} depot(s) configuration.", "Complete"));
+    }
+
+
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  OVERVIEW TAB — Steam showcase (long description, screenshots, patch notes)
+    // ══════════════════════════════════════════════════════════════════════════
+
+    [ObservableProperty]
+    private ObservableCollection<string> _screenshots = [];
+
+    public bool HasScreenshots => Screenshots.Count > 0;
+
+    /// <summary>
+    /// The screenshot shown large at the top of the gallery. Leading with one big frame reads far
+    /// better than a uniform strip of small ones.
+    /// </summary>
+    [ObservableProperty]
+    private string? _leadScreenshot;
+
+    /// <summary>The remaining screenshots, shown as a thumbnail row under the lead frame.</summary>
+    [ObservableProperty]
+    private ObservableCollection<string> _thumbScreenshots = [];
+
+    public bool HasThumbScreenshots => ThumbScreenshots.Count > 0;
+
+    /// <summary>Engine name for the facts list, e.g. "Unity 6000.4 LTS (Mono x64)".</summary>
+    public string EngineText => Instance?.Engine?.DisplayText is { Length: > 0 } n ? n : "—";
+
+    [ObservableProperty]
+    private ObservableCollection<SteamNewsItem> _newsItems = [];
+
+    /// <summary>Publisher-declared genres.</summary>
+    [ObservableProperty]
+    private ObservableCollection<string> _genreTags = [];
+
+    /// <summary>Steam feature categories (Single-player, Achievements, Cloud Saves…).</summary>
+    [ObservableProperty]
+    private ObservableCollection<string> _featureTags = [];
+
+    /// <summary>Community tags from the store page, most applied first.</summary>
+    [ObservableProperty]
+    private ObservableCollection<string> _communityTags = [];
+
+    public bool HasGenreTags => GenreTags.Count > 0;
+    public bool HasFeatureTags => FeatureTags.Count > 0;
+    public bool HasCommunityTags => CommunityTags.Count > 0;
+    public bool HasAnyTags => HasGenreTags || HasFeatureTags || HasCommunityTags;
+
+    public bool HasNewsItems => NewsItems.Count > 0;
+
+    [ObservableProperty]
+    private bool _isLoadingSteamShowcase;
+
+    /// <summary>Gets the long store copy, falling back to the one-line summary.</summary>
+    public string AboutGameText =>
+        !string.IsNullOrWhiteSpace(Instance?.Metadata?.AboutTheGame) ? Instance!.Metadata!.AboutTheGame!
+        : !string.IsNullOrWhiteSpace(Instance?.Metadata?.Description) ? Instance!.Metadata!.Description!
+        : GetString("String_NoDescriptionProvided", "No description provided for this game instance.");
+
+    public string DeveloperText => Instance?.Metadata?.Developer ?? "—";
+    public string PublisherText => Instance?.Metadata?.Publisher ?? "—";
+    public string ReleaseDateText => Instance?.Metadata?.ReleaseDate ?? "—";
+    public string GenresText => Instance?.Metadata?.Genres is { Count: > 0 } g ? string.Join(" · ", g) : "—";
+
+    public bool HasMetacriticScore => Instance?.Metadata?.MetacriticScore is > 0;
+    public string MetacriticText => Instance?.Metadata?.MetacriticScore?.ToString() ?? string.Empty;
+
+    public bool HasStoreWebsite => !string.IsNullOrWhiteSpace(Instance?.Metadata?.Website);
+
+    /// <summary>Gets the on-disk size of the install folder, formatted, or an em dash.</summary>
+    [ObservableProperty]
+    private string _installedSizeText = "—";
+
+    // ── Storage meter ─────────────────────────────────────────────────────────
+    // A number on its own ("615 MB") says nothing about whether that is a lot. The meter puts the
+    // game's footprint next to what the rest of the drive is doing.
+
+    /// <summary>Drive letter or mount point the game lives on, e.g. "D:".</summary>
+    [ObservableProperty]
+    private string _driveLabel = string.Empty;
+
+    /// <summary>Share of the whole drive taken by everything OTHER than this game, 0-100.</summary>
+    [ObservableProperty]
+    private double _driveOtherPercent;
+
+    /// <summary>Share of the whole drive taken by this game, 0-100.</summary>
+    [ObservableProperty]
+    private double _gameSharePercent;
+
+    /// <summary>Free space and capacity, already formatted for display.</summary>
+    [ObservableProperty]
+    private string _driveFreeText = string.Empty;
+
+    /// <summary>Share of the whole drive still free, 0-100.</summary>
+    [ObservableProperty]
+    private double _driveFreePercent;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasStorageMeter))]
+    private bool _hasDriveInfo;
+
+    /// <summary>True once the meter has real numbers to draw.</summary>
+    public bool HasStorageMeter => HasDriveInfo;
+
+    /// <summary>Formats a byte count the way the rest of the app does.</summary>
+    private static string FormatBytes(long bytes) => bytes switch
+    {
+        >= 1024L * 1024 * 1024 * 1024 => $"{bytes / (1024.0 * 1024 * 1024 * 1024):F2} TB",
+        >= 1024L * 1024 * 1024 => $"{bytes / (1024.0 * 1024 * 1024):F2} GB",
+        >= 1024L * 1024 => $"{bytes / (1024.0 * 1024):F0} MB",
+        > 0 => $"{bytes / 1024.0:F0} KB",
+        _ => "—"
+    };
+
+    /// <summary>Gets a one-line summary of the emulator state for the Overview status card.</summary>
+    public string EmulatorSummaryText
+    {
+        get
+        {
+            if (Instance == null) return "—";
+            if (!IsEmulatorInstalled && string.IsNullOrWhiteSpace(Instance.EmulatorId))
+                return GetString("String_OverviewNoEmulator", "None installed");
+
+            var mode = !string.IsNullOrWhiteSpace(InstalledEmulatorMode) ? InstalledEmulatorMode : Instance.EmulatorId;
+            var version = !string.IsNullOrWhiteSpace(Instance.InstalledEmulatorVersion)
+                ? $" · v{Instance.InstalledEmulatorVersion}"
+                : string.Empty;
+            return $"{mode}{version}";
+        }
+    }
+
+    /// <summary>Gets a one-line summary of the DLC unlocker state.</summary>
+    public string DlcUnlockerSummaryText
+    {
+        get
+        {
+            if (Instance == null) return "—";
+            if (!Instance.DlcUnlockerInstalled && !IsDlcUnlocked)
+                return GetString("String_OverviewNoUnlocker", "Not installed");
+
+            var count = Instance.UnlockedDlcIds?.Count ?? 0;
+            var total = Instance.Dlcs?.Count ?? 0;
+            return total > 0
+                ? string.Format(GetString("String_OverviewUnlockerFormat", "SmokeAPI · {0} of {1} DLC"), count, total)
+                : "SmokeAPI";
+        }
+    }
+
+    /// <summary>Gets a one-line summary of the mod state.</summary>
+    public string ModsSummaryText
+    {
+        get
+        {
+            if (Instance == null) return "—";
+            var installed = InstalledMods?.Count ?? 0;
+            if (installed == 0 && !IsBepInExInstalled)
+                return GetString("String_OverviewNoMods", "None installed");
+
+            var loader = IsBepInExInstalled && !string.IsNullOrWhiteSpace(InstalledBepInExVersion)
+                ? $"BepInEx {InstalledBepInExVersion} · "
+                : string.Empty;
+            return string.Format(GetString("String_OverviewModsFormat", "{0}{1} mod(s)"), loader, installed);
+        }
+    }
+
+    /// <summary>
+    /// Loads the Steam store showcase for the Overview tab: long description, screenshots and the
+    /// recent patch notes. All of it is cached, so reopening an instance does not re-hit Steam.
+    /// </summary>
+    public async Task LoadSteamShowcaseAsync()
+    {
+        if (_isDisposed || Instance == null || Instance.AppId == 0) return;
+        if (_metadataProvider is not BlueStar.Infrastructure.Metadata.SteamStoreApiClient steamClient) return;
+
+        IsLoadingSteamShowcase = true;
+        try
+        {
+            // Refresh metadata when the stored copy predates the richer fields (no screenshots yet).
+            var meta = Instance.Metadata;
+            if (meta == null || meta.Screenshots.Count == 0 || string.IsNullOrWhiteSpace(meta.AboutTheGame))
+            {
+                try
+                {
+                    var fetched = await steamClient.GetMetadataAsync(Instance.AppId, _cts.Token).ConfigureAwait(true);
+                    if (fetched != null)
+                    {
+                        meta = fetched;
+                        if (_isDisposed) return;
+
+                        Instance = Instance with { Metadata = fetched };
+                        await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Could not refresh Steam metadata for AppId {AppId}", Instance.AppId);
+                }
+            }
+
+            if (_isDisposed) return;
+
+            IReadOnlyList<string> shots = meta?.Screenshots ?? [];
+            Screenshots = new ObservableCollection<string>(shots.Take(12));
+            LeadScreenshot = Screenshots.FirstOrDefault();
+            ThumbScreenshots = new ObservableCollection<string>(Screenshots.Skip(1));
+            OnPropertyChanged(nameof(HasScreenshots));
+            OnPropertyChanged(nameof(HasThumbScreenshots));
+
+            IReadOnlyList<string> genres = meta?.Genres ?? [];
+            IReadOnlyList<string> features = meta?.Categories ?? [];
+
+            // Community tags are scraped from the store page, so they are fetched separately and
+            // only for the instance being looked at — the library and browse views call
+            // GetMetadataAsync constantly and must not pay for a full page load.
+            IReadOnlyList<string> community = meta?.StoreTags ?? [];
+            if (community.Count == 0)
+            {
+                try
+                {
+                    community = await steamClient.GetStoreTagsAsync(Instance.AppId, _cts.Token).ConfigureAwait(true);
+                    if (_isDisposed) return;
+
+                    if (community.Count > 0 && meta != null)
+                    {
+                        meta = meta with { StoreTags = community };
+                        Instance = Instance with { Metadata = meta };
+                        await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Could not read store tags for AppId {AppId}", Instance.AppId);
+                }
+            }
+
+            GenreTags = new ObservableCollection<string>(genres);
+            FeatureTags = new ObservableCollection<string>(features);
+            CommunityTags = new ObservableCollection<string>(community.Take(24));
+
+            OnPropertyChanged(nameof(HasGenreTags));
+            OnPropertyChanged(nameof(HasFeatureTags));
+            OnPropertyChanged(nameof(HasCommunityTags));
+            OnPropertyChanged(nameof(HasAnyTags));
+
+            NotifyOverviewProps();
+
+            try
+            {
+                var news = await steamClient.GetNewsAsync(Instance.AppId, 8, _cts.Token).ConfigureAwait(true);
+                if (_isDisposed) return;
+                NewsItems = new ObservableCollection<SteamNewsItem>(news.Take(6));
+                OnPropertyChanged(nameof(HasNewsItems));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Could not fetch Steam news for AppId {AppId}", Instance.AppId);
+            }
+        }
+        finally
+        {
+            IsLoadingSteamShowcase = false;
+        }
+    }
+
+    /// <summary>Raises change notification for every computed Overview field.</summary>
+    public void NotifyOverviewProps()
+    {
+        OnPropertyChanged(nameof(AboutGameText));
+        OnPropertyChanged(nameof(DeveloperText));
+        OnPropertyChanged(nameof(PublisherText));
+        OnPropertyChanged(nameof(ReleaseDateText));
+        OnPropertyChanged(nameof(GenresText));
+        OnPropertyChanged(nameof(HasMetacriticScore));
+        OnPropertyChanged(nameof(MetacriticText));
+        OnPropertyChanged(nameof(HasStoreWebsite));
+        OnPropertyChanged(nameof(EmulatorSummaryText));
+        OnPropertyChanged(nameof(DlcUnlockerSummaryText));
+        OnPropertyChanged(nameof(ModsSummaryText));
+        OnPropertyChanged(nameof(HasScreenshots));
+        OnPropertyChanged(nameof(HasThumbScreenshots));
+        OnPropertyChanged(nameof(EngineText));
+        OnPropertyChanged(nameof(HasNewsItems));
+        OnPropertyChanged(nameof(HasGenreTags));
+        OnPropertyChanged(nameof(HasFeatureTags));
+        OnPropertyChanged(nameof(HasCommunityTags));
+        OnPropertyChanged(nameof(HasAnyTags));
+    }
+
+    /// <summary>Measures the install folder so the Overview can show what it occupies on disk.</summary>
+    public async Task RefreshInstalledSizeAsync()
+    {
+        var installPath = Instance?.InstallPath;
+        if (string.IsNullOrWhiteSpace(installPath) || !Directory.Exists(installPath))
+        {
+            InstalledSizeText = "—";
+            HasDriveInfo = false;
+            return;
+        }
+
+        // Non-null copy for the background lambda: flow analysis does not carry the check above
+        // across the closure boundary.
+        string path = installPath;
+
+        try
+        {
+            long total = await Task.Run(() =>
+            {
+                long sum = 0;
+                try
+                {
+                    foreach (var f in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+                    {
+                        try { sum += new FileInfo(f).Length; } catch { }
+                    }
+                }
+                catch { }
+                return sum;
+            }).ConfigureAwait(true);
+
+            if (_isDisposed) return;
+
+            InstalledSizeText = FormatBytes(total);
+
+            // Drive figures for the meter.
+            try
+            {
+                var root = Path.GetPathRoot(Path.GetFullPath(path));
+                if (!string.IsNullOrWhiteSpace(root))
+                {
+                    var drive = new DriveInfo(root);
+                    if (drive.IsReady && drive.TotalSize > 0)
+                    {
+                        var capacity = drive.TotalSize;
+                        var free = drive.AvailableFreeSpace;
+                        var used = Math.Max(0, capacity - free);
+                        var game = Math.Min(total, used);
+
+                        GameSharePercent  = Math.Round(game / (double)capacity * 100.0, 3);
+                        DriveOtherPercent = Math.Round((used - game) / (double)capacity * 100.0, 3);
+
+                        DriveFreePercent  = Math.Round(free / (double)capacity * 100.0, 3);
+                        DriveLabel = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                        DriveFreeText = string.Format(
+                            GetString("String_OverviewDriveFreeFormat", "{0} free of {1}"),
+                            FormatBytes(free), FormatBytes(capacity));
+                        HasDriveInfo = true;
+                    }
+                    else
+                    {
+                        HasDriveInfo = false;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Could not read drive figures for {Path}", path);
+                HasDriveInfo = false;
+            }
+        }
+        catch
+        {
+            InstalledSizeText = "—";
+            HasDriveInfo = false;
+        }
+    }
+
+    /// <summary>Promotes a thumbnail to the large frame, so the gallery is browsable in place.</summary>
+    [RelayCommand]
+    public void ShowScreenshot(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url) || url == LeadScreenshot) return;
+
+        var previousLead = LeadScreenshot;
+        LeadScreenshot = url;
+
+        var thumbs = Screenshots.Where(u => u != url).ToList();
+        ThumbScreenshots = new ObservableCollection<string>(thumbs);
+        OnPropertyChanged(nameof(HasThumbScreenshots));
+
+        _ = previousLead;
+    }
+
+    /// <summary>Opens a Steam news entry in the default browser.</summary>
+    [RelayCommand]
+    public void OpenNewsItem(SteamNewsItem? item)
+    {
+        if (item == null || string.IsNullOrWhiteSpace(item.Url)) return;
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = item.Url, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not open news link {Url}", item.Url);
+        }
+    }
+
+    /// <summary>Opens the game's Steam store page.</summary>
+    [RelayCommand]
+    public void OpenStorePage()
+    {
+        if (Instance == null || Instance.AppId == 0) return;
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = $"https://store.steampowered.com/app/{Instance.AppId}",
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not open the store page for AppId {AppId}", Instance?.AppId);
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  VERSION TAB — four intent-based modes replacing the raw depot checklist
+    // ══════════════════════════════════════════════════════════════════════════
+
+    public const string VersionModeLatest   = "Latest";
+    public const string VersionModeCurated  = "Curated";
+    public const string VersionModeRollback = "Rollback";
+    public const string VersionModeCustom   = "Custom";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVersionModeLatest))]
+    [NotifyPropertyChangedFor(nameof(IsVersionModeCurated))]
+    [NotifyPropertyChangedFor(nameof(IsVersionModeRollback))]
+    [NotifyPropertyChangedFor(nameof(IsVersionModeCustom))]
+    private string _versionMode = VersionModeLatest;
+
+    public bool IsVersionModeLatest   => VersionMode == VersionModeLatest;
+    public bool IsVersionModeCurated  => VersionMode == VersionModeCurated;
+    public bool IsVersionModeRollback => VersionMode == VersionModeRollback;
+    public bool IsVersionModeCustom   => VersionMode == VersionModeCustom;
+
+    partial void OnVersionModeChanged(string value)
+    {
+        if (value == VersionModeLatest)
+        {
+            ApplyLatestAutoSelection();
+        }
+        else if (value == VersionModeRollback)
+        {
+            RefreshRollbackBuilds();
+        }
+        else if (value == VersionModeCustom)
+        {
+            RecomputeCustomBuildValidation();
+        }
+    }
+
+    [RelayCommand]
+    public void SelectVersionMode(string? mode)
+    {
+        if (string.IsNullOrWhiteSpace(mode)) return;
+        VersionMode = mode;
+    }
+
+    // ── Mode 1: Latest ────────────────────────────────────────────────────────
+
+    [ObservableProperty]
+    private bool _isLatestDepotDetailExpanded;
+
+    [RelayCommand]
+    public void ToggleLatestDepotDetail() => IsLatestDepotDetailExpanded = !IsLatestDepotDetailExpanded;
+
+    [ObservableProperty]
+    private int _autoSelectedDepotCount;
+
+    [ObservableProperty]
+    private int _autoSkippedDepotCount;
+
+    [ObservableProperty]
+    private string _autoSelectionSummary = string.Empty;
+
+    [ObservableProperty]
+    private string _autoSelectionSkippedSummary = string.Empty;
+
+    /// <summary>
+    /// Gets the depot ids that belong to a DLC rather than the base game. Those are downloaded
+    /// from the DLCs tab, so the Latest mode must leave them alone.
+    /// </summary>
+    private HashSet<uint> GetDlcDepotIds()
+    {
+        var ids = new HashSet<uint>();
+        foreach (var dlc in Instance?.Dlcs ?? [])
+        {
+            foreach (var d in dlc.Depots ?? [])
+            {
+                ids.Add(d.DepotId);
+            }
+        }
+        return ids;
+    }
+
+    /// <summary>
+    /// Selects exactly the base-game depots that match the current OS and architecture, and
+    /// deselects everything else. This is what makes "Latest" a one-click action instead of a
+    /// checklist the user has to reason about.
+    /// </summary>
+    public void ApplyLatestAutoSelection()
+    {
+        if (Depots.Count == 0) return;
+
+        var dlcDepotIds = GetDlcDepotIds();
+        int selected = 0, skipped = 0;
+
+        foreach (var item in Depots)
+        {
+            bool isDlcDepot = dlcDepotIds.Contains(item.Depot.DepotId);
+            bool compatible = IsDepotCompatibleWithCurrentOS(item.Depot);
+            bool take = compatible && !isDlcDepot;
+
+            item.IsSelected = take;
+            if (take) selected++; else skipped++;
+        }
+
+        AutoSelectedDepotCount = selected;
+        AutoSkippedDepotCount = skipped;
+
+        var osLabel = Environment.Is64BitOperatingSystem ? "Windows x64" : "Windows x86";
+        AutoSelectionSummary = string.Format(
+            GetString("String_VersionAutoSelectedFormat", "{0} depot(s) selected for {1}"),
+            selected, osLabel);
+
+        AutoSelectionSkippedSummary = skipped > 0
+            ? string.Format(
+                GetString("String_VersionAutoSkippedFormat", "{0} depot(s) skipped: other platforms, other architectures and DLC content"),
+                skipped)
+            : GetString("String_VersionAutoSkippedNone", "Every depot of this game applies to your system.");
+
+        RecalculateSelectedSize();
+        OnPropertyChanged(nameof(SelectedDepotsCount));
+        OnPropertyChanged(nameof(SelectedDepotsSize));
+    }
+
+    public string LatestBuildIdText =>
+        !string.IsNullOrWhiteSpace(SelectedBuild?.BuildId) ? SelectedBuild!.BuildId
+        : !string.IsNullOrWhiteSpace(Instance?.ActiveBuildId) ? Instance!.ActiveBuildId!
+        : GetString("String_VersionUnknownBuild", "latest available");
+
+    public string LatestBuildBranchText => SelectedBuild?.BranchName ?? Instance?.ActiveBranch ?? "public";
+
+    public string LatestBuildDateText =>
+        SelectedBuild?.UpdatedAt?.ToString("d MMM yyyy") ?? LatestVersionText ?? "—";
+
+    // ── Mode 2: Curated ───────────────────────────────────────────────────────
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasCurationRecommendation))]
+    [NotifyPropertyChangedFor(nameof(CuratedBuildIdText))]
+    [NotifyPropertyChangedFor(nameof(CuratedSummaryText))]
+    [NotifyPropertyChangedFor(nameof(CuratedNotesText))]
+    [NotifyPropertyChangedFor(nameof(HasCuratedNotes))]
+    [NotifyPropertyChangedFor(nameof(CuratedEmulatorText))]
+    [NotifyPropertyChangedFor(nameof(CuratedSourceText))]
+    [NotifyPropertyChangedFor(nameof(CuratedPinnedCountText))]
+    private CurationRecommendation? _curatedRecommendation;
+
+    /// <summary>
+    /// Gets whether a curated build exists for this AppID. The whole "Recommended" mode button is
+    /// hidden when it does not — there is nothing to recommend.
+    /// </summary>
+    public bool HasCurationRecommendation => CuratedRecommendation != null;
+
+    public string CuratedBuildIdText => CuratedRecommendation?.RecommendedBuildId ?? "—";
+    public string CuratedSummaryText => CuratedRecommendation?.Summary
+        ?? GetString("String_VersionCuratedNoSummary", "A build the community verified as stable for this game.");
+    public string CuratedNotesText => CuratedRecommendation?.CompatibilityNotes ?? string.Empty;
+    public bool HasCuratedNotes => !string.IsNullOrWhiteSpace(CuratedRecommendation?.CompatibilityNotes);
+    public string CuratedEmulatorText => string.IsNullOrWhiteSpace(CuratedRecommendation?.RecommendedEmulator)
+        ? GetString("String_VersionCuratedNoEmulator", "none required")
+        : CuratedRecommendation!.RecommendedEmulator!;
+    public string CuratedSourceText => CuratedRecommendation == null
+        ? string.Empty
+        : $"{CuratedRecommendation.Source} · {CuratedRecommendation.CuratedAt.LocalDateTime:d MMM yyyy}";
+    public string CuratedPinnedCountText => CuratedRecommendation == null
+        ? "0"
+        : CuratedRecommendation.PinnedManifests.Count.ToString();
+
+    /// <summary>
+    /// Loads the curated recommendation for this AppID, if any provider has one.
+    /// </summary>
+    public async Task LoadCurationRecommendationAsync()
+    {
+        if (_recommendationProvider == null || Instance == null || Instance.AppId == 0) return;
+
+        try
+        {
+            var rec = await _recommendationProvider
+                .GetRecommendationAsync(Instance.AppId, _cts.Token)
+                .ConfigureAwait(true);
+
+            if (_isDisposed) return;
+            CuratedRecommendation = rec;
+
+            // A mode that is not offered must not stay selected.
+            if (rec == null && VersionMode == VersionModeCurated)
+            {
+                VersionMode = VersionModeLatest;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "No curated recommendation for AppId {AppId}", Instance?.AppId);
+        }
+    }
+
+    /// <summary>
+    /// Pins the instance to the curated build and turns update checks off, which is the entire
+    /// point of choosing a curated version.
+    /// </summary>
+    [RelayCommand]
+    public async Task ApplyCuratedBuildAsync()
+    {
+        if (Instance == null || CuratedRecommendation == null) return;
+
+        var rec = CuratedRecommendation;
+
+        try
+        {
+            var updatedDepots = Instance.Depots.Select(d =>
+                rec.PinnedManifests.TryGetValue(d.DepotId, out var pinned) && pinned > 0
+                    ? d with { ManifestId = pinned, IsDownloaded = false }
+                    : d).ToList();
+
+            var map = new Dictionary<uint, ulong>(Instance.InstalledManifestMap);
+            foreach (var kv in rec.PinnedManifests) map[kv.Key] = kv.Value;
+
+            Instance = Instance with
+            {
+                Depots = updatedDepots.AsReadOnly(),
+                ActiveBuildId = rec.RecommendedBuildId,
+                ActiveBranch = rec.RecommendedBranch,
+                InstalledManifestMap = map,
+                IsBuildPinned = true,
+                DisableUpdateChecks = true,
+                HasUpdateAvailable = false,
+                UpdateDescription = null
+            };
+
+            DisableUpdateChecks = true;
+            HasGameUpdateAvailable = false;
+
+            await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+            await LoadInstanceAsync(Instance).ConfigureAwait(true);
+
+            StatusMessage = string.Format(
+                GetString("String_VersionCuratedAppliedFormat", "✅ Pinned to curated build {0}. Update checks are now off."),
+                rec.RecommendedBuildId);
+
+            _notificationService?.ShowSuccess(
+                GetString("String_VersionCuratedAppliedTitle", "Build Pinned"),
+                StatusMessage);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to apply curated build for {Name}", Instance?.Name);
+            StatusMessage = $"❌ {ex.Message}";
+        }
+    }
+
+    // ── Mode 3: Rollback to a previously installed build ──────────────────────
+
+    [ObservableProperty]
+    private ObservableCollection<RollbackBuildItem> _rollbackBuilds = [];
+
+    public bool HasRollbackBuilds => RollbackBuilds.Count > 0;
+
+    /// <summary>
+    /// Rebuilds the rollback list from the instance's build history, checking for each entry
+    /// whether its manifests are still recoverable from the local cache and whether the depot
+    /// keys are known. An entry that is not fully recoverable is shown but not offered.
+    /// </summary>
+    public void RefreshRollbackBuilds()
+    {
+        var list = new ObservableCollection<RollbackBuildItem>();
+
+        if (Instance != null)
+        {
+            var instanceManifestDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "BlueStar", "instances", Instance.Id.ToString(), "manifests");
+
+            foreach (var snap in Instance.BuildHistory ?? [])
+            {
+                int total = snap.ManifestMap.Count;
+                int cached = 0;
+                var missing = new List<uint>();
+
+                foreach (var kv in snap.ManifestMap)
+                {
+                    bool inCache = _manifestCacheService?.HasManifest(kv.Key, kv.Value) ?? false;
+
+                    if (!inCache)
+                    {
+                        // The instance folder is the other place a manifest can legitimately live.
+                        var local = Path.Combine(instanceManifestDir, $"{kv.Key}_{kv.Value}.manifest");
+                        try { inCache = File.Exists(local) && new FileInfo(local).Length > 32; }
+                        catch { inCache = false; }
+                    }
+
+                    if (inCache) cached++; else missing.Add(kv.Key);
+                }
+
+                bool isCurrent = !string.IsNullOrWhiteSpace(Instance.ActiveBuildId) &&
+                                 string.Equals(Instance.ActiveBuildId, snap.BuildId, StringComparison.OrdinalIgnoreCase);
+
+                list.Add(new RollbackBuildItem
+                {
+                    Snapshot = snap,
+                    CachedManifestCount = cached,
+                    TotalManifestCount = total,
+                    IsCurrentBuild = isCurrent,
+                    MissingDepotIds = missing.AsReadOnly()
+                });
+            }
+        }
+
+        RollbackBuilds = list;
+        OnPropertyChanged(nameof(HasRollbackBuilds));
+    }
+
+    /// <summary>
+    /// Re-applies a previous build's manifest map and queues the download that restores it.
+    /// </summary>
+    [RelayCommand]
+    public async Task RollbackToBuildAsync(RollbackBuildItem? item)
+    {
+        if (Instance == null || item == null || !item.CanRestore) return;
+
+        if (IsGameRunning)
+        {
+            _notificationService?.ShowWarning(
+                GetString("String_GameRunningTitle", "Game is Running"),
+                GetString("String_GameRunningRollbackDesc", "Close the game before rolling back to another version."));
+            return;
+        }
+
+        var snap = item.Snapshot;
+
+        try
+        {
+            IsApplyingGameUpdate = true;
+
+            // Same rule as a forward update: strip the layers first so the depot write lands on
+            // pristine files and the emulator/unlocker are rebuilt on top afterwards.
+            var prepared = Instance;
+            if (_emulatorLifecycleService != null)
+            {
+                prepared = await _emulatorLifecycleService
+                    .PrepareForGameUpdateAsync(Instance, null, CancellationToken.None)
+                    .ConfigureAwait(true);
+            }
+
+            var rolledDepots = prepared.Depots.Select(d =>
+                snap.ManifestMap.TryGetValue(d.DepotId, out var mid) && mid > 0
+                    ? d with { ManifestId = mid, IsDownloaded = false }
+                    : d).ToList();
+
+            var history = PushBuildHistory(prepared, "rollback");
+
+            Instance = prepared with
+            {
+                Depots = rolledDepots.AsReadOnly(),
+                InstalledManifestMap = new Dictionary<uint, ulong>(snap.ManifestMap),
+                ActiveBuildId = snap.BuildId,
+                ActiveBranch = snap.BranchName,
+                InstalledVersionDate = snap.BuildDate ?? snap.InstalledAt,
+                BuildHistory = history,
+                IsBuildPinned = true,
+                DisableUpdateChecks = true,
+                HasUpdateAvailable = false,
+                UpdateDescription = null
+            };
+
+            DisableUpdateChecks = true;
+            HasGameUpdateAvailable = false;
+
+            await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+
+            var downloadInstance = Instance with
+            {
+                Depots = rolledDepots.Where(d => snap.ManifestMap.ContainsKey(d.DepotId)).ToList().AsReadOnly()
+            };
+
+            await _downloadQueueManager.StartDownloadAsync(downloadInstance).ConfigureAwait(true);
+
+            StatusMessage = string.Format(
+                GetString("String_VersionRollbackStartedFormat", "⏪ Rolling back to build {0}. Update checks were turned off."),
+                snap.BuildId);
+
+            _notificationService?.ShowInfo(
+                GetString("String_VersionRollbackStartedTitle", "Rolling Back"),
+                StatusMessage);
+
+            ActiveJob = _downloadQueueManager.Queue.FirstOrDefault(j => j.Instance.Id == Instance.Id);
+            NotifyDownloadProps();
+            RefreshRollbackBuilds();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Rollback failed for {Name}", Instance?.Name);
+            StatusMessage = $"❌ {ex.Message}";
+            _notificationService?.ShowError(GetString("String_VersionRollbackFailedTitle", "Rollback Failed"), ex.Message);
+        }
+        finally
+        {
+            IsApplyingGameUpdate = false;
+        }
+    }
+
+    /// <summary>
+    /// Records the instance's CURRENT build into its history before it is overwritten, so it can
+    /// be rolled back to later. Newest first, capped at <see cref="MaxBuildHistoryEntries"/>.
+    /// </summary>
+    public const int MaxBuildHistoryEntries = 6;
+
+    private static IReadOnlyList<InstalledBuildSnapshot> PushBuildHistory(GameInstance instance, string reason)
+    {
+        // Nothing installed yet, or no manifests to remember: nothing worth recording.
+        if (instance.InstalledManifestMap == null || instance.InstalledManifestMap.Count == 0)
+        {
+            return instance.BuildHistory ?? [];
+        }
+
+        var buildId = !string.IsNullOrWhiteSpace(instance.ActiveBuildId)
+            ? instance.ActiveBuildId!
+            : instance.InstalledVersionDate?.ToString("yyyyMMdd") ?? "unknown";
+
+        var snapshot = new InstalledBuildSnapshot
+        {
+            BuildId = buildId,
+            BranchName = instance.ActiveBranch ?? "public",
+            DisplayName = reason == "rollback" ? null : instance.UpdateDescription,
+            ManifestMap = new Dictionary<uint, ulong>(instance.InstalledManifestMap),
+            InstalledAt = instance.UpdatedAt,
+            BuildDate = instance.InstalledVersionDate,
+            SizeBytes = instance.Depots?.Sum(d => d.SizeBytes) ?? 0
+        };
+
+        var history = new List<InstalledBuildSnapshot>();
+        history.Add(snapshot);
+
+        foreach (var old in instance.BuildHistory ?? [])
+        {
+            // Never keep two entries for the same build.
+            if (string.Equals(old.BuildId, snapshot.BuildId, StringComparison.OrdinalIgnoreCase)) continue;
+            history.Add(old);
+            if (history.Count >= MaxBuildHistoryEntries) break;
+        }
+
+        return history.AsReadOnly();
+    }
+
+    // ── Mode 4: Custom manifests ──────────────────────────────────────────────
+
+    [ObservableProperty]
+    private string _customVersionBuildId = string.Empty;
+
+    [ObservableProperty]
+    private string _customVersionBuildName = string.Empty;
+
+    [ObservableProperty]
+    private string _customBuildValidationMessage = string.Empty;
+
+    [ObservableProperty]
+    private bool _isCustomBuildValid;
+
+    [ObservableProperty]
+    private string _customBuildReadySummary = string.Empty;
+
+    /// <summary>
+    /// Validates the custom manifest table and produces the message that gates the download
+    /// button. Steam manifest ids are 19-digit unsigned 64-bit values; the most common mistake by
+    /// far is a truncated paste, which used to fail only once the download had already started.
+    /// </summary>
+    public void RecomputeCustomBuildValidation()
+    {
+        if (Depots.Count == 0)
+        {
+            IsCustomBuildValid = false;
+            CustomBuildValidationMessage = GetString("String_VersionCustomNoDepots", "This instance has no depots to configure.");
+            CustomBuildReadySummary = string.Empty;
+            return;
+        }
+
+        int ready = 0;
+        var problems = new List<string>();
+
+        foreach (var item in Depots)
+        {
+            var text = (item.ManifestInputText ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                text = item.Depot.ManifestId > 0 ? item.Depot.ManifestId.ToString() : string.Empty;
+            }
+
+            if (!TryParseManifestId(text, out var manifestId))
+            {
+                // The field holds something with no id in it at all (a stale label, a cleared box)
+                // while the depot itself has a perfectly good manifest. That is not a user error:
+                // the download would use the depot's id, so accept it silently.
+                if (!text.Any(char.IsDigit) && item.Depot.ManifestId > 0)
+                {
+                    item.ManifestInputText = item.Depot.ManifestId.ToString();
+                    ready++;
+                    continue;
+                }
+
+                // Only a genuinely unusable value gets flagged. Anything containing a real id —
+                // a pasted option label, an id with stray spaces — is accepted above.
+                var digits = new string((text ?? string.Empty).Where(char.IsDigit).ToArray());
+                if (digits.Length > 0 && digits.Length < 10)
+                {
+                    problems.Add(string.Format(
+                        GetString("String_VersionCustomShortIdFormat", "Depot {0}: manifest id has {1} digits; Steam ids have 19. Looks like a truncated paste."),
+                        item.Depot.DepotId, digits.Length));
+                }
+                else
+                {
+                    problems.Add(string.Format(
+                        GetString("String_VersionCustomBadIdFormat", "Depot {0}: “{1}” is not a valid manifest id."),
+                        item.Depot.DepotId, string.IsNullOrWhiteSpace(text) ? "—" : text));
+                }
+                continue;
+            }
+
+            ready++;
+        }
+
+        IsCustomBuildValid = problems.Count == 0;
+        CustomBuildReadySummary = string.Format(
+            GetString("String_VersionCustomReadyFormat", "{0} of {1} depots ready"),
+            ready, Depots.Count);
+
+        CustomBuildValidationMessage = problems.Count == 0
+            ? GetString("String_VersionCustomAllValid", "Every depot has a valid manifest id.")
+            : problems[0];
+    }
+
+    /// <summary>
+    /// Applies the custom manifest ids to the instance and queues the download.
+    /// </summary>
+    [RelayCommand]
+    public async Task DownloadCustomBuildAsync()
+    {
+        if (Instance == null) return;
+
+        RecomputeCustomBuildValidation();
+        if (!IsCustomBuildValid)
+        {
+            _notificationService?.ShowWarning(
+                GetString("String_VersionCustomInvalidTitle", "Manifest Configuration Invalid"),
+                CustomBuildValidationMessage);
+            return;
+        }
+
+        try
+        {
+            var map = new Dictionary<uint, ulong>();
+            foreach (var item in Depots)
+            {
+                var text = (item.ManifestInputText ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(text) && item.Depot.ManifestId > 0)
+                {
+                    text = item.Depot.ManifestId.ToString();
+                }
+                if (TryParseManifestId(text, out var mid))
+                {
+                    map[item.Depot.DepotId] = mid;
+                }
+            }
+
+            if (map.Count == 0) return;
+
+            var prepared = Instance;
+            if (_emulatorLifecycleService != null)
+            {
+                prepared = await _emulatorLifecycleService
+                    .PrepareForGameUpdateAsync(Instance, null, CancellationToken.None)
+                    .ConfigureAwait(true);
+            }
+
+            var history = PushBuildHistory(prepared, "custom");
+            var buildId = !string.IsNullOrWhiteSpace(CustomVersionBuildId) ? CustomVersionBuildId.Trim() : "custom";
+
+            var updatedDepots = prepared.Depots.Select(d =>
+                map.TryGetValue(d.DepotId, out var mid)
+                    ? d with { ManifestId = mid, IsDownloaded = false }
+                    : d).ToList();
+
+            Instance = prepared with
+            {
+                Depots = updatedDepots.AsReadOnly(),
+                InstalledManifestMap = map,
+                ActiveBuildId = buildId,
+                ActiveBranch = "custom",
+                BuildHistory = history,
+                IsBuildPinned = true,
+                DisableUpdateChecks = true,
+                HasUpdateAvailable = false,
+                UpdateDescription = null
+            };
+
+            DisableUpdateChecks = true;
+            HasGameUpdateAvailable = false;
+
+            await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+
+            var downloadInstance = Instance with
+            {
+                Depots = updatedDepots.Where(d => map.ContainsKey(d.DepotId)).ToList().AsReadOnly()
+            };
+
+            await _downloadQueueManager.StartDownloadAsync(downloadInstance).ConfigureAwait(true);
+
+            StatusMessage = string.Format(
+                GetString("String_VersionCustomStartedFormat", "⬇ Downloading custom build {0} ({1} depot(s))."),
+                buildId, map.Count);
+
+            ActiveJob = _downloadQueueManager.Queue.FirstOrDefault(j => j.Instance.Id == Instance.Id);
+            NotifyDownloadProps();
+            RefreshRollbackBuilds();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Custom build download failed for {Name}", Instance?.Name);
+            StatusMessage = $"❌ {ex.Message}";
+            _notificationService?.ShowError(GetString("String_VersionCustomFailedTitle", "Custom Build Failed"), ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Translates SteamCMD's <c>config.oslist</c> ("windows", "linux,macos", …) into the platform
+    /// label the UI shows. Returns null when the depot declares no OS restriction, in which case
+    /// whatever was already inferred is kept.
+    /// </summary>
+    /// <summary>
+    /// Reads the platform out of a depot's own name, for the depots SteamCMD reports no
+    /// <c>oslist</c> for. A depot literally called "Main Windows Depot …" must never end up tagged
+    /// macOS just because an older parse guessed wrong and the guess was persisted.
+    /// </summary>
+    private static string? PlatformFromDepotName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return null;
+
+        // Whole-word matches only: "Machine" must not read as "mac".
+        bool Has(string pattern) => System.Text.RegularExpressions.Regex.IsMatch(
+            name, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        if (Has(@"\b(?:windows|win)\s*(?:depot|build|content|binaries)\b") || Has(@"\bwin(?:32|64)\b"))
+            return "Windows";
+        if (Has(@"\b(?:linux|steamos)\s*(?:depot|build|content|binaries)\b"))
+            return "Linux";
+        if (Has(@"\b(?:mac|macos|osx|darwin)\s*(?:depot|build|content|binaries)\b"))
+            return "macOS";
+
+        if (Has(@"\bwindows\b")) return "Windows";
+        if (Has(@"\b(?:linux|steamos)\b")) return "Linux";
+        if (Has(@"\b(?:macos|mac\s?os|osx|os\s?x|darwin)\b")) return "macOS";
+
+        return null;
+    }
+
+    private static string? MapOsListToPlatform(string? osList)
+    {
+        if (string.IsNullOrWhiteSpace(osList)) return null;
+
+        var entries = osList
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(e => e.ToLowerInvariant())
+            .ToList();
+
+        if (entries.Count == 0) return null;
+        if (entries.Count > 1) return "Universal";
+
+        return entries[0] switch
+        {
+            "windows" => "Windows",
+            "linux" => "Linux",
+            "macos" or "mac" or "osx" => "macOS",
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Placeholder shown while the Steam version lookup is in flight.
+    /// <para>
+    /// It is a transient state, never an answer, so it must never be persisted or left on screen:
+    /// a lookup that failed once used to write this text into the 30-day state cache, and every
+    /// later visit replayed it — which is how "Latest on Steam" got stuck on "Checking…" forever.
+    /// </para>
+    /// </summary>
+    public const string CheckingSentinel = "Checking...";
+
+    /// <summary>True when the given text is the in-flight placeholder rather than a real answer.</summary>
+    private static bool IsCheckingPlaceholder(string? text) =>
+        string.IsNullOrWhiteSpace(text) ||
+        string.Equals(text, CheckingSentinel, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Makes sure the version labels never stay on the placeholder once a lookup has finished,
+    /// whatever the outcome.
+    /// </summary>
+    private void SettleVersionTexts()
+    {
+        if (IsCheckingPlaceholder(LatestVersionText))
+        {
+            LatestVersionText = GetString("String_VersionLookupUnavailable", "Not available");
+        }
+
+        if (IsCheckingPlaceholder(InstalledVersionText))
+        {
+            InstalledVersionText = GetString("String_VersionLookupUnknown", "Unknown");
+        }
+    }
+
+    /// <summary>
+    /// Extracts the manifest id from whatever ended up in a depot's text field.
+    /// <para>
+    /// The editable ComboBox can hand back the option's full display text
+    /// ("3889140805796509645 (Current - Steam)") rather than the bare id, and users paste ids with
+    /// stray spaces or surrounding punctuation. Rather than rejecting all of that as invalid, pull
+    /// out the first long run of digits — a Steam manifest id is a 64-bit value, so 15+ digits is
+    /// unambiguous within any of these strings.
+    /// </para>
+    /// </summary>
+    public static bool TryParseManifestId(string? text, out ulong manifestId)
+    {
+        manifestId = 0;
+        if (string.IsNullOrWhiteSpace(text)) return false;
+
+        var trimmed = text.Trim();
+        if (ulong.TryParse(trimmed, out manifestId) && manifestId > 0) return true;
+
+        var match = System.Text.RegularExpressions.Regex.Match(trimmed, @"\d{10,20}");
+        if (match.Success && ulong.TryParse(match.Value, out manifestId) && manifestId > 0)
+        {
+            return true;
+        }
+
+        manifestId = 0;
+        return false;
+    }
+
+    /// <summary>
+    /// Resolves a localized string by resource key, falling back to the supplied English text so
+    /// nothing ever renders blank if a key is missing from a dictionary.
+    /// </summary>
+    private static string GetString(string key, string fallback)
+    {
+        try
+        {
+            var value = System.Windows.Application.Current?.TryFindResource(key) as string;
+            return string.IsNullOrWhiteSpace(value) ? fallback : value;
+        }
+        catch
+        {
+            return fallback;
+        }
     }
 
     [RelayCommand]
@@ -3978,7 +5402,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             Name = customName,
             ExecutablePath = ConfiguredExecutablePath,
             LaunchArguments = CustomLaunchArgs,
-            EnableAdvancedBuildOptions = EnableAdvancedBuildOptions
+            DisableUpdateChecks = DisableUpdateChecks
         };
 
         await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
@@ -4611,14 +6035,77 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
         if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.FolderName))
         {
-            var targetPath = dialog.FolderName;
             var cleanGameName = CleanName(Instance.Name) ?? Instance.Name;
-            var exes = ShortcutHelper.FindGameExecutables(targetPath, cleanGameName);
-            var exe = Instance.ExecutablePath;
-            if (string.IsNullOrWhiteSpace(exe) || !File.Exists(exe))
+            var selectedRoot = dialog.FolderName;
+
+            // The picker returns the *parent* folder the user chose. Never install into its root:
+            // always give the game its own subfolder, exactly like the initial install flow does.
+            // EnsureGameSubfolder is a no-op when the user already picked the game's own folder.
+            var targetPath = PathHelper.EnsureGameSubfolder(selectedRoot, cleanGameName);
+
+            // Avoid silently sharing a folder with another instance.
+            try
             {
-                exe = _engineDetector.FindPrimaryExecutable(targetPath, cleanGameName);
+                var allInstances = await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
+                var clash = allInstances.FirstOrDefault(i =>
+                    i.Id != Instance.Id &&
+                    !string.IsNullOrWhiteSpace(i.InstallPath) &&
+                    string.Equals(
+                        i.InstallPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                        targetPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                        StringComparison.OrdinalIgnoreCase));
+
+                if (clash != null)
+                {
+                    StatusMessage = $"⚠ '{clash.Name}' already uses that folder. Pick a different location.";
+                    _notificationService?.ShowWarning("Folder In Use", $"'{clash.Name}' is already installed in:\n{targetPath}");
+                    return;
+                }
             }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not verify install path collisions for {Name}", Instance.Name);
+            }
+
+            Directory.CreateDirectory(targetPath);
+
+            var exes = ShortcutHelper.FindGameExecutables(targetPath, cleanGameName);
+
+            // Re-point the executable at the NEW directory. Keeping the previous value only makes
+            // sense when it already lives under the new path — otherwise the launcher would keep
+            // starting the game from the old folder after the move.
+            string? exe = null;
+            var previousExe = Instance.ExecutablePath;
+            if (!string.IsNullOrWhiteSpace(previousExe))
+            {
+                if (IsPathInside(previousExe, targetPath) && File.Exists(previousExe))
+                {
+                    exe = previousExe;
+                }
+                else
+                {
+                    // Try to keep the same executable, relative to the new root.
+                    var oldRoot = Instance.InstallPath;
+                    if (!string.IsNullOrWhiteSpace(oldRoot) && IsPathInside(previousExe, oldRoot))
+                    {
+                        var relative = Path.GetRelativePath(oldRoot, previousExe);
+                        var rebased = Path.GetFullPath(Path.Combine(targetPath, relative));
+                        if (File.Exists(rebased)) exe = rebased;
+                    }
+
+                    // Fall back to matching just the file name anywhere under the new root.
+                    if (exe == null)
+                    {
+                        var exeName = Path.GetFileName(previousExe);
+                        exe = exes.FirstOrDefault(candidate =>
+                            string.Equals(Path.GetFileName(candidate), exeName, StringComparison.OrdinalIgnoreCase));
+                    }
+                }
+            }
+
+            exe ??= _engineDetector.FindPrimaryExecutable(targetPath, cleanGameName);
+            exe ??= exes.FirstOrDefault();
+
             var status = (exes.Count > 0 || (exe != null && File.Exists(exe))) ? InstanceStatus.Ready : Instance.Status;
             var engine = await _engineDetector.DetectEngineAsync(targetPath, CancellationToken.None).ConfigureAwait(true) ?? Instance.Engine;
 
@@ -4630,9 +6117,38 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 Engine = engine
             };
             await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
-            await _appSettings.SetLastInstallDirectoryAsync(dialog.FolderName).ConfigureAwait(true);
-            StatusMessage = $"✅ Installation directory updated: {targetPath}";
+
+            // Persist the PARENT folder as the "last used" root, so the next game does not get
+            // nested inside this game's folder.
+            await _appSettings.SetLastInstallDirectoryAsync(selectedRoot).ConfigureAwait(true);
+
+            // Keep the Settings tab textbox in sync with the re-resolved executable.
+            ConfiguredExecutablePath = exe ?? string.Empty;
+
+            StatusMessage = string.IsNullOrWhiteSpace(exe)
+                ? $"✅ Installation directory updated: {targetPath} — no executable found yet, set it in Settings."
+                : $"✅ Installation directory updated: {targetPath}";
+
             await LoadInstanceAsync(Instance).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// Returns true when <paramref name="candidate"/> resolves to a location inside <paramref name="root"/>.
+    /// </summary>
+    private static bool IsPathInside(string? candidate, string? root)
+    {
+        if (string.IsNullOrWhiteSpace(candidate) || string.IsNullOrWhiteSpace(root)) return false;
+        try
+        {
+            var fullRoot = Path.GetFullPath(root)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            var fullCandidate = Path.GetFullPath(candidate);
+            return fullCandidate.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -5103,7 +6619,23 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 }
             }
 
-            // 3. Scan local instance manifests directory
+            // 3. Ask DepotBox for every manifest it knows about for this app. These are listed even
+            //    when nothing has been downloaded yet — the point of the Custom mode is to let the
+            //    user pick a manifest first and then go acquire it.
+            IReadOnlyList<ManifestInfo> depotBoxManifests = [];
+            if (_apiClient != null)
+            {
+                try
+                {
+                    depotBoxManifests = await _apiClient.GetManifestsAsync(Instance.AppId, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "DepotBox has no manifest list for AppId {AppId}", Instance.AppId);
+                }
+            }
+
+            // 4. Scan local instance manifests directory
             var localManifestIds = new Dictionary<uint, HashSet<ulong>>();
             var instanceManifestDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -5126,7 +6658,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 }
             }
 
-            // 4. Update each SelectableDepotItem on UI thread
+            // 5. Update each SelectableDepotItem on UI thread
             _uiContext.Post(_ =>
             {
                 foreach (var item in Depots)
@@ -5135,17 +6667,22 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                     var options = new List<DepotManifestOption>();
                     var seen = new HashSet<ulong>();
 
+                    // Is this manifest sitting in a cache we can read right now?
+                    bool IsLocallyAvailable(ulong mId) =>
+                        (_manifestCacheService?.HasManifest(depotId, mId) == true) ||
+                        (localManifestIds.TryGetValue(depotId, out var localHits) && localHits.Contains(mId));
+
                     // Current manifest
                     if (item.Depot.ManifestId > 0)
                     {
                         seen.Add(item.Depot.ManifestId);
-                        bool isCached = (_manifestCacheService?.HasManifest(depotId, item.Depot.ManifestId) == true) ||
-                                        (localManifestIds.TryGetValue(depotId, out var s) && s.Contains(item.Depot.ManifestId));
+                        bool isCached = IsLocallyAvailable(item.Depot.ManifestId);
                         options.Add(new DepotManifestOption
                         {
                             ManifestId = item.Depot.ManifestId,
-                            DisplayText = $"{item.Depot.ManifestId} (Current - {(isCached ? "Local" : "Steam")})",
-                            Source = isCached ? "Local" : "Steam"
+                            DisplayText = $"Current build{(isCached ? " · in local cache" : " · from Steam")}",
+                            Source = isCached ? "Local cache" : "Steam",
+                            IsBacked = true
                         });
                     }
 
@@ -5156,13 +6693,15 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                         if (match != null && match.ManifestId > 0 && seen.Add(match.ManifestId))
                         {
                             var branchLabel = !string.IsNullOrWhiteSpace(v.BranchName) ? v.BranchName : "build";
+                            var dateLabel = v.UpdatedAt.HasValue ? $" · {v.UpdatedAt.Value:d MMM yyyy}" : string.Empty;
                             options.Add(new DepotManifestOption
                             {
                                 ManifestId = match.ManifestId,
-                                DisplayText = $"{match.ManifestId} ({branchLabel} - {v.DisplayName})",
+                                DisplayText = $"{branchLabel} · {v.DisplayName}{dateLabel}",
                                 Source = v.Source,
                                 BranchName = v.BranchName,
-                                BuildId = v.BuildId
+                                BuildId = v.BuildId,
+                                IsBacked = IsLocallyAvailable(match.ManifestId)
                             });
                         }
                     }
@@ -5178,10 +6717,59 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                                 options.Add(new DepotManifestOption
                                 {
                                     ManifestId = art.ManifestId,
-                                    DisplayText = $"{art.ManifestId} (Provider: {(string.IsNullOrEmpty(providerLabel) ? "Online" : providerLabel)})",
-                                    Source = providerLabel
+                                    DisplayText = string.IsNullOrEmpty(providerLabel) ? "Provider" : providerLabel,
+                                    Source = string.IsNullOrEmpty(providerLabel) ? "Online" : providerLabel,
+                                    IsBacked = art.Routes.Count > 0 || IsLocallyAvailable(art.ManifestId)
                                 });
                             }
+                        }
+                    }
+
+                    // Everything DepotBox lists for this depot, backed or not
+                    foreach (var mi in depotBoxManifests.Where(m => m.DepotId == depotId))
+                    {
+                        if (mi.ManifestId > 0 && seen.Add(mi.ManifestId))
+                        {
+                            options.Add(new DepotManifestOption
+                            {
+                                ManifestId = mi.ManifestId,
+                                DisplayText = "DepotBox catalogue",
+                                Source = "DepotBox",
+                                IsBacked = mi.IsDownloaded || IsLocallyAvailable(mi.ManifestId)
+                            });
+                        }
+                    }
+
+                    // Builds this instance previously had installed
+                    foreach (var snap in Instance.BuildHistory ?? [])
+                    {
+                        if (snap.ManifestMap.TryGetValue(depotId, out var histId) && histId > 0 && seen.Add(histId))
+                        {
+                            options.Add(new DepotManifestOption
+                            {
+                                ManifestId = histId,
+                                DisplayText = $"previously installed · {snap.FormattedDate}",
+                                Source = "Build history",
+                                BuildId = snap.BuildId,
+                                IsBacked = IsLocallyAvailable(histId)
+                            });
+                        }
+                    }
+
+                    // Builds shown in the build picker (includes user-imported and custom ones)
+                    foreach (var b in AvailableBuilds)
+                    {
+                        if (b.DepotManifests.TryGetValue(depotId, out var bId) && bId > 0 && seen.Add(bId))
+                        {
+                            options.Add(new DepotManifestOption
+                            {
+                                ManifestId = bId,
+                                DisplayText = $"{b.DisplayName} · {b.Source}",
+                                Source = b.Source,
+                                BranchName = b.BranchName,
+                                BuildId = b.BuildId,
+                                IsBacked = IsLocallyAvailable(bId)
+                            });
                         }
                     }
 
@@ -5195,8 +6783,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                                 options.Add(new DepotManifestOption
                                 {
                                     ManifestId = mId,
-                                    DisplayText = $"{mId} (Local Archive)",
-                                    Source = "Local"
+                                    DisplayText = "local archive",
+                                    Source = "Local cache",
+                                    IsBacked = true
                                 });
                             }
                         }
@@ -5204,7 +6793,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
                     item.KnownManifestVersions = new ObservableCollection<DepotManifestOption>(options);
                     item.SelectedManifestOption = options.FirstOrDefault(o => o.ManifestId == item.Depot.ManifestId) ?? options.FirstOrDefault();
-                    if (item.SelectedManifestOption != null && string.IsNullOrWhiteSpace(item.ManifestInputText))
+                    if (item.SelectedManifestOption != null &&
+                        !TryParseManifestId(item.ManifestInputText, out ulong _existingManifestId))
                     {
                         item.ManifestInputText = item.SelectedManifestOption.ManifestId.ToString();
                     }
@@ -5289,28 +6879,41 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// Stores the custom manifest configuration as a selectable build WITHOUT downloading it.
+    /// Reads the same depot rows the Version tab's Custom mode edits.
+    /// </summary>
     [RelayCommand]
     public void SaveCustomBuild()
     {
         if (Instance == null) return;
 
         var map = new Dictionary<uint, ulong>();
-        foreach (var d in CustomBuildDepots)
+        foreach (var item in Depots)
         {
-            if (ulong.TryParse(d.ManifestIdText?.Trim(), out var mid) && mid > 0)
+            if (TryParseManifestId(item.ManifestInputText, out var mid))
             {
-                map[d.DepotId] = mid;
+                map[item.Depot.DepotId] = mid;
             }
-            else if (d.CurrentManifestId > 0)
+            else if (item.Depot.ManifestId > 0)
             {
-                map[d.DepotId] = d.CurrentManifestId;
+                map[item.Depot.DepotId] = item.Depot.ManifestId;
             }
         }
 
-        var buildId = !string.IsNullOrWhiteSpace(CustomBuildIdInput) ? CustomBuildIdInput.Trim() : "Custom";
-        var displayName = !string.IsNullOrWhiteSpace(CustomBuildNameInput)
-            ? CustomBuildNameInput.Trim()
-            : $"Build {buildId} (Custom)";
+        if (map.Count == 0)
+        {
+            StatusMessage = GetString("String_VersionCustomNoDepots", "This instance has no depots to configure.");
+            return;
+        }
+
+        var buildId = !string.IsNullOrWhiteSpace(CustomVersionBuildId) ? CustomVersionBuildId.Trim()
+                    : !string.IsNullOrWhiteSpace(CustomBuildIdInput) ? CustomBuildIdInput.Trim()
+                    : "Custom";
+
+        var displayName = !string.IsNullOrWhiteSpace(CustomVersionBuildName) ? CustomVersionBuildName.Trim()
+                        : !string.IsNullOrWhiteSpace(CustomBuildNameInput) ? CustomBuildNameInput.Trim()
+                        : $"Build {buildId} (Custom)";
 
         var newBuild = new GameBuildInfo
         {
@@ -5326,7 +6929,100 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         AvailableBuilds.Insert(0, newBuild);
         SelectedBuild = newBuild;
         IsCustomBuildModalOpen = false;
-        StatusMessage = $"✅ Switched to custom build: {newBuild.DisplayName}.";
+
+        // Keep it as a reusable preset on the instance, so the same manifest set can be recalled
+        // later from the chips row instead of being retyped.
+        var preset = new InstalledBuildSnapshot
+        {
+            BuildId = buildId,
+            BranchName = "custom",
+            DisplayName = displayName,
+            ManifestMap = map,
+            InstalledAt = DateTimeOffset.UtcNow,
+            SizeBytes = Depots
+                .Where(d => map.ContainsKey(d.Depot.DepotId))
+                .Sum(d => d.Depot.SizeBytes)
+        };
+
+        var presets = new List<InstalledBuildSnapshot> { preset };
+        foreach (var existing in Instance.SavedCustomBuilds ?? [])
+        {
+            // Saving under the same build id replaces the old preset rather than piling up.
+            if (string.Equals(existing.BuildId, preset.BuildId, StringComparison.OrdinalIgnoreCase)) continue;
+            presets.Add(existing);
+            if (presets.Count >= MaxSavedCustomBuilds) break;
+        }
+
+        Instance = Instance with { SavedCustomBuilds = presets.AsReadOnly() };
+        _ = _instanceManager.UpdateAsync(Instance, CancellationToken.None);
+        RefreshSavedCustomBuilds();
+
+        StatusMessage = string.Format(
+            GetString("String_VersionCustomSavedFormat", "✅ Saved custom build “{0}”. Recall it any time from the chips above."),
+            displayName);
+    }
+
+    /// <summary>Upper bound on how many custom presets an instance keeps.</summary>
+    public const int MaxSavedCustomBuilds = 12;
+
+    [ObservableProperty]
+    private ObservableCollection<InstalledBuildSnapshot> _savedCustomBuilds = [];
+
+    public bool HasSavedCustomBuilds => SavedCustomBuilds.Count > 0;
+
+    /// <summary>Reloads the preset chips from the instance.</summary>
+    public void RefreshSavedCustomBuilds()
+    {
+        SavedCustomBuilds = new ObservableCollection<InstalledBuildSnapshot>(Instance?.SavedCustomBuilds ?? []);
+        OnPropertyChanged(nameof(HasSavedCustomBuilds));
+    }
+
+    /// <summary>Loads a saved preset's manifest ids back into the Custom mode table.</summary>
+    [RelayCommand]
+    public void ApplyCustomBuildPreset(InstalledBuildSnapshot? preset)
+    {
+        if (preset == null || Instance == null) return;
+
+        CustomVersionBuildId = preset.BuildId;
+        CustomVersionBuildName = preset.DisplayName ?? string.Empty;
+
+        int applied = 0;
+        foreach (var item in Depots)
+        {
+            if (preset.ManifestMap.TryGetValue(item.Depot.DepotId, out var mid) && mid > 0)
+            {
+                item.ManifestInputText = mid.ToString();
+                item.SelectedManifestOption =
+                    item.KnownManifestVersions.FirstOrDefault(o => o.ManifestId == mid);
+                applied++;
+            }
+        }
+
+        VersionMode = VersionModeCustom;
+        RecomputeCustomBuildValidation();
+
+        StatusMessage = string.Format(
+            GetString("String_VersionCustomPresetAppliedFormat", "📋 Loaded “{0}” — {1} depot(s) filled in."),
+            preset.DisplayName ?? preset.BuildId, applied);
+    }
+
+    /// <summary>Removes a saved preset.</summary>
+    [RelayCommand]
+    public async Task DeleteCustomBuildPresetAsync(InstalledBuildSnapshot? preset)
+    {
+        if (preset == null || Instance == null) return;
+
+        var remaining = (Instance.SavedCustomBuilds ?? [])
+            .Where(b => !string.Equals(b.BuildId, preset.BuildId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        Instance = Instance with { SavedCustomBuilds = remaining.AsReadOnly() };
+        await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+        RefreshSavedCustomBuilds();
+
+        StatusMessage = string.Format(
+            GetString("String_VersionCustomPresetDeletedFormat", "🗑 Removed the saved build “{0}”."),
+            preset.DisplayName ?? preset.BuildId);
     }
 
     [RelayCommand]

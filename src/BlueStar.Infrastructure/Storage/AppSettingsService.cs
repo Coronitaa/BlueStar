@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
 namespace BlueStar.Infrastructure.Storage;
@@ -138,16 +138,6 @@ public sealed class AppSettingsService
         await SaveAsync().ConfigureAwait(false);
     }
 
-    /// <summary>Whether to show advanced build, depot manifests, and package import tools in game files tab (default false).</summary>
-    public bool EnableAdvancedBuildOptions => _current.EnableAdvancedBuildOptions;
-
-    /// <summary>Persists the advanced build options setting.</summary>
-    public async Task SetEnableAdvancedBuildOptionsAsync(bool enable)
-    {
-        _current = _current with { EnableAdvancedBuildOptions = enable };
-        await SaveAsync().ConfigureAwait(false);
-    }
-
     /// <summary>Whether experimental mod management and the Mods tab are enabled (default false).</summary>
     public bool EnableExperimentalMods => _current.EnableExperimentalMods;
 
@@ -240,7 +230,6 @@ public sealed class AppSettingsService
         public bool DeleteDepotsAfterInstall { get; init; } = true;
         public bool ShowNsfwContent { get; init; } = false;
         public bool ShowDrmContent { get; init; } = true;
-        public bool EnableAdvancedBuildOptions { get; init; } = false;
         public bool EnableExperimentalMods { get; init; } = false;
         public bool CheckSystemRequirementsOnStartup { get; init; } = true;
 

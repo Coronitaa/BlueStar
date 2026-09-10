@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -198,6 +198,213 @@ public sealed class EmulatorLifecycleService : IEmulatorLifecycleService
         }
 
         return uninstallResult;
+    }
+
+    /// <inheritdoc />
+    public async Task<GameInstance> PrepareForGameUpdateAsync(
+        GameInstance instance,
+        IProgress<DeployProgress>? progress = null,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+
+        var (wasDlcUnlocked, preservedDlcIds, sampleDlc) = await SnapshotDlcStateAsync(instance, ct).ConfigureAwait(false);
+
+        bool hadEmulator = instance.EmulatorEnabled
+                           || !string.IsNullOrWhiteSpace(instance.EmulatorId)
+                           || ReFixEmulator.IsEmulatorInstalled(instance.InstallPath);
+
+        var emulatorOptionId = instance.EmulatorId;
+        var fixLayerIds = (instance.InstalledFixLayers ?? [])
+            .Select(l => l.LayerId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToList();
+
+        if (!wasDlcUnlocked && !hadEmulator)
+        {
+            _logger.LogInformation("[EmulatorLifecycle] Nothing to strip before updating {Game}", instance.Name);
+            return instance;
+        }
+
+        _logger.LogInformation(
+            "[EmulatorLifecycle] Rolling {Game} back to a pristine state before the game update (emulator={Emulator}, dlcUnlocker={Dlc}, layers={Layers})",
+            instance.Name, emulatorOptionId ?? "none", wasDlcUnlocked, fixLayerIds.Count);
+
+        // 1. DLC unlocker comes off FIRST: it was layered on top of the emulator DLL, so removing it
+        //    in the other order would restore the unlocker's DLL over the emulator's backup chain.
+        if (wasDlcUnlocked)
+        {
+            progress?.Report(new DeployProgress { Percentage = 10, Message = "Removing DLC unlocker before the update...", CurrentStep = "PreUpdate_DlcUninstall" });
+            try
+            {
+                await _dlcInstaller.UninstallDlcAsync(instance, sampleDlc, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to remove DLC unlocker before updating {Game}", instance.Name);
+            }
+        }
+
+        // 2. Then the emulator, which restores the original Steam DLLs of the CURRENT build.
+        if (hadEmulator)
+        {
+            progress?.Report(new DeployProgress { Percentage = 35, Message = "Removing emulator and restoring original game files...", CurrentStep = "PreUpdate_EmulatorUninstall" });
+            try
+            {
+                if (_uninstallHandler != null)
+                {
+                    await _uninstallHandler(instance, ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    var emulator = new ReFixEmulator(LoggerFactory.Create(b => { }).CreateLogger<ReFixEmulator>());
+                    await emulator.UninstallAsync(instance, ct).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to remove emulator before updating {Game}", instance.Name);
+            }
+        }
+
+        progress?.Report(new DeployProgress { Percentage = 50, Message = "Instance is clean — downloading updated depot files...", CurrentStep = "PreUpdate_Done" });
+
+        // 3. Record what has to come back once the new files land. The instance is now genuinely
+        //    without an emulator/unlocker, so the flags must say so — otherwise the UI keeps
+        //    claiming a working emulator over a half-updated install.
+        return instance with
+        {
+            EmulatorEnabled = false,
+            EmulatorId = null,
+            InstalledEmulatorVersion = null,
+            DlcUnlockerInstalled = false,
+            InstalledFixLayers = [],
+            UnlockedDlcIds = preservedDlcIds,
+            AwaitingPostUpdateRedeploy = true,
+            PendingRedeployEmulatorId = hadEmulator ? (emulatorOptionId ?? "refix_valve") : null,
+            PendingRedeployDlcUnlocker = wasDlcUnlocked,
+            PendingRedeployFixLayerIds = fixLayerIds.AsReadOnly()
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<GameInstance> RestoreAfterGameUpdateAsync(
+        GameInstance instance,
+        IProgress<DeployProgress>? progress = null,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+
+        if (!instance.AwaitingPostUpdateRedeploy)
+        {
+            return instance;
+        }
+
+        _logger.LogInformation(
+            "[EmulatorLifecycle] Redeploying post-update layers for {Game} (emulator={Emulator}, dlcUnlocker={Dlc})",
+            instance.Name, instance.PendingRedeployEmulatorId ?? "none", instance.PendingRedeployDlcUnlocker);
+
+        var result = instance;
+        var emulatorOptionId = instance.PendingRedeployEmulatorId;
+        bool restoreDlc = instance.PendingRedeployDlcUnlocker;
+        bool allSucceeded = true;
+
+        // 1. Emulator first so the DLC unlocker can layer on top of it, mirroring a fresh install.
+        if (!string.IsNullOrWhiteSpace(emulatorOptionId))
+        {
+            progress?.Report(new DeployProgress { Percentage = 60, Message = "Reinstalling emulator on the updated game files...", CurrentStep = "PostUpdate_EmulatorDeploy" });
+            try
+            {
+                bool deployed;
+                if (_deployHandler != null)
+                {
+                    deployed = await _deployHandler(result, emulatorOptionId!, progress, ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    var emulator = new ReFixEmulator(LoggerFactory.Create(b => { }).CreateLogger<ReFixEmulator>());
+                    deployed = await emulator.DeployOptionAsync(result, emulatorOptionId!, progress, ct).ConfigureAwait(false);
+                }
+
+                if (deployed)
+                {
+                    result = result with
+                    {
+                        EmulatorEnabled = true,
+                        EmulatorId = emulatorOptionId,
+                        InstalledEmulatorVersion = ReFixEmulator.GetCurrentVersion()
+                    };
+                }
+                else
+                {
+                    allSucceeded = false;
+                    _logger.LogError("Failed to redeploy emulator {Option} after updating {Game}", emulatorOptionId, instance.Name);
+                }
+            }
+            catch (Exception ex)
+            {
+                allSucceeded = false;
+                _logger.LogError(ex, "Error redeploying emulator after updating {Game}", instance.Name);
+            }
+        }
+
+        // 2. DLC unlocker on top, re-backing up the NEW steam_api DLLs.
+        if (restoreDlc)
+        {
+            progress?.Report(new DeployProgress { Percentage = 90, Message = "Reinstalling DLC unlocker...", CurrentStep = "PostUpdate_DlcDeploy" });
+            var sampleDlc = result.Dlcs.Count > 0
+                ? result.Dlcs[0]
+                : new DlcInfo { AppId = result.AppId, Name = "Base Game", Depots = [] };
+            try
+            {
+                var restored = await _dlcInstaller.InstallDlcAsync(result, sampleDlc, ct).ConfigureAwait(false);
+                if (restored)
+                {
+                    result = result with { DlcUnlockerInstalled = true };
+                }
+                else
+                {
+                    allSucceeded = false;
+                    _logger.LogError("Failed to reinstall DLC unlocker after updating {Game}", instance.Name);
+                }
+            }
+            catch (Exception ex)
+            {
+                allSucceeded = false;
+                _logger.LogError(ex, "Error reinstalling DLC unlocker after updating {Game}", instance.Name);
+            }
+        }
+
+        // Clear the bookkeeping either way: leaving it set would retry the redeploy on every future
+        // download. Failures are surfaced through the logs and the returned flags.
+        result = result with
+        {
+            AwaitingPostUpdateRedeploy = false,
+            PendingRedeployEmulatorId = null,
+            PendingRedeployDlcUnlocker = false,
+            PendingRedeployFixLayerIds = []
+        };
+
+        if (_instanceManager != null)
+        {
+            try
+            {
+                await _instanceManager.UpdateAsync(result, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist instance after post-update redeploy for {Game}", instance.Name);
+            }
+        }
+
+        progress?.Report(new DeployProgress
+        {
+            Percentage = 100,
+            Message = allSucceeded ? "Emulator and DLC unlocker reinstalled." : "Update finished, but some layers could not be reinstalled.",
+            CurrentStep = "PostUpdate_Done"
+        });
+
+        return result;
     }
 
     private async Task<(bool WasDlcUnlocked, IReadOnlyList<uint> PreservedDlcIds, DlcInfo SampleDlc)> SnapshotDlcStateAsync(

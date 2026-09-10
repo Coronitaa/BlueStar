@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace BlueStar.Core.Models;
@@ -120,6 +120,14 @@ public record GameInstance
     public string? UpdateDescription { get; init; }
 
     /// <summary>
+    /// Gets or sets whether automatic update checking is disabled for this instance.
+    /// When true, BlueStar will not query Steam/DepotBox for newer builds for this game,
+    /// will not raise <see cref="HasUpdateAvailable"/>, and will not show update badges.
+    /// The user can still trigger a manual check from the instance detail view.
+    /// </summary>
+    public bool DisableUpdateChecks { get; init; } = false;
+
+    /// <summary>
     /// Gets or sets the origin and management type of this instance.
     /// Default is DepotBox for backward compatibility with pre-1.3 instances.
     /// </summary>
@@ -152,11 +160,6 @@ public record GameInstance
     public bool IsDepotBoxAssociated { get; init; } = false;
 
     /// <summary>
-    /// Gets or sets whether advanced build, manifest, and technical depot options are enabled for this instance.
-    /// </summary>
-    public bool EnableAdvancedBuildOptions { get; init; } = false;
-
-    /// <summary>
     /// Gets or sets whether a DLC unlocker (SmokeAPI/CreamAPI) is installed for this instance.
     /// </summary>
     public bool DlcUnlockerInstalled { get; init; } = false;
@@ -165,6 +168,50 @@ public record GameInstance
     /// Gets or sets the list of DLC AppIDs that are actively unlocked.
     /// </summary>
     public IReadOnlyList<uint> UnlockedDlcIds { get; init; } = [];
+
+    /// <summary>
+    /// Gets or sets the builds this instance has had installed, newest first.
+    /// Populated by the update flow right before <see cref="InstalledManifestMap"/> is overwritten,
+    /// and used to offer a rollback to a previous version from cached manifests.
+    /// Capped to the most recent few entries.
+    /// </summary>
+    public IReadOnlyList<InstalledBuildSnapshot> BuildHistory { get; init; } = [];
+
+    /// <summary>
+    /// Gets or sets the custom manifest configurations the user saved for this game — the
+    /// "Save without downloading" presets shown as chips in the Version tab's Custom mode.
+    /// Newest first.
+    /// </summary>
+    public IReadOnlyList<InstalledBuildSnapshot> SavedCustomBuilds { get; init; } = [];
+
+    /// <summary>
+    /// Gets or sets whether the installed build is pinned to a specific version and should not be
+    /// offered for update (set by the "Recommended" and "Previous version" download modes).
+    /// </summary>
+    public bool IsBuildPinned { get; init; } = false;
+
+    /// <summary>
+    /// Gets or sets whether this instance is mid-way through a game update and still has to have its
+    /// emulator / DLC unlocker redeployed once the new depot files finish downloading.
+    /// Set by the update flow before the download is enqueued, cleared once the redeploy succeeds.
+    /// </summary>
+    public bool AwaitingPostUpdateRedeploy { get; init; } = false;
+
+    /// <summary>
+    /// Gets or sets the emulator option id that must be redeployed after the pending game update
+    /// completes (null when no emulator was installed before the update).
+    /// </summary>
+    public string? PendingRedeployEmulatorId { get; init; }
+
+    /// <summary>
+    /// Gets or sets whether the DLC unlocker must be reinstalled after the pending game update completes.
+    /// </summary>
+    public bool PendingRedeployDlcUnlocker { get; init; } = false;
+
+    /// <summary>
+    /// Gets or sets the fix layer ids that must be redeployed after the pending game update completes.
+    /// </summary>
+    public IReadOnlyList<string> PendingRedeployFixLayerIds { get; init; } = [];
 
     /// <summary>
     /// Gets or sets the active fix and emulator layers installed on this instance.

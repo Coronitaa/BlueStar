@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using System.Text.Json;
 using BlueStar.Core.Interfaces;
@@ -183,6 +183,11 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                 ReleaseDate = GetReleaseDate(data),
                 Categories = GetStringArray(data, "categories", "description"),
                 Genres = GetStringArray(data, "genres", "description"),
+                AboutTheGame = StripHtml(data.TryGetProperty("about_the_game", out var about) ? about.GetString() : null),
+                Screenshots = GetScreenshots(data),
+                Website = data.TryGetProperty("website", out var site) ? site.GetString() : null,
+                MetacriticScore = GetMetacriticScore(data),
+                Platforms = GetPlatforms(data),
                 LastUpdated = DateTimeOffset.UtcNow
             };
 
@@ -1115,6 +1120,284 @@ public sealed class SteamStoreApiClient : IMetadataProvider
         return unified?.DepotEnrichment ?? new Dictionary<uint, SteamDepotMeta>();
     }
 
+
+    /// <summary>
+    /// Fetches the community tags from the game's store page.
+    /// <para>
+    /// The appdetails API returns genres and categories but never the user tags, and there is no
+    /// public endpoint for them. The store page embeds them as a JSON array in its
+    /// <c>InitAppTagModal(appid, [ … ])</c> call, which is what this reads. If the page shape ever
+    /// changes the method just returns nothing — tags are additive, never load-bearing.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<string>> GetStoreTagsAsync(uint appId, CancellationToken ct = default)
+    {
+        if (appId == 0) return [];
+
+        var cacheKey = $"steam_store_tags_{appId}_v1";
+        if (_cache != null)
+        {
+            try
+            {
+                var cached = await _cache.GetAsync<List<string>>(cacheKey, ct).ConfigureAwait(false);
+                if (cached is { Count: > 0 }) return cached.AsReadOnly();
+            }
+            catch { }
+        }
+
+        try
+        {
+            if (!await ThrottleAsync(ct).ConfigureAwait(false)) return [];
+
+            // birthtime + mature content cookies keep age-gated pages from redirecting to a form.
+            var url = $"https://store.steampowered.com/app/{appId}/?l=english&cc=US";
+            _metrics?.OnProviderRequest("SteamStoreTags", url);
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Add("Cookie", "birthtime=283993201; mature_content=1; lastagecheckage=1-January-1980; wants_mature_content=1");
+
+            using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogDebug("Store page returned {Status} for AppId={AppId}", response.StatusCode, appId);
+                return [];
+            }
+
+            var html = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+            var marker = "InitAppTagModal(";
+            var start = html.IndexOf(marker, StringComparison.Ordinal);
+            if (start < 0) return [];
+
+            var arrayStart = html.IndexOf('[', start);
+            if (arrayStart < 0) return [];
+
+            // Walk to the matching bracket so a "]" inside a tag name cannot truncate the array.
+            int depth = 0;
+            int arrayEnd = -1;
+            bool inString = false, escaped = false;
+            for (int i = arrayStart; i < html.Length; i++)
+            {
+                var c = html[i];
+                if (escaped) { escaped = false; continue; }
+                if (c == '\\' && inString) { escaped = true; continue; }
+                if (c == '"') { inString = !inString; continue; }
+                if (inString) continue;
+                if (c == '[') depth++;
+                else if (c == ']')
+                {
+                    depth--;
+                    if (depth == 0) { arrayEnd = i; break; }
+                }
+            }
+
+            if (arrayEnd < 0) return [];
+
+            var json = html[arrayStart..(arrayEnd + 1)];
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return [];
+
+            var tags = new List<string>();
+            foreach (var tag in doc.RootElement.EnumerateArray())
+            {
+                if (tag.ValueKind != JsonValueKind.Object) continue;
+                if (!tag.TryGetProperty("name", out var nameProp)) continue;
+
+                var name = nameProp.GetString();
+                if (string.IsNullOrWhiteSpace(name)) continue;
+
+                name = System.Net.WebUtility.HtmlDecode(name).Trim();
+                if (!tags.Contains(name, StringComparer.OrdinalIgnoreCase)) tags.Add(name);
+            }
+
+            if (_cache != null && tags.Count > 0)
+            {
+                try { await _cache.SetAsync(cacheKey, tags, TimeSpan.FromDays(7), ct).ConfigureAwait(false); } catch { }
+            }
+
+            _logger.LogDebug("Parsed {Count} store tags for AppId={AppId}", tags.Count, appId);
+            return tags.AsReadOnly();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to read store tags for AppId={AppId}", appId);
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Reads the store screenshot list. Full-size URLs are preferred; the thumbnail is the
+    /// fallback so a game with only thumbnails still shows something.
+    /// </summary>
+    private static IReadOnlyList<string> GetScreenshots(JsonElement data)
+    {
+        if (!data.TryGetProperty("screenshots", out var shots) || shots.ValueKind != JsonValueKind.Array)
+            return [];
+
+        var list = new List<string>();
+        foreach (var shot in shots.EnumerateArray())
+        {
+            string? url = null;
+            if (shot.TryGetProperty("path_full", out var full)) url = full.GetString();
+            if (string.IsNullOrWhiteSpace(url) && shot.TryGetProperty("path_thumbnail", out var thumb))
+                url = thumb.GetString();
+
+            if (!string.IsNullOrWhiteSpace(url)) list.Add(url!);
+        }
+        return list.AsReadOnly();
+    }
+
+    private static int? GetMetacriticScore(JsonElement data)
+    {
+        if (data.TryGetProperty("metacritic", out var mc) &&
+            mc.ValueKind == JsonValueKind.Object &&
+            mc.TryGetProperty("score", out var score) &&
+            score.TryGetInt32(out var value))
+        {
+            return value;
+        }
+        return null;
+    }
+
+    private static IReadOnlyList<string> GetPlatforms(JsonElement data)
+    {
+        if (!data.TryGetProperty("platforms", out var p) || p.ValueKind != JsonValueKind.Object)
+            return [];
+
+        var list = new List<string>();
+        if (p.TryGetProperty("windows", out var w) && w.ValueKind == JsonValueKind.True) list.Add("Windows");
+        if (p.TryGetProperty("mac", out var m) && m.ValueKind == JsonValueKind.True) list.Add("macOS");
+        if (p.TryGetProperty("linux", out var l) && l.ValueKind == JsonValueKind.True) list.Add("Linux");
+        return list.AsReadOnly();
+    }
+
+    /// <summary>
+    /// Turns Steam's HTML / BBCode announcement bodies into plain readable text. Steam mixes both
+    /// in the same field depending on the feed, so both are handled.
+    /// </summary>
+    private static string? StripHtml(string? html)
+    {
+        if (string.IsNullOrWhiteSpace(html)) return html;
+
+        var text = html;
+
+        // Keep paragraph and list structure as line breaks before dropping the tags.
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"<\s*br\s*/?>", "\n", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"</\s*(p|div|li|h[1-6])\s*>", "\n", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"<\s*li[^>]*>", "• ", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"<[^>]+>", string.Empty);
+
+        // BBCode used by community announcements.
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\[/?(b|i|u|h[1-3]|list|url[^\]]*|img|quote[^\]]*|code|strike|spoiler|noparse)\]", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\[\*\]", "• ");
+
+        text = System.Net.WebUtility.HtmlDecode(text);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"[ \t]+", " ");
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\n{3,}", "\n\n");
+
+        return text.Trim();
+    }
+
+    /// <summary>
+    /// Fetches recent Steam news for an app, patch notes first.
+    /// <para>
+    /// This is the public ISteamNews endpoint, so it needs no key. Entries Steam tags as patch
+    /// notes are surfaced ahead of general announcements, because "what changed in this build" is
+    /// what someone looking at an installed game wants.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<SteamNewsItem>> GetNewsAsync(uint appId, int count = 8, CancellationToken ct = default)
+    {
+        if (appId == 0) return [];
+
+        var cacheKey = $"steam_news_{appId}_v1";
+        if (_cache != null)
+        {
+            try
+            {
+                var cached = await _cache.GetAsync<List<SteamNewsItem>>(cacheKey, ct).ConfigureAwait(false);
+                if (cached is { Count: > 0 }) return cached.AsReadOnly();
+            }
+            catch { }
+        }
+
+        try
+        {
+            if (!await ThrottleAsync(ct).ConfigureAwait(false)) return [];
+
+            var url = $"https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid={appId}&count={Math.Clamp(count, 1, 30)}&maxlength=1200&format=json";
+            _metrics?.OnProviderRequest("SteamNews", url);
+
+            using var response = await _http.GetAsync(url, ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogDebug("Steam news returned {Status} for AppId={AppId}", response.StatusCode, appId);
+                return [];
+            }
+
+            var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(json);
+
+            if (!doc.RootElement.TryGetProperty("appnews", out var appnews) ||
+                !appnews.TryGetProperty("newsitems", out var items) ||
+                items.ValueKind != JsonValueKind.Array)
+            {
+                return [];
+            }
+
+            var list = new List<SteamNewsItem>();
+            foreach (var item in items.EnumerateArray())
+            {
+                var feedName = item.TryGetProperty("feedname", out var fn) ? fn.GetString() ?? string.Empty : string.Empty;
+
+                bool isPatch = feedName.Contains("update", StringComparison.OrdinalIgnoreCase);
+                if (item.TryGetProperty("tags", out var tags) && tags.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var tag in tags.EnumerateArray())
+                    {
+                        var t = tag.GetString();
+                        if (!string.IsNullOrWhiteSpace(t) && t.Contains("patchnote", StringComparison.OrdinalIgnoreCase))
+                        {
+                            isPatch = true;
+                            break;
+                        }
+                    }
+                }
+
+                var unix = item.TryGetProperty("date", out var d) && d.TryGetInt64(out var epoch) ? epoch : 0;
+
+                list.Add(new SteamNewsItem
+                {
+                    Gid = item.TryGetProperty("gid", out var g) ? g.GetString() ?? string.Empty : string.Empty,
+                    Title = item.TryGetProperty("title", out var t2) ? t2.GetString() ?? string.Empty : string.Empty,
+                    Url = item.TryGetProperty("url", out var u) ? u.GetString() ?? string.Empty : string.Empty,
+                    Contents = StripHtml(item.TryGetProperty("contents", out var c) ? c.GetString() : null) ?? string.Empty,
+                    FeedLabel = item.TryGetProperty("feedlabel", out var fl) ? fl.GetString() ?? string.Empty : string.Empty,
+                    FeedName = feedName,
+                    Author = item.TryGetProperty("author", out var a2) ? a2.GetString() : null,
+                    PublishedAt = unix > 0 ? DateTimeOffset.FromUnixTimeSeconds(unix) : DateTimeOffset.MinValue,
+                    IsPatchNote = isPatch
+                });
+            }
+
+            var ordered = list
+                .OrderByDescending(n => n.IsPatchNote)
+                .ThenByDescending(n => n.PublishedAt)
+                .ToList();
+
+            if (_cache != null)
+            {
+                try { await _cache.SetAsync(cacheKey, ordered, TimeSpan.FromHours(6), ct).ConfigureAwait(false); } catch { }
+            }
+
+            return ordered.AsReadOnly();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to fetch Steam news for AppId={AppId}", appId);
+            return [];
+        }
+    }
 
     private static string? GetFirstArrayString(JsonElement parent, string propertyName)
     {

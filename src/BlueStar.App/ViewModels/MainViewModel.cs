@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Threading;
 using System.Windows;
@@ -340,11 +340,21 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
                 int checkedCount = 0;
                 int updatesFound = 0;
+                int skippedCount = 0;
                 for (int i = 0; i < instances.Count; i++)
                 {
                     if (ct.IsCancellationRequested) break;
                     var inst = instances[i];
                     var pct = (double)i / instances.Count * 100.0;
+
+                    // Per-instance opt-out (Instance -> Settings -> Disable Update Checks).
+                    if (inst.DisableUpdateChecks)
+                    {
+                        skippedCount++;
+                        progress.Report(new BlueStar.Core.Models.BackgroundTaskProgress(pct, $"Skipping {inst.Name} (update checks disabled)...", "Analyzing"));
+                        continue;
+                    }
+
                     progress.Report(new BlueStar.Core.Models.BackgroundTaskProgress(pct, $"Checking {inst.Name} ({i + 1}/{instances.Count})...", "Analyzing"));
 
                     try
@@ -379,9 +389,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
                     checkedCount++;
                 }
 
+                var skippedNote = skippedCount > 0 ? $" ({skippedCount} skipped \u2014 update checks disabled)" : string.Empty;
                 var finalMessage = updatesFound > 0
-                    ? $"Scan complete: {updatesFound} update(s) detected across {checkedCount} games."
-                    : $"Scan complete: All {checkedCount} games are up to date.";
+                    ? $"Scan complete: {updatesFound} update(s) detected across {checkedCount} games.{skippedNote}"
+                    : $"Scan complete: All {checkedCount} games are up to date.{skippedNote}";
                 progress.Report(new BlueStar.Core.Models.BackgroundTaskProgress(100, finalMessage, "Complete"));
             });
     }
