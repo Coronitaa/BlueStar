@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -24,6 +27,8 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ILocalizationService _localizationService;
     private readonly ILogger<SettingsViewModel> _logger;
     private readonly IDebugLogService _debugLogService;
+    private readonly IInstanceManager? _instanceManager;
+    private readonly ICacheService? _cacheService;
 
     public Action<string>? OnNavigateRequested { get; set; }
 
@@ -162,6 +167,18 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private int _missingRequirementsCount;
 
+    [ObservableProperty]
+    private bool _isClearCacheModalOpen;
+
+    [ObservableProperty]
+    private bool _includePreviousManifests;
+
+    [ObservableProperty]
+    private bool _isClearingCache;
+
+    [ObservableProperty]
+    private string? _clearCacheResult;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SettingsViewModel"/> class.
     /// </summary>
@@ -174,7 +191,9 @@ public partial class SettingsViewModel : ObservableObject
         ILocalizationService localizationService,
         ILogger<SettingsViewModel> logger,
         IPrerequisiteService? prerequisiteService = null,
-        IDebugLogService? debugLogService = null)
+        IDebugLogService? debugLogService = null,
+        IInstanceManager? instanceManager = null,
+        ICacheService? cacheService = null)
     {
         _authService = authService ?? throw new ArgumentNullException(nameof(authService));
         _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
@@ -185,6 +204,8 @@ public partial class SettingsViewModel : ObservableObject
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _prerequisiteService = prerequisiteService;
         _debugLogService = debugLogService ?? new BlueStar.Infrastructure.Services.DebugLogService(_appSettings);
+        _instanceManager = instanceManager;
+        _cacheService = cacheService;
 
         _selectedLanguageOption = _localizationService.CurrentLanguage == "es" ? "Español (Latinoamérica)" : "English";
 
@@ -535,7 +556,14 @@ public partial class SettingsViewModel : ObservableObject
             }
 
             var vm = new DebugConsoleViewModel(_debugLogService, _notificationService);
-            _activeConsoleWindow = new Views.DebugConsoleWindow(vm);
+
+            _activeConsoleWindow = new Views.DebugConsoleWindow(vm)
+            {
+                // Owned by the main window, so it rides its minimise and restore and goes away
+                // with it. An unowned tool window is what used to outlive a closed app.
+                Owner = System.Windows.Application.Current?.MainWindow
+            };
+
             _activeConsoleWindow.Closed += (s, e) => _activeConsoleWindow = null;
             _activeConsoleWindow.Show();
         }
@@ -626,5 +654,125 @@ public partial class SettingsViewModel : ObservableObject
             _notificationService.ShowInfo("Ruta Copiada", "Ruta del archivo copiada al portapapeles.");
         }
         catch { }
+    }
+
+    [RelayCommand]
+    public void OpenClearCacheModal()
+    {
+        IncludePreviousManifests = false;
+        ClearCacheResult = null;
+        IsClearCacheModalOpen = true;
+    }
+
+    [RelayCommand]
+    public void CloseClearCacheModal()
+    {
+        if (!IsClearingCache)
+        {
+            IsClearCacheModalOpen = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task ConfirmClearCacheAsync()
+    {
+        IsClearingCache = true;
+        ClearCacheResult = null;
+
+        try
+        {
+            // 1. Get installed instances to preserve their banners & manifests
+            IReadOnlyList<GameInstance> installedInstances = [];
+            if (_instanceManager != null)
+            {
+                var all = await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
+                installedInstances = all
+                    .Where(i => i.Status != InstanceStatus.NotInstalled ||
+                                (!string.IsNullOrWhiteSpace(i.InstallPath) && Directory.Exists(i.InstallPath)))
+                    .ToList();
+            }
+
+            // 2. Clear image cache EXCEPT banners of installed instances
+            await Task.Run(() =>
+            {
+                BlueStar.App.Services.ImageCacheService.Instance.ClearCacheExceptInstalled(installedInstances);
+            });
+
+            // 3. Clear FileCacheService (API / query caches)
+            if (_cacheService != null)
+            {
+                await _cacheService.ClearAsync(CancellationToken.None).ConfigureAwait(true);
+            }
+
+            // 4. If requested, delete manifests from previous versions
+            if (IncludePreviousManifests)
+            {
+                await Task.Run(() =>
+                {
+                    try
+                    {
+                        var activeManifestKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var inst in installedInstances)
+                        {
+                            foreach (var depot in inst.Depots)
+                            {
+                                if (depot.ManifestId > 0)
+                                {
+                                    activeManifestKeys.Add($"{depot.DepotId}_{depot.ManifestId}.manifest");
+                                }
+                            }
+                        }
+
+                        var manifestCacheDir = Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                            "BlueStar", "cache", "manifests");
+
+                        if (Directory.Exists(manifestCacheDir))
+                        {
+                            var manifestFiles = Directory.GetFiles(manifestCacheDir, "*.manifest", SearchOption.AllDirectories);
+                            foreach (var mf in manifestFiles)
+                            {
+                                var fileName = Path.GetFileName(mf);
+                                if (!activeManifestKeys.Contains(fileName))
+                                {
+                                    try { File.Delete(mf); } catch { }
+                                }
+                            }
+
+                            foreach (var subDir in Directory.GetDirectories(manifestCacheDir))
+                            {
+                                try
+                                {
+                                    if (Directory.GetFiles(subDir).Length == 0 && Directory.GetDirectories(subDir).Length == 0)
+                                    {
+                                        Directory.Delete(subDir, recursive: false);
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Error while cleaning previous manifests from cache");
+                    }
+                });
+            }
+
+            ClearCacheResult = "✅ Caché limpiada con éxito.";
+            _notificationService.ShowSuccess(
+                "Caché Limpiada",
+                "La caché de la aplicación se ha limpiado correctamente. Los banners de tus juegos instalados se conservaron intactos.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to clear application cache");
+            ClearCacheResult = $"❌ Error: {ex.Message}";
+        }
+        finally
+        {
+            IsClearingCache = false;
+            IsClearCacheModalOpen = false;
+        }
     }
 }

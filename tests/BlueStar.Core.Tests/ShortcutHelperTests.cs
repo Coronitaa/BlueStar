@@ -286,5 +286,26 @@ public class ShortcutHelperTests
             }
         }
     }
+
+    [Fact]
+    public void RemoveGameShortcuts_WithNullOrEmpty_DoesNotThrow()
+    {
+        var act1 = () => ShortcutHelper.RemoveGameShortcuts(null);
+        act1.Should().NotThrow();
+
+        var act2 = () => ShortcutHelper.RemoveGameShortcuts(string.Empty, string.Empty, string.Empty);
+        act2.Should().NotThrow();
+    }
+
+    [Fact]
+    public void RemoveGameShortcuts_WithNonExistentGame_ExecutesSafely()
+    {
+        var act = () => ShortcutHelper.RemoveGameShortcuts(
+            "NonExistentGame_Test_123456",
+            @"C:\NonExistent\Path\Game.exe",
+            @"C:\NonExistent\Path");
+
+        act.Should().NotThrow();
+    }
 }
 

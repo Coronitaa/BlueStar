@@ -45,6 +45,83 @@ public class CommunityStatsService : ICommunityStatsService
         return DefaultCloudflareWorkerUrl.TrimEnd('/');
     }
 
+    /// <summary>
+    /// How long one call to the community worker may take.
+    /// </summary>
+    /// <remarks>
+    /// The old three seconds was spent before the first byte every time the app opened: a DNS
+    /// lookup and a cold TLS handshake to a host nothing had touched yet, while twenty other
+    /// requests raced for the same startup. The worker answers a warm connection in about a
+    /// third of a second, so a budget that small only ever fired on the handshake — and the
+    /// stack it logged made a routine timeout read like a crash.
+    /// </remarks>
+    private static readonly TimeSpan WorkerTimeout = TimeSpan.FromSeconds(15);
+
+    /// <summary>Pause before the one retry, long enough for a stalled handshake to give up.</summary>
+    private static readonly TimeSpan WorkerRetryDelay = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// Calls the community worker, once more after a pause if the first attempt ran out of time.
+    /// </summary>
+    /// <remarks>
+    /// Every one of these calls has something to fall back on — a cached list, a built-in list,
+    /// or simply not reporting — so a failure is a quiet line in the log, not a stack trace.
+    /// The caller's own token still cancels immediately: a closing app does not sit through a
+    /// retry.
+    /// </remarks>
+    /// <returns>What the call returned, or <c>null</c> if the worker could not be reached.</returns>
+    private async Task<T?> CallWorkerAsync<T>(
+        string what, Func<CancellationToken, Task<T?>> call, CancellationToken ct)
+        where T : class
+    {
+        for (var attempt = 1; attempt <= 2; attempt++)
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(WorkerTimeout);
+
+            try
+            {
+                return await call(cts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // The app is closing, or the caller lost interest. Nothing to report.
+                return null;
+            }
+            catch (OperationCanceledException)
+            {
+                if (attempt == 2)
+                {
+                    _logger.LogDebug(
+                        "{What}: the community worker did not answer within {Seconds:0}s, twice. Carrying on without it.",
+                        what, WorkerTimeout.TotalSeconds);
+                    return null;
+                }
+
+                try
+                {
+                    await Task.Delay(WorkerRetryDelay, ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return null;
+                }
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogDebug("{What}: the community worker is unreachable ({Message}).", what, ex.Message);
+                return null;
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogDebug("{What}: the community worker answered with something unreadable ({Message}).", what, ex.Message);
+                return null;
+            }
+        }
+
+        return null;
+    }
+
     private static readonly System.Text.RegularExpressions.Regex SteamSearchItemRegex = new(
         @"(?s)<a [^>]*data-ds-appid=""(?<appid>\d+)""[^>]*>.*?<span class=""title"">(?<title>[^<]+)</span>.*?</a>",
         System.Text.RegularExpressions.RegexOptions.Compiled);
@@ -100,23 +177,27 @@ public class CommunityStatsService : ICommunityStatsService
         }
         catch { }
 
-        try
-        {
-            var workerUrl = $"{GetWorkerBaseUrl()}/api/stats/trending";
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(3));
+        var workerUrl = $"{GetWorkerBaseUrl()}/api/stats/trending";
 
-            var response = await _httpClient.GetFromJsonAsync<StatsApiResponse>(workerUrl, cts.Token).ConfigureAwait(false);
-            if (response?.Results != null && response.Results.Count > 0)
-            {
-                var list = Deduplicate(response.Results.Select(r => r.ToSearchResult()));
-                await _cacheService.SetAsync(cacheKey, list, TimeSpan.FromMinutes(5), ct).ConfigureAwait(false);
-                return list;
-            }
-        }
-        catch (Exception ex)
+        var response = await CallWorkerAsync(
+            "Community trending",
+            token => _httpClient.GetFromJsonAsync<StatsApiResponse>(workerUrl, token),
+            ct).ConfigureAwait(false);
+
+        if (response?.Results is { Count: > 0 })
         {
-            _logger.LogDebug(ex, "Could not fetch real trending stats from Cloudflare worker");
+            var list = Deduplicate(response.Results.Select(r => r.ToSearchResult()));
+
+            try
+            {
+                await _cacheService.SetAsync(cacheKey, list, TimeSpan.FromMinutes(5), ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                // A cache write that fails is not worth losing the list over.
+            }
+
+            return list;
         }
 
         return DefaultCommunityTrendingFallback;
@@ -141,23 +222,27 @@ public class CommunityStatsService : ICommunityStatsService
         }
         catch { }
 
-        try
-        {
-            var workerUrl = $"{GetWorkerBaseUrl()}/api/stats/most-played";
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(3));
+        var workerUrl = $"{GetWorkerBaseUrl()}/api/stats/most-played";
 
-            var response = await _httpClient.GetFromJsonAsync<StatsApiResponse>(workerUrl, cts.Token).ConfigureAwait(false);
-            if (response?.Results != null && response.Results.Count > 0)
-            {
-                var list = Deduplicate(response.Results.Select(r => r.ToSearchResult()));
-                await _cacheService.SetAsync(cacheKey, list, TimeSpan.FromMinutes(5), ct).ConfigureAwait(false);
-                return list;
-            }
-        }
-        catch (Exception ex)
+        var response = await CallWorkerAsync(
+            "Community most added",
+            token => _httpClient.GetFromJsonAsync<StatsApiResponse>(workerUrl, token),
+            ct).ConfigureAwait(false);
+
+        if (response?.Results is { Count: > 0 })
         {
-            _logger.LogDebug(ex, "Could not fetch all-time most added stats from Cloudflare worker");
+            var list = Deduplicate(response.Results.Select(r => r.ToSearchResult()));
+
+            try
+            {
+                await _cacheService.SetAsync(cacheKey, list, TimeSpan.FromMinutes(5), ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                // A cache write that fails is not worth losing the list over.
+            }
+
+            return list;
         }
 
         return DefaultCommunityMostPlayedFallback;
@@ -378,21 +463,31 @@ public class CommunityStatsService : ICommunityStatsService
     {
         if (appId <= 0) return;
 
+        var workerUrl = $"{GetWorkerBaseUrl()}/api/stats/report-instance";
+        var payload = new { appId, name };
+
+        var resp = await CallWorkerAsync(
+            "Community instance report",
+            async token => (HttpResponseMessage?)await _httpClient
+                .PostAsJsonAsync(workerUrl, payload, token).ConfigureAwait(false),
+            ct).ConfigureAwait(false);
+
+        if (resp is null) return;
+
+        using (resp)
+        {
+            _logger.LogInformation("Reported instance to Cloudflare: {Name} (AppId={AppId}), Status={Status}", name, appId, resp.StatusCode);
+        }
+
         try
         {
-            var workerUrl = $"{GetWorkerBaseUrl()}/api/stats/report-instance";
-            var payload = new { appId, name };
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            var resp = await _httpClient.PostAsJsonAsync(workerUrl, payload, cts.Token).ConfigureAwait(false);
-            _logger.LogInformation("Reported instance to Cloudflare: {Name} (AppId={AppId}), Status={Status}", name, appId, resp.StatusCode);
-
             // Invalidate local feeds cache so subsequent refreshes pull new data
             await _cacheService.RemoveAsync("bluestar_trending_7d_v7", CancellationToken.None).ConfigureAwait(false);
             await _cacheService.RemoveAsync("bluestar_most_played_alltime_v7", CancellationToken.None).ConfigureAwait(false);
         }
-        catch (Exception ex)
+        catch
         {
-            _logger.LogWarning(ex, "Failed to report instance to Cloudflare: {Name} (AppId={AppId})", name, appId);
+            // The next refresh will pick the new data up anyway.
         }
     }
 
@@ -411,8 +506,13 @@ public class CommunityStatsService : ICommunityStatsService
                 durationMinutes = Math.Max(1, (int)duration.TotalMinutes)
             };
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            await _httpClient.PostAsJsonAsync(workerUrl, payload, cts.Token).ConfigureAwait(false);
+            var resp = await CallWorkerAsync(
+                "Community playtime report",
+                async token => (HttpResponseMessage?)await _httpClient
+                    .PostAsJsonAsync(workerUrl, payload, token).ConfigureAwait(false),
+                ct).ConfigureAwait(false);
+
+            resp?.Dispose();
         }
         catch { }
     }
@@ -428,20 +528,30 @@ public class CommunityStatsService : ICommunityStatsService
 
         if (valid.Count == 0) return;
 
+        var workerUrl = $"{GetWorkerBaseUrl()}/api/stats/sync-instances";
+        var payload = new { instances = valid };
+
+        var resp = await CallWorkerAsync(
+            "Community instance sync",
+            async token => (HttpResponseMessage?)await _httpClient
+                .PostAsJsonAsync(workerUrl, payload, token).ConfigureAwait(false),
+            ct).ConfigureAwait(false);
+
+        if (resp is null) return;
+
+        using (resp)
+        {
+            _logger.LogInformation("Synced {Count} local instances to Cloudflare: Status={Status}", valid.Count, resp.StatusCode);
+        }
+
         try
         {
-            var workerUrl = $"{GetWorkerBaseUrl()}/api/stats/sync-instances";
-            var payload = new { instances = valid };
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
-            var resp = await _httpClient.PostAsJsonAsync(workerUrl, payload, cts.Token).ConfigureAwait(false);
-            _logger.LogInformation("Synced {Count} local instances to Cloudflare: Status={Status}", valid.Count, resp.StatusCode);
-
             await _cacheService.RemoveAsync("bluestar_trending_7d_v7", CancellationToken.None).ConfigureAwait(false);
             await _cacheService.RemoveAsync("bluestar_most_played_alltime_v7", CancellationToken.None).ConfigureAwait(false);
         }
-        catch (Exception ex)
+        catch
         {
-            _logger.LogDebug(ex, "Could not bulk sync local instances to Cloudflare worker");
+            // The next refresh will pick the new data up anyway.
         }
     }
 

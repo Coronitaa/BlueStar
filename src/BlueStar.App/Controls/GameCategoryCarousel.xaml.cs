@@ -29,6 +29,11 @@ public partial class GameCategoryCarousel : UserControl
         DependencyProperty.Register(nameof(OpenSteamDbCommand), typeof(ICommand), typeof(GameCategoryCarousel),
             new PropertyMetadata(null));
 
+    /// <summary>Raised when a card itself is clicked: opens the game's store page panel.</summary>
+    public static readonly DependencyProperty OpenDetailCommandProperty =
+        DependencyProperty.Register(nameof(OpenDetailCommand), typeof(ICommand), typeof(GameCategoryCarousel),
+            new PropertyMetadata(null));
+
     public static readonly DependencyProperty ViewMoreCommandProperty =
         DependencyProperty.Register(nameof(ViewMoreCommand), typeof(ICommand), typeof(GameCategoryCarousel),
             new PropertyMetadata(null));
@@ -57,6 +62,12 @@ public partial class GameCategoryCarousel : UserControl
     {
         get => (ICommand?)GetValue(OpenSteamDbCommandProperty);
         set => SetValue(OpenSteamDbCommandProperty, value);
+    }
+
+    public ICommand? OpenDetailCommand
+    {
+        get => (ICommand?)GetValue(OpenDetailCommandProperty);
+        set => SetValue(OpenDetailCommandProperty, value);
     }
 
     public ICommand? ViewMoreCommand

@@ -199,7 +199,55 @@ public partial class HomeViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string? _catalogErrorMessage;
 
+    // ── Store page detail modal (the same panel Explore opens) ──
+
+    [ObservableProperty]
+    private bool _isDetailOpen;
+
+    [ObservableProperty]
+    private SearchResult? _detailTarget;
+
+    [ObservableProperty]
+    private string? _detailUrl;
+
+    /// <summary>
+    /// Opens the store page of a catalog card inside the app.
+    /// </summary>
+    [RelayCommand]
+    public void OpenGameDetail(SearchResult? result)
+    {
+        if (result is null || result.AppId == 0) return;
+
+        DetailTarget = result;
+        DetailUrl = result.StorePageUrl;
+        IsDetailOpen = true;
+    }
+
+    /// <summary>Closes the store page panel.</summary>
+    [RelayCommand]
+    public void CloseGameDetail()
+    {
+        IsDetailOpen = false;
+        DetailTarget = null;
+        DetailUrl = null;
+    }
+
+    /// <summary>
+    /// Hands the open title over to Explore, which applies its featured tags as filters. Home has
+    /// no filter panel of its own, so "similar games" belongs on the tab that does.
+    /// </summary>
+    [RelayCommand]
+    public void FindSimilarGames(SearchResult? result)
+    {
+        var target = result ?? DetailTarget;
+        CloseGameDetail();
+        if (target is null) return;
+
+        OnFindSimilarRequested?.Invoke(target);
+    }
+
     public Action<string>? OnNavigateRequested { get; set; }
+    public Action<SearchResult>? OnFindSimilarRequested { get; set; }
     public Action<string>? OnNavigateToCategoryRequested { get; set; }
     public Action<GameInstance>? OnManageInstanceRequested { get; set; }
     public Action<GameInstance, bool>? OnManageInstanceRequestedWithUpdate { get; set; }
@@ -256,11 +304,16 @@ public partial class HomeViewModel : ObservableObject, IDisposable
         _ = LoadCategoryFeedsAsync();
     }
 
+    /// <summary>
+    /// Expands or collapses a category in place. The carousels live here now, so "view more"
+    /// grows the grid on this page instead of handing the category over to Explore, which is a
+    /// search surface and has no carousels of its own.
+    /// </summary>
     [RelayCommand]
     public void ViewMoreCategory(CatalogCategory category)
     {
         if (category == null) return;
-        OnNavigateToCategoryRequested?.Invoke(category.Id);
+        category.IsExpanded = !category.IsExpanded;
     }
 
     private List<SearchResult> FilterBySettings(IEnumerable<SearchResult> source)

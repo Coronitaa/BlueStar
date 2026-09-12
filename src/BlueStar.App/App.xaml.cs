@@ -46,6 +46,8 @@ public partial class App : Application
         _singleInstanceMutex = new Mutex(true, MutexId, out bool isFirstInstance);
         if (!isFirstInstance)
         {
+            var broughtForward = false;
+
             try
             {
                 IntPtr hWnd = FindWindow(null, "BlueStar");
@@ -53,11 +55,27 @@ public partial class App : Application
                 {
                     ShowWindowAsync(hWnd, SW_RESTORE);
                     SetForegroundWindow(hWnd);
+                    broughtForward = true;
                 }
             }
             catch
             {
                 // Ignore Win32 errors
+            }
+
+            // Another instance holds the mutex but has no window to raise: it is stuck, or it is
+            // still shutting down. Exiting mutely here is what made that state impossible to
+            // diagnose — no window, no error, and nothing in the log either, because the logger
+            // is only configured further down. Say so instead.
+            if (!broughtForward)
+            {
+                MessageBox.Show(
+                    "BlueStar is already running, but it has no window to bring forward.\n\n" +
+                    "It is either still closing or it has got stuck. End the BlueStar process in " +
+                    "Task Manager and start it again.",
+                    "BlueStar is already running",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
             }
 
             Environment.Exit(0);
@@ -160,6 +178,23 @@ public partial class App : Application
         });
         services.AddSingleton<IMetadataProvider>(sp => sp.GetRequiredService<SteamStoreApiClient>());
 
+        // Explore: faceted Steam store search and the tag catalog behind the filter panel.
+        services.AddHttpClient<ISteamCatalogSearchService, BlueStar.Infrastructure.Steam.SteamCatalogSearchService>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(15);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(BrowserUserAgent);
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/json, text/javascript, */*; q=0.01");
+            client.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en-US,en;q=0.9,es;q=0.8");
+            client.DefaultRequestHeaders.Add("X-Requested-With", "XMLHttpRequest");
+        });
+
+        services.AddHttpClient<ISteamTagCatalogService, BlueStar.Infrastructure.Steam.SteamTagCatalogService>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(20);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(BrowserUserAgent);
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/json, */*; q=0.01");
+        });
+
 
         // General HTTP Client
         services.AddHttpClient();
@@ -246,7 +281,8 @@ public partial class App : Application
         services.AddTransient<ViewModels.HomeViewModel>();
         services.AddTransient<ViewModels.LibraryViewModel>();
         services.AddTransient<ViewModels.InstanceDetailViewModel>();
-        services.AddTransient<ViewModels.BrowseViewModel>();
+        // Explore is resolved once and kept: see ISharedViewModel.
+        services.AddSingleton<ViewModels.BrowseViewModel>();
         services.AddTransient<ViewModels.DownloadsViewModel>();
         services.AddTransient<ViewModels.SettingsViewModel>();
         services.AddTransient<ViewModels.AboutViewModel>();
@@ -280,6 +316,16 @@ public partial class App : Application
         };
 
         base.OnStartup(e);
+
+        // The debug console is its own top-level window. Under the old OnLastWindowClose mode,
+        // leaving it open and closing the main window left the app running with no visible UI,
+        // holding the mutex, until the process was killed by hand — exactly the state seen on
+        // 2026-09-11. OnMainWindowClose in App.xaml fixes that; this is the backstop for a
+        // shutdown that starts but never finishes.
+        if (MainWindow != null)
+        {
+            MainWindow.Closed += (_, _) => ArmShutdownWatchdog();
+        }
 
         // Initialize dynamic localization
         try
@@ -322,9 +368,47 @@ public partial class App : Application
         });
     }
 
+    /// <summary>
+    /// Guarantees the process actually ends once the main window has gone.
+    /// </summary>
+    /// <remarks>
+    /// The UI thread is the only foreground thread here, so anything that stalls the dispatcher
+    /// on the way out leaves a process with no window, still holding the single-instance mutex —
+    /// which makes every later launch exit in silence. This gives shutdown a generous window and
+    /// then ends the process itself, leaving a line in the log saying it had to. The watchdog is
+    /// a background thread, so it can never be the thing keeping the process alive.
+    /// </remarks>
+    private static void ArmShutdownWatchdog()
+    {
+        var watchdog = new Thread(() =>
+        {
+            Thread.Sleep(TimeSpan.FromSeconds(10));
+
+            try
+            {
+                Log.Warning("Shutdown did not finish within 10s of the main window closing. Ending the process.");
+                Log.CloseAndFlush();
+            }
+            catch
+            {
+                // Nothing useful left to do if even logging is stuck.
+            }
+
+            Environment.Exit(0);
+        })
+        {
+            IsBackground = true,
+            Name = "BlueStar shutdown watchdog"
+        };
+
+        watchdog.Start();
+    }
+
     /// <inheritdoc />
     protected override void OnExit(ExitEventArgs e)
     {
+        Log.Information("BlueStar is shutting down (exit code {ExitCode})", e.ApplicationExitCode);
+
         if (_singleInstanceMutex != null)
         {
             try
@@ -338,6 +422,7 @@ public partial class App : Application
             }
         }
 
+        Log.Information("Shutdown complete");
         Log.CloseAndFlush();
         base.OnExit(e);
     }

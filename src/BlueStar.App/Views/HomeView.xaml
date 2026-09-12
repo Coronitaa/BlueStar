@@ -4,6 +4,7 @@
              xmlns:sys="clr-namespace:System;assembly=mscorlib"
              xmlns:vm="clr-namespace:BlueStar.App.ViewModels"
              xmlns:controls="clr-namespace:BlueStar.App.Controls"
+             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
              d:DataContext="{d:DesignInstance vm:HomeViewModel}"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -345,7 +346,13 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Style="{StaticResource Card}" Width="360" Margin="0,0,16,0">
+                                    <Border Style="{StaticResource Card}" Width="360" Margin="0,0,16,0"
+                                            Padding="0" ClipToBounds="True" Cursor="Hand">
+                                        <Border.InputBindings>
+                                            <MouseBinding MouseAction="LeftClick"
+                                                          Command="{Binding DataContext.ManageInstanceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                          CommandParameter="{Binding}"/>
+                                        </Border.InputBindings>
                                         <Grid>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="168"/>
@@ -355,16 +362,20 @@
                                                 <RowDefinition Height="Auto"/>
                                             </Grid.RowDefinitions>
 
-                                            <!-- Game banner / cover image (Strict 460x215 aspect ratio, 360x168) -->
-                                            <Border Grid.Row="0" CornerRadius="8,8,0,0"
-                                                    Background="{StaticResource SurfaceCardHoverBrush}"
-                                                    ClipToBounds="True"
-                                                    Margin="-16,-16,-16,12">
+                                            <!-- Game banner / cover image (460x215 aspect ratio, 360x168).
+                                                 The artwork is the Border's own background so it follows the
+                                                 card's corner radius instead of spilling over it. -->
+                                            <Border Grid.Row="0" CornerRadius="11,11,0,0"
+                                                    Background="{StaticResource SurfaceCardHoverBrush}">
                                                 <Grid>
                                                     <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}" Stretch="Uniform" Width="36" Height="36" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                    <Image Source="{Binding HeaderImageUrl, Converter={StaticResource CachedImageConverter}}"
-                                                           Stretch="UniformToFill"
-                                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                    <Border CornerRadius="11,11,0,0">
+                                                        <Border.Background>
+                                                            <ImageBrush ImageSource="{Binding HeaderImageUrl, Converter={StaticResource CachedImageConverter}}"
+                                                                        Stretch="UniformToFill"
+                                                                        RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                        </Border.Background>
+                                                    </Border>
 
                                                     <!-- 🔔 TOP-RIGHT GAME UPDATE BADGE -->
                                                     <Border HorizontalAlignment="Right" VerticalAlignment="Top"
@@ -388,7 +399,7 @@
                                             </Border>
 
                                             <!-- Title & AppId -->
-                                            <StackPanel Grid.Row="1">
+                                            <StackPanel Grid.Row="1" Margin="16,12,16,0">
                                                 <DockPanel LastChildFill="True">
                                                     <!-- Origin Icons docked right of title -->
                                                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
@@ -418,7 +429,7 @@
                                             </StackPanel>
 
                                             <!-- Engine Badge & Status Row -->
-                                            <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
+                                            <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="16,8,16,0">
                                                 <!-- Engine Badge -->
                                                 <Border CornerRadius="{StaticResource RadiusSm}"
                                                         Padding="8,3"
@@ -444,7 +455,7 @@
                                             </StackPanel>
 
                                             <!-- Action Buttons Row (Pinned to bottom) -->
-                                            <Grid Grid.Row="4" VerticalAlignment="Bottom">
+                                            <Grid Grid.Row="4" VerticalAlignment="Bottom" Margin="16,0,16,16">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="4"/>
@@ -745,6 +756,7 @@
                                             IsExploreTab="False"
                                             AddToLibraryCommand="{Binding DataContext.AddCatalogGameCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                             OpenSteamDbCommand="{Binding DataContext.OpenSteamDbCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            OpenDetailCommand="{Binding DataContext.OpenGameDetailCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                             ViewMoreCommand="{Binding DataContext.ViewMoreCategoryCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                             LoadMoreCommand="{Binding DataContext.LoadMoreCategoryItemsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
                                     </DataTemplate>
@@ -795,7 +807,7 @@
                                     <DataTemplate>
                                         <Border Style="{StaticResource SkeletonCard}" Width="360" Margin="0,0,16,16">
                                             <StackPanel>
-                                                <Border Style="{StaticResource SkeletonBlock}" Height="168" Margin="-16,-16,-16,12" CornerRadius="8,8,0,0"/>
+                                                <Border Style="{StaticResource SkeletonBlock}" Height="168" Margin="-16,-16,-16,12" CornerRadius="11,11,0,0"/>
                                                 <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="180" HorizontalAlignment="Left" Margin="0,0,0,6"/>
                                                 <Border Style="{StaticResource SkeletonBlock}" Height="12" Width="100" HorizontalAlignment="Left" Margin="0,0,0,12"/>
                                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
@@ -855,7 +867,13 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Style="{StaticResource Card}" Width="360" Margin="0,0,16,16">
+                                            <Border Style="{StaticResource Card}" Width="360" Margin="0,0,16,16"
+                                                    Padding="0" ClipToBounds="True" Cursor="Hand">
+                                                <Border.InputBindings>
+                                                    <MouseBinding MouseAction="LeftClick"
+                                                                  Command="{Binding DataContext.OpenGameDetailCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                  CommandParameter="{Binding}"/>
+                                                </Border.InputBindings>
                                                 <Grid>
                                                     <Grid.RowDefinitions>
                                                         <RowDefinition Height="168"/>
@@ -866,23 +884,27 @@
                                                         <RowDefinition Height="Auto"/>
                                                     </Grid.RowDefinitions>
 
-                                                    <!-- Header Image Artwork (Strict 460x215 aspect ratio, 360x168) -->
-                                                    <Border Grid.Row="0" CornerRadius="8,8,0,0"
-                                                            Background="{StaticResource SurfaceCardHoverBrush}"
-                                                            ClipToBounds="True"
-                                                            Margin="-16,-16,-16,12">
+                                                    <!-- Header Image Artwork (460x215 aspect ratio, 360x168).
+                                                         Painted as the Border's background so it follows the
+                                                         card's corner radius instead of spilling over it. -->
+                                                    <Border Grid.Row="0" CornerRadius="11,11,0,0"
+                                                            Background="{StaticResource SurfaceCardHoverBrush}">
                                                         <Grid>
                                                             <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}"
                                                                   Stretch="Uniform" Width="36" Height="36"
                                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                            <Image Source="{Binding HeaderImageUrl, Converter={StaticResource CachedImageConverter}}"
-                                                                   Stretch="UniformToFill"
-                                                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                            <Border CornerRadius="11,11,0,0">
+                                                                <Border.Background>
+                                                                    <ImageBrush ImageSource="{Binding HeaderImageUrl, Converter={StaticResource CachedImageConverter}}"
+                                                                                Stretch="UniformToFill"
+                                                                                RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                                </Border.Background>
+                                                            </Border>
                                                         </Grid>
                                                     </Border>
 
                                                     <!-- Title & AppId -->
-                                                    <StackPanel Grid.Row="1">
+                                                    <StackPanel Grid.Row="1" Margin="16,12,16,0">
                                                         <TextBlock Text="{Binding Name}" Style="{StaticResource H3}"
                                                                    TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
                                                         <TextBlock Text="{Binding AppId, StringFormat='Steam AppID: {0}'}"
@@ -890,7 +912,7 @@
                                                     </StackPanel>
 
                                                     <!-- Badges: AppType, Version, DLCs -->
-                                                    <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,6,0,0">
+                                                    <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="16,6,16,0">
                                                         <Border CornerRadius="{StaticResource RadiusSm}"
                                                                 Padding="7,2" Margin="0,0,6,4"
                                                                 Background="{StaticResource SurfaceInputBrush}"
@@ -937,7 +959,7 @@
                                                     </WrapPanel>
 
                                                     <!-- OS Platforms Tags -->
-                                                    <WrapPanel Grid.Row="3" Orientation="Horizontal" Margin="0,2,0,0">
+                                                    <WrapPanel Grid.Row="3" Orientation="Horizontal" Margin="16,2,16,0">
                                                         <Border CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="0,0,5,4"
                                                                 Background="#201B90FF" BorderBrush="#501B90FF" BorderThickness="1"
                                                                 Visibility="{Binding HasWindows, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -956,7 +978,7 @@
                                                     </WrapPanel>
 
                                                     <!-- Actions: ➕ Add to Instances & SteamDB -->
-                                                    <Grid Grid.Row="5">
+                                                    <Grid Grid.Row="5" Margin="16,0,16,16">
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="*"/>
                                                             <ColumnDefinition Width="8"/>
@@ -1859,6 +1881,89 @@
                     <!-- Close Button -->
                     <Button Grid.Row="6" Content="{DynamicResource String_Close}" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Right" Padding="14,6"
                             Command="{Binding CloseSteamSearchModalCommand}"/>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ═══════════════════════════════════════════════════════════════
+             STORE PAGE MODAL — the same panel Explore opens, so a card here
+             and a card there behave identically.
+             ═══════════════════════════════════════════════════════════════ -->
+        <Grid Background="#C2040407" Panel.ZIndex="1400"
+              Visibility="{Binding IsDetailOpen, Converter={StaticResource BoolToVisibilityConverter}}">
+            <Border Background="{StaticResource SurfaceCardBrush}"
+                    BorderBrush="{StaticResource StrongBorderBrush}" BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    MaxWidth="1120" Margin="28"
+                    ClipToBounds="True">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Modal header -->
+                    <Border Grid.Row="0" Background="{StaticResource TopBarBackgroundBrush}"
+                            BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="0,0,0,1"
+                            Padding="14,9">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                                <TextBlock Text="{Binding DetailTarget.Name}" FontSize="14" FontWeight="SemiBold"
+                                           Foreground="{StaticResource PrimaryTextBrush}"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding DetailUrl}" FontSize="10.5"
+                                           FontFamily="{StaticResource MonospaceFontFamily}"
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Style="{StaticResource SecondaryButton}" Padding="9,7"
+                                    Command="{Binding CloseGameDetailCommand}">
+                                <Path Data="{StaticResource IconClose}" Fill="{StaticResource SecondaryTextBrush}"
+                                      Stretch="Uniform" Width="11" Height="11"/>
+                            </Button>
+                        </Grid>
+                    </Border>
+
+                    <!-- Embedded store page -->
+                    <Grid Grid.Row="1" Background="#1B2838">
+                        <wv2:WebView2 x:Name="StorePageView"/>
+                    </Grid>
+
+                    <!-- Modal actions -->
+                    <Border Grid.Row="2" Background="{StaticResource TopBarBackgroundBrush}"
+                            BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="0,1,0,0"
+                            Padding="14,10">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Style="{StaticResource SecondaryButton}" Padding="12,8" Margin="0,0,8,0"
+                                    Command="{Binding FindSimilarGamesCommand}"
+                                    CommandParameter="{Binding DetailTarget}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Data="{StaticResource IconSimilar}" Fill="{StaticResource SecondaryTextBrush}"
+                                          Stretch="Uniform" Width="12" Height="12" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{DynamicResource String_SimilarGames}" FontSize="12"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource SecondaryButton}" Padding="12,8" Margin="0,0,8,0"
+                                    Command="{Binding OpenSteamDbCommand}"
+                                    CommandParameter="{Binding DetailTarget}">
+                                <TextBlock Text="SteamDB" FontSize="12"/>
+                            </Button>
+                            <Button Style="{StaticResource PrimaryButton}" Padding="14,8"
+                                    Command="{Binding AddCatalogGameCommand}"
+                                    CommandParameter="{Binding DetailTarget}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Data="{StaticResource IconPlus}" Fill="{StaticResource InverseTextBrush}"
+                                          Stretch="Uniform" Width="12" Height="12" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{DynamicResource String_AddToInstance}" FontSize="12"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Border>
                 </Grid>
             </Border>
         </Grid>

@@ -1,14 +1,85 @@
 using System;
+using System.ComponentModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using Microsoft.Web.WebView2.Core;
 
 namespace BlueStar.App.Views;
 
 public partial class HomeView : UserControl
 {
+    private bool _webViewReady;
+    private ViewModels.HomeViewModel? _viewModel;
+
     public HomeView()
     {
         InitializeComponent();
+
+        DataContextChanged += OnDataContextChanged;
+        Unloaded += OnUnloaded;
+    }
+
+    // ── Embedded store page (the same panel Explore opens) ───────────────
+
+    private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (_viewModel != null) _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+
+        _viewModel = e.NewValue as ViewModels.HomeViewModel;
+
+        if (_viewModel != null) _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel != null) _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        _viewModel = null;
+    }
+
+    private async void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(ViewModels.HomeViewModel.DetailUrl)) return;
+
+        var url = _viewModel?.DetailUrl;
+        if (string.IsNullOrWhiteSpace(url)) return;
+
+        try
+        {
+            await EnsureWebViewAsync().ConfigureAwait(true);
+            StorePageView.Source = new Uri(url);
+        }
+        catch (Exception)
+        {
+            // A missing WebView2 runtime must not take the dashboard down: the SteamDB button
+            // still opens the page in the person's own browser.
+        }
+    }
+
+    /// <summary>
+    /// Creates the WebView2 environment against the same profile folder Explore uses, so a Steam
+    /// sign-in made in either panel is remembered by both.
+    /// </summary>
+    private async System.Threading.Tasks.Task EnsureWebViewAsync()
+    {
+        if (_webViewReady) return;
+
+        var profileFolder = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "BlueStar", "webview");
+
+        Directory.CreateDirectory(profileFolder);
+
+        var environment = await CoreWebView2Environment
+            .CreateAsync(userDataFolder: profileFolder)
+            .ConfigureAwait(true);
+
+        await StorePageView.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
+
+        StorePageView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+        StorePageView.CoreWebView2.Settings.IsStatusBarEnabled = false;
+
+        _webViewReady = true;
     }
 
     private System.Windows.Threading.DispatcherTimer? _scrollTimer;

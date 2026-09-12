@@ -1147,6 +1147,12 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 InstallModalTargetVersionMode = "Recommended";
                 NotifyInstallModalVersionModeChanged();
             }
+            else if (!value && string.Equals(InstallModalTargetVersionMode, "Recommended", StringComparison.OrdinalIgnoreCase))
+            {
+                // Clicked off: no mode pinned, which installs the public branch as it comes.
+                InstallModalTargetVersionMode = string.Empty;
+                NotifyInstallModalVersionModeChanged();
+            }
         }
     }
 
@@ -1160,6 +1166,12 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 InstallModalTargetVersionMode = "Latest";
                 NotifyInstallModalVersionModeChanged();
             }
+            else if (!value && string.Equals(InstallModalTargetVersionMode, "Latest", StringComparison.OrdinalIgnoreCase))
+            {
+                // Clicked off: no mode pinned, which installs the public branch as it comes.
+                InstallModalTargetVersionMode = string.Empty;
+                NotifyInstallModalVersionModeChanged();
+            }
         }
     }
 
@@ -1171,6 +1183,12 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             if (value && !string.Equals(InstallModalTargetVersionMode, "Custom", StringComparison.OrdinalIgnoreCase))
             {
                 InstallModalTargetVersionMode = "Custom";
+                NotifyInstallModalVersionModeChanged();
+            }
+            else if (!value && string.Equals(InstallModalTargetVersionMode, "Custom", StringComparison.OrdinalIgnoreCase))
+            {
+                // Clicked off: no mode pinned, which installs the public branch as it comes.
+                InstallModalTargetVersionMode = string.Empty;
                 NotifyInstallModalVersionModeChanged();
             }
         }
@@ -1195,7 +1213,88 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     private bool _installModalSelectAllDlcs = true;
 
     [ObservableProperty]
-    private string _installModalDlcMethod = "CreamAPI";
+    private string _installModalDlcMethod = string.Empty;
+
+    /// <summary>True when at least one optional DLC is ticked in the install modal.</summary>
+    public bool InstallModalHasSelectedDlcs => InstallModalDlcs != null && InstallModalDlcs.Any(d => d.IsSelected);
+
+    /// <summary>True when the title has no depots at all, so nothing can be downloaded.</summary>
+    [ObservableProperty]
+    private bool _installModalHasNoDepots;
+
+    // ── "Force DLC unlocker without detected DLCs" confirmation ──
+
+    [ObservableProperty]
+    private bool _isForceDlcUnlockerConfirmOpen;
+
+    /// <summary>The method the person picked while no DLC was selected, pending confirmation.</summary>
+    private string? _pendingForcedDlcMethod;
+
+    /// <summary>Set while the confirmation flow writes the method, so the radio setters do not re-ask.</summary>
+    private bool _suppressDlcMethodConfirm;
+
+    /// <summary>
+    /// Applies a DLC unlocker method, asking first when the game has no DLC selected: installing a
+    /// wrapper for a title with no detected DLC is a deliberate choice, not a default.
+    /// </summary>
+    private void RequestDlcUnlockerMethod(string method)
+    {
+        if (_suppressDlcMethodConfirm)
+        {
+            InstallModalDlcMethod = method;
+            return;
+        }
+
+        if (InstallModalHasSelectedDlcs)
+        {
+            InstallModalDlcMethod = method;
+            return;
+        }
+
+        _pendingForcedDlcMethod = method;
+        IsForceDlcUnlockerConfirmOpen = true;
+
+        // Nothing is selected until the person confirms, so bounce the radio back.
+        NotifyDlcMethodChanged();
+    }
+
+    [RelayCommand]
+    public void ConfirmForceDlcUnlocker()
+    {
+        var method = _pendingForcedDlcMethod;
+        _pendingForcedDlcMethod = null;
+        IsForceDlcUnlockerConfirmOpen = false;
+
+        if (string.IsNullOrWhiteSpace(method)) return;
+
+        _suppressDlcMethodConfirm = true;
+        try
+        {
+            InstallModalDlcMethod = method;
+            _forcedDlcMethodAccepted = true;
+        }
+        finally
+        {
+            _suppressDlcMethodConfirm = false;
+        }
+
+        NotifyDlcMethodChanged();
+    }
+
+    [RelayCommand]
+    public void CancelForceDlcUnlocker()
+    {
+        _pendingForcedDlcMethod = null;
+        IsForceDlcUnlockerConfirmOpen = false;
+        NotifyDlcMethodChanged();
+    }
+
+    private void NotifyDlcMethodChanged()
+    {
+        OnPropertyChanged(nameof(IsModalCreamApiSelected));
+        OnPropertyChanged(nameof(IsModalSmokeApiSelected));
+        OnPropertyChanged(nameof(InstallModalHasSelectedDlcs));
+    }
 
     [ObservableProperty]
     private string _installModalSelectedEmulator = "refix_valve";
@@ -1208,6 +1307,11 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             if (value && !string.Equals(InstallModalSelectedEmulator, "none", StringComparison.OrdinalIgnoreCase))
             {
                 InstallModalSelectedEmulator = "none";
+                NotifyEmulatorSelectionChanged();
+            }
+            else if (!value && string.Equals(InstallModalSelectedEmulator, "none", StringComparison.OrdinalIgnoreCase))
+            {
+                InstallModalSelectedEmulator = string.Empty;
                 NotifyEmulatorSelectionChanged();
             }
         }
@@ -1223,6 +1327,11 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 InstallModalSelectedEmulator = "refix_valve";
                 NotifyEmulatorSelectionChanged();
             }
+            else if (!value && string.Equals(InstallModalSelectedEmulator, "refix_valve", StringComparison.OrdinalIgnoreCase))
+            {
+                InstallModalSelectedEmulator = string.Empty;
+                NotifyEmulatorSelectionChanged();
+            }
         }
     }
 
@@ -1234,6 +1343,11 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             if (value && !string.Equals(InstallModalSelectedEmulator, "refix_goldberg", StringComparison.OrdinalIgnoreCase))
             {
                 InstallModalSelectedEmulator = "refix_goldberg";
+                NotifyEmulatorSelectionChanged();
+            }
+            else if (!value && string.Equals(InstallModalSelectedEmulator, "refix_goldberg", StringComparison.OrdinalIgnoreCase))
+            {
+                InstallModalSelectedEmulator = string.Empty;
                 NotifyEmulatorSelectionChanged();
             }
         }
@@ -1249,6 +1363,11 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 InstallModalSelectedEmulator = "gamefix_online";
                 NotifyEmulatorSelectionChanged();
             }
+            else if (!value && string.Equals(InstallModalSelectedEmulator, "gamefix_online", StringComparison.OrdinalIgnoreCase))
+            {
+                InstallModalSelectedEmulator = string.Empty;
+                NotifyEmulatorSelectionChanged();
+            }
         }
     }
 
@@ -1256,6 +1375,52 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private GameFixInfo? _selectedModalSpecificGameFix;
+
+    /// <summary>
+    /// The fixes that are not online fixes, offered as tick boxes in the install modal.
+    /// </summary>
+    /// <remarks>
+    /// An online fix stands in for the emulator, so it belongs in the radio group and only one
+    /// can win. A bypass or a hypervisor fix is a layer: it goes on top of whatever emulator was
+    /// picked, ReFix included, and several can apply together. The modal had nowhere to say that
+    /// — the only specific fixes it offered were the online ones — so installing a bypass meant
+    /// finishing the install and then going to the Emulator tab to do it by hand.
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(InstallModalHasExtraFixes))]
+    private ObservableCollection<InstallModalFixItem> _installModalExtraFixes = [];
+
+    /// <summary>Whether this title has any layerable fix to offer.</summary>
+    public bool InstallModalHasExtraFixes => InstallModalExtraFixes.Count > 0;
+
+    /// <summary>
+    /// Rebuilds the tick-box list from the fixes already loaded for this title.
+    /// </summary>
+    /// <remarks>
+    /// Reuses whatever <see cref="LoadGameFixesCoreAsync"/> put in the grouped collections, so
+    /// opening the modal costs no extra request.
+    /// </remarks>
+    private void RebuildInstallModalExtraFixes()
+    {
+        var alreadyInstalled = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var layer in Instance?.InstalledFixLayers ?? [])
+        {
+            if (layer.IsOnline || string.IsNullOrWhiteSpace(layer.FixId)) continue;
+            alreadyInstalled.Add(layer.FixId);
+        }
+
+        var rows = BypassGameFixes
+            .Concat(HypervisorGameFixes)
+            .Concat(OtherGameFixes)
+            .Where(f => !f.IsOnline)
+            .GroupBy(f => f.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .Select(f => new InstallModalFixItem(f, alreadyInstalled.Contains(f.Id)))
+            .ToList();
+
+        InstallModalExtraFixes = new ObservableCollection<InstallModalFixItem>(rows);
+    }
 
     public bool IsValveRecommendedForGame =>
         (CuratedRecommendation != null && !string.IsNullOrWhiteSpace(CuratedRecommendation.RecommendedEmulator) &&
@@ -1270,7 +1435,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
     private void NotifyEmulatorSelectionChanged()
     {
-        InstallModalEnableReFix = !string.Equals(InstallModalSelectedEmulator, "none", StringComparison.OrdinalIgnoreCase);
+        InstallModalEnableReFix = !string.IsNullOrWhiteSpace(InstallModalSelectedEmulator)
+            && !string.Equals(InstallModalSelectedEmulator, "none", StringComparison.OrdinalIgnoreCase);
         OnPropertyChanged(nameof(InstallModalSelectedEmulator));
         OnPropertyChanged(nameof(IsInstallModalEmulatorNone));
         OnPropertyChanged(nameof(IsInstallModalEmulatorValve));
@@ -1365,10 +1531,25 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         {
             if (value)
             {
-                InstallModalDlcMethod = "CreamAPI";
-                OnPropertyChanged(nameof(IsModalCreamApiSelected));
-                OnPropertyChanged(nameof(IsModalSmokeApiSelected));
+                RequestDlcUnlockerMethod("CreamAPI");
             }
+            else if (string.Equals(InstallModalDlcMethod, "CreamAPI", StringComparison.OrdinalIgnoreCase))
+            {
+                // Clicked off: back to no unlocker at all.
+                _forcedDlcMethodAccepted = false;
+                _suppressDlcMethodConfirm = true;
+                try
+                {
+                    InstallModalDlcMethod = string.Empty;
+                }
+                finally
+                {
+                    _suppressDlcMethodConfirm = false;
+                }
+            }
+
+            OnPropertyChanged(nameof(IsModalCreamApiSelected));
+            OnPropertyChanged(nameof(IsModalSmokeApiSelected));
         }
     }
 
@@ -1379,10 +1560,25 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         {
             if (value)
             {
-                InstallModalDlcMethod = "SmokeAPI";
-                OnPropertyChanged(nameof(IsModalCreamApiSelected));
-                OnPropertyChanged(nameof(IsModalSmokeApiSelected));
+                RequestDlcUnlockerMethod("SmokeAPI");
             }
+            else if (string.Equals(InstallModalDlcMethod, "SmokeAPI", StringComparison.OrdinalIgnoreCase))
+            {
+                // Clicked off: back to no unlocker at all.
+                _forcedDlcMethodAccepted = false;
+                _suppressDlcMethodConfirm = true;
+                try
+                {
+                    InstallModalDlcMethod = string.Empty;
+                }
+                finally
+                {
+                    _suppressDlcMethodConfirm = false;
+                }
+            }
+
+            OnPropertyChanged(nameof(IsModalCreamApiSelected));
+            OnPropertyChanged(nameof(IsModalSmokeApiSelected));
         }
     }
 
@@ -1395,6 +1591,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(IsModalCreamApiSelected));
         OnPropertyChanged(nameof(IsModalSmokeApiSelected));
+        OnPropertyChanged(nameof(InstallModalHasSelectedDlcs));
     }
 
     partial void OnInstallModalSelectAllDlcsChanged(bool value)
@@ -1413,9 +1610,54 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             _isUpdatingSelectAllInternally = false;
         }
         UpdateInstallModalDiskSpace();
+        SyncDlcMethodWithSelection();
     }
 
     private bool _isUpdatingSelectAllInternally;
+
+    /// <summary>
+    /// Keeps the unlocker method in step with the DLC list: a method is only pre-selected once at
+    /// least one DLC is ticked, and clearing every DLC clears the method again (unless the person
+    /// deliberately forced one through the confirmation).
+    /// </summary>
+    private void SyncDlcMethodWithSelection()
+    {
+        if (_suppressDlcMethodConfirm) return;
+
+        var hasSelection = InstallModalHasSelectedDlcs;
+
+        if (hasSelection && string.IsNullOrWhiteSpace(InstallModalDlcMethod))
+        {
+            _suppressDlcMethodConfirm = true;
+            try
+            {
+                InstallModalDlcMethod = !string.IsNullOrWhiteSpace(Instance?.DlcUnlockerMethod)
+                    ? Instance!.DlcUnlockerMethod
+                    : "CreamAPI";
+            }
+            finally
+            {
+                _suppressDlcMethodConfirm = false;
+            }
+        }
+        else if (!hasSelection && !_forcedDlcMethodAccepted && !string.IsNullOrWhiteSpace(InstallModalDlcMethod))
+        {
+            _suppressDlcMethodConfirm = true;
+            try
+            {
+                InstallModalDlcMethod = string.Empty;
+            }
+            finally
+            {
+                _suppressDlcMethodConfirm = false;
+            }
+        }
+
+        NotifyDlcMethodChanged();
+    }
+
+    /// <summary>Set once the person confirms a wrapper for a title with no detected DLC.</summary>
+    private bool _forcedDlcMethodAccepted;
 
     [RelayCommand]
     public void ToggleSelectAllModalDlcs()
@@ -1435,6 +1677,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         {
             _isUpdatingSelectAllInternally = false;
         }
+
+        SyncDlcMethodWithSelection();
     }
 
     public void UpdateInstallModalDiskSpace()
@@ -1541,11 +1785,29 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 InstallModalDlcs.Add(item);
             }
         }
-        InstallModalSelectAllDlcs = true;
+        InstallModalSelectAllDlcs = InstallModalDlcs.Count > 0;
 
-        InstallModalDlcMethod = !string.IsNullOrWhiteSpace(Instance.DlcUnlockerMethod) ? Instance.DlcUnlockerMethod : "CreamAPI";
-        OnPropertyChanged(nameof(IsModalCreamApiSelected));
-        OnPropertyChanged(nameof(IsModalSmokeApiSelected));
+        // No unlocker method is pre-selected: one is only offered once a DLC is actually ticked,
+        // and choosing one for a title with no DLC goes through an explicit confirmation.
+        _forcedDlcMethodAccepted = false;
+        _pendingForcedDlcMethod = null;
+        IsForceDlcUnlockerConfirmOpen = false;
+        _suppressDlcMethodConfirm = true;
+        try
+        {
+            InstallModalDlcMethod = InstallModalDlcs.Any(d => d.IsSelected)
+                ? (!string.IsNullOrWhiteSpace(Instance.DlcUnlockerMethod) ? Instance.DlcUnlockerMethod : "CreamAPI")
+                : string.Empty;
+        }
+        finally
+        {
+            _suppressDlcMethodConfirm = false;
+        }
+        NotifyDlcMethodChanged();
+
+        // Warn up front when the title resolved no depots at all: nothing can be downloaded.
+        InstallModalHasNoDepots = Instance.Depots == null || Instance.Depots.Count == 0;
+
         InstallModalEnableReFix = Instance.EmulatorEnabled;
 
         if (_recommendationProvider != null && Instance.AppId > 0 && CuratedRecommendation == null)
@@ -1574,6 +1836,14 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }
         NotifyInstallModalVersionModeChanged();
 
+        // The Custom mode edits the same per-depot manifest table the Game Version tab uses, so
+        // it needs the build id and the validation strip seeded here too.
+        if (string.IsNullOrWhiteSpace(CustomVersionBuildId))
+        {
+            CustomVersionBuildId = Instance.ActiveBuildId ?? string.Empty;
+        }
+        RecomputeCustomBuildValidation();
+
         // Query game-specific fixes (Online-Fix / DepotBox catalog) for this title
         if (_apiClient != null && OnlineGameFixes.Count == 0)
         {
@@ -1591,6 +1861,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         {
             SelectedModalSpecificGameFix = OnlineGameFixes[0];
         }
+
+        RebuildInstallModalExtraFixes();
 
         // Initialize specific emulator selection
         if (Instance.EmulatorEnabled && !string.IsNullOrWhiteSpace(Instance.EmulatorId))
@@ -1758,7 +2030,6 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }
 
         var selectedDlcIds = InstallModalDlcs.Where(d => d.IsSelected).Select(d => d.AppId).ToHashSet();
-        bool hasSelectedDlcs = selectedDlcIds.Count > 0;
 
         // Base game depots + selected DLC depots
         var selectedDepots = new List<DepotInfo>();
@@ -1808,8 +2079,41 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             targetBranch = !string.IsNullOrWhiteSpace(InstallModalSelectedBranch)
                 ? InstallModalSelectedBranch.Trim()
                 : "public";
-            targetBuildId = Instance.ActiveBuildId;
-            isBuildPinned = !string.Equals(targetBranch, "public", StringComparison.OrdinalIgnoreCase);
+
+            // Custom here means the same as Custom in the Game Version tab: the branch plus
+            // whatever manifest id was typed or picked for each depot.
+            var customManifests = new Dictionary<uint, ulong>();
+            foreach (var item in Depots)
+            {
+                var text = (item.ManifestInputText ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(text) && item.Depot.ManifestId > 0)
+                {
+                    text = item.Depot.ManifestId.ToString();
+                }
+                if (TryParseManifestId(text, out var manifestId) && manifestId > 0)
+                {
+                    customManifests[item.Depot.DepotId] = manifestId;
+                }
+            }
+
+            if (customManifests.Count > 0)
+            {
+                distinctDepots = distinctDepots.Select(d =>
+                    customManifests.TryGetValue(d.DepotId, out var pinned) && pinned > 0
+                        ? d with { ManifestId = pinned, IsDownloaded = false }
+                        : d).ToList();
+
+                foreach (var kv in customManifests)
+                {
+                    manifestMap[kv.Key] = kv.Value;
+                }
+            }
+
+            targetBuildId = !string.IsNullOrWhiteSpace(CustomVersionBuildId)
+                ? CustomVersionBuildId.Trim()
+                : Instance.ActiveBuildId;
+            isBuildPinned = customManifests.Count > 0
+                || !string.Equals(targetBranch, "public", StringComparison.OrdinalIgnoreCase);
             disableUpdates = isBuildPinned;
         }
         else
@@ -1854,9 +2158,25 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }
 
         bool isSpecificFix = string.Equals(InstallModalSelectedEmulator, "gamefix_online", StringComparison.OrdinalIgnoreCase);
-        bool enableEmulator = !string.Equals(InstallModalSelectedEmulator, "none", StringComparison.OrdinalIgnoreCase);
+        bool enableEmulator = !string.IsNullOrWhiteSpace(InstallModalSelectedEmulator)
+            && !string.Equals(InstallModalSelectedEmulator, "none", StringComparison.OrdinalIgnoreCase);
         string? emulatorId = enableEmulator ? InstallModalSelectedEmulator : null;
         string? pendingFixId = isSpecificFix ? SelectedModalSpecificGameFix?.Id : null;
+
+        // Every layer to put down after the download, most important first. The online fix, when
+        // one was chosen, leads: it stands in for the emulator. The tick boxes follow, and they
+        // coexist with it and with ReFix rather than replacing either.
+        var fixLayerIds = new List<string>();
+        if (!string.IsNullOrWhiteSpace(pendingFixId)) fixLayerIds.Add(pendingFixId);
+
+        foreach (var extra in InstallModalExtraFixes)
+        {
+            if (!extra.IsSelected) continue;
+            if (string.IsNullOrWhiteSpace(extra.Fix.Id)) continue;
+            if (fixLayerIds.Contains(extra.Fix.Id, StringComparer.OrdinalIgnoreCase)) continue;
+
+            fixLayerIds.Add(extra.Fix.Id);
+        }
         string? installedEmulatorVersion = isSpecificFix
             ? (SelectedModalSpecificGameFix?.Name ?? "Online Fix")
             : (enableEmulator ? "1.0" : null);
@@ -1869,14 +2189,16 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             InstalledManifestMap = manifestMap,
             IsBuildPinned = isBuildPinned,
             DisableUpdateChecks = disableUpdates,
-            DlcUnlockerMethod = InstallModalDlcMethod,
+            DlcUnlockerMethod = !string.IsNullOrWhiteSpace(InstallModalDlcMethod)
+                ? InstallModalDlcMethod
+                : Instance.DlcUnlockerMethod,
             PendingCreateDesktopShortcut = InstallModalCreateDesktopShortcut,
             PendingCreateStartMenuShortcut = InstallModalCreateStartMenuShortcut,
             AwaitingPostUpdateRedeploy = true,
-            PendingRedeployDlcUnlocker = hasSelectedDlcs || InstallModalDlcs.Count > 0,
+            PendingRedeployDlcUnlocker = !string.IsNullOrWhiteSpace(InstallModalDlcMethod),
             PendingRedeployEmulatorId = isSpecificFix ? null : emulatorId,
-            PendingRedeployGameFixId = pendingFixId,
-            PendingRedeployFixLayerIds = pendingFixId != null ? [pendingFixId] : [],
+            PendingRedeployGameFixId = fixLayerIds.Count > 0 ? fixLayerIds[0] : null,
+            PendingRedeployFixLayerIds = fixLayerIds,
             EmulatorEnabled = enableEmulator,
             EmulatorId = emulatorId,
             InstalledEmulatorVersion = installedEmulatorVersion,
@@ -6516,7 +6838,12 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             return;
         }
 
-        // Ensure missing manifests and keys are acquired via ManifestRegistry across providers
+        // Ensure missing manifests and keys are acquired via ManifestRegistry across providers.
+        // Both of these used to swallow every failure, so a game for which NOTHING could be
+        // resolved (no manifest from any provider, no depot key) was still handed to the download
+        // queue, which then "completed" it in a couple of seconds without downloading a byte.
+        var depotsMissingManifest = new List<uint>();
+
         if (_manifestRegistry != null && Instance.AppId > 0)
         {
             for (int i = 0; i < combinedDepots.Count; i++)
@@ -6533,7 +6860,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                             File.Copy(acquired, manifestFile, overwrite: true);
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Could not acquire manifest {DepotId}_{ManifestId} for {Game}", d.DepotId, d.ManifestId, Instance.Name);
+                    }
                 }
 
                 if (string.IsNullOrWhiteSpace(d.DepotKey) && _depotKeyRepository != null)
@@ -6546,9 +6876,51 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                             combinedDepots[i] = d with { DepotKey = key };
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Could not resolve depot key for depot {DepotId}", d.DepotId);
+                    }
                 }
             }
+        }
+
+        // A depot is downloadable if we hold its manifest locally, or if we hold its decryption
+        // key (in which case DepotDownloader can still pull the manifest from the Steam CDN).
+        // With neither, the download is guaranteed to produce nothing.
+        var usableDepots = 0;
+        foreach (var d in combinedDepots)
+        {
+            var manifestFile = Path.Combine(instanceManifestDir, $"{d.DepotId}_{d.ManifestId}.manifest");
+            var hasManifest = File.Exists(manifestFile) && new FileInfo(manifestFile).Length > 32;
+            var hasKey = !string.IsNullOrWhiteSpace(d.DepotKey);
+
+            if (hasManifest || hasKey) usableDepots++;
+            else depotsMissingManifest.Add(d.DepotId);
+        }
+
+        if (usableDepots == 0)
+        {
+            var depotList = string.Join(", ", depotsMissingManifest.Take(6));
+            var detail =
+                $"No manifest or depot key could be found for {Instance.Name} (AppId {Instance.AppId}). " +
+                $"None of the configured providers (local cache, ManifestHub, DepotBox) has data for depot(s) {depotList}. " +
+                "Starting the download would install nothing.";
+
+            _logger.LogError("Refusing to queue {Game} (AppId {AppId}): no usable depots. Missing: {Depots}",
+                Instance.Name, Instance.AppId, depotList);
+
+            StatusMessage = "⚠ No depots available for this game.";
+            _notificationService?.ShowError("Cannot Download", detail);
+            return;
+        }
+
+        if (depotsMissingManifest.Count > 0)
+        {
+            _logger.LogWarning("{Count} depot(s) of {Game} have neither a manifest nor a key and will be skipped: {Depots}",
+                depotsMissingManifest.Count, Instance.Name, string.Join(", ", depotsMissingManifest));
+            _notificationService?.ShowWarning(
+                "Some Depots Unavailable",
+                $"{depotsMissingManifest.Count} depot(s) of {Instance.Name} have no manifest or key available and will be skipped.");
         }
 
         var downloadInstance = Instance with { Depots = combinedDepots.AsReadOnly() };
@@ -7206,7 +7578,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 }
             }
 
-            // 5. Reset downloaded status on instance depots and DLCs while preserving instance metadata
+            // 5. Remove shortcuts from Desktop and Start Menu
+            ShortcutHelper.RemoveGameShortcuts(Instance.Name, Instance.ExecutablePath, Instance.InstallPath);
+
+            // 6. Reset downloaded status on instance depots and DLCs while preserving instance metadata
             var uninstalledDepots = (Instance.Depots ?? []).Select(d => d with { IsDownloaded = false }).ToList();
             var uninstalledDlcs = (Instance.Dlcs ?? []).Select(d => d with
             {

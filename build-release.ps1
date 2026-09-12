@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "1.3.0"
+    [string]$Version = "1.4.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -72,10 +72,10 @@ $releaseSettings = [ordered]@{
 $settingsJsonPath = Join-Path $publishDir "settings.json"
 $releaseSettings | ConvertTo-Json -Depth 5 | Set-Content -Path $settingsJsonPath -Encoding UTF8
 
-# 2.2 Bundle Visual C++ and Windows system runtime dependencies for zero-dependency portable mode
-Write-Host "  Bundling VC++ runtimes and system dependencies for zero-dependency execution..." -ForegroundColor Gray
+# 2.2 Bundle Visual C++, DirectX, and Windows system runtime dependencies for zero-dependency portable mode
+Write-Host "  Bundling VC++, DirectX runtimes and system dependencies for zero-dependency execution..." -ForegroundColor Gray
 $sys32 = "$env:WINDIR\System32"
-$vcDlls = @(
+$systemDlls = @(
     "msvcp140.dll",
     "msvcp140_1.dll",
     "msvcp140_2.dll",
@@ -85,10 +85,17 @@ $vcDlls = @(
     "vcruntime140_1.dll",
     "vcruntime140_threads.dll",
     "vcomp140.dll",
-    "ucrtbase.dll"
+    "ucrtbase.dll",
+    "d3dcompiler_47.dll",
+    "d3dcompiler_43.dll",
+    "d3dx9_43.dll",
+    "d3dx11_43.dll",
+    "xaudio2_7.dll",
+    "xinput1_3.dll",
+    "xinput1_4.dll"
 )
 $toolsDir = Join-Path $publishDir "tools"
-foreach ($dll in $vcDlls) {
+foreach ($dll in $systemDlls) {
     $srcPath = Join-Path $sys32 $dll
     if (Test-Path $srcPath) {
         Copy-Item -Path $srcPath -Destination $publishDir -Force
@@ -98,14 +105,39 @@ foreach ($dll in $vcDlls) {
     }
 }
 
-# 2.3 Copy .NET host runtime libraries to tools directory for DepotDownloaderMod standalone operation
-$dotnetHostDlls = @("hostfxr.dll", "hostpolicy.dll", "coreclr.dll", "clrjit.dll")
-foreach ($dDll in $dotnetHostDlls) {
-    $srcHost = Join-Path $publishDir $dDll
-    if (Test-Path $srcHost) {
-        Copy-Item -Path $srcHost -Destination $toolsDir -Force
+# 2.3 Copy complete .NET host runtime and core libraries to tools directory for DepotDownloaderMod standalone operation
+Write-Host "  Bundling complete .NET host runtime and dependencies for DepotDownloaderMod standalone execution..." -ForegroundColor Gray
+$runtimeDlls = Get-ChildItem -Path $publishDir -Filter "*.dll" | Where-Object {
+    $_.Name -like "System.*.dll" -or
+    $_.Name -like "Microsoft.Win32.*.dll" -or
+    $_.Name -like "Microsoft.Extensions.*.dll" -or
+    $_.Name -in @("coreclr.dll", "clrjit.dll", "hostfxr.dll", "hostpolicy.dll", "System.Private.CoreLib.dll", "mscorlib.dll", "netstandard.dll")
+}
+foreach ($rDll in $runtimeDlls) {
+    Copy-Item -Path $rDll.FullName -Destination $toolsDir -Force
+}
+
+# Ensure DepotDownloaderMod.runtimeconfig.json is self-contained aware
+$ddmRuntimeConfig = Join-Path $toolsDir "DepotDownloaderMod.runtimeconfig.json"
+$ddmConfigContent = @{
+    runtimeOptions = @{
+        tfm = "net8.0"
+        rollForward = "LatestMajor"
+        includedFrameworks = @(
+            @{
+                name = "Microsoft.NETCore.App"
+                version = "8.0.0"
+            }
+        )
+        configProperties = @{
+            "System.Globalization.Invariant" = $true
+            "System.Globalization.PredefinedCulturesOnly" = $true
+            "System.Reflection.Metadata.MetadataUpdater.IsSupported" = $false
+            "System.Runtime.Serialization.EnableUnsafeBinaryFormatterSerialization" = $false
+        }
     }
 }
+$ddmConfigContent | ConvertTo-Json -Depth 5 | Set-Content -Path $ddmRuntimeConfig -Encoding UTF8
 
 # 3. Setup Code Signing Certificate ("BlueStar Devs")
 Write-Host "[3/6] Configuring code signing certificate ('BlueStar Devs')..." -ForegroundColor Yellow
@@ -119,16 +151,6 @@ if (-not $cert) {
 
 if ($cert) {
     Write-Host "  Using Certificate: $($cert.Subject) [Thumbprint: $($cert.Thumbprint)]" -ForegroundColor Green
-    
-    # Export public certificate (.cer)
-    $cerPath = Join-Path $distDir "BlueStar_Certificate.cer"
-    [System.IO.File]::WriteAllBytes($cerPath, $cert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
-    Copy-Item -Path $cerPath -Destination $publishDir -Force
-
-    # Create certificate install batch script for distribution
-    $installBatContent = "@echo off`r`necho Installing BlueStar Digital Certificate into Windows Certificate Store...`r`ncertutil -user -f -addstore Root `"%~dp0BlueStar_Certificate.cer`"`r`ncertutil -user -f -addstore TrustedPublisher `"%~dp0BlueStar_Certificate.cer`"`r`necho Certificate installed successfully.`r`npause"
-    Set-Content -Path (Join-Path $distDir "install-cert.bat") -Value $installBatContent -Encoding ASCII
-    Set-Content -Path (Join-Path $publishDir "install-cert.bat") -Value $installBatContent -Encoding ASCII
     
     # Sign main executable and key libraries
     Write-Host "  Signing application binaries with DigiCert timestamp..." -ForegroundColor Gray

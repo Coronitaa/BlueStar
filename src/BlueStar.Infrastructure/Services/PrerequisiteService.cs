@@ -132,17 +132,22 @@ public sealed class PrerequisiteService : IPrerequisiteService
             items.Add(uePrereq);
         }
 
-        // 3. Scan local game directory for embedded installers
+        // 3. Scan the local game directory for embedded installers.
+        //    Two passes: the redistributables we know how to recognise, and then anything else
+        //    shipped in a redist folder, so a title that bundles a prerequisite we never
+        //    anticipated still shows up instead of being silently skipped.
         if (!string.IsNullOrWhiteSpace(instance.InstallPath) && Directory.Exists(instance.InstallPath))
         {
             try
             {
                 var files = Directory.GetFiles(instance.InstallPath, "*.exe", SafeEnumOptions)
-                    .Concat(Directory.GetFiles(instance.InstallPath, "*.msi", SafeEnumOptions));
+                    .Concat(Directory.GetFiles(instance.InstallPath, "*.msi", SafeEnumOptions))
+                    .ToList();
 
                 foreach (var file in files)
                 {
                     var fileName = Path.GetFileName(file).ToLowerInvariant();
+                    var claimed = true;
 
                     if (fileName.Contains("vcredist") || fileName.Contains("vc_redist"))
                     {
@@ -182,34 +187,53 @@ public sealed class PrerequisiteService : IPrerequisiteService
                             if (uePrereq.Status != PrerequisiteStatus.InstalledInSystem)
                                 uePrereq.Status = PrerequisiteStatus.AvailableInGame;
                         }
+                        else
+                        {
+                            // The engine was not detected but the package ships the UE prereqs anyway.
+                            AddDiscovered(items, file, "Unreal Engine Prerequisites", "Unreal Engine",
+                                "Visual C++, DirectX and Epic runtime components shipped with this Unreal Engine title.");
+                        }
                     }
                     else if (fileName.Contains("physx"))
                     {
-                        var physxItem = new PrerequisiteItem
-                        {
-                            Id = "nvidia_physx",
-                            Name = "NVIDIA PhysX System Software",
-                            Category = "PhysX",
-                            Description = "Hardware-accelerated physics engine for legacy and Unreal games.",
-                            LocalInstallerPath = file,
-                            Status = PrerequisiteStatus.AvailableInGame,
-                            SilentArguments = "/quiet /norestart"
-                        };
-                        if (!items.Any(i => i.Id == physxItem.Id)) items.Add(physxItem);
+                        AddDiscovered(items, file, "NVIDIA PhysX System Software", "PhysX",
+                            "Hardware-accelerated physics engine for legacy and Unreal games.", id: "nvidia_physx");
                     }
                     else if (fileName.Contains("oalinst") || fileName.Contains("openal"))
                     {
-                        var openalItem = new PrerequisiteItem
-                        {
-                            Id = "openal_runtime",
-                            Name = "OpenAL 3D Audio Runtime",
-                            Category = "OpenAL",
-                            Description = "Cross-platform 3D positional audio API.",
-                            LocalInstallerPath = file,
-                            Status = PrerequisiteStatus.AvailableInGame,
-                            SilentArguments = "/s"
-                        };
-                        if (!items.Any(i => i.Id == openalItem.Id)) items.Add(openalItem);
+                        AddDiscovered(items, file, "OpenAL 3D Audio Runtime", "OpenAL",
+                            "Cross-platform 3D positional audio API.", id: "openal_runtime", silentArgs: "/s");
+                    }
+                    else if (fileName.Contains("xnafx") || fileName.Contains("xna"))
+                    {
+                        AddDiscovered(items, file, "Microsoft XNA Framework Redistributable", "XNA",
+                            "Runtime required by XNA / MonoGame titles.", id: "xna_framework");
+                    }
+                    else if (fileName.Contains("dotnetfx") || fileName.StartsWith("ndp") || fileName.Contains("netfx"))
+                    {
+                        AddDiscovered(items, file, ".NET Framework Redistributable", ".NET Runtime",
+                            "Legacy .NET Framework runtime shipped with this title.", id: "dotnet_framework_legacy");
+                    }
+                    else if (fileName.Contains("directx") || fileName.Contains("d3d"))
+                    {
+                        AddDiscovered(items, file, "DirectX Redistributable (bundled)", "DirectX",
+                            "DirectX runtime files shipped inside the game package.", id: "directx_bundled");
+                    }
+                    else
+                    {
+                        claimed = false;
+                    }
+
+                    if (claimed) continue;
+
+                    // ── Unanticipated prerequisites ──
+                    // Anything left that lives in a redistributable folder is treated as a
+                    // prerequisite of this specific game, whatever it happens to be.
+                    if (IsInRedistributableFolder(file, instance.InstallPath))
+                    {
+                        AddDiscovered(items, file, PrettyInstallerName(file), "Game Package",
+                            "Bundled with this game as a required runtime component.",
+                            essential: false);
                     }
                 }
             }
@@ -220,6 +244,90 @@ public sealed class PrerequisiteService : IPrerequisiteService
         }
 
         return items;
+    }
+
+    /// <summary>
+    /// Folder names publishers use for the runtimes they ship next to the game. Anything found
+    /// inside one is a prerequisite by intent, even when its file name means nothing to us.
+    /// </summary>
+    private static readonly string[] RedistFolderNames =
+    [
+        "_commonredist", "commonredist", "_redist", "redist", "redists", "redistributable",
+        "redistributables", "prereq", "prereqs", "prerequisite", "prerequisites",
+        "directx", "vcredist", "installers", "install", "support", "extras", "runtime", "runtimes"
+    ];
+
+    /// <summary>
+    /// Executable names that are the game itself, an uninstaller or a crash reporter rather than
+    /// a runtime, and which must never be launched as a "prerequisite".
+    /// </summary>
+    private static readonly string[] NonPrerequisiteNames =
+    [
+        "unins", "uninstall", "setup.exe", "launcher", "crashreport", "crashhandler",
+        "epicwebhelper", "steamservice", "quickboot", "eac", "battleye", "activate"
+    ];
+
+    private static bool IsInRedistributableFolder(string file, string installRoot)
+    {
+        var directory = Path.GetDirectoryName(file);
+        if (string.IsNullOrWhiteSpace(directory)) return false;
+
+        var fileName = Path.GetFileName(file).ToLowerInvariant();
+        if (NonPrerequisiteNames.Any(n => fileName.Contains(n, StringComparison.Ordinal))) return false;
+
+        // The game root itself is not a redist folder: only nested redist folders count.
+        var relative = Path.GetRelativePath(installRoot, directory);
+        if (string.IsNullOrWhiteSpace(relative) || relative == ".") return false;
+
+        return relative
+            .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Any(segment => RedistFolderNames.Contains(segment.ToLowerInvariant()));
+    }
+
+    /// <summary>Turns "vcredist_x64_2013.exe" into something a person can read in the list.</summary>
+    private static string PrettyInstallerName(string file)
+    {
+        var raw = Path.GetFileNameWithoutExtension(file).Replace('_', ' ').Replace('-', ' ').Trim();
+        if (string.IsNullOrWhiteSpace(raw)) return Path.GetFileName(file);
+
+        var words = raw.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Select(w => w.Length > 1 ? char.ToUpperInvariant(w[0]) + w[1..] : w.ToUpperInvariant());
+
+        var parent = Path.GetFileName(Path.GetDirectoryName(file) ?? string.Empty);
+        var name = string.Join(' ', words);
+        return string.IsNullOrWhiteSpace(parent) ? name : $"{name} ({parent})";
+    }
+
+    private static void AddDiscovered(
+        List<PrerequisiteItem> items,
+        string file,
+        string name,
+        string category,
+        string description,
+        string? id = null,
+        string? silentArgs = null,
+        bool essential = false)
+    {
+        id ??= "pkg_" + Path.GetFileNameWithoutExtension(file).ToLowerInvariant()
+            .Replace(' ', '_').Replace('-', '_').Replace('.', '_');
+
+        if (items.Any(i => string.Equals(i.Id, id, StringComparison.OrdinalIgnoreCase))) return;
+
+        silentArgs ??= file.EndsWith(".msi", StringComparison.OrdinalIgnoreCase)
+            ? "/qn /norestart"
+            : "/quiet /norestart";
+
+        items.Add(new PrerequisiteItem
+        {
+            Id = id,
+            Name = name,
+            Category = category,
+            Description = description,
+            LocalInstallerPath = file,
+            Status = PrerequisiteStatus.AvailableInGame,
+            SilentArguments = silentArgs,
+            IsEssential = essential
+        });
     }
 
     /// <inheritdoc />

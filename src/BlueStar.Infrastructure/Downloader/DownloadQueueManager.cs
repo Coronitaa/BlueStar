@@ -758,24 +758,27 @@ public class DownloadQueueManager
         {
             RunOnUi(() =>
             {
-                if (job.JobStatus != DownloadJobStatus.Downloading) return;
-                job.DownloadedBytes = p.DownloadedBytes;
-                job.TotalBytes = p.TotalBytes;
-                job.SpeedBytesPerSec = p.Speed;
-                job.Percentage = p.Percentage;
-                job.WriteBytesPerSec = p.WriteBytesPerSec;
-                job.ActiveConnections = p.ActiveConnections;
-                job.EstimatedTimeRemaining = p.EstimatedTimeRemaining;
-                job.Phase = p.Phase;
-                job.TotalChunks = p.TotalChunks;
-                job.CompletedChunks = p.CompletedChunks;
-                job.CurrentDepotId = p.CurrentDepotId;
-                job.CurrentDepotIndex = p.CurrentDepotIndex;
-                job.TotalDepots = p.TotalDepots;
-                if (!string.IsNullOrWhiteSpace(p.CurrentFile))
-                    job.StatusMessage = p.CurrentFile;
-                job.NotifyMetricsChanged();
-                UpdateTelemetry(p.Speed, p.WriteBytesPerSec);
+                lock (job)
+                {
+                    if (job.JobStatus != DownloadJobStatus.Downloading) return;
+                    job.DownloadedBytes = p.DownloadedBytes;
+                    job.TotalBytes = p.TotalBytes;
+                    job.SpeedBytesPerSec = p.Speed;
+                    job.Percentage = p.Percentage;
+                    job.WriteBytesPerSec = p.WriteBytesPerSec;
+                    job.ActiveConnections = p.ActiveConnections;
+                    job.EstimatedTimeRemaining = p.EstimatedTimeRemaining;
+                    job.Phase = p.Phase;
+                    job.TotalChunks = p.TotalChunks;
+                    job.CompletedChunks = p.CompletedChunks;
+                    job.CurrentDepotId = p.CurrentDepotId;
+                    job.CurrentDepotIndex = p.CurrentDepotIndex;
+                    job.TotalDepots = p.TotalDepots;
+                    if (!string.IsNullOrWhiteSpace(p.CurrentFile))
+                        job.StatusMessage = p.CurrentFile;
+                    job.NotifyMetricsChanged();
+                    UpdateTelemetry(p.Speed, p.WriteBytesPerSec);
+                }
             });
         });
 
@@ -790,11 +793,14 @@ public class DownloadQueueManager
             await Task.Run(() => _downloadProvider.DownloadAsync(instance, progress, cts.Token), cts.Token)
                 .ConfigureAwait(false);
 
-            job.JobStatus = DownloadJobStatus.Completed;
-            job.Percentage = 100;
-            job.Phase = "Completed";
-            job.StatusMessage = "Completed ✅";
-            job.CompletedAt = DateTimeOffset.Now;
+            lock (job)
+            {
+                job.JobStatus = DownloadJobStatus.Completed;
+                job.Percentage = 100;
+                job.Phase = "Completed";
+                job.StatusMessage = "Completed ✅";
+                job.CompletedAt = DateTimeOffset.Now;
+            }
 
             RunOnUi(() =>
             {
@@ -922,18 +928,53 @@ public class DownloadQueueManager
                                         job.NotifyMetricsChanged();
                                     }));
 
-                                var fixSuccess = await _gameFixDeployService.DeployFixByIdAsync(
-                                    updatedInstance,
-                                    updatedInstance.PendingRedeployGameFixId,
-                                    fixProgress,
-                                    CancellationToken.None).ConfigureAwait(false);
+                                // Every layer the install modal asked for, in the order it chose.
+                                // PendingRedeployFixLayerIds used to be written and never read,
+                                // so a bypass ticked alongside an online fix was silently
+                                // dropped; only the single PendingRedeployGameFixId was deployed.
+                                var layerIds = updatedInstance.PendingRedeployFixLayerIds is { Count: > 0 } declared
+                                    ? declared.ToList()
+                                    : new List<string> { updatedInstance.PendingRedeployGameFixId! };
 
-                                if (fixSuccess && _instanceManager != null)
+                                var anyDeployed = false;
+
+                                foreach (var layerId in layerIds)
+                                {
+                                    if (string.IsNullOrWhiteSpace(layerId)) continue;
+
+                                    RunOnUi(() =>
+                                    {
+                                        job.StatusMessage = layerIds.Count > 1
+                                            ? $"Deploying fix {layerIds.IndexOf(layerId) + 1} of {layerIds.Count}..."
+                                            : "Deploying game-specific emulator...";
+                                        job.NotifyMetricsChanged();
+                                    });
+
+                                    try
+                                    {
+                                        anyDeployed |= await _gameFixDeployService.DeployFixByIdAsync(
+                                            updatedInstance,
+                                            layerId,
+                                            fixProgress,
+                                            CancellationToken.None).ConfigureAwait(false);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        // One layer failing must not cost the ones after it.
+                                        _logger.LogError(ex, "Failed to deploy fix layer {FixId} for {Game}", layerId, updatedInstance.Name);
+                                    }
+                                }
+
+                                if (anyDeployed && _instanceManager != null)
                                 {
                                     var refreshed = await _instanceManager.GetByIdAsync(updatedInstance.Id, CancellationToken.None).ConfigureAwait(false);
                                     if (refreshed != null)
                                     {
-                                        updatedInstance = refreshed with { PendingRedeployGameFixId = null };
+                                        updatedInstance = refreshed with
+                                        {
+                                            PendingRedeployGameFixId = null,
+                                            PendingRedeployFixLayerIds = []
+                                        };
                                         await _instanceManager.UpdateAsync(updatedInstance, CancellationToken.None).ConfigureAwait(false);
                                     }
                                 }

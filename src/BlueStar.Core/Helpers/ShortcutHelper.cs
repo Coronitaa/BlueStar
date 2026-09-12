@@ -1054,4 +1054,135 @@ public static class ShortcutHelper
             return false;
         }
     }
+
+    /// <summary>
+    /// Deletes game shortcuts (.lnk) from Desktop and Start Menu (both current user and common profiles).
+    /// Matches by candidate file names and by inspecting shortcut TargetPath against game executable or installation folder.
+    /// </summary>
+    public static void RemoveGameShortcuts(string? gameName, string? executablePath = null, string? installPath = null)
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        try
+        {
+            var targetDirectories = new List<string>();
+
+            void AddDir(Environment.SpecialFolder folder)
+            {
+                try
+                {
+                    var p = Environment.GetFolderPath(folder);
+                    if (!string.IsNullOrWhiteSpace(p) && Directory.Exists(p) && !targetDirectories.Contains(p, StringComparer.OrdinalIgnoreCase))
+                    {
+                        targetDirectories.Add(p);
+                    }
+                }
+                catch { }
+            }
+
+            AddDir(Environment.SpecialFolder.DesktopDirectory);
+            AddDir(Environment.SpecialFolder.Desktop);
+            AddDir(Environment.SpecialFolder.CommonDesktopDirectory);
+            AddDir(Environment.SpecialFolder.Programs);
+            AddDir(Environment.SpecialFolder.CommonPrograms);
+
+            var candidateFileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(gameName))
+            {
+                candidateFileNames.Add($"{PathHelper.SanitizeFolderName(gameName)}.lnk");
+                candidateFileNames.Add($"{gameName}.lnk");
+            }
+
+            if (!string.IsNullOrWhiteSpace(executablePath))
+            {
+                var exeName = Path.GetFileNameWithoutExtension(executablePath);
+                if (!string.IsNullOrWhiteSpace(exeName))
+                {
+                    candidateFileNames.Add($"{PathHelper.SanitizeFolderName(exeName)}.lnk");
+                    candidateFileNames.Add($"{exeName}.lnk");
+                }
+            }
+
+            // 1. Remove direct name matches
+            foreach (var dir in targetDirectories)
+            {
+                foreach (var candidate in candidateFileNames)
+                {
+                    var fullFile = Path.Combine(dir, candidate);
+                    if (File.Exists(fullFile))
+                    {
+                        try
+                        {
+                            File.Delete(fullFile);
+                        }
+                        catch { }
+                    }
+                }
+            }
+
+            // 2. Inspect remaining shortcuts to find any pointing into the install folder or to the executable
+            if (!string.IsNullOrWhiteSpace(installPath) || !string.IsNullOrWhiteSpace(executablePath))
+            {
+                var normalizedInstall = !string.IsNullOrWhiteSpace(installPath)
+                    ? Path.GetFullPath(installPath).TrimEnd('\\', '/')
+                    : null;
+                var normalizedExe = !string.IsNullOrWhiteSpace(executablePath)
+                    ? Path.GetFullPath(executablePath)
+                    : null;
+
+                dynamic? shell = null;
+                try
+                {
+                    var shellType = Type.GetTypeFromProgID("WScript.Shell");
+                    if (shellType != null)
+                    {
+                        shell = Activator.CreateInstance(shellType);
+                    }
+                }
+                catch { }
+
+                if (shell != null)
+                {
+                    foreach (var dir in targetDirectories)
+                    {
+                        try
+                        {
+                            var lnkFiles = Directory.GetFiles(dir, "*.lnk", SearchOption.TopDirectoryOnly);
+                            foreach (var lnk in lnkFiles)
+                            {
+                                try
+                                {
+                                    dynamic shortcut = shell.CreateShortcut(lnk);
+                                    string target = shortcut.TargetPath;
+                                    if (!string.IsNullOrWhiteSpace(target))
+                                    {
+                                        var normTarget = Path.GetFullPath(target);
+                                        bool isMatch = false;
+
+                                        if (normalizedExe != null && string.Equals(normTarget, normalizedExe, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            isMatch = true;
+                                        }
+                                        else if (normalizedInstall != null && normTarget.StartsWith(normalizedInstall, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            isMatch = true;
+                                        }
+
+                                        if (isMatch)
+                                        {
+                                            File.Delete(lnk);
+                                        }
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+            }
+        }
+        catch { }
+    }
 }

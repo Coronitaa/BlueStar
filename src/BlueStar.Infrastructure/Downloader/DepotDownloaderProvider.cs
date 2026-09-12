@@ -120,6 +120,26 @@ public partial class DepotDownloaderProvider : IDownloadProvider
             }).ToList();
 
 
+            // Surface the state of the depot inputs up front. A depot with neither a local
+            // manifest nor a decryption key cannot produce any content, and used to fail silently
+            // further down (the download "completed" in seconds having written nothing).
+            var unusableDepots = depotItems
+                .Where(d => string.IsNullOrWhiteSpace(d.ManifestFilePath) && string.IsNullOrWhiteSpace(d.DepotKey))
+                .Select(d => d.DepotId)
+                .ToList();
+
+            if (unusableDepots.Count == depotItems.Count)
+            {
+                _logger.LogWarning(
+                    "None of the {Count} depot(s) of {GameName} has a local manifest or a depot key; the download depends entirely on Steam handing out keys anonymously and will most likely fail.",
+                    depotItems.Count, instance.Name);
+            }
+            else if (unusableDepots.Count > 0)
+            {
+                _logger.LogWarning("Depot(s) {Depots} of {GameName} have no manifest and no key available.",
+                    string.Join(", ", unusableDepots), instance.Name);
+            }
+
             var request = new DepotDownloadRequest
             {
                 InstanceId = instance.Id,

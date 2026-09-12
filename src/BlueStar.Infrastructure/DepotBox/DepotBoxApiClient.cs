@@ -26,6 +26,24 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
     private Task<IReadOnlyList<GameFixInfo>>? _inFlightCatalogTask;
     private readonly SemaphoreSlim _catalogLock = new(1, 1);
 
+    /// <summary>Answers to a filtered fixes query, keyed by query and tag.</summary>
+    /// <remarks>
+    /// The full catalogue already had a cache and single-flight; the filtered query had neither,
+    /// and the instance dashboard asks for the same one from several panels as it opens — the
+    /// log of 2026-09-11 shows the identical answer fetched three times in six seconds.
+    /// </remarks>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, CachedFixQuery> _fixQueryCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Task<IReadOnlyList<GameFixInfo>>> _fixQueryInFlight =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>How long a fixes query is remembered. Fixes are published, not live data.</summary>
+    private static readonly TimeSpan FixQueryTtl = TimeSpan.FromMinutes(10);
+
+    /// <summary>One memoised answer to a fixes query.</summary>
+    private sealed record CachedFixQuery(IReadOnlyList<GameFixInfo> Value, DateTimeOffset ExpiresAt);
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -609,7 +627,45 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<GameFixInfo>> GetGameFixesAsync(string? query = null, string? tags = null, CancellationToken ct = default)
+    /// <remarks>
+    /// Cached and single-flighted. An empty answer is cached too: without that, every panel that
+    /// asked re-queried the endpoint and then pulled the whole catalogue down to filter it
+    /// locally, which is most of what the repeated calls in the log were.
+    /// </remarks>
+    public Task<IReadOnlyList<GameFixInfo>> GetGameFixesAsync(string? query = null, string? tags = null, CancellationToken ct = default)
+    {
+        var key = (query?.Trim() ?? string.Empty) + "\u001f" + (tags?.Trim() ?? string.Empty);
+
+        if (_fixQueryCache.TryGetValue(key, out var cached) && DateTimeOffset.UtcNow < cached.ExpiresAt)
+        {
+            return Task.FromResult(cached.Value);
+        }
+
+        return _fixQueryInFlight.GetOrAdd(key, _ => RunFixesQueryAsync(key, query, tags));
+    }
+
+    /// <summary>
+    /// Runs one fixes query and remembers the answer, then lets the next caller start a new one.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not given a caller's cancellation token: several callers share this one task,
+    /// and the first of them giving up must not fail the rest. The request has its own timeout.
+    /// </remarks>
+    private async Task<IReadOnlyList<GameFixInfo>> RunFixesQueryAsync(string key, string? query, string? tags)
+    {
+        try
+        {
+            var result = await FetchGameFixesAsync(query, tags, CancellationToken.None).ConfigureAwait(false);
+            _fixQueryCache[key] = new CachedFixQuery(result, DateTimeOffset.UtcNow.Add(FixQueryTtl));
+            return result;
+        }
+        finally
+        {
+            _fixQueryInFlight.TryRemove(key, out _);
+        }
+    }
+
+    private async Task<IReadOnlyList<GameFixInfo>> FetchGameFixesAsync(string? query, string? tags, CancellationToken ct)
     {
         var queryParams = new List<string>();
         if (!string.IsNullOrWhiteSpace(query))

@@ -103,6 +103,9 @@ public sealed class AppSettingsService
     /// <summary>Whether to show games with 3rd-party DRM in catalogs and searches (default true).</summary>
     public bool ShowDrmContent => _current.ShowDrmContent;
 
+    /// <summary>Whether Explore shows result cards in a grid rather than a row list.</summary>
+    public bool ExploreGridView => _current.ExploreGridView;
+
     /// <summary>Persists a new last install directory.</summary>
     public async Task SetLastInstallDirectoryAsync(string path)
     {
@@ -135,6 +138,15 @@ public sealed class AppSettingsService
     public async Task SetShowDrmContentAsync(bool show)
     {
         _current = _current with { ShowDrmContent = show };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Remembers whether Explore was last left on the card grid or the row list.</summary>
+    public async Task SetExploreGridViewAsync(bool grid)
+    {
+        if (_current.ExploreGridView == grid) return;
+
+        _current = _current with { ExploreGridView = grid };
         await SaveAsync().ConfigureAwait(false);
     }
 
@@ -250,6 +262,7 @@ public sealed class AppSettingsService
         public bool DeleteDepotsAfterInstall { get; init; } = true;
         public bool ShowNsfwContent { get; init; } = false;
         public bool ShowDrmContent { get; init; } = true;
+        public bool ExploreGridView { get; init; } = true;
         public bool EnableExperimentalMods { get; init; } = false;
         public bool CheckSystemRequirementsOnStartup { get; init; } = true;
         public bool EnableAdvancedBuildOptions { get; init; } = false;

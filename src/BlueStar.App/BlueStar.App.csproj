@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
@@ -9,6 +9,9 @@
     <AssemblyName>BlueStar</AssemblyName>
     <ApplicationIcon>Assets\bluestar.ico</ApplicationIcon>
     <Description>BlueStar — Universal Steam Game Instance Manager, Depot Staging, Manifest Resolver, and Multi-Engine Launcher</Description>
+    <Version>1.4.0</Version>
+    <AssemblyVersion>1.4.0.0</AssemblyVersion>
+    <FileVersion>1.4.0.0</FileVersion>
     <SatelliteResourceLanguages>en-US;en</SatelliteResourceLanguages>
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
@@ -21,6 +24,7 @@
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.1" />

@@ -66,8 +66,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private UserControl? _currentView;
 
+    /// <summary>The Explore page, built once and reused. See <see cref="GetExploreView"/>.</summary>
+    private BrowseView? _exploreView;
+
     partial void OnCurrentViewChanged(UserControl? oldValue, UserControl? newValue)
     {
+        if (oldValue?.DataContext is ISharedViewModel) return;
+
         if (oldValue?.DataContext is IDisposable oldDisposable && !ReferenceEquals(oldDisposable, newValue?.DataContext))
         {
             try
@@ -693,10 +698,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         else if (entry.Page == "ExploreCategory" && !string.IsNullOrWhiteSpace(entry.CategoryId))
         {
             SelectedNavigation = "Explore";
-            var view = new BrowseView();
-            var vm = App.Services.GetRequiredService<BrowseViewModel>();
-            vm.OnManageInstanceRequested = OpenInstanceDetail;
-            view.DataContext = vm;
+            var (view, vm) = GetExploreView();
             CurrentView = view;
             vm.ExpandCategory(entry.CategoryId);
         }
@@ -736,6 +738,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             var vm = App.Services.GetRequiredService<HomeViewModel>();
             vm.OnNavigateRequested = Navigate;
             vm.OnNavigateToCategoryRequested = NavigateToExploreCategory;
+            vm.OnFindSimilarRequested = OpenSimilarInExplore;
             vm.OnManageInstanceRequested = OpenInstanceDetail;
             vm.OnManageInstanceRequestedWithUpdate = (inst, autoCheck) => OpenInstanceDetail(inst, autoCheckUpdates: autoCheck);
             view.DataContext = vm;
@@ -757,11 +760,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         if (page is "Browse" or "Explore")
         {
-            var view = new BrowseView();
-            var vm = App.Services.GetRequiredService<BrowseViewModel>();
-            vm.OnManageInstanceRequested = OpenInstanceDetail;
-            view.DataContext = vm;
-            CurrentView = view;
+            CurrentView = GetExploreView().View;
             return;
         }
 
@@ -803,18 +802,51 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
+    /// Switches to Explore and filters it by the featured tags of the given title, which is what
+    /// "similar games" means. Home shows the store panel but has no filter panel of its own.
+    /// </summary>
+    public void OpenSimilarInExplore(SearchResult target)
+    {
+        if (target is null) return;
+
+        Navigate("Explore");
+
+        // Resolving the tags may need a round trip to the store page, so this is deliberately
+        // not awaited: Explore is already on screen and fills in when the answer arrives.
+        _ = GetExploreView().ViewModel.FindSimilarAsync(target);
+    }
+
+    /// <summary>
     /// Navigates to the Explore tab, auto-expanding the requested category vertical grid.
     /// </summary>
     public void NavigateToExploreCategory(string categoryId)
     {
         PushNavigation("ExploreCategory", null, categoryId);
         SelectedNavigation = "Explore";
-        var view = new BrowseView();
-        var vm = App.Services.GetRequiredService<BrowseViewModel>();
-        vm.OnManageInstanceRequested = OpenInstanceDetail;
-        view.DataContext = vm;
+        var (view, vm) = GetExploreView();
         CurrentView = view;
         vm.ExpandCategory(categoryId);
+    }
+
+    /// <summary>
+    /// Returns the one Explore page, building it the first time it is asked for.
+    /// </summary>
+    /// <remarks>
+    /// Both the view and its ViewModel are kept. A new <see cref="BrowseView"/> would re-create
+    /// every card and re-run the filter panel's layout, which is most of what the window was
+    /// doing while it appeared to hang on the way back into Explore.
+    /// </remarks>
+    private (BrowseView View, BrowseViewModel ViewModel) GetExploreView()
+    {
+        if (_exploreView is null)
+        {
+            var vm = App.Services.GetRequiredService<BrowseViewModel>();
+            vm.OnManageInstanceRequested = OpenInstanceDetail;
+
+            _exploreView = new BrowseView { DataContext = vm };
+        }
+
+        return (_exploreView, (BrowseViewModel)_exploreView.DataContext);
     }
 
     [RelayCommand]
@@ -1148,7 +1180,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
         _subscribedJobs.Clear();
 
-        if (CurrentView?.DataContext is IDisposable currentDisposable)
+        if (CurrentView?.DataContext is not ISharedViewModel &&
+            CurrentView?.DataContext is IDisposable currentDisposable)
         {
             try
             {

@@ -34,6 +34,17 @@ public interface IMetadataProvider
     Task EnrichSearchResultAsync(SearchResult result, CancellationToken ct = default);
 
     /// <summary>
+    /// Reads the user tags Steam shows on a product's store page.
+    /// </summary>
+    /// <remarks>
+    /// Neither appdetails nor the search response carries these for a product that did not come
+    /// from a faceted search, so this is the only way to learn what a title is tagged with when
+    /// it arrived from a curated feed. Returns an empty list rather than throwing: tags are
+    /// additive, never load-bearing.
+    /// </remarks>
+    Task<IReadOnlyList<string>> GetStoreTagsAsync(uint appId, CancellationToken ct = default);
+
+    /// <summary>
     /// Searches the Steam Store for games matching the specified query.
     /// </summary>
     /// <param name="query">Search term or AppId.</param>

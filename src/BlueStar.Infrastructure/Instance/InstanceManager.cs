@@ -436,10 +436,16 @@ public sealed class InstanceManager : IInstanceManager
                 {
                     var json = await File.ReadAllTextAsync(instanceFile, ct).ConfigureAwait(false);
                     var instance = JsonSerializer.Deserialize<GameInstance>(json, JsonOptions);
-                    if (instance != null && !string.IsNullOrWhiteSpace(instance.InstallPath))
+                    if (instance != null)
                     {
-                        // Clean up hardlinks & junctions safely
-                        await _storageManager.DeleteInstanceAsync(instance.InstallPath, ct).ConfigureAwait(false);
+                        // Clean up shortcuts from Desktop and Start Menu
+                        ShortcutHelper.RemoveGameShortcuts(instance.Name, instance.ExecutablePath, instance.InstallPath);
+
+                        if (!string.IsNullOrWhiteSpace(instance.InstallPath))
+                        {
+                            // Clean up hardlinks & junctions safely
+                            await _storageManager.DeleteInstanceAsync(instance.InstallPath, ct).ConfigureAwait(false);
+                        }
                     }
                 }
                 catch { }

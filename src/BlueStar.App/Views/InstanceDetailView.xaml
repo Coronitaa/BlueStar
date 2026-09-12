@@ -3822,7 +3822,7 @@
                     BorderBrush="{StaticResource AccentBrush}"
                     BorderThickness="1"
                     CornerRadius="{StaticResource RadiusLg}"
-                    Width="680" MaxHeight="780"
+                    Width="780" MaxHeight="840"
                     HorizontalAlignment="Center" VerticalAlignment="Center">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -3844,23 +3844,23 @@
                             <Grid Margin="24,18">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="12"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
 
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                        <Border Background="{StaticResource AccentBrush}" CornerRadius="{StaticResource RadiusXs}" Padding="8,2" Margin="0,0,8,0">
-                                            <TextBlock Text="1-CLICK INSTALL" FontSize="10" FontWeight="Bold" Foreground="White"/>
-                                        </Border>
                                         <Border Background="{StaticResource SurfaceCardBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusXs}" Padding="8,2">
                                             <TextBlock Text="{Binding InstallModalRequiredSpaceText, StringFormat='📦 {0}'}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}"/>
                                         </Border>
                                     </StackPanel>
-                                    <TextBlock Text="{Binding InstallModalGameTitle}" Style="{StaticResource H2}" FontSize="20" Margin="0,0,0,4"/>
-                                    <TextBlock Text="{Binding InstallModalShortDescription}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap" MaxHeight="40" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding InstallModalGameTitle}" Style="{StaticResource H2}" FontSize="20" Margin="0,0,0,4"
+                                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding InstallModalGameTitle}"/>
+                                    <TextBlock Text="{Binding InstallModalShortDescription}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap" MaxHeight="34" TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
 
-                                <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}" VerticalAlignment="Top" Command="{Binding CloseInstallModalCommand}"/>
+                                <Button Grid.Column="2" Content="✕" Style="{StaticResource GhostButton}" VerticalAlignment="Top" Command="{Binding CloseInstallModalCommand}"/>
                             </Grid>
                         </Grid>
                     </Border>
@@ -3897,26 +3897,29 @@
                                 <!-- Option 1: Recommended (Curated) - Only visible if available for this game -->
                                 <RadioButton Style="{StaticResource VersionModeCard}"
                                              GroupName="InstallModalVersionGroup"
+                                             controls:ToggleableRadio.AllowUncheck="True"
                                              Visibility="{Binding InstallModalHasRecommendedVersion, Converter={StaticResource BoolToVisibilityConverter}}"
                                              IsChecked="{Binding IsInstallModalVersionRecommended, Mode=TwoWay}">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
                                             <Path Data="{StaticResource IconStar}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"
                                                   Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                            <TextBlock Text="{DynamicResource String_InstallModalVersionRecommended}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{DynamicResource String_InstallModalVersionRecommended}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
                                             <Border Background="{StaticResource AccentTranslucentBrush}" CornerRadius="{StaticResource RadiusXs}" Padding="4,1" Margin="6,0,0,0">
                                                 <TextBlock Text="Verified" FontSize="8" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
                                             </Border>
                                         </StackPanel>
                                         <TextBlock Text="{DynamicResource String_InstallModalVersionRecommendedDesc}"
                                                    Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"
-                                                   TextWrapping="Wrap" MaxHeight="28" TextTrimming="CharacterEllipsis"/>
+                                                   TextWrapping="Wrap" MinHeight="28" TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                 </RadioButton>
 
                                 <!-- Option 2: Latest -->
                                 <RadioButton Style="{StaticResource VersionModeCard}"
                                              GroupName="InstallModalVersionGroup"
+                                             controls:ToggleableRadio.AllowUncheck="True"
                                              IsChecked="{Binding IsInstallModalVersionLatest, Mode=TwoWay}">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
@@ -3929,13 +3932,14 @@
                                         </StackPanel>
                                         <TextBlock Text="{DynamicResource String_InstallModalVersionLatestDesc}"
                                                    Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"
-                                                   TextWrapping="Wrap" MaxHeight="28" TextTrimming="CharacterEllipsis"/>
+                                                   TextWrapping="Wrap" MinHeight="28" TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                 </RadioButton>
 
                                 <!-- Option 3: Custom -->
                                 <RadioButton Style="{StaticResource VersionModeCard}"
                                              GroupName="InstallModalVersionGroup"
+                                             controls:ToggleableRadio.AllowUncheck="True"
                                              IsChecked="{Binding IsInstallModalVersionCustom, Mode=TwoWay}">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
@@ -3945,7 +3949,7 @@
                                         </StackPanel>
                                         <TextBlock Text="{DynamicResource String_InstallModalVersionCustomDesc}"
                                                    Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"
-                                                   TextWrapping="Wrap" MaxHeight="28" TextTrimming="CharacterEllipsis"/>
+                                                   TextWrapping="Wrap" MinHeight="28" TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                 </RadioButton>
                             </UniformGrid>
@@ -3979,29 +3983,384 @@
                             <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
                                     CornerRadius="{StaticResource RadiusMd}" Padding="12,8" Margin="0,0,0,14"
                                     Visibility="{Binding IsInstallModalVersionLatest, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Path Data="{StaticResource IconCheck}" Fill="{StaticResource SuccessBrush}" Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBlock Text="{DynamicResource String_InstallModalLatestInfo}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center"/>
-                                </StackPanel>
+                                <Grid VerticalAlignment="Center">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Path Grid.Column="0" Data="{StaticResource IconCheck}" Fill="{StaticResource SuccessBrush}" Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <TextBlock Grid.Column="1" TextWrapping="Wrap" Text="{DynamicResource String_InstallModalLatestInfo}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                </Grid>
                             </Border>
 
                             <!-- If Custom is selected: Show Branch ComboBox -->
                             <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
                                     CornerRadius="{StaticResource RadiusMd}" Padding="12,10" Margin="0,0,0,14"
                                     Visibility="{Binding IsInstallModalVersionCustom, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <StackPanel>
+                                <StackPanel AllowDrop="True" Drop="DepotDropZone_Drop" DragOver="DepotDropZone_DragOver">
                                     <TextBlock Text="{DynamicResource String_InstallModalCustomBranchLabel}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,6"/>
                                     <ComboBox Style="{StaticResource DarkComboBox}"
                                               IsEditable="True"
                                               ItemsSource="{Binding InstallModalAvailableBranches}"
                                               SelectedItem="{Binding InstallModalSelectedBranch, UpdateSourceTrigger=PropertyChanged}"
                                               Text="{Binding InstallModalSelectedBranch, UpdateSourceTrigger=PropertyChanged}"/>
+
+                                    <!-- Per-depot manifests, the same table the Game Version tab's
+                                         Custom mode edits, so "Custom" means the same thing in both. -->
+                                    <Separator Margin="0,14,0,12" Background="{StaticResource SubtleBorderBrush}"/>
+
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" MinWidth="110"/>
+                                            <ColumnDefinition Width="10"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="{DynamicResource String_VersionCustomBuildIdLabel}" Style="{StaticResource CaptionBold}"
+                                                       TextTrimming="CharacterEllipsis" Margin="0,0,0,5"/>
+                                            <TextBox Style="{StaticResource DarkTextBox}" MinHeight="32"
+                                                     VerticalContentAlignment="Center"
+                                                     Text="{Binding CustomVersionBuildId, UpdateSourceTrigger=PropertyChanged}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" VerticalAlignment="Bottom">
+                                            <Button Content="{DynamicResource String_ImportFromManifestFilesBtn}"
+                                                    Style="{StaticResource SecondaryButton}" Padding="12,7" MinHeight="32"
+                                                    Command="{Binding ImportManifestFilesDirectlyCommand}"/>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <TextBlock Text="{DynamicResource String_VersionCustomNoDepots}"
+                                               Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}"
+                                               HorizontalAlignment="Center" Margin="0,6,0,6" TextWrapping="Wrap"
+                                               Visibility="{Binding Depots.Count, Converter={StaticResource ZeroToVisibilityConverter}}"/>
+
+                                    <Border Background="{StaticResource SurfaceCardBrush}" BorderBrush="{StaticResource SubtleBorderBrush}"
+                                            BorderThickness="1" CornerRadius="{StaticResource RadiusMd}" MaxHeight="190"
+                                            Visibility="{Binding Depots.Count, Converter={StaticResource NullToVisibilityConverter}}">
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                            <ItemsControl ItemsSource="{Binding Depots}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="0,0,0,1" Padding="10,8">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="1.1*" MinWidth="90"/>
+                                                                    <ColumnDefinition Width="1.5*" MinWidth="120"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
+                                                                    <TextBlock Text="{Binding DisplayName}" Style="{StaticResource BodySmall}" TextTrimming="CharacterEllipsis"/>
+                                                                    <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis">
+                                                                        <Run Text="{Binding Depot.DepotId, Mode=OneWay}"/>
+                                                                        <Run Text=" · "/>
+                                                                        <Run Text="{Binding PlatformTag, Mode=OneWay}"/>
+                                                                    </TextBlock>
+                                                                </StackPanel>
+
+                                                                <ComboBox Grid.Column="1" Style="{StaticResource CompactDarkComboBox}"
+                                                                          IsEditable="True" Margin="0,0,10,0" VerticalAlignment="Center"
+                                                                          ItemsSource="{Binding KnownManifestVersions}"
+                                                                          SelectedItem="{Binding SelectedManifestOption}"
+                                                                          TextSearch.TextPath="ManifestIdString"
+                                                                          Text="{Binding ManifestInputText, UpdateSourceTrigger=PropertyChanged}"
+                                                                          ToolTip="{DynamicResource String_SelectManifestVersion}"/>
+
+                                                                <Border Grid.Column="2" Background="{StaticResource SurfaceInputBrush}"
+                                                                        BorderBrush="{Binding AvailabilityBadgeColor}" BorderThickness="1"
+                                                                        CornerRadius="{StaticResource RadiusSm}" Padding="7,3" VerticalAlignment="Center">
+                                                                    <TextBlock Text="{Binding AvailabilityStatus}" FontSize="10" FontWeight="SemiBold"
+                                                                               Foreground="{Binding AvailabilityBadgeColor}"/>
+                                                                </Border>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </Border>
+
+                                    <TextBlock Text="{DynamicResource String_VersionCustomDropHint}" Style="{StaticResource Caption}"
+                                               Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap"
+                                               HorizontalAlignment="Center" TextAlignment="Center" Margin="0,8,0,0"/>
+
+                                    <Border CornerRadius="{StaticResource RadiusMd}" Padding="10,8" Margin="0,10,0,0" BorderThickness="1"
+                                            Visibility="{Binding CustomBuildValidationMessage, Converter={StaticResource NullToVisibilityConverter}}">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="{StaticResource DangerBgBrush}"/>
+                                                <Setter Property="BorderBrush" Value="{StaticResource DangerBorderBrush}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsCustomBuildValid}" Value="True">
+                                                        <Setter Property="Background" Value="{StaticResource SuccessBgBrush}"/>
+                                                        <Setter Property="BorderBrush" Value="{StaticResource SuccessBorderBrush}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock Text="{Binding CustomBuildValidationMessage}" TextWrapping="Wrap" FontSize="11">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Body}">
+                                                    <Setter Property="Foreground" Value="{StaticResource DangerBrush}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsCustomBuildValid}" Value="True">
+                                                            <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Border>
                                 </StackPanel>
                             </Border>
 
                             <Separator Margin="0,0,0,14" Background="{StaticResource SubtleBorderBrush}"/>
 
-                            <!-- 3. Optional DLCs -->
+                            <!-- No depots found for this title -->
+                            <Border Background="{StaticResource DangerBgBrush}" BorderBrush="{StaticResource DangerBorderBrush}" BorderThickness="1"
+                                    CornerRadius="{StaticResource RadiusMd}" Padding="12,10" Margin="0,0,0,14"
+                                    Visibility="{Binding InstallModalHasNoDepots, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,3">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Path Grid.Column="0" Data="{StaticResource IconInfo}" Fill="{StaticResource DangerBrush}" Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <TextBlock Grid.Column="1" TextWrapping="Wrap" Text="{DynamicResource String_InstallModalNoDepotsTitle}" FontSize="12" FontWeight="Bold" Foreground="{StaticResource DangerBrush}"/>
+                                    </Grid>
+                                    <TextBlock Text="{DynamicResource String_InstallModalNoDepotsDesc}"
+                                               Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- 3. Game Emulator -->
+                            <TextBlock Text="{DynamicResource String_InstallModalEmulatorSelectorTitle}" Style="{StaticResource CaptionBold}" Margin="0,0,0,8"/>
+                            <UniformGrid Rows="1" Margin="0,0,0,8">
+                                <!-- Option 1: None / Vanilla -->
+                                <RadioButton Style="{StaticResource VersionModeCard}"
+                                             GroupName="InstallModalEmulatorGroup"
+                                             controls:ToggleableRadio.AllowUncheck="True"
+                                             IsChecked="{Binding IsInstallModalEmulatorNone, Mode=TwoWay}"
+                                             Margin="0,0,4,0">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
+                                            <Path Data="{StaticResource IconSteam}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"
+                                                  Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                            <TextBlock Text="{DynamicResource String_InstallModalEmulatorNone}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                        <TextBlock Text="{DynamicResource String_InstallModalEmulatorNoneDesc}"
+                                                   Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"
+                                                   TextWrapping="Wrap" MinHeight="28" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                </RadioButton>
+
+                                <!-- Option 2: ReFix Online (Steam Spacewar) -->
+                                <RadioButton Style="{StaticResource VersionModeCard}"
+                                             GroupName="InstallModalEmulatorGroup"
+                                             controls:ToggleableRadio.AllowUncheck="True"
+                                             IsChecked="{Binding IsInstallModalEmulatorValve, Mode=TwoWay}"
+                                             Margin="2,0,2,0">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,3">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                                <Path Data="{StaticResource IconEmulator}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"
+                                                      Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <TextBlock Text="{DynamicResource String_InstallModalEmulatorValve}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+                                            </StackPanel>
+                                            <Border Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="4,0,0,0"
+                                                    Background="{StaticResource AccentTranslucentBrush}" CornerRadius="{StaticResource RadiusXs}" Padding="5,1"
+                                                    Visibility="{Binding IsValveRecommendedForGame, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <TextBlock Text="{DynamicResource String_InstallModalRecommendedBadge}" FontSize="8" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
+                                            </Border>
+                                        </Grid>
+                                        <TextBlock Text="{DynamicResource String_InstallModalEmulatorValveDesc}"
+                                                   Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"
+                                                   TextWrapping="Wrap" MinHeight="28" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                </RadioButton>
+
+                                <!-- Option 3: Re:Goldberg LAN -->
+                                <RadioButton Style="{StaticResource VersionModeCard}"
+                                             GroupName="InstallModalEmulatorGroup"
+                                             controls:ToggleableRadio.AllowUncheck="True"
+                                             IsChecked="{Binding IsInstallModalEmulatorGoldberg, Mode=TwoWay}"
+                                             Margin="3,0,3,0">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,3">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                                <Path Data="{StaticResource IconGamepad}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"
+                                                      Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <TextBlock Text="{DynamicResource String_InstallModalEmulatorGoldberg}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+                                            </StackPanel>
+                                            <Border Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="4,0,0,0"
+                                                    Background="{StaticResource AccentTranslucentBrush}" CornerRadius="{StaticResource RadiusXs}" Padding="5,1"
+                                                    Visibility="{Binding IsGoldbergRecommendedForGame, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <TextBlock Text="{DynamicResource String_InstallModalRecommendedBadge}" FontSize="8" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
+                                            </Border>
+                                        </Grid>
+                                        <TextBlock Text="{DynamicResource String_InstallModalEmulatorGoldbergDesc}"
+                                                   Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"
+                                                   TextWrapping="Wrap" MinHeight="28" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                </RadioButton>
+
+                                <!-- Option 4: Game-Specific Online Fix (Only visible if available) -->
+                                <RadioButton Style="{StaticResource VersionModeCard}"
+                                             GroupName="InstallModalEmulatorGroup"
+                                             controls:ToggleableRadio.AllowUncheck="True"
+                                             Visibility="{Binding HasModalSpecificOnlineFix, Converter={StaticResource BoolToVisibilityConverter}}"
+                                             IsChecked="{Binding IsInstallModalEmulatorSpecific, Mode=TwoWay}"
+                                             Margin="3,0,0,0">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,3">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                                <Path Data="{StaticResource IconTerminal}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"
+                                                      Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <TextBlock Text="{DynamicResource String_InstallModalEmulatorSpecific}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+                                            </StackPanel>
+                                            <Border Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="4,0,0,0"
+                                                    Background="{StaticResource AccentTranslucentBrush}" CornerRadius="{StaticResource RadiusXs}" Padding="5,1">
+                                                <TextBlock Text="{DynamicResource String_InstallModalEmulatorSpecificBadge}" FontSize="8" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
+                                            </Border>
+                                        </Grid>
+                                        <TextBlock Text="{Binding SelectedModalSpecificGameFix.Name, FallbackValue='Online-Fix'}"
+                                                   Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"
+                                                   TextWrapping="Wrap" MinHeight="28" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                </RadioButton>
+                            </UniformGrid>
+
+                            <!-- Emulator detail box depending on selection -->
+                            <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                                    CornerRadius="{StaticResource RadiusMd}" Padding="12,8" Margin="0,0,0,14"
+                                    Visibility="{Binding IsInstallModalEmulatorNone, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <Grid VerticalAlignment="Center">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Path Grid.Column="0" Data="{StaticResource IconInfo}" Fill="{StaticResource SecondaryTextBrush}" Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <TextBlock Grid.Column="1" TextWrapping="Wrap" Text="{DynamicResource String_InstallModalEmulatorNoneInfo}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                </Grid>
+                            </Border>
+
+                            <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                                    CornerRadius="{StaticResource RadiusMd}" Padding="12,8" Margin="0,0,0,14"
+                                    Visibility="{Binding IsInstallModalEmulatorValve, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <Grid VerticalAlignment="Center">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Path Grid.Column="0" Data="{StaticResource IconCheck}" Fill="{StaticResource SuccessBrush}" Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <TextBlock Grid.Column="1" TextWrapping="Wrap" Text="{DynamicResource String_InstallModalEmulatorValveInfo}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                </Grid>
+                            </Border>
+
+                            <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                                    CornerRadius="{StaticResource RadiusMd}" Padding="12,8" Margin="0,0,0,14"
+                                    Visibility="{Binding IsInstallModalEmulatorGoldberg, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <Grid VerticalAlignment="Center">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Path Grid.Column="0" Data="{StaticResource IconCheck}" Fill="{StaticResource SuccessBrush}" Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <TextBlock Grid.Column="1" TextWrapping="Wrap" Text="{DynamicResource String_InstallModalEmulatorGoldbergInfo}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                </Grid>
+                            </Border>
+
+                            <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1"
+                                    CornerRadius="{StaticResource RadiusMd}" Padding="12,10" Margin="0,0,0,14"
+                                    Visibility="{Binding IsInstallModalEmulatorSpecific, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,6" Visibility="{Binding OnlineGameFixes.Count, Converter={StaticResource NullToVisibilityConverter}}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="{DynamicResource String_InstallModalSpecificFixSelectLabel}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,4"/>
+                                            <ComboBox Style="{StaticResource DarkComboBox}"
+                                                      ItemsSource="{Binding OnlineGameFixes}"
+                                                      SelectedItem="{Binding SelectedModalSpecificGameFix, Mode=TwoWay}"
+                                                      DisplayMemberPath="Name"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Background="{StaticResource AccentTranslucentBrush}" CornerRadius="{StaticResource RadiusXs}" Padding="8,3" VerticalAlignment="Bottom" Margin="10,0,0,0">
+                                            <TextBlock Text="{Binding SelectedModalSpecificGameFix.TagsSummary, FallbackValue='ONLINE FIX'}" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
+                                        </Border>
+                                    </Grid>
+                                    <Grid Margin="0,4,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Path Grid.Column="0" Data="{StaticResource IconCheck}" Fill="{StaticResource SuccessBrush}" Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <TextBlock Grid.Column="1" TextWrapping="Wrap" Text="{Binding SelectedModalSpecificGameFix.Name, StringFormat={StaticResource String_InstallModalSpecificFixInfo}}"
+                                        Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Layerable fixes: bypasses, hypervisor fixes and anything else
+                                 that is not an online fix. These sit on top of whatever emulator
+                                 was chosen above, ReFix included, and several can apply at once —
+                                 so they are tick boxes, not another radio. -->
+                            <StackPanel Visibility="{Binding InstallModalHasExtraFixes, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <Separator Margin="0,0,0,14" Background="{StaticResource SubtleBorderBrush}"/>
+
+                                <TextBlock Text="{DynamicResource String_InstallModalExtraFixesTitle}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{DynamicResource String_InstallModalExtraFixesDesc}"
+                                           Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"
+                                           TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+                                <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusMd}" Padding="12,8" Margin="0,0,0,14" MaxHeight="130"
+                                        BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl ItemsSource="{Binding InstallModalExtraFixes}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="0,3,0,3">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected, Mode=TwoWay}" Style="{StaticResource DarkCheckBox}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                        <Border Grid.Column="1" Background="{StaticResource AccentTranslucentBrush}" CornerRadius="{StaticResource RadiusXs}" Padding="5,1" VerticalAlignment="Center" Margin="0,0,8,0">
+                                                            <TextBlock Text="{Binding Kind}" FontSize="8" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
+                                                        </Border>
+                                                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding Name}" Style="{StaticResource BodySmall}" TextTrimming="CharacterEllipsis"/>
+                                                            <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis"/>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </Border>
+                            </StackPanel>
+
+                            <Separator Margin="0,0,0,14" Background="{StaticResource SubtleBorderBrush}"/>
+
+                            <!-- 4. Optional DLCs -->
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -4044,152 +4403,6 @@
 
                             <Separator Margin="0,0,0,14" Background="{StaticResource SubtleBorderBrush}"/>
 
-                            <!-- 4. Game Emulator -->
-                            <TextBlock Text="{DynamicResource String_InstallModalEmulatorSelectorTitle}" Style="{StaticResource CaptionBold}" Margin="0,0,0,8"/>
-                            <UniformGrid Rows="1" Margin="0,0,0,8">
-                                <!-- Option 1: None / Vanilla -->
-                                <RadioButton Style="{StaticResource VersionModeCard}"
-                                             GroupName="InstallModalEmulatorGroup"
-                                             IsChecked="{Binding IsInstallModalEmulatorNone, Mode=TwoWay}"
-                                             Margin="0,0,4,0">
-                                    <StackPanel>
-                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
-                                            <Path Data="{StaticResource IconSteam}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"
-                                                  Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                            <TextBlock Text="{DynamicResource String_InstallModalEmulatorNone}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                        <TextBlock Text="{DynamicResource String_InstallModalEmulatorNoneDesc}"
-                                                   Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"
-                                                   TextWrapping="Wrap" MaxHeight="28" TextTrimming="CharacterEllipsis"/>
-                                    </StackPanel>
-                                </RadioButton>
-
-                                <!-- Option 2: ReFix Online (Steam Spacewar) -->
-                                <RadioButton Style="{StaticResource VersionModeCard}"
-                                             GroupName="InstallModalEmulatorGroup"
-                                             IsChecked="{Binding IsInstallModalEmulatorValve, Mode=TwoWay}"
-                                             Margin="2,0,2,0">
-                                    <StackPanel>
-                                        <Grid Margin="0,0,0,3">
-                                            <StackPanel Orientation="Horizontal">
-                                                <Path Data="{StaticResource IconEmulator}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"
-                                                      Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                <TextBlock Text="{DynamicResource String_InstallModalEmulatorValve}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
-                                            </StackPanel>
-                                            <Border HorizontalAlignment="Right" Background="{StaticResource AccentTranslucentBrush}" CornerRadius="{StaticResource RadiusXs}" Padding="5,1"
-                                                    Visibility="{Binding IsValveRecommendedForGame, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                <TextBlock Text="{DynamicResource String_InstallModalRecommendedBadge}" FontSize="8" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
-                                            </Border>
-                                        </Grid>
-                                        <TextBlock Text="{DynamicResource String_InstallModalEmulatorValveDesc}"
-                                                   Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"
-                                                   TextWrapping="Wrap" MaxHeight="28" TextTrimming="CharacterEllipsis"/>
-                                    </StackPanel>
-                                </RadioButton>
-
-                                <!-- Option 3: Re:Goldberg LAN -->
-                                <RadioButton Style="{StaticResource VersionModeCard}"
-                                             GroupName="InstallModalEmulatorGroup"
-                                             IsChecked="{Binding IsInstallModalEmulatorGoldberg, Mode=TwoWay}"
-                                             Margin="3,0,3,0">
-                                    <StackPanel>
-                                        <Grid Margin="0,0,0,3">
-                                            <StackPanel Orientation="Horizontal">
-                                                <Path Data="{StaticResource IconGamepad}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"
-                                                      Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                <TextBlock Text="{DynamicResource String_InstallModalEmulatorGoldberg}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
-                                            </StackPanel>
-                                            <Border HorizontalAlignment="Right" Background="{StaticResource AccentTranslucentBrush}" CornerRadius="{StaticResource RadiusXs}" Padding="5,1"
-                                                    Visibility="{Binding IsGoldbergRecommendedForGame, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                <TextBlock Text="{DynamicResource String_InstallModalRecommendedBadge}" FontSize="8" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
-                                            </Border>
-                                        </Grid>
-                                        <TextBlock Text="{DynamicResource String_InstallModalEmulatorGoldbergDesc}"
-                                                   Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"
-                                                   TextWrapping="Wrap" MaxHeight="28" TextTrimming="CharacterEllipsis"/>
-                                    </StackPanel>
-                                </RadioButton>
-
-                                <!-- Option 4: Game-Specific Online Fix (Only visible if available) -->
-                                <RadioButton Style="{StaticResource VersionModeCard}"
-                                             GroupName="InstallModalEmulatorGroup"
-                                             Visibility="{Binding HasModalSpecificOnlineFix, Converter={StaticResource BoolToVisibilityConverter}}"
-                                             IsChecked="{Binding IsInstallModalEmulatorSpecific, Mode=TwoWay}"
-                                             Margin="3,0,0,0">
-                                    <StackPanel>
-                                        <Grid Margin="0,0,0,3">
-                                            <StackPanel Orientation="Horizontal">
-                                                <Path Data="{StaticResource IconTerminal}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"
-                                                      Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                <TextBlock Text="{DynamicResource String_InstallModalEmulatorSpecific}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
-                                            </StackPanel>
-                                            <Border HorizontalAlignment="Right" Background="{StaticResource AccentTranslucentBrush}" CornerRadius="{StaticResource RadiusXs}" Padding="5,1">
-                                                <TextBlock Text="{DynamicResource String_InstallModalEmulatorSpecificBadge}" FontSize="8" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
-                                            </Border>
-                                        </Grid>
-                                        <TextBlock Text="{Binding SelectedModalSpecificGameFix.Name, FallbackValue='Online-Fix'}"
-                                                   Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"
-                                                   TextWrapping="Wrap" MaxHeight="28" TextTrimming="CharacterEllipsis"/>
-                                    </StackPanel>
-                                </RadioButton>
-                            </UniformGrid>
-
-                            <!-- Emulator detail box depending on selection -->
-                            <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
-                                    CornerRadius="{StaticResource RadiusMd}" Padding="12,8" Margin="0,0,0,14"
-                                    Visibility="{Binding IsInstallModalEmulatorNone, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Path Data="{StaticResource IconInfo}" Fill="{StaticResource SecondaryTextBrush}" Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBlock Text="{DynamicResource String_InstallModalEmulatorNoneInfo}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center" TextWrapping="Wrap"/>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
-                                    CornerRadius="{StaticResource RadiusMd}" Padding="12,8" Margin="0,0,0,14"
-                                    Visibility="{Binding IsInstallModalEmulatorValve, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Path Data="{StaticResource IconCheck}" Fill="{StaticResource SuccessBrush}" Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBlock Text="{DynamicResource String_InstallModalEmulatorValveInfo}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center" TextWrapping="Wrap"/>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
-                                    CornerRadius="{StaticResource RadiusMd}" Padding="12,8" Margin="0,0,0,14"
-                                    Visibility="{Binding IsInstallModalEmulatorGoldberg, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Path Data="{StaticResource IconCheck}" Fill="{StaticResource SuccessBrush}" Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBlock Text="{DynamicResource String_InstallModalEmulatorGoldbergInfo}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center" TextWrapping="Wrap"/>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1"
-                                    CornerRadius="{StaticResource RadiusMd}" Padding="12,10" Margin="0,0,0,14"
-                                    Visibility="{Binding IsInstallModalEmulatorSpecific, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <StackPanel>
-                                    <Grid Margin="0,0,0,6" Visibility="{Binding OnlineGameFixes.Count, Converter={StaticResource NullToVisibilityConverter}}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0">
-                                            <TextBlock Text="{DynamicResource String_InstallModalSpecificFixSelectLabel}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,4"/>
-                                            <ComboBox Style="{StaticResource DarkComboBox}"
-                                                      ItemsSource="{Binding OnlineGameFixes}"
-                                                      SelectedItem="{Binding SelectedModalSpecificGameFix, Mode=TwoWay}"
-                                                      DisplayMemberPath="Name"/>
-                                        </StackPanel>
-                                        <Border Grid.Column="1" Background="{StaticResource AccentTranslucentBrush}" CornerRadius="{StaticResource RadiusXs}" Padding="8,3" VerticalAlignment="Bottom" Margin="10,0,0,0">
-                                            <TextBlock Text="{Binding SelectedModalSpecificGameFix.TagsSummary, FallbackValue='ONLINE FIX'}" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
-                                        </Border>
-                                    </Grid>
-                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                        <Path Data="{StaticResource IconCheck}" Fill="{StaticResource SuccessBrush}" Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                        <TextBlock Text="{Binding SelectedModalSpecificGameFix.Name, StringFormat={StaticResource String_InstallModalSpecificFixInfo}}"
-                                                   Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Border>
-
                             <!-- 5. DLC Unlocker Method -->
                             <TextBlock Text="{DynamicResource String_DlcMethodSettingTitle}" Style="{StaticResource CaptionBold}" Margin="0,0,0,8"/>
                             <Grid Margin="0,0,0,14">
@@ -4199,6 +4412,7 @@
                                 </Grid.ColumnDefinitions>
                                 <RadioButton Grid.Column="0"
                                              GroupName="InstallModalDlcGroup"
+                                             controls:ToggleableRadio.AllowUncheck="True"
                                              IsChecked="{Binding IsModalCreamApiSelected}"
                                              Style="{StaticResource VersionModeCard}"
                                              Margin="0,0,6,0">
@@ -4215,6 +4429,7 @@
                                 </RadioButton>
                                 <RadioButton Grid.Column="1"
                                              GroupName="InstallModalDlcGroup"
+                                             controls:ToggleableRadio.AllowUncheck="True"
                                              IsChecked="{Binding IsModalSmokeApiSelected}"
                                              Style="{StaticResource VersionModeCard}"
                                              Margin="6,0,0,0">
@@ -4225,6 +4440,11 @@
                                     </StackPanel>
                                 </RadioButton>
                             </Grid>
+
+                            <TextBlock Text="{DynamicResource String_InstallModalDlcMethodNoneHint}"
+                                       Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}"
+                                       TextWrapping="Wrap" Margin="0,-8,0,14"
+                                       Visibility="{Binding InstallModalHasSelectedDlcs, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
 
                             <Separator Margin="0,0,0,14" Background="{StaticResource SubtleBorderBrush}"/>
 
@@ -4274,7 +4494,9 @@
 
                             <TextBlock Grid.Column="0" Text="{Binding InstallModalSubtitle}"
                                        Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"
-                                       VerticalAlignment="Center"/>
+                                       VerticalAlignment="Center" Margin="0,0,16,0"
+                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding InstallModalSubtitle}"/>
 
                             <StackPanel Grid.Column="1" Orientation="Horizontal">
                                 <Button Content="{DynamicResource String_Cancel}" Style="{StaticResource SecondaryButton}"
@@ -4288,6 +4510,37 @@
                         </Grid>
                     </Border>
                 </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ═══ FORCE DLC UNLOCKER CONFIRMATION ═══ -->
+        <Grid Visibility="{Binding IsForceDlcUnlockerConfirmOpen, Converter={StaticResource BoolToVisibilityConverter}}"
+              Background="{StaticResource ModalOverlayBrush}"
+              Panel.ZIndex="1200">
+            <Border Background="{StaticResource SurfaceCardElevatedBrush}"
+                    BorderBrush="{StaticResource WarningBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Width="480"
+                    Padding="24,20"
+                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                        <Path Data="{StaticResource IconInfo}" Fill="{StaticResource WarningBrush}" Width="15" Height="15" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,9,0"/>
+                        <TextBlock Text="{DynamicResource String_InstallModalForceDlcTitle}" Style="{StaticResource H3}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="{DynamicResource String_InstallModalForceDlcDesc}"
+                               Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"
+                               TextWrapping="Wrap" Margin="0,0,0,18"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="{DynamicResource String_Cancel}" Style="{StaticResource SecondaryButton}"
+                                Padding="14,8" Margin="0,0,10,0"
+                                Command="{Binding CancelForceDlcUnlockerCommand}"/>
+                        <Button Content="{DynamicResource String_InstallModalForceDlcConfirm}" Style="{StaticResource PrimaryButton}"
+                                Padding="16,8"
+                                Command="{Binding ConfirmForceDlcUnlockerCommand}"/>
+                    </StackPanel>
+                </StackPanel>
             </Border>
         </Grid>
     </Grid>

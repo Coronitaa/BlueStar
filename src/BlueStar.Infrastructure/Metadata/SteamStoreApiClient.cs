@@ -53,39 +53,33 @@ public sealed class SteamStoreApiClient : IMetadataProvider
         _metrics = metrics;
     }
 
+    /// <summary>
+    /// Waits for this client's turn to talk to Steam.
+    /// </summary>
+    /// <remarks>
+    /// Pacing lives in <see cref="BlueStar.Infrastructure.Steam.SteamRequestGate"/> rather than
+    /// here, so that this client and the Explore catalog search share one budget instead of each
+    /// staying inside its own limit and together exceeding Steam's.
+    /// </remarks>
     private async Task<bool> ThrottleAsync(CancellationToken ct)
     {
-        if (DateTimeOffset.UtcNow < _cooldownUntil)
-        {
-            _logger.LogWarning("Steam Store API is in backoff cooldown until {Cooldown}", _cooldownUntil);
-            return false;
-        }
+        var lease = await BlueStar.Infrastructure.Steam.SteamRequestGate
+            .AcquireAsync(BlueStar.Infrastructure.Steam.SteamRequestPriority.Background, ct)
+            .ConfigureAwait(false);
 
-        await _throttleSemaphore.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            if (DateTimeOffset.UtcNow < _cooldownUntil)
-                return false;
+        if (lease is null) return false;
 
-            var elapsed = DateTimeOffset.UtcNow - _lastRequest;
-            if (elapsed < MinRequestInterval)
-            {
-                var delay = MinRequestInterval - elapsed;
-                await Task.Delay(delay, ct).ConfigureAwait(false);
-            }
-            _lastRequest = DateTimeOffset.UtcNow;
-            return true;
-        }
-        finally
-        {
-            _throttleSemaphore.Release();
-        }
+        // The lease has already enforced the spacing; the request itself may overlap.
+        lease.Dispose();
+
+        _lastRequest = DateTimeOffset.UtcNow;
+        return true;
     }
 
     private void ReportRateLimitEncountered(System.Net.HttpStatusCode statusCode)
     {
-        _logger.LogWarning("Steam API rate limit / block encountered ({StatusCode}). Entering 5-minute backoff cooldown.", statusCode);
         _cooldownUntil = DateTimeOffset.UtcNow.AddMinutes(5);
+        BlueStar.Infrastructure.Steam.SteamRequestGate.ReportBlocked(statusCode);
     }
 
     /// <inheritdoc />

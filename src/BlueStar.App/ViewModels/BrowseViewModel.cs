@@ -19,7 +19,7 @@ namespace BlueStar.App.ViewModels;
 /// <summary>
 /// ViewModel for searching and exploring games in DepotBox catalog with live Steam/SteamDB enrichment and instance installation notifications.
 /// </summary>
-public partial class BrowseViewModel : ObservableObject, IDisposable
+public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisposable
 {
     private readonly IDepotBoxApiClient _apiClient;
     private readonly IInstanceManager _instanceManager;
@@ -44,19 +44,81 @@ public partial class BrowseViewModel : ObservableObject, IDisposable
     private ObservableCollection<SearchResult> _results = [];
 
     [ObservableProperty]
-    private ObservableCollection<SearchResult> _filteredResults = [];
+    private ObservableCollection<FilterGroupViewModel> _filterGroups = [];
 
     [ObservableProperty]
-    private ObservableCollection<CatalogCategory> _categories = [];
+    private ObservableCollection<FilterOptionItem> _activeFilters = [];
+
+    /// <summary>
+    /// Names of the tags currently being filtered on. Every card's bubbles are marked against
+    /// this, so a game shows at a glance which of the chosen tags it carries.
+    /// </summary>
+    private HashSet<string> _activeTagNames = new(StringComparer.CurrentCultureIgnoreCase);
 
     [ObservableProperty]
-    private ObservableCollection<TrendingChipItem> _trendingSuggestionChips = [];
+    private ObservableCollection<SortOptionItem> _sortOptions = [];
+
+    /// <summary>
+    /// Steam's curated lists, offered in the toolbar next to the sort. These used to be a group
+    /// in the filter panel, but they are a way of looking at the whole catalog rather than a
+    /// filter you combine with others, so they belong up here.
+    /// </summary>
+    [ObservableProperty]
+    private ObservableCollection<SortOptionItem> _storeListOptions = [];
 
     [ObservableProperty]
-    private string _selectedTypeFilter = "All";
+    private SortOptionItem? _selectedSort;
+
+    /// <summary>
+    /// Which way the chosen sort runs. The store takes the direction as part of the sort token
+    /// (<c>Released_DESC</c>), so the selector offers the field and this button the direction,
+    /// rather than listing every field twice.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isSortDescending = true;
 
     [ObservableProperty]
-    private bool _hasActiveTypeFilter;
+    private SortOptionItem? _selectedStoreList;
+
+    /// <summary>How many results matched every selected tag, before any were relaxed.</summary>
+    [ObservableProperty]
+    private int _exactMatchCount;
+
+    /// <summary>Whether the list has started including partial tag matches.</summary>
+    [ObservableProperty]
+    private bool _isShowingRelated;
+
+    /// <summary>
+    /// The full title the search fell back to when the typed one matched nothing, or
+    /// <c>null</c> when the typed one was enough.
+    /// </summary>
+    /// <remarks>
+    /// Shown above the results so a person who typed "phasmo" and is looking at Phasmophobia
+    /// knows the list answers a different word than the one in the box.
+    /// </remarks>
+    [ObservableProperty]
+    private string? _suggestedTerm;
+
+    [ObservableProperty]
+    private string _selectedAppType = SteamStoreFacets.AppTypeAll;
+
+    /// <summary>
+    /// Results asked for per request. Fixed now that the toolbar slot it used to occupy shows
+    /// Steam's curated lists instead; the list grows by scrolling, not by page size.
+    /// </summary>
+    private const int PageSize = 50;
+
+    [ObservableProperty]
+    private int _currentPage = 1;
+
+    [ObservableProperty]
+    private int _totalResults;
+
+    [ObservableProperty]
+    private int _totalPages = 1;
+
+    [ObservableProperty]
+    private bool _isGridView = true;
 
     [ObservableProperty]
     private bool _isSearching;
@@ -68,10 +130,108 @@ public partial class BrowseViewModel : ObservableObject, IDisposable
     private string? _errorMessage;
 
     [ObservableProperty]
-    private bool _hasSearched;
+    private bool _hasActiveFilters;
 
+    [ObservableProperty]
+    private bool _isEnriching;
+
+    [ObservableProperty]
+    private int _enrichedCount;
+
+    [ObservableProperty]
+    private int _enrichTotal;
+
+    [ObservableProperty]
+    private int _hiddenByContentFilters;
+
+    [ObservableProperty]
+    private bool _hasMoreResults;
+
+    [ObservableProperty]
+    private bool _isLoadingMore;
+
+    [ObservableProperty]
+    private bool _isDetailOpen;
+
+    [ObservableProperty]
+    private SearchResult? _detailTarget;
+
+    [ObservableProperty]
+    private string? _detailUrl;
+
+    /// <summary>Raised when the person asks to open the detail page of a created instance.</summary>
     public Action<GameInstance>? OnManageInstanceRequested { get; set; }
 
+    private readonly ISteamCatalogSearchService? _catalogSearch;
+    private readonly ISteamTagCatalogService? _tagCatalog;
+    private readonly ICacheService? _cache;
+    private readonly Dictionary<string, int> _facetUsage = new(StringComparer.Ordinal);
+
+    private CancellationTokenSource? _searchDebounce;
+    private bool _suppressSearch;
+
+    /// <summary>
+    /// Bumped every time a fresh query starts. A page that comes back carrying an older number
+    /// is thrown away instead of being merged into results it no longer belongs to.
+    /// </summary>
+    private int _searchGeneration;
+
+    private CancellationTokenSource? _searchCts;
+
+    /// <summary>The adult-content tag group, kept to hand so settings can hide it.</summary>
+    private FilterGroupViewModel? _adultGroup;
+
+    /// <summary>Everything loaded for the current query, before the local filters.</summary>
+    private readonly List<SearchResult> _fetched = [];
+
+    /// <summary>
+    /// Ceiling on how many cards stay alive at once. The card grid wraps rather than scrolling a
+    /// uniform list, so WPF cannot virtualise it; past this point the person narrows the filters
+    /// instead of scrolling forever.
+    /// </summary>
+    private const int MaxMaterialized = 200;
+
+    /// <summary>
+    /// One step of the search: a set of tags to require, and the term to require with them.
+    /// </summary>
+    /// <param name="Tags">Tags that must all be present. Empty means the tags do not narrow.</param>
+    /// <param name="Term">Free-text term, or <c>null</c> to browse.</param>
+    /// <param name="IsSuggestion">Whether the term came from autocomplete rather than the person.</param>
+    private sealed record SearchRung(
+        IReadOnlyList<SteamFacetOption> Tags, string? Term, bool IsSuggestion = false);
+
+    /// <summary>
+    /// How many steps the ladder may hold. Every subset of the chosen tags would be 2^n, which
+    /// is a lot of requests for the fourth or fifth tag; the sizes that match the most tags are
+    /// generated first, so the cap only ever cuts the least exact ones.
+    /// </summary>
+    private const int MaxLadderRungs = 12;
+
+    /// <summary>How many empty steps one call may walk through before giving the screen back.</summary>
+    private const int MaxEmptyHops = 4;
+
+    private readonly List<SearchRung> _ladder = [];
+
+    private bool _suggestionsResolved;
+
+    private List<int> _selectedTagIds = [];
+    private int _ladderRung;
+    private int _rungStart;
+
+    private readonly System.Collections.Concurrent.ConcurrentQueue<SearchResult> _enrichQueue = new();
+    private readonly object _enrichLock = new();
+    private Task? _enrichWorker;
+
+    private readonly System.Collections.Concurrent.ConcurrentQueue<FilterOptionItem> _countQueue = new();
+    private readonly HashSet<string> _countSeen = new(StringComparer.Ordinal);
+    private readonly object _countLock = new();
+    private Task? _countWorker;
+
+    private const string UsageCacheKey = "browse_facet_usage_v1";
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BrowseViewModel"/> class.
+    /// </summary>
     public BrowseViewModel(
         IDepotBoxApiClient apiClient,
         IInstanceManager instanceManager,
@@ -84,7 +244,10 @@ public partial class BrowseViewModel : ObservableObject, IDisposable
         BlueStar.Infrastructure.Storage.AppSettingsService? settingsService = null,
         IBackgroundTaskService? backgroundTaskService = null,
         IGameCatalogProvider? catalogProvider = null,
-        IBuildResolver? buildResolver = null)
+        IBuildResolver? buildResolver = null,
+        ISteamCatalogSearchService? catalogSearch = null,
+        ISteamTagCatalogService? tagCatalog = null,
+        ICacheService? cache = null)
     {
         _apiClient = apiClient;
         _instanceManager = instanceManager;
@@ -98,7 +261,30 @@ public partial class BrowseViewModel : ObservableObject, IDisposable
         _backgroundTaskService = backgroundTaskService;
         _catalogProvider = catalogProvider;
         _buildResolver = buildResolver;
+        _catalogSearch = catalogSearch;
+        _tagCatalog = tagCatalog;
+        _cache = cache;
 
+        // Restore the grid-or-list choice before anything can observe it, so switching to
+        // Explore does not flash the grid on the way to the list.
+        _isGridView = settingsService?.ExploreGridView ?? true;
+
+        // Both toolbar lists start with an empty entry, because "no particular order" and
+        // "the whole catalog" have to be expressible. They are otherwise independent: Steam
+        // reads filter= and sort_by= together, so neither selector clears the other.
+        SortOptions = new ObservableCollection<SortOptionItem>(
+            [new SortOptionItem(string.Empty, Localize("SortNone", "No particular order")),
+                .. SteamStoreFacets.SortOptions.Select(o => new SortOptionItem(o.Value, Localize("Sort_" + o.Value, o.FallbackName)))]);
+
+        StoreListOptions = new ObservableCollection<SortOptionItem>(
+            [new SortOptionItem(string.Empty, Localize("StoreListNone", "Whole catalog")),
+                .. SteamStoreFacets.StoreLists.Select(o => new SortOptionItem(o.Value, Localize("Facet_StoreList_" + o.Value, o.FallbackName)))]);
+
+        // Setting this would otherwise fire a search before the filter panel exists, spending a
+        // request on a query InitializeAsync is about to replace.
+        _suppressSearch = true;
+        SelectedSort = SortOptions.FirstOrDefault();
+        _suppressSearch = false;
 
         if (_settingsService != null)
         {
@@ -107,542 +293,1403 @@ public partial class BrowseViewModel : ObservableObject, IDisposable
                 App.Current?.Dispatcher?.Invoke(() =>
                 {
                     if (_isDisposed) return;
-                    _ = LoadCategoryFeedsAsync();
-                    ApplyFilter();
+
+                    // Adult content is negated in the query itself, so a change there means the
+                    // page has to be fetched again rather than merely re-filtered.
+                    if (ApplyAdultVisibility()) _ = RunSearchAsync();
+                    else RebuildVisible();
                 });
             };
             _settingsService.SettingsChanged += _settingsChangedHandler;
         }
 
-        _ = LoadCategoryFeedsAsync();
-    }
-
-    private string? _pendingExpandedCategoryId;
-    public Action<string>? OnScrollToCategoryRequested;
-
-    public void ExpandCategory(string categoryId)
-    {
-        _pendingExpandedCategoryId = categoryId;
-        HasSearched = false;
-        SearchQuery = string.Empty;
-
-        if (Categories != null && Categories.Count > 0)
-        {
-            foreach (var cat in Categories)
-            {
-                cat.IsExpanded = string.Equals(cat.Id, categoryId, StringComparison.OrdinalIgnoreCase);
-            }
-        }
-
-        OnScrollToCategoryRequested?.Invoke(categoryId);
-    }
-
-    [RelayCommand]
-    public void ToggleCategoryExpand(CatalogCategory category)
-    {
-        if (category == null) return;
-        category.IsExpanded = !category.IsExpanded;
-    }
-
-    private List<SearchResult> FilterBySettings(IEnumerable<SearchResult> source)
-    {
-        if (source == null) return [];
-        var allowNsfw = _settingsService?.ShowNsfwContent ?? false;
-        var allowDrm = _settingsService?.ShowDrmContent ?? true;
-
-        return source.Where(item =>
-            (allowNsfw || !item.IsNsfw) &&
-            (allowDrm || !item.HasDrm)).ToList();
-    }
-
-    public async Task LoadCategoryFeedsAsync()
-    {
-        await Task.Yield();
-
-        var catTrending = new CatalogCategory("bluestar_trending_7d", "Trending on BlueStar", "Most added to instances in the last 7 days", "IconFlame", "#3B82F6", "LAST WEEK");
-        var catMostPlayed = new CatalogCategory("bluestar_most_played_alltime", "Most Added in BlueStar", "Titles with the most instances created of all time", "IconTrophy", "#8B5CF6", "ALL TIME");
-        var catSteamDbMostPlayed = new CatalogCategory("steamdb_most_played", "Most Played", "Top concurrent players in real time", "IconUsers", "#10B981", "STEAM");
-        var catSteamDbTrending = new CatalogCategory("steamdb_trending", "Trending Games", "Titles with highest recent activity growth", "IconTrending", "#F59E0B", "STEAM");
-        var catSteamDbTopSellers = new CatalogCategory("steamdb_top_sellers", "Top Sellers & Popular", "Top selling releases and deals worldwide", "IconTag", "#EC4899", "STEAM");
-        var catSteamDbTopRated = new CatalogCategory("steamdb_top_rated", "Top Rated & Anticipated", "Top rated by community and critics", "IconStar", "#6366F1", "STEAM");
-        Categories = new ObservableCollection<CatalogCategory>
-        {
-            catTrending,
-            catMostPlayed,
-            catSteamDbMostPlayed,
-            catSteamDbTrending,
-            catSteamDbTopSellers,
-            catSteamDbTopRated
-        };
-
-        if (!string.IsNullOrWhiteSpace(_pendingExpandedCategoryId))
-        {
-            foreach (var cat in Categories)
-            {
-                cat.IsExpanded = string.Equals(cat.Id, _pendingExpandedCategoryId, StringComparison.OrdinalIgnoreCase);
-            }
-            OnScrollToCategoryRequested?.Invoke(_pendingExpandedCategoryId);
-        }
-
-        var defaultTrendingNames = new[] { "Counter-Strike 2", "Cyberpunk 2077", "ELDEN RING", "Baldur's Gate 3", "Hades II" };
-        TrendingSuggestionChips = new ObservableCollection<TrendingChipItem>(
-            defaultTrendingNames.Select((name, idx) => TrendingChipItem.Create(name, idx + 1)));
-
-        if (_statsService == null)
-        {
-            foreach (var c in Categories) c.IsLoading = false;
-            return;
-        }
-
-        // 2. Load feeds asynchronously & progressively
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                var trendingItems = await _statsService.GetTrendingBlueStarAsync().ConfigureAwait(false);
-                catTrending.PoolItems = trendingItems.ToList();
-                var filtered = FilterBySettings(catTrending.PoolItems);
-                var initial = filtered.Take(catTrending.DisplayLimit).ToList();
-                catTrending.Items = new ObservableCollection<SearchResult>(initial);
-                catTrending.IsLoading = false;
-                catTrending.HasMoreItems = filtered.Count > initial.Count;
-                _ = EnrichResultsAsync(initial, catTrending);
-
-                if (filtered.Count > 0)
-                {
-                    var chips = filtered.Take(5)
-                        .Select(t => t.Name)
-                        .Where(n => !string.IsNullOrWhiteSpace(n))
-                        .Select((name, idx) => TrendingChipItem.Create(name, idx + 1))
-                        .ToList();
-
-                    App.Current?.Dispatcher?.Invoke(() =>
-                    {
-                        TrendingSuggestionChips = new ObservableCollection<TrendingChipItem>(chips);
-                    });
-                }
-            }
-            catch { catTrending.IsLoading = false; }
-        });
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                var items = await _statsService.GetMostPlayedBlueStarAsync().ConfigureAwait(false);
-                catMostPlayed.PoolItems = items.ToList();
-                var filtered = FilterBySettings(catMostPlayed.PoolItems);
-                var initial = filtered.Take(catMostPlayed.DisplayLimit).ToList();
-                catMostPlayed.Items = new ObservableCollection<SearchResult>(initial);
-                catMostPlayed.IsLoading = false;
-                catMostPlayed.HasMoreItems = filtered.Count > initial.Count;
-                _ = EnrichResultsAsync(initial, catMostPlayed);
-            }
-            catch { catMostPlayed.IsLoading = false; }
-        });
-
-        _ = Task.Run(() => LoadSteamCategoryFeedAsync(catSteamDbMostPlayed, "most_played"));
-        _ = Task.Run(() => LoadSteamCategoryFeedAsync(catSteamDbTrending, "trending"));
-        _ = Task.Run(() => LoadSteamCategoryFeedAsync(catSteamDbTopSellers, "top_sellers"));
-        _ = Task.Run(() => LoadSteamCategoryFeedAsync(catSteamDbTopRated, "top_rated"));
-    }
-
-
-    private async Task LoadSteamCategoryFeedAsync(CatalogCategory cat, string type)
-    {
-        if (_statsService == null || cat == null) return;
-        try
-        {
-            var items = await _statsService.GetSteamDbListAsync(type, 0, 30).ConfigureAwait(false);
-            cat.PoolItems = items.ToList();
-            var filtered = FilterBySettings(cat.PoolItems);
-
-            // If some items were filtered out by tags and we have less than DisplayLimit (9 slots), fetch more from Steam
-            while (filtered.Count < cat.DisplayLimit)
-            {
-                var offset = cat.PoolItems.Count;
-                var more = await _statsService.GetSteamDbListAsync(type, offset, 25).ConfigureAwait(false);
-                if (more == null || more.Count == 0) break;
-                var newUnique = more.Where(m => m.AppId > 0 && !cat.PoolItems.Any(p => p.AppId == m.AppId)).ToList();
-                if (newUnique.Count == 0) break;
-                cat.PoolItems.AddRange(newUnique);
-                filtered = FilterBySettings(cat.PoolItems);
-            }
-
-            var initial = filtered.Take(cat.DisplayLimit).ToList();
-            cat.Items = new ObservableCollection<SearchResult>(initial);
-            cat.IsLoading = false;
-            cat.HasMoreItems = cat.PoolItems.Count > 0;
-        }
-        catch { cat.IsLoading = false; }
-    }
-
-
-    [RelayCommand]
-    public void ClearSearch()
-    {
-        SearchQuery = string.Empty;
-        Results.Clear();
-        FilteredResults.Clear();
-        HasSearched = false;
-        ErrorMessage = null;
-        SelectedTypeFilter = "All";
-        HasActiveTypeFilter = false;
-    }
-
-    [RelayCommand]
-    public async Task QuickSearchAsync(string query)
-    {
-        if (string.IsNullOrWhiteSpace(query)) return;
-        SearchQuery = query;
-        await SearchAsync();
-    }
-
-    [RelayCommand]
-    public void SelectTypeFilter(string filter)
-    {
-        SelectedTypeFilter = filter ?? "All";
-        HasActiveTypeFilter = !string.Equals(SelectedTypeFilter, "All", StringComparison.OrdinalIgnoreCase);
-        ApplyFilter();
-    }
-
-    private void ApplyFilter()
-    {
-        if (Results.Count == 0)
-        {
-            FilteredResults = [];
-            return;
-        }
-
-        IEnumerable<SearchResult> filtered = FilterBySettings(Results);
-
-        if (string.Equals(SelectedTypeFilter, "Games", StringComparison.OrdinalIgnoreCase))
-        {
-            filtered = filtered.Where(r => string.Equals(r.AppType, "Game", StringComparison.OrdinalIgnoreCase));
-        }
-        else if (string.Equals(SelectedTypeFilter, "Tools", StringComparison.OrdinalIgnoreCase))
-        {
-            filtered = filtered.Where(r => string.Equals(r.AppType, "Tool", StringComparison.OrdinalIgnoreCase) ||
-                                           string.Equals(r.AppType, "Application", StringComparison.OrdinalIgnoreCase));
-        }
-        else if (string.Equals(SelectedTypeFilter, "DLCs", StringComparison.OrdinalIgnoreCase))
-        {
-            filtered = filtered.Where(r => r.DlcCount.HasValue && r.DlcCount.Value > 0);
-        }
-
-        FilteredResults = new ObservableCollection<SearchResult>(filtered);
+        _ = InitializeAsync();
     }
 
     /// <summary>
-    /// Searches for games matching the current query and enriches results in the background.
+    /// Builds the filter panel, loads the store events, and runs the opening query.
+    /// Explore opens on Steam's popular new releases rather than an empty page.
+    /// </summary>
+    private async Task InitializeAsync()
+    {
+        await LoadUsageAsync().ConfigureAwait(true);
+        await BuildFilterGroupsAsync().ConfigureAwait(true);
+
+        // Opening state: Steam's popular new releases, chosen in the toolbar rather than the panel.
+        // Set quietly, so the opening query is run once below rather than twice.
+        _suppressSearch = true;
+        SelectedStoreList = StoreListOptions.FirstOrDefault(o => o.Value == "popularnew")
+                            ?? StoreListOptions.FirstOrDefault();
+        _suppressSearch = false;
+
+        await RunSearchAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Assembles every filter group: Steam's own facets, plus the tag groups resolved against
+    /// the live tag catalog.
+    /// </summary>
+    private async Task BuildFilterGroupsAsync()
+    {
+        var groups = new List<FilterGroupViewModel>();
+
+        FilterGroupViewModel Group(
+            string key, string fallbackTitle, string iconKey, int visible, bool open,
+            IEnumerable<SteamFacetOption> options, bool single = false, bool exclude = true)
+        {
+            var vm = new FilterGroupViewModel(
+                key, Localize("Filter_" + key, fallbackTitle), iconKey, visible, open,
+                _facetUsage, OnFilterChanged, RequestCountsFor, single, exclude);
+
+            vm.SetOptions(options.Select(o => new FilterOptionItem(o, Localize("Facet_" + o.Kind + "_" + o.Value, o.FallbackName))));
+            return vm;
+        }
+
+        // The tag groups come from the live catalog, so they are built before being placed.
+        var tagGroups = new List<FilterGroupViewModel>();
+
+        if (_tagCatalog != null)
+        {
+            foreach (var definition in SteamTagGroups.All)
+            {
+                try
+                {
+                    var tags = await _tagCatalog.GetGroupAsync(definition.Key, _cts.Token).ConfigureAwait(true);
+                    if (tags.Count == 0) continue;
+
+                    var vm = new FilterGroupViewModel(
+                        definition.Key,
+                        Localize("Filter_" + definition.Key, definition.FallbackTitle),
+                        definition.IconKey,
+                        definition.VisibleCount,
+                        definition.OpenByDefault,
+                        _facetUsage, OnFilterChanged, RequestCountsFor);
+
+                    vm.SetOptions(tags.Select(t => new FilterOptionItem(t.ToFacet(), t.Name, t.ProductCount)));
+                    tagGroups.Add(vm);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Could not build the {Group} tag group", definition.Key);
+                }
+            }
+        }
+
+        FilterGroupViewModel? Tag(string key) => tagGroups.FirstOrDefault(g => g.Key == key);
+
+        void AddTag(string key)
+        {
+            var group = Tag(key);
+            if (group != null) groups.Add(group);
+        }
+
+        AddTag("genre");
+        AddTag("setting");
+        AddTag("gameplay");
+        AddTag("pace");
+        AddTag("style");
+
+        groups.Add(Group("mode", "Game mode", "IconTarget", 12, true, SteamStoreFacets.PlayerSupport, exclude: false));
+        groups.Add(Group("platform", "Platform", "IconMonitor", 9, true, SteamStoreFacets.Platform, exclude: false));
+        groups.Add(Group("features", "Steam features", "IconSliders", 10, false, SteamStoreFacets.Features, exclude: false));
+
+        // No "My PC" group: judging a result against the machine needs detected hardware and a
+        // parsed pc_requirements, and nothing produces either yet. A group of bubbles that can
+        // never answer is worse than no group, so it is gone until the verdict exists.
+
+        groups.Add(Group("language", "Language", "IconLanguage", 8, false, SteamStoreFacets.Languages, exclude: false));
+
+        // Review standing reads as a floor rather than a set, so only one band at a time.
+        groups.Add(Group("rating", "Review rating", "IconStar", 6, false, SteamStoreFacets.Ratings, single: true));
+
+        groups.Add(Group("controller", "Controller support", "IconGamepad", 8, false, SteamStoreFacets.Controller, exclude: false));
+        groups.Add(Group("accessibility", "Accessibility", "IconAccessibility", 8, false, SteamStoreFacets.Accessibility, exclude: false));
+        groups.Add(Group("price", "Price", "IconMoney", 6, false, SteamStoreFacets.Price, exclude: false));
+        groups.Add(Group("content", "Content", "IconShield", 6, false, SteamStoreFacets.Content));
+
+        // Adult content goes last, and only exists while settings allow it.
+        _adultGroup = tagGroups.FirstOrDefault(g => g.Key == SteamTagGroups.AdultGroupKey);
+        if (_adultGroup != null) groups.Add(_adultGroup);
+
+        FilterGroups = new ObservableCollection<FilterGroupViewModel>(groups);
+
+        ApplyAdultVisibility();
+    }
+
+    /// <summary>
+    /// Hides the adult-content group while adult content is switched off in settings.
+    /// </summary>
+    /// <remarks>
+    /// Hiding is not enough on its own: with the setting off those tags are also pushed into the
+    /// query as exclusions by <see cref="BuildFacets"/>, so the results never contain them in the
+    /// first place rather than being filtered out after the fact.
+    /// </remarks>
+    /// <returns><c>true</c> when the setting had actually changed.</returns>
+    private bool ApplyAdultVisibility()
+    {
+        var allowed = _settingsService?.ShowNsfwContent ?? false;
+
+        if (_adultGroup is null) return false;
+        if (_adultGroup.IsVisible == allowed) return false;
+
+        _adultGroup.IsVisible = allowed;
+
+        if (!allowed)
+        {
+            var previous = _suppressSearch;
+            _suppressSearch = true;
+            _adultGroup.ClearSelection();
+            _suppressSearch = previous;
+        }
+
+        _adultGroup.IsExpanded = false;
+        RefreshActiveFilters();
+        return true;
+    }
+
+    private string Localize(string resourceKey, string fallback)
+    {
+        try
+        {
+            if (App.Current?.TryFindResource("String_" + resourceKey) is string localized &&
+                !string.IsNullOrWhiteSpace(localized))
+            {
+                return localized;
+            }
+        }
+        catch
+        {
+            // Falls through to the English label.
+        }
+
+        return fallback;
+    }
+
+    /// <summary>
+    /// Queues the product counts for the bubbles a group just made visible.
+    /// </summary>
+    /// <remarks>
+    /// One probe per tag, and there are hundreds of tags. Firing them as they appear is what got
+    /// the address blocked by Steam, so they go into a single queue drained by one worker, one at
+    /// a time, and only while nothing more important is talking to Steam. Each count is cached
+    /// for a day, so this is a first-run cost.
+    /// </remarks>
+    private void RequestCountsFor(FilterGroupViewModel group)
+    {
+        if (_tagCatalog is null || _catalogSearch is null || _isDisposed) return;
+
+        // A collapsed group's bubbles are not on screen; their counts can wait until it opens.
+        if (!group.IsExpanded) return;
+
+        var queued = false;
+
+        lock (_countLock)
+        {
+            foreach (var item in group.Items)
+            {
+                if (item.ProductCount is not null) continue;
+                if (item.Option.Kind != SteamFacetKind.Tag) continue;
+                if (!_countSeen.Add(item.Key)) continue;
+
+                _countQueue.Enqueue(item);
+                queued = true;
+            }
+
+            if (queued && _countWorker is null)
+            {
+                _countWorker = Task.Run(DrainCountQueueAsync);
+            }
+        }
+    }
+
+    private async Task DrainCountQueueAsync()
+    {
+        var idleRounds = 0;
+
+        while (!_isDisposed && !_cts.IsCancellationRequested)
+        {
+            if (!_countQueue.TryDequeue(out var item))
+            {
+                // Nothing to do for a while: stand down and let the next Refresh restart us.
+                if (++idleRounds > 20) break;
+
+                try
+                {
+                    await Task.Delay(500, _cts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+
+                continue;
+            }
+
+            idleRounds = 0;
+
+            // A search in flight is what the person is waiting for, so counts step aside for it.
+            // They no longer wait on enrichment: both are background work behind the same
+            // request gate, and yielding to it meant the numbers next to the tags never filled
+            // in while a page of results was being checked, which takes minutes.
+            while (!_isDisposed && IsSearching)
+            {
+                try
+                {
+                    await Task.Delay(400, _cts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+            }
+
+            try
+            {
+                var probe = new SteamSearchQuery
+                {
+                    Count = 1,
+                    AppTypes = SteamStoreFacets.AppTypeAll,
+                    Facets = new Dictionary<SteamFacetOption, FacetState> { [item.Option] = FacetState.Include }
+                };
+
+                var count = await _catalogSearch!.GetMatchCountAsync(probe, _cts.Token).ConfigureAwait(false);
+
+                if (count.HasValue)
+                {
+                    App.Current?.Dispatcher?.Invoke(() => item.ProductCount = count.Value);
+                }
+                else
+                {
+                    // Steam is refusing us. Drop what is left rather than hammering, and forget
+                    // these keys so they can be asked for again later.
+                    DiscardPendingCounts();
+                    return;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Could not count products for facet {Facet}", item.Option.Value);
+            }
+        }
+
+        lock (_countLock)
+        {
+            _countWorker = null;
+        }
+    }
+
+    private void DiscardPendingCounts()
+    {
+        lock (_countLock)
+        {
+            while (_countQueue.TryDequeue(out var dropped))
+            {
+                _countSeen.Remove(dropped.Key);
+            }
+
+            _countWorker = null;
+        }
+    }
+
+    private void OnFilterChanged()
+    {
+        if (_suppressSearch) return;
+
+        CurrentPage = 1;
+        RefreshActiveFilters();
+        _ = SaveUsageAsync();
+        _ = RunSearchAsync();
+    }
+
+    private void RefreshActiveFilters()
+    {
+        var active = FilterGroups.SelectMany(g => g.ActiveOptions).ToList();
+        ActiveFilters = new ObservableCollection<FilterOptionItem>(active);
+        HasActiveFilters = active.Count > 0 || !string.IsNullOrWhiteSpace(SearchQuery);
+
+        _activeTagNames = active
+            .Where(o => o.Option.Kind == SteamFacetKind.Tag && o.State == FacetState.Include)
+            .Select(o => o.DisplayName)
+            .ToHashSet(StringComparer.CurrentCultureIgnoreCase);
+
+        MarkActiveTags(_fetched);
+    }
+
+    /// <summary>
+    /// Lights up the bubbles a card shares with the query.
+    /// </summary>
+    private void MarkActiveTags(IEnumerable<SearchResult> items)
+    {
+        foreach (var item in items)
+        {
+            foreach (var tag in item.StoreTags)
+            {
+                tag.IsActive = _activeTagNames.Contains(tag.Name);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Runs the current query. Pages accumulate: the first call replaces what is on screen, and
+    /// every call after that appends, which is what the scroll-to-bottom loading relies on.
+    /// </summary>
+    public async Task RunSearchAsync(bool reset = true)
+    {
+        if (_catalogSearch is null || _isDisposed) return;
+
+        if (reset)
+        {
+            // Whatever was in flight belongs to a query nobody asked for any more.
+            _searchCts?.Cancel();
+            _searchCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+            _searchGeneration++;
+
+            _fetched.Clear();
+
+            // Clear what is on screen too: the placeholders are the answer while this runs, and
+            // leaving the previous page underneath them reads as a page that half-changed.
+            if (Results.Count > 0) Results = [];
+
+            BuildLadder();
+            _ladderRung = 0;
+            _rungStart = 0;
+            ExactMatchCount = 0;
+            IsShowingRelated = false;
+            HasMoreResults = true;
+        }
+
+        var generation = _searchGeneration;
+        var token = (_searchCts ?? _cts).Token;
+
+        if (reset) IsSearching = true; else IsLoadingMore = true;
+        ErrorMessage = null;
+
+        try
+        {
+            // Both go into the query: the list picks the pool, the sort orders it.
+            var storeList = string.IsNullOrEmpty(SelectedStoreList?.Value) ? null : SelectedStoreList!.Value;
+            var sortBy = SteamStoreFacets.ComposeSort(SelectedSort?.Value, IsSortDescending);
+
+            // Nothing chosen: Steam would answer on relevance, which hands back the same few
+            // blockbusters whatever the facets say. Each curated list names its own fallback.
+            // A typed search is the exception — there, relevance is the whole point, and a sort
+            // imposed on top of it drops the very match the person was looking for. Checked
+            // live: term=phasmophobia answers with 18 products, Phasmophobia first; the same
+            // term under sort_by=Released_DESC answers with 10 and Phasmophobia is not among
+            // them. So a search is ordered only when the person asked for an order themselves.
+            if (string.IsNullOrEmpty(sortBy) && string.IsNullOrWhiteSpace(SearchQuery))
+            {
+                sortBy = SteamStoreFacets.DefaultSortFor(storeList);
+            }
+
+            // Coming soon carries the only order its products can be put in.
+            if (!SteamStoreFacets.AllowsSorting(storeList)) sortBy = string.Empty;
+
+            // A step that matches nothing used to leave an empty screen with more steps still
+            // below it, because only a scroll advanced the ladder and there was nothing to
+            // scroll. Now the call keeps walking until it has something to show.
+            var landed = 0;
+
+            for (var hop = 0; hop <= MaxEmptyHops; hop++)
+            {
+                if (_ladderRung >= _ladder.Count)
+                {
+                    // The tags and the typed term are spent. Before calling it empty, ask Steam
+                    // what that half-typed title might have been.
+                    if (landed > 0 || !await TryAppendSuggestionRungsAsync(token).ConfigureAwait(true))
+                    {
+                        break;
+                    }
+
+                    if (_isDisposed || generation != _searchGeneration) return;
+                }
+
+                var rung = _ladder[_ladderRung];
+
+                var query = new SteamSearchQuery
+                {
+                    Term = rung.Term,
+                    AppTypes = SelectedAppType,
+                    SortBy = sortBy,
+                    StoreList = storeList,
+                    Start = _rungStart,
+                    Count = PageSize,
+                    Facets = BuildFacets(rung.Tags)
+                };
+
+                var page = await _catalogSearch.SearchAsync(query, token).ConfigureAwait(true);
+
+                // A newer query started while this one was on the wire: its results are the ones
+                // on screen, so this page is dropped rather than mixed in with them.
+                if (_isDisposed || generation != _searchGeneration) return;
+
+                if (_ladderRung == 0) ExactMatchCount = page.TotalCount;
+
+                var known = _fetched.Select(f => f.AppId).ToHashSet();
+                var fresh = page.Items.Where(i => known.Add(i.AppId)).ToList();
+
+                foreach (var item in fresh)
+                {
+                    item.MatchedTagCount = _selectedTagIds.Count == 0
+                        ? 0
+                        : item.TagIds.Count(id => _selectedTagIds.Contains(id));
+                }
+
+                _fetched.AddRange(fresh);
+                _rungStart += Math.Max(page.Items.Count, 1);
+                landed += fresh.Count;
+
+                // This step is spent: drop a tag and keep going, which is how partial matches
+                // get in.
+                if (page.Items.Count == 0 || _rungStart >= page.TotalCount)
+                {
+                    if (rung.IsSuggestion) SuggestedTerm = rung.Term;
+
+                    _ladderRung++;
+                    _rungStart = 0;
+                    if (_ladderRung > 0 && _ladder.Count > 1) IsShowingRelated = true;
+                }
+                else if (rung.IsSuggestion)
+                {
+                    SuggestedTerm = rung.Term;
+                }
+
+                TotalResults = _ladderRung == 0 ? page.TotalCount : _fetched.Count;
+                HasMoreResults = _ladderRung < _ladder.Count && _fetched.Count < MaxMaterialized;
+
+                RebuildVisible();
+
+                _ = ResolveResultTagsAsync(fresh);
+                QueueEnrichment(fresh);
+
+                if (landed > 0) break;
+            }
+
+            if (_ladderRung >= _ladder.Count) HasMoreResults = false;
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer query replaced this one.
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            _logger.LogError(ex, "Steam catalog search failed");
+        }
+        finally
+        {
+            if (generation == _searchGeneration)
+            {
+                IsSearching = false;
+                IsLoadingMore = false;
+                RefreshActiveFilters();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Collects every non-tag facet, then adds the tag set for the rung being queried.
+    /// </summary>
+    private Dictionary<SteamFacetOption, FacetState> BuildFacets(IReadOnlyList<SteamFacetOption> includedTags)
+    {
+        var facets = new Dictionary<SteamFacetOption, FacetState>();
+
+        foreach (var group in FilterGroups)
+        {
+            foreach (var (option, state) in group.ActiveFacets)
+            {
+                if (option.Kind is SteamFacetKind.StoreList
+                    or SteamFacetKind.LocalPostFilter
+                    or SteamFacetKind.LocalRequirements)
+                {
+                    continue;
+                }
+
+                // Included tags come from the ladder; exclusions always apply.
+                if (option.Kind == SteamFacetKind.Tag && state == FacetState.Include) continue;
+
+                facets[option] = state;
+            }
+        }
+
+        foreach (var tag in includedTags)
+        {
+            facets[tag] = FacetState.Include;
+        }
+
+        // With adult content switched off, Steam is asked not to return it at all. Doing this in
+        // the query rather than in the local pass means the page is not silently half empty.
+        if (!(_settingsService?.ShowNsfwContent ?? false))
+        {
+            foreach (var id in SteamTagGroups.AdultTagIds)
+            {
+                var option = new SteamFacetOption(
+                    SteamFacetKind.Tag, id.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    string.Empty, SupportsExclude: true);
+
+                if (!facets.ContainsKey(option)) facets[option] = FacetState.Exclude;
+            }
+        }
+
+        return facets;
+    }
+
+    /// <summary>
+    /// Works out the sequence of queries to walk, most exact first.
+    /// </summary>
+    /// <remarks>
+    /// Steam's <c>tags=</c> is an AND, so asking for four tags at once returns only the products
+    /// carrying all four — often nothing at all. Rather than trade that precision for a plain
+    /// OR, the search walks down: every tag together, then every set one tag smaller, then every
+    /// set smaller again, down to the single tags. A product carrying three of the four is
+    /// therefore fetched before one carrying two, and one carrying two before one carrying one.
+    /// <para>
+    /// The old ladder jumped straight from all-four to each-one, so a product matching three of
+    /// the four was never queried as such — it only turned up under whichever single tag it
+    /// shared, mixed in with everything else carrying that one tag. The middle sets are what
+    /// was missing.
+    /// </para>
+    /// <para>
+    /// <see cref="RebuildVisible"/> then orders what came back by how many of the chosen tags
+    /// each product actually carries, so the AND-heavy ones stay at the top even once pages from
+    /// several steps are mixed together.
+    /// </para>
+    /// </remarks>
+    private void BuildLadder()
+    {
+        _ladder.Clear();
+        _suggestionsResolved = false;
+        SuggestedTerm = null;
+
+        var included = FilterGroups
+            .SelectMany(g => g.ActiveOptions)
+            .Where(o => o.Option.Kind == SteamFacetKind.Tag && o.State == FacetState.Include)
+            .Select(o => o.Option)
+            .ToList();
+
+        _selectedTagIds = included
+            .Select(o => int.TryParse(o.Value, out var id) ? id : 0)
+            .Where(id => id > 0)
+            .ToList();
+
+        var term = string.IsNullOrWhiteSpace(SearchQuery) ? null : SearchQuery.Trim();
+
+        if (included.Count == 0)
+        {
+            _ladder.Add(new SearchRung([], term));
+            return;
+        }
+
+        for (var size = included.Count; size >= 1; size--)
+        {
+            foreach (var combination in Combinations(included, size))
+            {
+                _ladder.Add(new SearchRung(combination, term));
+                if (_ladder.Count >= MaxLadderRungs) return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Every subset of <paramref name="source"/> of exactly <paramref name="size"/> items, in
+    /// the order the tags were chosen.
+    /// </summary>
+    private static IEnumerable<IReadOnlyList<T>> Combinations<T>(IReadOnlyList<T> source, int size)
+    {
+        if (size <= 0 || size > source.Count) yield break;
+
+        var indices = new int[size];
+        for (var i = 0; i < size; i++) indices[i] = i;
+
+        while (true)
+        {
+            var combination = new List<T>(size);
+            foreach (var index in indices) combination.Add(source[index]);
+            yield return combination;
+
+            var pivot = size - 1;
+            while (pivot >= 0 && indices[pivot] == source.Count - size + pivot) pivot--;
+            if (pivot < 0) yield break;
+
+            indices[pivot]++;
+            for (var j = pivot + 1; j < size; j++) indices[j] = indices[j - 1] + 1;
+        }
+    }
+
+    /// <summary>
+    /// Turns a half-typed title into steps the faceted search can actually run.
+    /// </summary>
+    /// <remarks>
+    /// Steam's faceted search matches whole words, so "phasmo" answers with nothing while
+    /// "phasmophobia" answers with seventeen products. Its autocomplete does match prefixes, so
+    /// when the typed term runs the ladder dry the titles it offers become further steps,
+    /// carrying the same tags and filters as the rest. Only the first of them is usually
+    /// fetched: the walk stops as soon as a step has something to show.
+    /// </remarks>
+    /// <returns><c>true</c> when at least one step was added.</returns>
+    private async Task<bool> TryAppendSuggestionRungsAsync(CancellationToken token)
+    {
+        if (_suggestionsResolved || _catalogSearch is null || _isDisposed) return false;
+
+        _suggestionsResolved = true;
+
+        var term = string.IsNullOrWhiteSpace(SearchQuery) ? null : SearchQuery.Trim();
+        if (term is null) return false;
+
+        IReadOnlyList<SteamTitleSuggestion> suggestions;
+
+        try
+        {
+            suggestions = await _catalogSearch.SuggestTitlesAsync(term, token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not resolve title suggestions for {Term}", term);
+            return false;
+        }
+
+        if (_isDisposed || suggestions.Count == 0) return false;
+
+        // The tags stay exactly as they were: a suggestion widens the title, never the filters.
+        IReadOnlyList<SteamFacetOption> tags = _ladder.Count > 0 ? _ladder[0].Tags : [];
+        var added = 0;
+        var seen = new HashSet<string>(StringComparer.CurrentCultureIgnoreCase) { term };
+
+        foreach (var suggestion in suggestions)
+        {
+            if (string.IsNullOrWhiteSpace(suggestion.Name)) continue;
+            if (!seen.Add(suggestion.Name)) continue;
+
+            _ladder.Add(new SearchRung(tags, suggestion.Name, IsSuggestion: true));
+
+            if (++added >= MaxEmptyHops) break;
+        }
+
+        return added > 0;
+    }
+
+    /// <summary>
+    /// Loads the next page onto the end of the list. Bound to the scroll reaching the bottom.
+    /// </summary>
+    [RelayCommand]
+    public async Task LoadMoreAsync()
+    {
+        if (!HasMoreResults || IsLoadingMore || IsSearching || _isDisposed) return;
+        await RunSearchAsync(reset: false).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Rebuilds what is on screen from everything fetched so far.
+    /// </summary>
+    /// <remarks>
+    /// The local filters — the Content group, the review band and the person's NSFW and
+    /// DRM display settings — hide results instead of discarding them, so turning a filter back
+    /// off brings its results back without going to Steam again.
+    /// </remarks>
+    private void RebuildVisible()
+    {
+        var kept = _fetched.Where(PassesLocalFilters);
+
+        // Steam's own order is the order, and it is the one the sort selector asked for. The
+        // only time it gets rearranged is when the search has had to relax an AND into partial
+        // matches: then pages from different rungs are mixed together and the results carrying
+        // more of the chosen tags belong above the ones carrying one.
+        var visible = _ladder.Count > 1
+            ? kept.Select((item, index) => (item, index))
+                  .OrderByDescending(p => p.item.MatchedTagCount)
+                  .ThenBy(p => p.index)
+                  .Select(p => p.item)
+                  .ToList()
+            : kept.ToList();
+
+        HiddenByContentFilters = _fetched.Count - visible.Count;
+
+        SyncCollection(Results, visible);
+    }
+
+    /// <summary>
+    /// Brings the bound collection in line with the list that should be on screen.
+    /// </summary>
+    /// <remarks>
+    /// Two shapes cover almost every call. Nothing changed — the common case while enrichment
+    /// ticks along — costs one walk and no notifications at all. A page arriving on the end is
+    /// appended, so the cards already rendered are left alone. Anything else (a filter changing
+    /// the order) replaces the collection once: a single reset beats a few hundred Move and
+    /// Insert notifications, each of which made the panel re-measure the whole wrap layout.
+    /// </remarks>
+    private void SyncCollection(ObservableCollection<SearchResult> target, List<SearchResult> desired)
+    {
+        var shared = Math.Min(target.Count, desired.Count);
+        var prefixMatches = true;
+
+        for (var i = 0; i < shared; i++)
+        {
+            if (!ReferenceEquals(target[i], desired[i]))
+            {
+                prefixMatches = false;
+                break;
+            }
+        }
+
+        if (prefixMatches)
+        {
+            if (desired.Count == target.Count) return;
+
+            if (desired.Count > target.Count)
+            {
+                for (var i = target.Count; i < desired.Count; i++) target.Add(desired[i]);
+                return;
+            }
+
+            for (var i = target.Count - 1; i >= desired.Count; i--) target.RemoveAt(i);
+            return;
+        }
+
+        Results = new ObservableCollection<SearchResult>(desired);
+    }
+
+    private bool PassesLocalFilters(SearchResult item)
+    {
+        var allowNsfw = _settingsService?.ShowNsfwContent ?? false;
+        var allowDrm = _settingsService?.ShowDrmContent ?? true;
+
+        if (!allowNsfw && item.IsNsfw) return false;
+        if (!allowDrm && item.HasDrm) return false;
+
+        var content = FilterGroups.FirstOrDefault(g => g.Key == "content");
+        var rating = FilterGroups.FirstOrDefault(g => g.Key == "rating");
+
+        FacetState StateOf(FilterGroupViewModel? group, string value) =>
+            group?.AllOptions.FirstOrDefault(o => o.Option.Value == value)?.State ?? FacetState.Neutral;
+
+        if (!PassesRating(item, rating)) return false;
+
+        var noDrm = StateOf(content, "no_drm");
+        var noLauncher = StateOf(content, "no_launcher");
+        var hasDlc = StateOf(content, "has_dlc");
+        var hideAdult = StateOf(content, "hide_adult");
+
+        var anyContentFilter = noDrm != FacetState.Neutral || noLauncher != FacetState.Neutral
+                               || hasDlc != FacetState.Neutral || hideAdult != FacetState.Neutral;
+
+        // These answers only exist once appdetails has been read for this result. Until then the
+        // result stays visible and carries its pending badge rather than being judged blind.
+        if (anyContentFilter && !item.IsEnriched) return true;
+
+        if (noDrm == FacetState.Include && item.HasDrm) return false;
+        if (noDrm == FacetState.Exclude && !item.HasDrm) return false;
+
+        if (noLauncher == FacetState.Include && item.HasExternalLauncher) return false;
+        if (noLauncher == FacetState.Exclude && !item.HasExternalLauncher) return false;
+
+        var carriesDlc = item.DlcCount is > 0;
+        if (hasDlc == FacetState.Include && !carriesDlc) return false;
+        if (hasDlc == FacetState.Exclude && carriesDlc) return false;
+
+        if (hideAdult == FacetState.Include && item.IsNsfw) return false;
+
+        return true;
+    }
+
+    /// <summary>
+    /// Applies the review band, when one is chosen.
+    /// </summary>
+    /// <remarks>
+    /// The band is read from the positive-review percentage rather than from the summary text,
+    /// because the summary arrives in the store language and would stop matching the moment
+    /// someone browses in Spanish. A product Steam gives no percentage for has no standing to
+    /// judge, so it steps aside while a band is active.
+    /// </remarks>
+    private static bool PassesRating(SearchResult item, FilterGroupViewModel? rating)
+    {
+        var chosen = rating?.AllOptions.FirstOrDefault(o => o.State == FacetState.Include);
+        if (chosen is null) return true;
+
+        if (item.ReviewPercent is not { } percent) return false;
+
+        return chosen.Option.Value switch
+        {
+            "rating_min_95" => percent >= 95,
+            "rating_min_80" => percent >= 80,
+            "rating_min_70" => percent >= 70,
+            "rating_min_40" => percent >= 40,
+            "rating_below_40" => percent < 40,
+            _ => true
+        };
+    }
+
+    /// <summary>
+    /// Turns the tag ids Steam ships with each row into display names for the card bubbles.
+    /// </summary>
+    private async Task ResolveResultTagsAsync(IReadOnlyList<SearchResult> items)
+    {
+        if (_tagCatalog is null || items.Count == 0) return;
+
+        try
+        {
+            foreach (var item in items)
+            {
+                if (item.TagIds.Count == 0) continue;
+
+                var names = await _tagCatalog.ResolveNamesAsync(item.TagIds, _cts.Token).ConfigureAwait(true);
+                if (_isDisposed) return;
+
+                item.StoreTags = names
+                    .Take(8)
+                    .Select(n => new StoreTagRef(n, _activeTagNames.Contains(n)))
+                    .ToList();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Ignored.
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not resolve store tag names");
+        }
+    }
+
+    /// <summary>
+    /// Reads DRM, external launcher and DLC count for newly loaded results.
+    /// </summary>
+    /// <remarks>
+    /// Steam exposes none of these as a search facet, so each one is an appdetails request. They
+    /// go one at a time behind everything else, and they only happen at all when the person has
+    /// asked for something that depends on them, or is idly browsing — never as a burst behind a
+    /// page load, which is what got the address blocked.
+    /// </remarks>
+    private void QueueEnrichment(IReadOnlyList<SearchResult> items)
+    {
+        if (_metadataProvider is null || items.Count == 0 || _isDisposed) return;
+
+        foreach (var item in items)
+        {
+            if (!item.IsEnriched) _enrichQueue.Enqueue(item);
+        }
+
+        EnrichTotal = _fetched.Count;
+        EnrichedCount = _fetched.Count(f => f.IsEnriched);
+
+        lock (_enrichLock)
+        {
+            _enrichWorker ??= Task.Run(DrainEnrichQueueAsync);
+        }
+    }
+
+    private async Task DrainEnrichQueueAsync()
+    {
+        var idle = 0;
+
+        while (!_isDisposed && !_cts.IsCancellationRequested)
+        {
+            if (!_enrichQueue.TryDequeue(out var item))
+            {
+                if (++idle > 20) break;
+
+                try
+                {
+                    await Task.Delay(500, _cts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+
+                continue;
+            }
+
+            idle = 0;
+            IsEnriching = true;
+
+            try
+            {
+                await _metadataProvider!.EnrichSearchResultAsync(item, _cts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Enrichment failed for AppId={AppId}", item.AppId);
+            }
+
+            App.Current?.Dispatcher?.Invoke(() =>
+            {
+                if (_isDisposed) return;
+
+                item.HasExternalLauncher = item.HasDrm;
+                item.IsEnriched = true;
+                EnrichedCount = _fetched.Count(f => f.IsEnriched);
+                IsEnriching = EnrichedCount < _fetched.Count;
+
+                RebuildVisible();
+            });
+        }
+
+        lock (_enrichLock)
+        {
+            _enrichWorker = null;
+        }
+
+        App.Current?.Dispatcher?.Invoke(() => IsEnriching = false);
+    }
+
+    /// <summary>
+    /// Runs the search immediately, without waiting for the typing pause.
     /// </summary>
     [RelayCommand]
     public async Task SearchAsync()
     {
-        if (string.IsNullOrWhiteSpace(SearchQuery))
-        {
-            ClearSearch();
-            return;
-        }
-
-        IsSearching = true;
-        ErrorMessage = null;
-        HasSearched = true;
-        Results.Clear();
-        FilteredResults.Clear();
-
-        try
-        {
-            _logger.LogInformation("Searching catalog for: {Query}", SearchQuery);
-            IReadOnlyList<SearchResult> searchResults = [];
-
-            if (_catalogProvider != null)
-            {
-                try
-                {
-                    searchResults = await _catalogProvider.SearchGamesAsync(SearchQuery, CancellationToken.None).ConfigureAwait(true);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Catalog provider search failed, falling back to DepotBox");
-                }
-            }
-
-            if (searchResults.Count == 0 && _apiClient != null)
-            {
-                searchResults = await _apiClient.SearchGamesAsync(SearchQuery, CancellationToken.None).ConfigureAwait(true);
-            }
-
-            Results = new ObservableCollection<SearchResult>(searchResults);
-            ApplyFilter();
-            _logger.LogInformation("Found {Count} results", Results.Count);
-
-            // Enrich search results in parallel (DLCs, OS, Depot Version)
-            _ = EnrichResultsAsync(searchResults);
-        }
-
-        catch (UnauthorizedAccessException)
-        {
-            ErrorMessage = "Invalid or missing API key. Please configure your DepotBox API key in Settings.";
-        }
-        catch (HttpRequestException ex)
-        {
-            ErrorMessage = $"Network or API error: {ex.Message}";
-            _logger.LogError(ex, "DepotBox API search failed");
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = $"Search failed: {ex.Message}";
-            _logger.LogError(ex, "Unexpected search error");
-        }
-        finally
-        {
-            IsSearching = false;
-        }
+        CurrentPage = 1;
+        await RunSearchAsync().ConfigureAwait(true);
     }
 
-    private async Task EnrichResultsAsync(IEnumerable<SearchResult> results, CatalogCategory? parentCategory = null)
+    partial void OnSearchQueryChanged(string value)
     {
-        var items = results.ToList();
-        var allowNsfw = _settingsService?.ShowNsfwContent ?? false;
-        var allowDrm = _settingsService?.ShowDrmContent ?? true;
+        if (_suppressSearch) return;
 
-        await Parallel.ForEachAsync(items, new ParallelOptions { MaxDegreeOfParallelism = 4 }, async (result, ct) =>
-        {
-            if (_isDisposed) return;
-            try
-            {
-                // 1. Enrich from Steam Store / Web API (DLC count, OS compatibility, high-res artwork, release/update date, app type, NSFW, DRM)
-                if (_metadataProvider != null && result.AppId > 0)
-                {
-                    await _metadataProvider.EnrichSearchResultAsync(result, ct).ConfigureAwait(false);
-                }
+        _searchDebounce?.Cancel();
+        _searchDebounce = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+        var token = _searchDebounce.Token;
 
-                // 2. If version date is still empty, attempt fallback to latest app update date
-                if (result.AppId > 0 && string.IsNullOrWhiteSpace(result.Version) && _metadataProvider is BlueStar.Infrastructure.Metadata.SteamStoreApiClient steamClient)
-                {
-                    try
-                    {
-                        var updateDate = await steamClient.GetLatestAppUpdateDateAsync(result.AppId, ct).ConfigureAwait(false);
-                        if (updateDate.HasValue)
-                        {
-                            result.Version = $"{updateDate.Value.LocalDateTime:d MMM yyyy}";
-                        }
-                    }
-                    catch { }
-                }
-
-                // 3. If after enrichment this game is NSFW or DRM and is part of a catalog category carousel, replenish it
-                if ((!allowNsfw && result.IsNsfw) || (!allowDrm && result.HasDrm))
-                {
-                    App.Current?.Dispatcher?.Invoke(() =>
-                    {
-                        if (parentCategory != null)
-                        {
-                            parentCategory.Items?.Remove(result);
-                            _ = ReplenishCategoryAsync(parentCategory);
-                        }
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Background metadata enrichment error for AppId={AppId}", result.AppId);
-            }
-        }).ConfigureAwait(false);
-    }
-
-    private async Task ReplenishCategoryAsync(CatalogCategory category)
-    {
-        if (category == null || _statsService == null) return;
-        var allowNsfw = _settingsService?.ShowNsfwContent ?? false;
-        var allowDrm = _settingsService?.ShowDrmContent ?? true;
-
-        var needed = category.DisplayLimit - category.Items.Count;
-        if (needed <= 0) return;
-
-        var existingIds = new HashSet<uint>(category.Items.Select(i => i.AppId));
-        var candidates = category.PoolItems
-            .Where(i => i.AppId > 0 && !existingIds.Contains(i.AppId))
-            .Where(i => (allowNsfw || !i.IsNsfw) && (allowDrm || !i.HasDrm))
-            .Take(needed)
-            .ToList();
-
-        // If it's a Steam ranking category and pool has fewer candidates than needed, fetch more from Steam Store
-        if (candidates.Count < needed && IsSteamCategory(category.Id))
+        _ = Task.Run(async () =>
         {
             try
             {
-                var listType = GetListTypeForCategory(category.Id);
-                while (candidates.Count < needed)
+                await Task.Delay(450, token).ConfigureAwait(false);
+                if (token.IsCancellationRequested) return;
+
+                await App.Current!.Dispatcher.InvokeAsync(async () =>
                 {
-                    var offset = category.Items.Count + category.PoolItems.Count;
-                    var more = await _statsService.GetSteamDbListAsync(listType, offset, 25).ConfigureAwait(false);
-                    if (more == null || more.Count == 0) break;
-
-                    var newUnique = more.Where(m => m.AppId > 0 && !existingIds.Contains(m.AppId) && !category.PoolItems.Any(p => p.AppId == m.AppId)).ToList();
-                    if (newUnique.Count == 0) break;
-
-                    category.PoolItems.AddRange(newUnique);
-
-                    var extra = newUnique
-                        .Where(i => (allowNsfw || !i.IsNsfw) && (allowDrm || !i.HasDrm))
-                        .Take(needed - candidates.Count)
-                        .ToList();
-
-                    candidates.AddRange(extra);
-                }
-            }
-            catch { }
-        }
-
-        if (candidates.Count > 0)
-        {
-            // Pre-enrich candidates before UI insertion
-            await Parallel.ForEachAsync(candidates, new ParallelOptions { MaxDegreeOfParallelism = 4 }, async (candidate, ct) =>
-            {
-                try
-                {
-                    if (_metadataProvider != null && candidate.AppId > 0)
-                    {
-                        await _metadataProvider.EnrichSearchResultAsync(candidate, ct).ConfigureAwait(false);
-                    }
-                }
-                catch { }
-            }).ConfigureAwait(false);
-
-            var clean = candidates.Where(i => (allowNsfw || !i.IsNsfw) && (allowDrm || !i.HasDrm)).ToList();
-            if (clean.Count > 0)
-            {
-                App.Current?.Dispatcher?.Invoke(() =>
-                {
-                    foreach (var item in clean)
-                    {
-                        if (!category.Items.Any(i => i.AppId == item.AppId))
-                        {
-                            category.Items.Add(item);
-                        }
-                    }
+                    CurrentPage = 1;
+                    RefreshActiveFilters();
+                    await RunSearchAsync().ConfigureAwait(true);
                 });
             }
-
-            // If any candidate was filtered out post-enrichment, replenish again to ensure 9 slots stay full
-            if (clean.Count < candidates.Count && category.Items.Count < category.DisplayLimit)
+            catch (OperationCanceledException)
             {
-                _ = ReplenishCategoryAsync(category);
+                // Superseded by a newer keystroke.
             }
-        }
-    }
-
-    private static bool IsSteamCategory(string categoryId)
-    {
-        return !string.IsNullOrWhiteSpace(categoryId) &&
-               categoryId.StartsWith("steamdb_", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string GetListTypeForCategory(string categoryId)
-    {
-        if (string.IsNullOrWhiteSpace(categoryId)) return "top_sellers";
-        if (categoryId.Contains("most_played", StringComparison.OrdinalIgnoreCase)) return "most_played";
-        if (categoryId.Contains("trending", StringComparison.OrdinalIgnoreCase)) return "trending";
-        if (categoryId.Contains("top_rated", StringComparison.OrdinalIgnoreCase)) return "top_rated";
-        if (categoryId.Contains("top_sellers", StringComparison.OrdinalIgnoreCase)) return "top_sellers";
-        return "top_sellers";
+        }, token);
     }
 
     /// <summary>
-    /// Loads more games for the given expanded category.
-    /// Uses skeleton placeholder during background loading and metadata enrichment,
-    /// then cleanly appends the verified games in a single UI dispatch.
+    /// Applies a newly chosen order.
+    /// </summary>
+    /// <remarks>
+    /// The curated list is left exactly as it was. Steam's search reads <c>filter=</c> and
+    /// <c>sort_by=</c> together — the list decides which products are in the pool, the sort
+    /// decides the order they come back in — so there is nothing to clear.
+    /// </remarks>
+    partial void OnSelectedSortChanged(SortOptionItem? value)
+    {
+        OnPropertyChanged(nameof(CanInvertSort));
+
+        // Each field has a direction people mean by default: newest first, best reviewed first,
+        // but A-Z and cheapest first. The button is there to disagree.
+        if (!string.IsNullOrEmpty(value?.Value))
+        {
+            IsSortDescending = SteamStoreFacets.PrefersDescending(value.Value);
+        }
+
+        if (_suppressSearch) return;
+
+        CurrentPage = 1;
+        _ = RunSearchAsync();
+    }
+
+    /// <summary>
+    /// Applies a newly chosen curated list, leaving the order alone.
+    /// </summary>
+    partial void OnSelectedStoreListChanged(SortOptionItem? value)
+    {
+        OnPropertyChanged(nameof(CanChooseSort));
+        OnPropertyChanged(nameof(CanInvertSort));
+
+        if (_suppressSearch) return;
+
+        CurrentPage = 1;
+        _ = RunSearchAsync();
+    }
+
+    /// <summary>
+    /// Whether the chosen sort has an opposite.
+    /// </summary>
+    /// <remarks>
+    /// Price is the only field Steam sorts both ways. Asking it for <c>Reviews_ASC</c> or
+    /// <c>Released_ASC</c> is not an error there and not a reversal either — it is an unknown
+    /// token, and an unknown token gets the unsorted catalogue back, which is what made the
+    /// invert button on "user reviews" look like it returned well-reviewed games. So the button
+    /// stands down on every other field rather than lying about what it does.
+    /// </remarks>
+    public bool CanInvertSort
+    {
+        get
+        {
+            if (!CanChooseSort) return false;
+
+            var value = SelectedSort?.Value;
+            return !string.IsNullOrEmpty(value) && SteamStoreFacets.SupportsBothDirections(value);
+        }
+    }
+
+    /// <summary>
+    /// Whether the order can be chosen at all, given the curated list in play.
+    /// </summary>
+    /// <remarks>
+    /// See <see cref="SteamStoreFacets.AllowsSorting"/>: coming soon has no order but its own.
+    /// The selector goes grey rather than staying live over a value the query throws away.
+    /// </remarks>
+    public bool CanChooseSort => SteamStoreFacets.AllowsSorting(SelectedStoreList?.Value);
+
+    /// <summary>
+    /// Flips the chosen sort between ascending and descending.
     /// </summary>
     [RelayCommand]
-    public async Task LoadMoreCategoryItemsAsync(CatalogCategory category)
+    public void ToggleSortDirection()
     {
-        if (category == null || category.IsLoadingMore || _statsService == null) return;
-        category.IsLoadingMore = true;
+        if (!CanInvertSort) return;
+
+        IsSortDescending = !IsSortDescending;
+        CurrentPage = 1;
+        _ = RunSearchAsync();
+    }
+
+    /// <summary>
+    /// Switches between all products, games only and software only.
+    /// </summary>
+    [RelayCommand]
+    public void SetAppType(string? appType)
+    {
+        SelectedAppType = string.IsNullOrWhiteSpace(appType) ? SteamStoreFacets.AppTypeAll : appType;
+        CurrentPage = 1;
+        _ = RunSearchAsync();
+    }
+
+    /// <summary>
+    /// Switches between the card grid and the row list, and remembers the choice.
+    /// </summary>
+    [RelayCommand]
+    public void SetView(string? mode)
+        => IsGridView = !string.Equals(mode, "list", StringComparison.OrdinalIgnoreCase);
+
+    partial void OnIsGridViewChanged(bool value)
+    {
+        if (_settingsService is null) return;
+
+        // Fire and forget: the file write is small, and nothing here waits on it.
+        _ = _settingsService.SetExploreGridViewAsync(value);
+    }
+
+    /// <summary>
+    /// Jumps back to the top of the results and reloads from the first page.
+    /// </summary>
+    [RelayCommand]
+    public async Task ResetToFirstPageAsync()
+    {
+        CurrentPage = 1;
+        await RunSearchAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Removes one active filter from the chip bar.
+    /// </summary>
+    [RelayCommand]
+    public void RemoveFilter(FilterOptionItem? item)
+    {
+        if (item is null) return;
+
+        item.State = FacetState.Neutral;
+        item.IsPinned = false;
+
+        // Only the group that owns the bubble needs its list rebuilt; the rest just update
+        // their badge. Rebuilding all sixteen was what made the panel stutter.
+        foreach (var group in FilterGroups)
+        {
+            if (group.AllOptions.Contains(item)) group.Refresh();
+            else group.RefreshBadgeOnly();
+        }
+
+        OnFilterChanged();
+    }
+
+    /// <summary>
+    /// Empties the search box and leaves every filter exactly where it is.
+    /// </summary>
+    /// <remarks>
+    /// The only way to drop a search used to be "Clear all", which also threw away whatever
+    /// tags had been chosen to go with it. Retyping those is the expensive half.
+    /// </remarks>
+    [RelayCommand]
+    public void ClearSearch()
+    {
+        if (string.IsNullOrEmpty(SearchQuery)) return;
+
+        // Assigning it runs the debounced search, so the results follow on their own.
+        SearchQuery = string.Empty;
+    }
+
+    /// <summary>
+    /// Clears every filter, the event narrowing and the search term.
+    /// </summary>
+    [RelayCommand]
+    public void ClearAllFilters()
+    {
+        _suppressSearch = true;
+
+        foreach (var group in FilterGroups) group.ClearSelection();
+        SearchQuery = string.Empty;
+        CurrentPage = 1;
+        HiddenByContentFilters = 0;
+
+        _suppressSearch = false;
+
+        RefreshActiveFilters();
+        _ = RunSearchAsync();
+    }
+
+    /// <summary>
+    /// Activates a store tag from a result card, so clicking a bubble on a card filters by it.
+    /// </summary>
+    [RelayCommand]
+    public void FilterByTag(string? tagName)
+    {
+        if (string.IsNullOrWhiteSpace(tagName)) return;
+
+        _suppressSearch = true;
+        var applied = FilterGroups.Any(g => g.ActivateByName(tagName));
+        _suppressSearch = false;
+
+        if (!applied) return;
+
+        CurrentPage = 1;
+        RefreshActiveFilters();
+        _ = SaveUsageAsync();
+        _ = RunSearchAsync();
+    }
+
+    /// <summary>
+    /// Opens the store page of a result inside the app.
+    /// </summary>
+    [RelayCommand]
+    public void OpenDetail(SearchResult? result)
+    {
+        if (result is null || result.AppId == 0) return;
+
+        DetailTarget = result;
+        DetailUrl = result.StorePageUrl;
+        IsDetailOpen = true;
+    }
+
+    /// <summary>Closes the detail panel.</summary>
+    [RelayCommand]
+    public void CloseDetail()
+    {
+        IsDetailOpen = false;
+        DetailTarget = null;
+        DetailUrl = null;
+    }
+
+    /// <summary>
+    /// Closes the detail panel and filters by the featured tags of the product that was open,
+    /// which is what "similar games" means here.
+    /// </summary>
+    /// <remarks>
+    /// The tags have to be found before they can be applied, and where they come from depends on
+    /// where the product did. A card from a faceted search already carries them. A card handed
+    /// over from Home does not: those come from the community feed and Steam's featured
+    /// categories, which ship a name and a capsule and nothing else — so the old version read an
+    /// empty list, returned, and left Explore sitting there unfiltered, which is exactly what
+    /// "similar games does nothing" was.
+    /// <para>
+    /// So: the card's own tags, else the tag ids Steam ships with a search row, else the store
+    /// page itself. And a tag only counts once a group has actually taken it — the filter panel
+    /// holds five thematic groups, not the whole catalogue, so walking the first four names and
+    /// hoping is how a title tagged entirely outside them ended up applying nothing.
+    /// </para>
+    /// </remarks>
+    [RelayCommand]
+    public async Task FindSimilarAsync(SearchResult? result)
+    {
+        var target = result ?? DetailTarget;
+        if (target is null) return;
+
+        CloseDetail();
+
+        var token = _cts.Token;
+        var featured = await ResolveFeaturedTagsAsync(target, token).ConfigureAwait(true);
+
+        if (_isDisposed) return;
+
+        if (featured.Count == 0)
+        {
+            _notificationService?.ShowInfo(
+                "No tags to match",
+                $"Steam lists no store tags for {target.Name}, so there is nothing to find similar games by.");
+            return;
+        }
+
+        _suppressSearch = true;
+        foreach (var group in FilterGroups) group.ClearSelection();
+
+        var applied = new List<string>();
+
+        foreach (var tag in featured)
+        {
+            foreach (var group in FilterGroups)
+            {
+                if (!group.ActivateByName(tag)) continue;
+
+                applied.Add(tag);
+                break;
+            }
+
+            if (applied.Count == 4) break;
+        }
+
+        _suppressSearch = false;
+
+        if (applied.Count == 0)
+        {
+            _notificationService?.ShowInfo(
+                "No matching filters",
+                $"None of the tags on {target.Name} are in the filter panel, so Explore has nothing to narrow by.");
+            return;
+        }
+
+        CurrentPage = 1;
+        RefreshActiveFilters();
+        _ = SaveUsageAsync();
+        await RunSearchAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Finds the store tags of a product, wherever they happen to be available.
+    /// </summary>
+    /// <returns>Tag names in Steam's own order of prominence; empty when none could be read.</returns>
+    private async Task<IReadOnlyList<string>> ResolveFeaturedTagsAsync(SearchResult target, CancellationToken token)
+    {
+        // Already resolved: a card that came from a search here.
+        if (target.StoreTags.Count > 0)
+        {
+            return target.StoreTags.Select(t => t.Name).ToList();
+        }
+
+        // Steam ships tag ids as data attributes on every search row, so this costs nothing but
+        // a catalogue lookup.
+        if (target.TagIds.Count > 0 && _tagCatalog != null)
+        {
+            try
+            {
+                var names = await _tagCatalog.ResolveNamesAsync(target.TagIds, token).ConfigureAwait(true);
+                if (names.Count > 0) return names;
+            }
+            catch (OperationCanceledException)
+            {
+                return [];
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Could not resolve tag names for AppId {AppId}", target.AppId);
+            }
+        }
+
+        // Nothing local to go on: read the store page. One request, cached for a week.
+        if (target.AppId != 0 && _metadataProvider != null)
+        {
+            try
+            {
+                return await _metadataProvider.GetStoreTagsAsync(target.AppId, token).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException)
+            {
+                return [];
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Could not read store tags for AppId {AppId}", target.AppId);
+            }
+        }
+
+        return [];
+    }
+
+    /// <summary>
+    /// Kept for the navigation history: an Explore entry that used to point at a carousel now
+    /// resolves to the equivalent Steam store list in the toolbar.
+    /// </summary>
+    public void ExpandCategory(string categoryId)
+    {
+        if (string.IsNullOrWhiteSpace(categoryId)) return;
+
+        var listValue = categoryId.ToLowerInvariant() switch
+        {
+            var id when id.Contains("top_seller", StringComparison.Ordinal) => "globaltopsellers",
+            var id when id.Contains("trending", StringComparison.Ordinal) => "popularnew",
+            var id when id.Contains("most_played", StringComparison.Ordinal) => "globaltopsellers",
+            var id when id.Contains("coming", StringComparison.Ordinal) => "comingsoon",
+            _ => "popularnew"
+        };
+
+        // A chip naming a list the toolbar no longer offers falls back to the whole catalogue
+        // rather than clearing the selector to nothing.
+        SelectedStoreList = StoreListOptions.FirstOrDefault(o => o.Value == listValue)
+                            ?? StoreListOptions.FirstOrDefault();
+    }
+
+    private static void OpenUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return;
 
         try
         {
-            var allowNsfw = _settingsService?.ShowNsfwContent ?? false;
-            var allowDrm = _settingsService?.ShowDrmContent ?? true;
-
-            const int batchSize = 9;
-            var existingIds = new HashSet<uint>(category.Items.Select(i => i.AppId));
-            var candidates = new List<SearchResult>();
-
-            // 1. Take unadded candidates from local PoolItems first
-            var poolCandidates = category.PoolItems
-                .Where(i => i.AppId > 0 && !existingIds.Contains(i.AppId))
-                .Where(i => (allowNsfw || !i.IsNsfw) && (allowDrm || !i.HasDrm))
-                .Take(batchSize)
-                .ToList();
-
-            candidates.AddRange(poolCandidates);
-
-            // 2. If it's a Steam ranking category and we need more items, query Steam Store API with pagination
-            if (candidates.Count < batchSize && IsSteamCategory(category.Id))
-            {
-                try
-                {
-                    var listType = GetListTypeForCategory(category.Id);
-                    var offset = category.Items.Count + category.PoolItems.Count;
-                    var more = await _statsService.GetSteamDbListAsync(listType, offset, 25).ConfigureAwait(false);
-
-                    var newUnique = more
-                        .Where(m => m.AppId > 0 && !existingIds.Contains(m.AppId) && !category.PoolItems.Any(p => p.AppId == m.AppId))
-                        .ToList();
-
-                    category.PoolItems.AddRange(newUnique);
-
-                    var extra = newUnique
-                        .Where(i => (allowNsfw || !i.IsNsfw) && (allowDrm || !i.HasDrm))
-                        .Take(batchSize - candidates.Count)
-                        .ToList();
-
-                    candidates.AddRange(extra);
-                    category.HasMoreItems = more.Count > 0;
-                }
-                catch { }
-            }
-            else if (!IsSteamCategory(category.Id))
-            {
-                // For BlueStar and DepotBox, HasMoreItems depends purely on authentic pool items remaining
-                var remainingInPool = category.PoolItems.Count(i => i.AppId > 0 && !existingIds.Contains(i.AppId) && !candidates.Contains(i));
-                category.HasMoreItems = remainingInPool > 0;
-            }
-
-            if (candidates.Count > 0)
-            {
-                var cleanCandidates = candidates
-                    .Where(i => (allowNsfw || !i.IsNsfw) && (allowDrm || !i.HasDrm))
-                    .ToList();
-
-                if (cleanCandidates.Count > 0)
-                {
-                    category.DisplayLimit += cleanCandidates.Count;
-                    App.Current?.Dispatcher?.Invoke(() =>
-                    {
-                        foreach (var item in cleanCandidates)
-                        {
-                            if (!category.Items.Any(i => i.AppId == item.AppId))
-                            {
-                                category.Items.Add(item);
-                            }
-                        }
-                    });
-
-                    // Non-blocking background metadata enrichment (DLCs, tags) without holding up UI
-                    _ = EnrichResultsAsync(cleanCandidates, category);
-                }
-            }
-            else if (IsSteamCategory(category.Id))
-            {
-                category.HasMoreItems = false;
-            }
+            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
         }
-        finally
+        catch
         {
-            category.IsLoadingMore = false;
+            // Opening a browser is best effort.
+        }
+    }
+
+    private async Task LoadUsageAsync()
+    {
+        if (_cache is null) return;
+
+        try
+        {
+            var stored = await _cache.GetAsync<Dictionary<string, int>>(UsageCacheKey, _cts.Token).ConfigureAwait(true);
+            if (stored is null) return;
+
+            foreach (var (key, value) in stored) _facetUsage[key] = value;
+        }
+        catch
+        {
+            // A missing usage history just means no bubble is pinned yet.
+        }
+    }
+
+    private async Task SaveUsageAsync()
+    {
+        if (_cache is null) return;
+
+        try
+        {
+            await _cache.SetAsync(UsageCacheKey, new Dictionary<string, int>(_facetUsage),
+                TimeSpan.FromDays(365), _cts.Token).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Best effort.
         }
     }
 

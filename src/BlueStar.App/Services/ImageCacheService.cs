@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -8,8 +8,10 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Linq;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using BlueStar.Core.Models;
 
 namespace BlueStar.App.Services;
 
@@ -372,8 +374,85 @@ public sealed class ImageCacheService
 
     private string GetDiskCachePath(string key)
     {
+        return Path.Combine(_diskCacheFolder, $"{GetHashForDisk(key)}.bin");
+    }
+
+    private static string GetHashForDisk(string key)
+    {
         var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(key));
-        var hash = Convert.ToHexString(hashBytes).ToLowerInvariant();
-        return Path.Combine(_diskCacheFolder, $"{hash}.bin");
+        return Convert.ToHexString(hashBytes).ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Clears cached images from memory and disk, preserving only the canonical banners and artwork
+    /// of the specified installed game instances.
+    /// </summary>
+    public void ClearCacheExceptInstalled(IEnumerable<GameInstance> installedInstances)
+    {
+        var preservedHashes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var inst in installedInstances)
+        {
+            if (inst == null) continue;
+
+            // 1. AppId key
+            if (inst.AppId > 0)
+            {
+                var key = $"steam_app_{inst.AppId}";
+                preservedHashes.Add(GetHashForDisk(key));
+            }
+
+            // 2. HeaderImageUrl key
+            if (!string.IsNullOrWhiteSpace(inst.HeaderImageUrl))
+            {
+                var key = BuildKey(inst.HeaderImageUrl, inst.AppId);
+                preservedHashes.Add(GetHashForDisk(key));
+            }
+
+            // 3. Metadata Header / Capsule Image URLs
+            if (inst.Metadata != null)
+            {
+                if (!string.IsNullOrWhiteSpace(inst.Metadata.HeaderImageUrl))
+                {
+                    preservedHashes.Add(GetHashForDisk(BuildKey(inst.Metadata.HeaderImageUrl, inst.AppId)));
+                }
+                if (!string.IsNullOrWhiteSpace(inst.Metadata.CapsuleImageUrl))
+                {
+                    preservedHashes.Add(GetHashForDisk(BuildKey(inst.Metadata.CapsuleImageUrl, inst.AppId)));
+                }
+            }
+        }
+
+        // Clear L1 memory cache keys not preserved
+        var memoryKeysToRemove = _memoryCache.Keys
+            .Where(k => !preservedHashes.Contains(GetHashForDisk(k)))
+            .ToList();
+
+        foreach (var k in memoryKeysToRemove)
+        {
+            _memoryCache.TryRemove(k, out _);
+        }
+
+        // Delete disk cache files not preserved
+        if (Directory.Exists(_diskCacheFolder))
+        {
+            try
+            {
+                var files = Directory.GetFiles(_diskCacheFolder, "*.bin");
+                foreach (var file in files)
+                {
+                    var fileHash = Path.GetFileNameWithoutExtension(file);
+                    if (!preservedHashes.Contains(fileHash))
+                    {
+                        try
+                        {
+                            File.Delete(file);
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch { }
+        }
     }
 }
