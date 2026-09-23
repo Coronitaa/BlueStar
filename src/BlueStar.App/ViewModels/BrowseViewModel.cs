@@ -124,6 +124,9 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     private bool _isSearching;
 
     [ObservableProperty]
+    private SearchState _searchState = SearchState.Idle;
+
+    [ObservableProperty]
     private bool _isCreatingInstance;
 
     [ObservableProperty]
@@ -133,13 +136,22 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     private bool _hasActiveFilters;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsEnrichmentVisible))]
     private bool _isEnriching;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsEnrichmentVisible))]
     private int _enrichedCount;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsEnrichmentVisible))]
     private int _enrichTotal;
+
+    /// <summary>
+    /// Indicates whether DRM/DLC enrichment is actively running and has unfinished items.
+    /// Evaluates to false immediately when EnrichedCount reaches EnrichTotal (e.g. 50/50), hiding the badge.
+    /// </summary>
+    public bool IsEnrichmentVisible => IsEnriching && EnrichTotal > 0 && EnrichedCount < EnrichTotal;
 
     [ObservableProperty]
     private int _hiddenByContentFilters;
@@ -163,6 +175,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     public Action<GameInstance>? OnManageInstanceRequested { get; set; }
 
     private readonly ISteamCatalogSearchService? _catalogSearch;
+    private readonly ISearchPipeline? _searchPipeline;
     private readonly ISteamTagCatalogService? _tagCatalog;
     private readonly ICacheService? _cache;
     private readonly Dictionary<string, int> _facetUsage = new(StringComparer.Ordinal);
@@ -218,7 +231,8 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     private int _ladderRung;
     private int _rungStart;
 
-    private readonly System.Collections.Concurrent.ConcurrentQueue<SearchResult> _enrichQueue = new();
+    private readonly PriorityQueue<SearchResult, int> _priorityEnrichQueue = new();
+    private readonly HashSet<uint> _enqueuedEnrichAppIds = [];
     private readonly object _enrichLock = new();
     private Task? _enrichWorker;
 
@@ -247,7 +261,8 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         IBuildResolver? buildResolver = null,
         ISteamCatalogSearchService? catalogSearch = null,
         ISteamTagCatalogService? tagCatalog = null,
-        ICacheService? cache = null)
+        ICacheService? cache = null,
+        ISearchPipeline? searchPipeline = null)
     {
         _apiClient = apiClient;
         _instanceManager = instanceManager;
@@ -264,6 +279,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         _catalogSearch = catalogSearch;
         _tagCatalog = tagCatalog;
         _cache = cache;
+        _searchPipeline = searchPipeline;
 
         // Restore the grid-or-list choice before anything can observe it, so switching to
         // Explore does not flash the grid on the way to the list.
@@ -634,8 +650,10 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     }
 
     /// <summary>
+    /// <summary>
     /// Runs the current query. Pages accumulate: the first call replaces what is on screen, and
     /// every call after that appends, which is what the scroll-to-bottom loading relies on.
+    /// Preserves existing results during Refreshing to eliminate UI flicker.
     /// </summary>
     public async Task RunSearchAsync(bool reset = true)
     {
@@ -650,9 +668,15 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
 
             _fetched.Clear();
 
-            // Clear what is on screen too: the placeholders are the answer while this runs, and
-            // leaving the previous page underneath them reads as a page that half-changed.
-            if (Results.Count > 0) Results = [];
+            // DO NOT clear Results here! Preserving Results during Refreshing prevents visual flicker.
+            if (Results.Count == 0)
+            {
+                SearchState = SearchState.LoadingInitial;
+            }
+            else
+            {
+                SearchState = SearchState.Refreshing;
+            }
 
             BuildLadder();
             _ladderRung = 0;
@@ -670,17 +694,63 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
 
         try
         {
+            // If ISearchPipeline is present, execute queries through the layered pipeline (offline-first, FTS5, deterministic AppID)
+            if (_searchPipeline != null)
+            {
+                var poolName = string.IsNullOrEmpty(SelectedStoreList?.Value) ? null : SelectedStoreList!.Value;
+                var sortName = SelectedSort?.Value ?? string.Empty;
+
+                var req = new SearchRequest
+                {
+                    RawQuery = SearchQuery,
+                    Pool = poolName ?? "all",
+                    SortBy = sortName,
+                    Descending = IsSortDescending,
+                    AppTypes = SelectedAppType,
+                    Start = reset ? 0 : _fetched.Count,
+                    Count = PageSize,
+                    IncludedTagIds = _selectedTagIds,
+                    HideAdult = !(_settingsService?.ShowNsfwContent ?? false)
+                };
+
+                var res = await _searchPipeline.ExecuteAsync(req, token).ConfigureAwait(true);
+                if (_isDisposed || generation != _searchGeneration) return;
+
+                ExactMatchCount = res.TotalCount;
+                TotalResults = res.TotalCount;
+
+                var known = _fetched.Select(f => f.AppId).ToHashSet();
+                var fresh = res.Items.Where(i => known.Add(i.AppId)).ToList();
+
+                foreach (var item in fresh)
+                {
+                    item.MatchedTagCount = _selectedTagIds.Count == 0
+                        ? 0
+                        : item.TagIds.Count(id => _selectedTagIds.Contains(id));
+                }
+
+                _fetched.AddRange(fresh);
+                HasMoreResults = _fetched.Count < res.TotalCount && fresh.Count > 0 && _fetched.Count < MaxMaterialized;
+
+                RebuildVisible();
+                SearchState = Results.Count > 0 ? SearchState.ShowingResults : SearchState.Empty;
+
+                _ = ResolveResultTagsAsync(fresh);
+                QueueEnrichment(fresh);
+                return;
+            }
+
+            // Deterministic AppID lookup: bypass store search ladder if a numeric AppID or Steam URL was entered
+            if (SteamQueryParser.TryParseAppId(SearchQuery, out var parsedAppId))
+            {
+                await ResolveAppIdSearchAsync(parsedAppId, generation, token).ConfigureAwait(true);
+                return;
+            }
+
             // Both go into the query: the list picks the pool, the sort orders it.
             var storeList = string.IsNullOrEmpty(SelectedStoreList?.Value) ? null : SelectedStoreList!.Value;
             var sortBy = SteamStoreFacets.ComposeSort(SelectedSort?.Value, IsSortDescending);
 
-            // Nothing chosen: Steam would answer on relevance, which hands back the same few
-            // blockbusters whatever the facets say. Each curated list names its own fallback.
-            // A typed search is the exception — there, relevance is the whole point, and a sort
-            // imposed on top of it drops the very match the person was looking for. Checked
-            // live: term=phasmophobia answers with 18 products, Phasmophobia first; the same
-            // term under sort_by=Released_DESC answers with 10 and Phasmophobia is not among
-            // them. So a search is ordered only when the person asked for an order themselves.
             if (string.IsNullOrEmpty(sortBy) && string.IsNullOrWhiteSpace(SearchQuery))
             {
                 sortBy = SteamStoreFacets.DefaultSortFor(storeList);
@@ -689,9 +759,6 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
             // Coming soon carries the only order its products can be put in.
             if (!SteamStoreFacets.AllowsSorting(storeList)) sortBy = string.Empty;
 
-            // A step that matches nothing used to leave an empty screen with more steps still
-            // below it, because only a scroll advanced the ladder and there was nothing to
-            // scroll. Now the call keeps walking until it has something to show.
             var landed = 0;
 
             for (var hop = 0; hop <= MaxEmptyHops; hop++)
@@ -743,8 +810,6 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                 _rungStart += Math.Max(page.Items.Count, 1);
                 landed += fresh.Count;
 
-                // This step is spent: drop a tag and keep going, which is how partial matches
-                // get in.
                 if (page.Items.Count == 0 || _rungStart >= page.TotalCount)
                 {
                     if (rung.IsSuggestion) SuggestedTerm = rung.Term;
@@ -762,6 +827,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                 HasMoreResults = _ladderRung < _ladder.Count && _fetched.Count < MaxMaterialized;
 
                 RebuildVisible();
+                SearchState = Results.Count > 0 ? SearchState.ShowingResults : SearchState.Empty;
 
                 _ = ResolveResultTagsAsync(fresh);
                 QueueEnrichment(fresh);
@@ -770,6 +836,11 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
             }
 
             if (_ladderRung >= _ladder.Count) HasMoreResults = false;
+
+            if (generation == _searchGeneration && (SearchState == SearchState.Refreshing || SearchState == SearchState.LoadingInitial))
+            {
+                SearchState = Results.Count > 0 ? SearchState.ShowingResults : SearchState.Empty;
+            }
         }
         catch (OperationCanceledException)
         {
@@ -777,7 +848,11 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         }
         catch (Exception ex)
         {
-            ErrorMessage = ex.Message;
+            if (generation == _searchGeneration)
+            {
+                ErrorMessage = ex.Message;
+                SearchState = SearchState.Error;
+            }
             _logger.LogError(ex, "Steam catalog search failed");
         }
         finally
@@ -788,6 +863,106 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                 IsLoadingMore = false;
                 RefreshActiveFilters();
             }
+        }
+    }
+
+    /// <summary>
+    /// Resolves an exact AppID deterministically using local cache / appdetails metadata first,
+    /// falling back to a single store search query only if necessary.
+    /// </summary>
+    private async Task ResolveAppIdSearchAsync(uint appId, int generation, CancellationToken token)
+    {
+        SearchResult? resolved = null;
+
+        // 1. Try resolving via IMetadataProvider (hits L1 memory, L2 disk cache, and single-flight appdetails)
+        if (_metadataProvider != null)
+        {
+            try
+            {
+                var meta = await _metadataProvider.GetMetadataAsync(appId, token).ConfigureAwait(true);
+                if (meta != null)
+                {
+                    resolved = new SearchResult
+                    {
+                        AppId = meta.AppId,
+                        Name = meta.Name,
+                        AppType = "Game",
+                        HeaderImageUrl = meta.HeaderImageUrl ?? $"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{appId}/header.jpg",
+                        ReleaseDateText = meta.ReleaseDate,
+                        Version = meta.ReleaseDate,
+                        HasWindows = meta.Platforms.Contains("Windows", StringComparer.OrdinalIgnoreCase) || meta.Platforms.Count == 0,
+                        HasMac = meta.Platforms.Contains("macOS", StringComparer.OrdinalIgnoreCase) || meta.Platforms.Contains("Mac", StringComparer.OrdinalIgnoreCase),
+                        HasLinux = meta.Platforms.Contains("Linux", StringComparer.OrdinalIgnoreCase),
+                        StoreTags = meta.StoreTags.Take(8).Select(t => new StoreTagRef(t, _activeTagNames.Contains(t))).ToList()
+                    };
+
+                    await _metadataProvider.EnrichSearchResultAsync(resolved, token).ConfigureAwait(true);
+                    resolved.IsEnriched = true;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "AppId {AppId} resolution via metadata provider failed", appId);
+            }
+        }
+
+        if (_isDisposed || generation != _searchGeneration) return;
+
+        // 2. If metadata provider couldn't find it, fallback to single store search query
+        if (resolved == null && _catalogSearch != null)
+        {
+            try
+            {
+                var query = new SteamSearchQuery
+                {
+                    Term = appId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    AppTypes = SelectedAppType,
+                    Start = 0,
+                    Count = 10
+                };
+                var page = await _catalogSearch.SearchAsync(query, token).ConfigureAwait(true);
+                if (_isDisposed || generation != _searchGeneration) return;
+
+                resolved = page.Items.FirstOrDefault(i => i.AppId == appId);
+                if (resolved != null)
+                {
+                    _ = ResolveResultTagsAsync([resolved]);
+                    QueueEnrichment([resolved]);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "AppId {AppId} fallback search failed", appId);
+            }
+        }
+
+        if (_isDisposed || generation != _searchGeneration) return;
+
+        _fetched.Clear();
+        if (resolved != null)
+        {
+            _fetched.Add(resolved);
+            TotalResults = 1;
+            ExactMatchCount = 1;
+            HasMoreResults = false;
+            RebuildVisible();
+            SearchState = SearchState.ShowingResults;
+        }
+        else
+        {
+            TotalResults = 0;
+            ExactMatchCount = 0;
+            HasMoreResults = false;
+            RebuildVisible();
+            SearchState = SearchState.Empty;
         }
     }
 
@@ -1167,20 +1342,49 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     /// asked for something that depends on them, or is idly browsing — never as a burst behind a
     /// page load, which is what got the address blocked.
     /// </remarks>
-    private void QueueEnrichment(IReadOnlyList<SearchResult> items)
+    /// <summary>
+    /// Reads DRM, external launcher and DLC count for newly loaded results using prioritized background processing.
+    /// Priority 0: Explicitly opened or requested item.
+    /// Priority 1: Required for active DRM/Launcher filter.
+    /// Priority 2: Visible in current view.
+    /// Priority 3: Pre-fetched background items.
+    /// </summary>
+    private void QueueEnrichment(IReadOnlyList<SearchResult> items, int priority = 2)
     {
         if (_metadataProvider is null || items.Count == 0 || _isDisposed) return;
 
-        foreach (var item in items)
+        var anyContentFilter = FilterGroups
+            .FirstOrDefault(g => g.Key == "content")?.ActiveOptions.Any() == true;
+
+        lock (_enrichLock)
         {
-            if (!item.IsEnriched) _enrichQueue.Enqueue(item);
+            foreach (var item in items)
+            {
+                if (item.IsEnriched) continue;
+                if (_enqueuedEnrichAppIds.Add(item.AppId))
+                {
+                    var itemPriority = anyContentFilter ? 1 : priority;
+                    _priorityEnrichQueue.Enqueue(item, itemPriority);
+                }
+            }
+
+            _enrichWorker ??= Task.Run(DrainEnrichQueueAsync);
         }
 
         EnrichTotal = _fetched.Count;
         EnrichedCount = _fetched.Count(f => f.IsEnriched);
+    }
+
+    /// <summary>
+    /// Promotes an item to the highest priority (P0) when opened or hovered by the user.
+    /// </summary>
+    public void PrioritizeEnrichment(SearchResult item)
+    {
+        if (item.IsEnriched || _metadataProvider is null || _isDisposed) return;
 
         lock (_enrichLock)
         {
+            _priorityEnrichQueue.Enqueue(item, 0); // P0: Highest priority
             _enrichWorker ??= Task.Run(DrainEnrichQueueAsync);
         }
     }
@@ -1191,8 +1395,23 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
 
         while (!_isDisposed && !_cts.IsCancellationRequested)
         {
-            if (!_enrichQueue.TryDequeue(out var item))
+            SearchResult? item = null;
+            lock (_enrichLock)
             {
+                if (_priorityEnrichQueue.TryDequeue(out var dequeued, out _))
+                {
+                    item = dequeued;
+                    _enqueuedEnrichAppIds.Remove(item.AppId);
+                }
+            }
+
+            if (item is null)
+            {
+                App.Current?.Dispatcher?.Invoke(() =>
+                {
+                    if (!_isDisposed) IsEnriching = false;
+                });
+
                 if (++idle > 20) break;
 
                 try
@@ -1208,7 +1427,13 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
             }
 
             idle = 0;
-            IsEnriching = true;
+            App.Current?.Dispatcher?.Invoke(() =>
+            {
+                if (!_isDisposed && EnrichTotal > 0 && EnrichedCount < EnrichTotal)
+                {
+                    IsEnriching = true;
+                }
+            });
 
             try
             {
@@ -1227,10 +1452,12 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
             {
                 if (_isDisposed) return;
 
-                item.HasExternalLauncher = item.HasDrm;
                 item.IsEnriched = true;
                 EnrichedCount = _fetched.Count(f => f.IsEnriched);
-                IsEnriching = EnrichedCount < _fetched.Count;
+                lock (_enrichLock)
+                {
+                    IsEnriching = _priorityEnrichQueue.Count > 0 && EnrichedCount < EnrichTotal;
+                }
 
                 RebuildVisible();
             });
@@ -1339,7 +1566,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
             if (!CanChooseSort) return false;
 
             var value = SelectedSort?.Value;
-            return !string.IsNullOrEmpty(value) && SteamStoreFacets.SupportsBothDirections(value);
+            return !string.IsNullOrEmpty(value);
         }
     }
 
@@ -1372,6 +1599,13 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     public void SetAppType(string? appType)
     {
         SelectedAppType = string.IsNullOrWhiteSpace(appType) ? SteamStoreFacets.AppTypeAll : appType;
+        if (SelectedAppType == SteamStoreFacets.AppTypeSoftware && SelectedStoreList?.Value == "popularnew")
+        {
+            _suppressSearch = true;
+            SelectedStoreList = StoreListOptions.FirstOrDefault(o => string.IsNullOrEmpty(o.Value))
+                                ?? StoreListOptions.FirstOrDefault();
+            _suppressSearch = false;
+        }
         CurrentPage = 1;
         _ = RunSearchAsync();
     }

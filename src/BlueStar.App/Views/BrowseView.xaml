@@ -5,6 +5,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:sys="clr-namespace:System;assembly=mscorlib"
              xmlns:vm="clr-namespace:BlueStar.App.ViewModels"
+             xmlns:ctrl="clr-namespace:BlueStar.App.Controls"
              xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
              d:DataContext="{d:DesignInstance vm:BrowseViewModel}"
              mc:Ignorable="d"
@@ -353,10 +354,10 @@
 
         <DataTemplate x:Key="CardMetaTemplate">
             <StackPanel Orientation="Horizontal">
-                <TextBlock Text="{Binding ReviewSummary}" FontSize="11" FontWeight="SemiBold"
+                <TextBlock Text="{Binding ReviewDisplayText}" FontSize="11" FontWeight="SemiBold"
                            Foreground="#66C0F4" Margin="0,0,8,0"
-                           TextTrimming="CharacterEllipsis" MaxWidth="140"
-                           Visibility="{Binding ReviewSummary, Converter={StaticResource NullToVisibilityConverter}}"/>
+                           TextTrimming="CharacterEllipsis" MaxWidth="220"
+                           Visibility="{Binding ReviewDisplayText, Converter={StaticResource NullToVisibilityConverter}}"/>
                 <TextBlock Text="{Binding ReleaseDateText}" FontSize="11"
                            Foreground="{StaticResource MutedTextBrush}" Margin="0,0,8,0"/>
                 <Path Data="{StaticResource IconWindows}" Fill="{StaticResource MutedTextBrush}"
@@ -634,6 +635,7 @@
                                    FontSize="13" VerticalAlignment="Center" IsHitTestVisible="False"
                                    Visibility="{Binding SearchQuery, Converter={StaticResource InverseNullToVisibilityConverter}}"/>
                         <TextBox AutomationProperties.AutomationId="CatalogSearchTextBox"
+                                 AutomationProperties.Name="{DynamicResource String_SearchGamesPlaceholder}"
                                  Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                                  Background="Transparent" BorderThickness="0"
                                  Foreground="{StaticResource PrimaryTextBrush}"
@@ -649,6 +651,7 @@
                          the one that also throws the chosen tags away. -->
                     <Button Grid.Column="2" Style="{StaticResource GhostButton}"
                             Command="{Binding ClearSearchCommand}"
+                            AutomationProperties.Name="{DynamicResource String_ClearSearch}"
                             Width="24" Height="24" Padding="0" Margin="6,0,-4,0"
                             VerticalAlignment="Center"
                             ToolTip="{DynamicResource String_ClearSearch}"
@@ -663,16 +666,17 @@
                 <TextBlock Text="{DynamicResource String_SortBy}" Style="{StaticResource Caption}"
                            VerticalAlignment="Center" Margin="0,0,7,0"/>
                 <ComboBox Style="{StaticResource DarkComboBox}"
+                          AutomationProperties.Name="{DynamicResource String_SortBy}"
                           ItemsSource="{Binding SortOptions}" SelectedItem="{Binding SelectedSort}"
                           DisplayMemberPath="DisplayName" MinWidth="152"
                           IsEnabled="{Binding CanChooseSort}"/>
 
-                <!-- Direction. Only price has an opposite Steam implements, so this stands
-                     down on every other field rather than quietly returning the whole catalogue. -->
+                <!-- Direction. -->
                 <Button Margin="6,0,0,0" Width="34" Height="34" Padding="0"
                         Style="{StaticResource SecondaryButton}"
                         Command="{Binding ToggleSortDirectionCommand}"
-                        IsEnabled="{Binding CanInvertSort}">
+                        IsEnabled="{Binding CanInvertSort}"
+                        AutomationProperties.Name="{DynamicResource String_InvertOrder}">
                     <Button.ToolTip>
                         <TextBlock Text="{DynamicResource String_InvertOrder}"/>
                     </Button.ToolTip>
@@ -696,12 +700,14 @@
                 <TextBlock Text="{DynamicResource String_ShowList}" Style="{StaticResource Caption}"
                            VerticalAlignment="Center" Margin="0,0,7,0"/>
                 <ComboBox Style="{StaticResource DarkComboBox}"
+                          AutomationProperties.Name="{DynamicResource String_ShowList}"
                           ItemsSource="{Binding StoreListOptions}" SelectedItem="{Binding SelectedStoreList}"
                           DisplayMemberPath="DisplayName" MinWidth="178"/>
             </StackPanel>
 
             <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Center">
                 <RadioButton GroupName="ViewMode" Style="{StaticResource FilterChipRadioButton}"
+                             AutomationProperties.Name="{DynamicResource String_ViewGrid}"
                              IsChecked="{Binding IsGridView, Mode=OneWay}"
                              Command="{Binding SetViewCommand}" CommandParameter="grid"
                              ToolTip="{DynamicResource String_ViewGrid}">
@@ -709,6 +715,7 @@
                           Stretch="Uniform" Width="13" Height="13"/>
                 </RadioButton>
                 <RadioButton GroupName="ViewMode" Style="{StaticResource FilterChipRadioButton}"
+                             AutomationProperties.Name="{DynamicResource String_ViewList}"
                              IsChecked="{Binding IsGridView, Mode=OneWay, Converter={StaticResource InverseBoolConverter}}"
                              Command="{Binding SetViewCommand}" CommandParameter="list"
                              ToolTip="{DynamicResource String_ViewList}">
@@ -780,7 +787,7 @@
                 <StackPanel Margin="0,0,4,16">
 
                     <!-- Result count, enrichment progress, pager -->
-                    <Grid Margin="0,0,0,10">
+                    <Grid Margin="0,0,0,10" MinHeight="28">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
@@ -809,20 +816,32 @@
                             </Border>
                         </StackPanel>
 
-                        <Border Grid.Column="1" Margin="12,0,0,0" Padding="10,3"
-                                Background="{StaticResource SurfaceInputBrush}"
-                                BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
-                                CornerRadius="9" VerticalAlignment="Center"
-                                Visibility="{Binding IsEnriching, Converter={StaticResource BoolToVisibilityConverter}}">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{DynamicResource String_CheckingDrmAndDlc}" FontSize="11"
-                                           Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
-                                <TextBlock FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
-                                           Foreground="{StaticResource CyanBrush}">
-                                    <Run Text="{Binding EnrichedCount, Mode=OneWay}"/><Run Text="/"/><Run Text="{Binding EnrichTotal, Mode=OneWay}"/>
-                                </TextBlock>
-                            </StackPanel>
-                        </Border>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border Margin="12,0,0,0" Padding="8,2" CornerRadius="9"
+                                    Background="{StaticResource AccentTranslucentBrush}"
+                                    BorderBrush="{StaticResource AccentBrush}" BorderThickness="1"
+                                    Visibility="{Binding SearchState, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Refreshing}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Border Style="{StaticResource SkeletonBlock}" Width="9" Height="9" CornerRadius="4" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{DynamicResource String_LoadingMore}" FontSize="11" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Margin="12,0,0,0" Padding="10,3"
+                                    Background="{StaticResource SurfaceInputBrush}"
+                                    BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                                    CornerRadius="9"
+                                    Visibility="{Binding IsEnrichmentVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{DynamicResource String_CheckingDrmAndDlc}" FontSize="11"
+                                               Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                                    <TextBlock FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
+                                               Foreground="{StaticResource CyanBrush}">
+                                        <Run Text="{Binding EnrichedCount, Mode=OneWay}"/><Run Text="/"/><Run Text="{Binding EnrichTotal, Mode=OneWay}"/>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
 
                         <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center"
                                     Visibility="{Binding HiddenByContentFilters, Converter={StaticResource NullToVisibilityConverter}}">
@@ -832,85 +851,105 @@
                         </StackPanel>
                     </Grid>
 
-                    <!-- Loading: the same shimmering placeholders the other tabs use, laid out
-                         as the cards they are about to become. -->
-                    <ItemsControl Visibility="{Binding IsSearching, Converter={StaticResource BoolToVisibilityConverter}}"
-                                  ItemsSource="{StaticResource SkeletonSlots}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Style="{StaticResource SkeletonCard}" Width="288" Height="330"
-                                        Margin="0,0,12,12">
-                                    <StackPanel>
-                                        <Border Style="{StaticResource SkeletonBlock}" Height="134"
-                                                Margin="-16,-16,-16,14" CornerRadius="8,8,0,0"/>
-                                        <Border Style="{StaticResource SkeletonBlock}" Height="17" Width="186"
-                                                HorizontalAlignment="Left" Margin="0,0,0,8"/>
-                                        <Border Style="{StaticResource SkeletonBlock}" Height="11" Width="112"
-                                                HorizontalAlignment="Left" Margin="0,0,0,14"/>
-                                        <WrapPanel Margin="0,0,0,16">
-                                            <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="64"
-                                                    Margin="0,0,6,6" CornerRadius="9"/>
-                                            <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="52"
-                                                    Margin="0,0,6,6" CornerRadius="9"/>
-                                            <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="76"
-                                                    Margin="0,0,6,6" CornerRadius="9"/>
-                                        </WrapPanel>
-                                        <Grid VerticalAlignment="Bottom">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="8"/>
-                                                <ColumnDefinition Width="74"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Border Grid.Column="0" Style="{StaticResource SkeletonBlock}"
-                                                    Height="34" CornerRadius="6"/>
-                                            <Border Grid.Column="2" Style="{StaticResource SkeletonBlock}"
-                                                    Height="34" CornerRadius="6"/>
-                                        </Grid>
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-
-                    <!-- Error -->
+                    <!-- Error: shown only when SearchState == Error -->
                     <Border Background="{StaticResource DangerBgBrush}" BorderBrush="{StaticResource DangerBrush}"
                             BorderThickness="1" CornerRadius="{StaticResource RadiusMd}"
                             Padding="14,10" Margin="0,0,0,12"
-                            Visibility="{Binding ErrorMessage, Converter={StaticResource NullToVisibilityConverter}}">
+                            Visibility="{Binding SearchState, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Error}">
                         <TextBlock Text="{Binding ErrorMessage}" Foreground="{StaticResource DangerBrush}"
                                    Style="{StaticResource BodyMedium}" TextWrapping="Wrap"/>
                     </Border>
 
-                    <!-- Cards. The view toggle swaps both the panel and the item template. -->
-                    <ItemsControl ItemsSource="{Binding Results}">
-                        <ItemsControl.Style>
-                            <Style TargetType="ItemsControl">
-                                <Setter Property="ItemTemplate" Value="{StaticResource ResultCardTemplate}"/>
-                                <Setter Property="ItemsPanel">
-                                    <Setter.Value>
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel Orientation="Horizontal"/>
-                                        </ItemsPanelTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsGridView}" Value="False">
-                                        <Setter Property="ItemTemplate" Value="{StaticResource ResultRowTemplate}"/>
-                                        <Setter Property="ItemsPanel">
-                                            <Setter.Value>
-                                                <ItemsPanelTemplate>
-                                                    <StackPanel Orientation="Vertical"/>
-                                                </ItemsPanelTemplate>
-                                            </Setter.Value>
-                                        </Setter>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </ItemsControl.Style>
-                    </ItemsControl>
+                    <!-- Viewport Container: Skeletons, Results, and Empty State share the same coordinate space, eliminating vertical flicker -->
+                    <Grid>
+                        <!-- Loading: skeletons shown only during LoadingInitial -->
+                        <ItemsControl Visibility="{Binding SearchState, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=LoadingInitial}"
+                                      ItemsSource="{StaticResource SkeletonSlots}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource SkeletonCard}" Width="288" Height="330"
+                                            Margin="0,0,12,12">
+                                        <StackPanel>
+                                            <Border Style="{StaticResource SkeletonBlock}" Height="134"
+                                                    Margin="-16,-16,-16,14" CornerRadius="8,8,0,0"/>
+                                            <Border Style="{StaticResource SkeletonBlock}" Height="17" Width="186"
+                                                    HorizontalAlignment="Left" Margin="0,0,0,8"/>
+                                            <Border Style="{StaticResource SkeletonBlock}" Height="11" Width="112"
+                                                    HorizontalAlignment="Left" Margin="0,0,0,14"/>
+                                            <WrapPanel Margin="0,0,0,16">
+                                                <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="64"
+                                                        Margin="0,0,6,6" CornerRadius="9"/>
+                                                <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="52"
+                                                        Margin="0,0,6,6" CornerRadius="9"/>
+                                                <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="76"
+                                                        Margin="0,0,6,6" CornerRadius="9"/>
+                                            </WrapPanel>
+                                            <Grid VerticalAlignment="Bottom">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="8"/>
+                                                    <ColumnDefinition Width="74"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource SkeletonBlock}"
+                                                        Height="34" CornerRadius="6"/>
+                                                <Border Grid.Column="2" Style="{StaticResource SkeletonBlock}"
+                                                        Height="34" CornerRadius="6"/>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- Cards. The view toggle swaps both the panel and the item template. -->
+                        <ItemsControl ItemsSource="{Binding Results}">
+                            <ItemsControl.Style>
+                                <Style TargetType="ItemsControl">
+                                    <Setter Property="ItemTemplate" Value="{StaticResource ResultCardTemplate}"/>
+                                    <Setter Property="ItemsPanel">
+                                        <Setter.Value>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel Orientation="Horizontal"/>
+                                            </ItemsPanelTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsGridView}" Value="False">
+                                            <Setter Property="ItemTemplate" Value="{StaticResource ResultRowTemplate}"/>
+                                            <Setter Property="ItemsPanel">
+                                                <Setter.Value>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Orientation="Vertical"/>
+                                                    </ItemsPanelTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ItemsControl.Style>
+                        </ItemsControl>
+
+                        <!-- Empty. Shown ONLY when SearchState == Empty; completely eliminates flicker during Refreshing -->
+                        <Border Background="{StaticResource SurfaceCardBrush}"
+                                BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                                CornerRadius="{StaticResource RadiusLg}" Padding="44,34" Margin="0,4,0,0"
+                                Visibility="{Binding SearchState, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Empty}">
+                            <StackPanel HorizontalAlignment="Center">
+                                <Path Data="{StaticResource IconSearch}" Fill="{StaticResource MutedTextBrush}"
+                                      Stretch="Uniform" Width="38" Height="38" Margin="0,0,0,14" HorizontalAlignment="Center"/>
+                                <TextBlock Text="{DynamicResource String_NoResultsFound}" Style="{StaticResource H3}"
+                                           HorizontalAlignment="Center"/>
+                                <TextBlock Text="{DynamicResource String_NoResultsFoundDesc}" Style="{StaticResource Caption}"
+                                           Foreground="{StaticResource MutedTextBrush}" HorizontalAlignment="Center" Margin="0,6,0,14" TextWrapping="Wrap"
+                                           MaxWidth="360" TextAlignment="Center"/>
+                                <Button Content="{DynamicResource String_ClearAllFilters}" Style="{StaticResource SecondaryButton}"
+                                        HorizontalAlignment="Center" Command="{Binding ClearAllFiltersCommand}"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
 
                     <!-- Bottom of the list. The scroll handler asks for the next page as this
                          comes into view; the row only says so while a page is on the wire. -->
@@ -922,39 +961,6 @@
                                     CornerRadius="7" Margin="0,0,8,0" VerticalAlignment="Center"/>
                             <TextBlock Text="{DynamicResource String_LoadingMore}" FontSize="12"
                                        Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Empty. Shown only once the search has finished and come back with
-                         nothing: while it is still running the skeletons above are the answer. -->
-                    <Border Background="{StaticResource SurfaceCardBrush}"
-                            BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
-                            CornerRadius="{StaticResource RadiusLg}" Padding="44,34" Margin="0,4,0,0">
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                                <Style.Triggers>
-                                    <MultiDataTrigger>
-                                        <MultiDataTrigger.Conditions>
-                                            <Condition Binding="{Binding IsSearching}" Value="False"/>
-                                            <Condition Binding="{Binding IsLoadingMore}" Value="False"/>
-                                            <Condition Binding="{Binding Results.Count}" Value="0"/>
-                                        </MultiDataTrigger.Conditions>
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </MultiDataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
-                        <StackPanel HorizontalAlignment="Center">
-                            <Path Data="{StaticResource IconSearch}" Fill="{StaticResource MutedTextBrush}"
-                                  Stretch="Uniform" Width="38" Height="38" Margin="0,0,0,14" HorizontalAlignment="Center"/>
-                            <TextBlock Text="{DynamicResource String_NoResultsFound}" Style="{StaticResource H3}"
-                                       HorizontalAlignment="Center"/>
-                            <TextBlock Text="{DynamicResource String_NoResultsFoundDesc}" Style="{StaticResource Caption}"
-                                       HorizontalAlignment="Center" Margin="0,6,0,14" TextWrapping="Wrap"
-                                       MaxWidth="360" TextAlignment="Center"/>
-                            <Button Content="{DynamicResource String_ClearAllFilters}" Style="{StaticResource SecondaryButton}"
-                                    HorizontalAlignment="Center" Command="{Binding ClearAllFiltersCommand}"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>

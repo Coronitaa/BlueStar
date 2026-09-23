@@ -230,7 +230,13 @@ public class SearchResult : INotifyPropertyChanged
     public string? ReviewSummary
     {
         get => _reviewSummary;
-        set => SetField(ref _reviewSummary, value);
+        set
+        {
+            if (SetField(ref _reviewSummary, value))
+            {
+                OnPropertyChanged(nameof(ReviewDisplayText));
+            }
+        }
     }
 
     /// <summary>
@@ -239,7 +245,46 @@ public class SearchResult : INotifyPropertyChanged
     public int? ReviewPercent
     {
         get => _reviewPercent;
-        set => SetField(ref _reviewPercent, value);
+        set
+        {
+            if (SetField(ref _reviewPercent, value))
+            {
+                OnPropertyChanged(nameof(ReviewDisplayText));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Formatted review string combining summary and real percentage, e.g. "Overwhelmingly Positive (100%)".
+    /// </summary>
+    public string? ReviewDisplayText
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(ReviewSummary))
+            {
+                return ReviewPercent.HasValue && ReviewPercent > 0 ? $"{ReviewPercent.Value}%" : null;
+            }
+
+            var summary = ReviewSummary.Trim();
+            // If the summary is already just a percentage (e.g. "35%" or "35"), avoid "35% (35%)"
+            if (summary.EndsWith("%") || (ReviewPercent.HasValue && summary == $"{ReviewPercent.Value}"))
+            {
+                if (ReviewPercent.HasValue && ReviewPercent.Value > 0)
+                {
+                    var derived = BlueStar.Core.Helpers.RatingEngine.GetReviewSummary(ReviewPercent.Value, 100);
+                    return $"{derived} ({ReviewPercent.Value}%)";
+                }
+                return summary;
+            }
+
+            if (ReviewPercent.HasValue && ReviewPercent.Value > 0)
+            {
+                return $"{summary} ({ReviewPercent.Value}%)";
+            }
+
+            return summary;
+        }
     }
 
     /// <summary>

@@ -117,7 +117,8 @@ public sealed class StringMatchConverter : IValueConverter
     {
         if (value == null && parameter == null) return true;
         if (value == null || parameter == null) return false;
-        return string.Equals(value.ToString(), parameter.ToString(), StringComparison.OrdinalIgnoreCase);
+        var pStr = parameter.ToString()?.Replace("\\,", ",");
+        return string.Equals(value.ToString(), pStr, StringComparison.OrdinalIgnoreCase);
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

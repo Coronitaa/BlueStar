@@ -49,7 +49,10 @@ public sealed class SteamSearchQuery
     public IReadOnlyDictionary<SteamFacetOption, FacetState> Facets { get; init; } =
         new Dictionary<SteamFacetOption, FacetState>();
 
-    /// <summary>Restrict results to these AppIDs (used by the store-event chips).</summary>
+    /// <summary>
+    /// Restrict results to these AppIDs (e.g. used by store-event chips or local candidate sets).
+    /// Applied locally to matching results as Steam's store search does not filter by arbitrary AppID lists.
+    /// </summary>
     public IReadOnlyCollection<uint>? RestrictToAppIds { get; init; }
 
     /// <summary>

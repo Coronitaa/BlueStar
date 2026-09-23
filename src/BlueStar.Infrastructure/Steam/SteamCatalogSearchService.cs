@@ -109,7 +109,12 @@ public sealed partial class SteamCatalogSearchService : ISteamCatalogSearchServi
         var envelope = await GetEnvelopeAsync(url, SteamRequestPriority.Interactive, ct).ConfigureAwait(false);
         if (envelope is null) return SteamSearchPage.Empty;
 
-        var items = ParseRows(envelope.Value.Html);
+        var items = ParseRows(envelope.Value.Html, query.AppTypes);
+        if (query.RestrictToAppIds is { Count: > 0 } restrictSet)
+        {
+            var set = restrictSet.ToHashSet();
+            items = items.Where(i => set.Contains(i.AppId)).ToList();
+        }
         var page = new SteamSearchPage(items, envelope.Value.TotalCount, query.Start);
 
         if (_cache != null && items.Count > 0)
@@ -492,7 +497,7 @@ public sealed partial class SteamCatalogSearchService : ISteamCatalogSearchServi
     /// Turns the store markup fragment into results. Anything the markup does not state is left
     /// unset rather than guessed: DRM, DLC count and Deck rating arrive later, from appdetails.
     /// </summary>
-    private static List<SearchResult> ParseRows(string html)
+    private static List<SearchResult> ParseRows(string html, string? appTypes = null)
     {
         var results = new List<SearchResult>();
         if (string.IsNullOrWhiteSpace(html)) return results;
@@ -516,11 +521,14 @@ public sealed partial class SteamCatalogSearchService : ISteamCatalogSearchServi
             var hasMac = body.Contains("platform_img mac", StringComparison.OrdinalIgnoreCase);
             var hasLinux = body.Contains("platform_img linux", StringComparison.OrdinalIgnoreCase);
 
+            var isSoftware = string.Equals(appTypes, "994", StringComparison.OrdinalIgnoreCase)
+                             || body.Contains("for this software", StringComparison.OrdinalIgnoreCase);
+
             var result = new SearchResult
             {
                 AppId = appId,
                 Name = name,
-                AppType = "Game",
+                AppType = isSoftware ? "Software" : "Game",
                 HeaderImageUrl = $"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{appId}/header.jpg",
                 HasWindows = hasWin || (!hasMac && !hasLinux),
                 HasMac = hasMac,

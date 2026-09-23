@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using System.Text.Json;
 using BlueStar.Core.Interfaces;
@@ -286,7 +286,8 @@ public sealed class SteamStoreApiClient : IMetadataProvider
         bool IsNsfw,
         bool HasDrm,
         string? DrmNotice,
-        string? Version
+        string? Version,
+        bool HasExternalLauncher = false
     );
 
     /// <inheritdoc />
@@ -312,6 +313,7 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                     result.IsNsfw = cached.IsNsfw;
                     result.HasDrm = cached.HasDrm;
                     result.DrmNotice = cached.DrmNotice;
+                    result.HasExternalLauncher = cached.HasExternalLauncher;
                     if (!string.IsNullOrWhiteSpace(cached.Version)) result.Version = cached.Version;
                     return;
                 }
@@ -496,9 +498,11 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                     }
                     result.IsNsfw = isNsfw;
 
-                    // 1.6 DRM
+                    // 1.6 DRM and 3rd-Party Account / Launcher
                     bool hasDrm = false;
                     string? drmNotice = null;
+                    bool hasExternalLauncher = false;
+
                     if (data.TryGetProperty("drm_notice", out var drmProp) && drmProp.ValueKind == JsonValueKind.String)
                     {
                         var notice = drmProp.GetString();
@@ -508,15 +512,24 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                             drmNotice = notice.Trim();
                         }
                     }
+
                     if (data.TryGetProperty("ext_user_account_notice", out var extAccProp) && extAccProp.ValueKind == JsonValueKind.String)
                     {
                         var notice = extAccProp.GetString();
                         if (!string.IsNullOrWhiteSpace(notice))
                         {
-                            hasDrm = true;
-                            drmNotice = string.IsNullOrWhiteSpace(drmNotice) ? notice.Trim() : $"{drmNotice} • {notice.Trim()}";
+                            hasExternalLauncher = true;
+                            if (string.IsNullOrWhiteSpace(drmNotice))
+                            {
+                                drmNotice = notice.Trim();
+                            }
+                            else
+                            {
+                                drmNotice = $"{drmNotice} • {notice.Trim()}";
+                            }
                         }
                     }
+
                     if (data.TryGetProperty("legal_notice", out var legalProp) && legalProp.ValueKind == JsonValueKind.String)
                     {
                         var legal = legalProp.GetString() ?? "";
@@ -529,8 +542,10 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                                 drmNotice = "Incorporates 3rd-party DRM";
                         }
                     }
+
                     result.HasDrm = hasDrm;
                     result.DrmNotice = drmNotice;
+                    result.HasExternalLauncher = hasExternalLauncher;
 
                     // 1.7 Release Date fallback
                     if (string.IsNullOrWhiteSpace(result.Version) &&
@@ -558,7 +573,8 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                             result.IsNsfw,
                             result.HasDrm,
                             result.DrmNotice,
-                            result.Version
+                            result.Version,
+                            result.HasExternalLauncher
                         );
                         try { await _cache.SetAsync(cacheKey, item, TimeSpan.FromDays(7), ct).ConfigureAwait(false); } catch { }
                     }

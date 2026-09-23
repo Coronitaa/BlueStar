@@ -7,7 +7,10 @@ using BlueStar.Infrastructure.Cache;
 using BlueStar.Infrastructure.DepotBox;
 using BlueStar.Infrastructure.Downloader;
 using BlueStar.Infrastructure.Instance;
+using BlueStar.Infrastructure.Catalog;
 using BlueStar.Infrastructure.Metadata;
+using BlueStar.Infrastructure.Search;
+using BlueStar.Infrastructure.Steam;
 using BlueStar.Infrastructure.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -195,6 +198,15 @@ public partial class App : Application
             client.DefaultRequestHeaders.Accept.ParseAdd("application/json, */*; q=0.01");
         });
 
+        // Local SQLite Catalog & Search Pipeline
+        var catalogDbPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "BlueStar",
+            "catalog.db");
+        services.AddSingleton<ILocalCatalogRepository>(sp =>
+            new LocalCatalogRepository(sp.GetRequiredService<ILogger<LocalCatalogRepository>>(), catalogDbPath));
+        services.AddSingleton<SteamResponseValidator>();
+        services.AddSingleton<ISearchPipeline, SearchPipeline>();
 
         // General HTTP Client
         services.AddHttpClient();

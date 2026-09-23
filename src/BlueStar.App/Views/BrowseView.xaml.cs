@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using BlueStar.App.ViewModels;
+using BlueStar.Core.Models;
 using Microsoft.Web.WebView2.Core;
 
 namespace BlueStar.App.Views;
@@ -19,7 +20,7 @@ namespace BlueStar.App.Views;
 public partial class BrowseView : UserControl
 {
     /// <summary>How close to the bottom the list gets before the next page is asked for.</summary>
-    private const double LoadMoreThreshold = 600d;
+    private const double LoadMoreThreshold = 250d;
 
     private bool _webViewReady;
     private BrowseViewModel? _viewModel;
@@ -75,8 +76,13 @@ public partial class BrowseView : UserControl
     {
         if (_viewModel is null) return;
 
+        // Only trigger when user is scrolling downward and there is actual scrollable content
+        if (e.VerticalChange <= 0 || ResultsScroller.ScrollableHeight <= 0) return;
+
         var remaining = ResultsScroller.ScrollableHeight - ResultsScroller.VerticalOffset;
         if (remaining > LoadMoreThreshold) return;
+
+        if (!_viewModel.HasMoreResults || _viewModel.IsLoadingMore || _viewModel.IsSearching) return;
 
         var command = _viewModel.LoadMoreCommand;
         if (command.CanExecute(null)) command.Execute(null);
@@ -89,6 +95,12 @@ public partial class BrowseView : UserControl
 
     private async void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(BrowseViewModel.SearchState) && _viewModel?.SearchState == SearchState.LoadingInitial)
+        {
+            ResultsScroller.ScrollToTop();
+            return;
+        }
+
         if (e.PropertyName != nameof(BrowseViewModel.DetailUrl)) return;
 
         var url = _viewModel?.DetailUrl;

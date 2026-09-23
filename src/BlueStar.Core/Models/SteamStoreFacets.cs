@@ -100,14 +100,10 @@ public static class SteamStoreFacets
     public const string AppTypeAll = AppTypeGames + "," + AppTypeSoftware;
 
     /// <summary>
-    /// The order applied when nobody has chosen one and no curated list supplies its own.
+    /// The default sort token. Empty leaves Steam on its natural ranking (popularity/trending for curated
+    /// lists, relevance/popularity for catalog search).
     /// </summary>
-    /// <remarks>
-    /// Sending no <c>sort_by</c> leaves Steam on its relevance ranking, which answers with the
-    /// same few blockbusters no matter what the facets say — so every filter looked like it did
-    /// nothing. Newest-first is an order the filters can actually move.
-    /// </remarks>
-    public const string DefaultSort = "Released_DESC";
+    public const string DefaultSort = "";
 
     /// <summary>Steam sort tokens, in the order the store shows them.</summary>
     /// <remarks>
@@ -126,8 +122,14 @@ public static class SteamStoreFacets
     /// <summary>
     /// The direction Steam actually implements for a field that only has one.
     /// </summary>
-    public static bool PrefersDescending(string sortBase) =>
-        sortBase is "Released" or "Reviews" or "DeckCompatDate";
+    public static bool PrefersDescending(string? sortBase)
+    {
+        if (string.IsNullOrEmpty(sortBase)) return false;
+        return string.Equals(sortBase, "Released", System.StringComparison.OrdinalIgnoreCase)
+            || string.Equals(sortBase, "Reviews", System.StringComparison.OrdinalIgnoreCase)
+            || string.Equals(sortBase, "DeckCompatDate", System.StringComparison.OrdinalIgnoreCase)
+            || string.Equals(sortBase, "Deck", System.StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// Whether Steam honours both directions of this sort. Only price does.
@@ -140,8 +142,8 @@ public static class SteamStoreFacets
     /// why reversing "user reviews" handed back well-reviewed games. Only <c>Price</c> has a
     /// real opposite, and the button is offered for it alone.
     /// </remarks>
-    public static bool SupportsBothDirections(string sortBase) =>
-        string.Equals(sortBase, "Price", System.StringComparison.Ordinal);
+    public static bool SupportsBothDirections(string? sortBase) =>
+        string.Equals(sortBase, "Price", System.StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Turns a sort base and a direction into the token the store expects.
@@ -155,27 +157,26 @@ public static class SteamStoreFacets
         if (string.IsNullOrEmpty(sortBase)) return string.Empty;
         if (sortBase.StartsWith('_')) return sortBase;
 
-        if (!SupportsBothDirections(sortBase)) descending = PrefersDescending(sortBase);
+        var canonical = sortBase.ToLowerInvariant() switch
+        {
+            "released" => "Released",
+            "reviews" => "Reviews",
+            "name" => "Name",
+            "price" => "Price",
+            "deckcompatdate" or "deck" => "DeckCompatDate",
+            _ => sortBase
+        };
 
-        return sortBase + (descending ? "_DESC" : "_ASC");
+        if (!SupportsBothDirections(canonical)) descending = PrefersDescending(canonical);
+
+        return canonical + (descending ? "_DESC" : "_ASC");
     }
 
     /// <summary>
     /// The order to apply when nobody has chosen one, given the curated list in play.
+    /// Empty leaves Steam on its natural ranking (e.g. popularnew, globaltopsellers, or general catalog relevance).
     /// </summary>
-    /// <remarks>
-    /// <c>popularnew</c> is Steam's "New &amp; Trending", and its own ranking is weighted so
-    /// heavily towards what is selling that decade-old blockbusters sit at the top of a list
-    /// labelled "new releases". Ordering it by release date keeps the pool — the new things
-    /// people are actually buying — and puts the new ones first, which is what the label
-    /// promises. Top sellers and coming soon each arrive in an order that is the point of
-    /// asking for them, so they are left alone.
-    /// </remarks>
-    public static string DefaultSortFor(string? storeList) => storeList switch
-    {
-        "globaltopsellers" or "comingsoon" => string.Empty,
-        _ => DefaultSort
-    };
+    public static string DefaultSortFor(string? storeList) => string.Empty;
 
     /// <summary>
     /// Whether a curated list can be reordered at all.
