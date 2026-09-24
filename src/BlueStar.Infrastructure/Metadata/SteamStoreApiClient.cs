@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using BlueStar.Core.Helpers;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
@@ -295,7 +296,16 @@ public sealed class SteamStoreApiClient : IMetadataProvider
         string? Version,
         bool HasExternalLauncher = false,
         string? DrmName = null,
-        string? LauncherName = null
+        string? LauncherName = null,
+        string? AntiCheatName = null,
+        string? AntiCheatNotice = null,
+        string? AccountName = null,
+        string? AccountNotice = null,
+        string? EulaName = null,
+        string? EulaNotice = null,
+        string? PriceText = null,
+        int? PriceCents = null,
+        int DiscountPercent = 0
     );
 
     /// <inheritdoc />
@@ -303,7 +313,7 @@ public sealed class SteamStoreApiClient : IMetadataProvider
     {
         if (result == null || result.AppId == 0) return;
 
-        var cacheKey = $"steam_enrich_{result.AppId}_v4";
+        var cacheKey = $"steam_enrich_{result.AppId}_v6";
         if (_cache != null)
         {
             try
@@ -319,12 +329,25 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                     if (!string.IsNullOrWhiteSpace(cached.AppType)) result.AppType = cached.AppType;
                     if (!string.IsNullOrWhiteSpace(cached.HeaderImageUrl)) result.HeaderImageUrl = cached.HeaderImageUrl;
                     result.IsNsfw = cached.IsNsfw;
-                    result.HasDrm = cached.HasDrm;
+                    result.HasDrm = cached.HasDrm || !string.IsNullOrWhiteSpace(cached.DrmName);
                     result.DrmNotice = cached.DrmNotice;
                     if (!string.IsNullOrWhiteSpace(cached.DrmName)) result.DrmName = cached.DrmName;
-                    result.HasExternalLauncher = cached.HasExternalLauncher;
+                    result.HasExternalLauncher = cached.HasExternalLauncher || !string.IsNullOrWhiteSpace(cached.LauncherName);
                     if (!string.IsNullOrWhiteSpace(cached.LauncherName)) result.LauncherName = cached.LauncherName;
+                    result.HasAntiCheat = !string.IsNullOrWhiteSpace(cached.AntiCheatName);
+                    if (!string.IsNullOrWhiteSpace(cached.AntiCheatName)) result.AntiCheatName = cached.AntiCheatName;
+                    result.AntiCheatNotice = cached.AntiCheatNotice;
+                    result.HasAccount = cached.HasExternalLauncher || !string.IsNullOrWhiteSpace(cached.AccountName);
+                    if (!string.IsNullOrWhiteSpace(cached.AccountName)) result.AccountName = cached.AccountName;
+                    result.AccountNotice = cached.AccountNotice;
+                    result.HasEula = !string.IsNullOrWhiteSpace(cached.EulaName);
+                    if (!string.IsNullOrWhiteSpace(cached.EulaName)) result.EulaName = cached.EulaName;
+                    result.EulaNotice = cached.EulaNotice;
+                    if (!string.IsNullOrWhiteSpace(cached.PriceText)) result.PriceText = cached.PriceText;
+                    if (cached.PriceCents.HasValue) result.PriceCents = cached.PriceCents;
+                    result.DiscountPercent = cached.DiscountPercent;
                     if (!string.IsNullOrWhiteSpace(cached.Version)) result.Version = cached.Version;
+                    result.IsEnriched = true;
                     return;
                 }
             }
@@ -338,7 +361,7 @@ public sealed class SteamStoreApiClient : IMetadataProvider
         // 1. Try fetching rich store data via Steam Store API (appdetails)
         try
         {
-            var url = $"https://store.steampowered.com/api/appdetails?appids={result.AppId}&l=english&cc=US";
+            var url = $"https://store.steampowered.com/api/appdetails?appids={result.AppId}&l=english";
             var response = await _http.GetAsync(url, ct).ConfigureAwait(false);
 
             if (response.StatusCode is System.Net.HttpStatusCode.TooManyRequests or System.Net.HttpStatusCode.Forbidden)
@@ -360,7 +383,22 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                 using var doc = JsonDocument.Parse(json);
 
                 var appKey = result.AppId.ToString();
-                if (doc.RootElement.TryGetProperty(appKey, out var appElement) &&
+                JsonElement appElement = default;
+                bool foundApp = doc.RootElement.TryGetProperty(appKey, out appElement);
+                if (!foundApp)
+                {
+                    foreach (var prop in doc.RootElement.EnumerateObject())
+                    {
+                        if (prop.Value.ValueKind == JsonValueKind.Object)
+                        {
+                            appElement = prop.Value;
+                            foundApp = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (foundApp &&
                     appElement.TryGetProperty("success", out var s) && s.GetBoolean() &&
                     appElement.TryGetProperty("data", out var data))
                 {
@@ -508,12 +546,51 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                     }
                     result.IsNsfw = isNsfw;
 
-                    // 1.6 DRM and 3rd-Party Account / Launcher
+                    // 1.6 Pricing & Discounts (Real localized pricing from Steam)
+                    if (data.TryGetProperty("is_free", out var isFreeProp) && isFreeProp.GetBoolean())
+                    {
+                        result.PriceCents = 0;
+                        result.PriceText = "Free";
+                        result.DiscountPercent = 0;
+                    }
+                    else if (data.TryGetProperty("price_overview", out var priceOverview) && priceOverview.ValueKind == JsonValueKind.Object)
+                    {
+                        if (priceOverview.TryGetProperty("final", out var finalCents) && finalCents.TryGetInt32(out var cents))
+                        {
+                            result.PriceCents = cents;
+                        }
+                        if (priceOverview.TryGetProperty("final_formatted", out var finalFormatted) && finalFormatted.ValueKind == JsonValueKind.String)
+                        {
+                            var fmt = finalFormatted.GetString();
+                            if (!string.IsNullOrWhiteSpace(fmt)) result.PriceText = fmt;
+                        }
+                        if (priceOverview.TryGetProperty("discount_percent", out var discProp) && discProp.TryGetInt32(out var disc))
+                        {
+                            result.DiscountPercent = disc;
+                        }
+                        if (priceOverview.TryGetProperty("initial_formatted", out var initialFormatted) && initialFormatted.ValueKind == JsonValueKind.String)
+                        {
+                            var initFmt = initialFormatted.GetString();
+                            if (!string.IsNullOrWhiteSpace(initFmt) && result.DiscountPercent > 0)
+                            {
+                                result.OriginalPriceText = initFmt;
+                            }
+                        }
+                    }
+
+                    // 1.7 DRM, 3rd-Party Account, Anti-Cheat, EULA
                     bool hasDrm = false;
                     string? drmNotice = null;
                     string? drmName = null;
                     bool hasExternalLauncher = false;
                     string? launcherName = null;
+                    string? launcherNotice = null;
+                    string? antiCheatName = null;
+                    string? antiCheatNotice = null;
+                    string? accountName = null;
+                    string? accountNotice = null;
+                    string? eulaName = null;
+                    string? eulaNotice = null;
 
                     if (data.TryGetProperty("drm_notice", out var drmProp) && drmProp.ValueKind == JsonValueKind.String)
                     {
@@ -523,6 +600,12 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                             hasDrm = true;
                             drmNotice = notice.Trim();
                             drmName = ThirdPartyNoticeParser.ParseDrmName(drmNotice);
+                            var parsedAc = ThirdPartyNoticeParser.ExtractAntiCheatName(drmNotice);
+                            if (!string.IsNullOrWhiteSpace(parsedAc))
+                            {
+                                antiCheatName = parsedAc;
+                                antiCheatNotice = drmNotice;
+                            }
                         }
                     }
 
@@ -532,15 +615,10 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                         if (!string.IsNullOrWhiteSpace(notice))
                         {
                             hasExternalLauncher = true;
-                            launcherName = ThirdPartyNoticeParser.ParseLauncherName(notice.Trim());
-                            if (string.IsNullOrWhiteSpace(drmNotice))
-                            {
-                                drmNotice = notice.Trim();
-                            }
-                            else
-                            {
-                                drmNotice = $"{drmNotice} • {notice.Trim()}";
-                            }
+                            launcherNotice = notice.Trim();
+                            launcherName = ThirdPartyNoticeParser.ParseLauncherName(launcherNotice);
+                            accountName = ThirdPartyNoticeParser.ExtractAccountName(launcherNotice);
+                            accountNotice = launcherNotice;
                         }
                     }
 
@@ -557,15 +635,122 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                             if (string.IsNullOrWhiteSpace(drmNotice))
                                 drmNotice = "Incorporates 3rd-party DRM";
                         }
+                        if (string.IsNullOrWhiteSpace(antiCheatName) &&
+                            (legal.Contains("anti-cheat", StringComparison.OrdinalIgnoreCase) ||
+                             legal.Contains("anticheat", StringComparison.OrdinalIgnoreCase) ||
+                             legal.Contains("antitrampas", StringComparison.OrdinalIgnoreCase) ||
+                             legal.Contains("BattlEye", StringComparison.OrdinalIgnoreCase) ||
+                             legal.Contains("EasyAntiCheat", StringComparison.OrdinalIgnoreCase) ||
+                             legal.Contains("Easy Anti-Cheat", StringComparison.OrdinalIgnoreCase) ||
+                             legal.Contains("Vanguard", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            var parsedAc = ThirdPartyNoticeParser.ExtractAntiCheatName(legal);
+                            if (!string.IsNullOrWhiteSpace(parsedAc))
+                            {
+                                antiCheatName = parsedAc;
+                                antiCheatNotice = "Anti-Cheat Protection";
+                            }
+                        }
+                        if (string.IsNullOrWhiteSpace(eulaName) &&
+                            (legal.Contains("EULA", StringComparison.OrdinalIgnoreCase) ||
+                             legal.Contains("ALUF", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            var parsedEula = ThirdPartyNoticeParser.ExtractEulaName(legal);
+                            if (!string.IsNullOrWhiteSpace(parsedEula))
+                            {
+                                eulaName = parsedEula;
+                                eulaNotice = "EULA Agreement Required";
+                            }
+                        }
                     }
 
-                    result.HasDrm = hasDrm;
-                    result.DrmNotice = drmNotice;
-                    result.DrmName = drmName;
-                    result.HasExternalLauncher = hasExternalLauncher;
-                    result.LauncherName = launcherName;
+                    // 1.8 Store Page HTML Fallback for Anti-Cheat, EULA, Account, & Live Price
+                    if (string.IsNullOrWhiteSpace(antiCheatName) || string.IsNullOrWhiteSpace(eulaName) || string.IsNullOrWhiteSpace(accountName) || string.IsNullOrWhiteSpace(result.PriceText))
+                    {
+                        try
+                        {
+                            var pageUrl = $"https://store.steampowered.com/app/{result.AppId}/?l=english";
+                            using var pageReq = new HttpRequestMessage(HttpMethod.Get, pageUrl);
+                            pageReq.Headers.Add("Cookie", "birthtime=786240001; mature_content=1; wants_mature_content=1");
+                            using var pageResp = await _http.SendAsync(pageReq, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+                            if (pageResp.IsSuccessStatusCode)
+                            {
+                                var html = await pageResp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
 
-                    // 1.7 Release Date fallback
+                                if (string.IsNullOrWhiteSpace(antiCheatName))
+                                {
+                                    var acMatch = Regex.Match(html, @"class=""[^""]*anticheat_section[^""]*""[^>]*>.*?<div class=""anticheat_name"">([^<]+)", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+                                    if (acMatch.Success)
+                                    {
+                                        antiCheatName = ThirdPartyNoticeParser.ExtractAntiCheatName(acMatch.Groups[1].Value.Trim());
+                                        antiCheatNotice = "3rd-Party Anti-Cheat";
+                                    }
+                                    else if (html.Contains("Kernel Level Anti-Cheat", StringComparison.OrdinalIgnoreCase) ||
+                                             html.Contains("antitrampas a nivel de kernel", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        antiCheatName = "Kernel Anti-Cheat";
+                                        antiCheatNotice = "Kernel Level Anti-Cheat";
+                                    }
+                                }
+
+                                if (string.IsNullOrWhiteSpace(eulaName))
+                                {
+                                    var eulaMatch = Regex.Match(html, @"<a[^>]*href=""[^""]*eula[^""]*""[^>]*>([^<]+)</a>", RegexOptions.IgnoreCase);
+                                    if (eulaMatch.Success)
+                                    {
+                                        eulaName = ThirdPartyNoticeParser.ExtractEulaName(System.Net.WebUtility.HtmlDecode(eulaMatch.Groups[1].Value.Trim()));
+                                        eulaNotice = "Requires agreement to a 3rd-party EULA";
+                                    }
+                                    else if (html.Contains("Requires agreement to a 3rd-party EULA", StringComparison.OrdinalIgnoreCase) ||
+                                             html.Contains("Es necesario aceptar un ALUF", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        eulaName = "ALUF / EULA";
+                                        eulaNotice = "Requires agreement to a 3rd-party EULA";
+                                    }
+                                }
+
+                                if (string.IsNullOrWhiteSpace(accountName) && string.IsNullOrWhiteSpace(launcherName))
+                                {
+                                    var accMatch = Regex.Match(html, @"Requires 3rd-Party Account:[^<]*<a[^>]*>([^<]+)</a>", RegexOptions.IgnoreCase);
+                                    if (!accMatch.Success)
+                                    {
+                                        accMatch = Regex.Match(html, @"Requires 3rd-Party Account:\s*([^\r\n<]+)", RegexOptions.IgnoreCase);
+                                    }
+                                    if (accMatch.Success)
+                                    {
+                                        var accRaw = System.Net.WebUtility.HtmlDecode(accMatch.Groups[1].Value.Trim()).Replace("\u00a0", " ");
+                                        accountName = ThirdPartyNoticeParser.ExtractAccountName(accRaw);
+                                        accountNotice = accRaw;
+                                        launcherName = accountName;
+                                        hasExternalLauncher = true;
+                                    }
+                                }
+
+                                if (string.IsNullOrWhiteSpace(result.PriceText))
+                                {
+                                    var priceMatch = Regex.Match(html, @"<div class=""game_purchase_price price""[^>]*>([^<]+)</div>", RegexOptions.IgnoreCase);
+                                    if (priceMatch.Success)
+                                    {
+                                        result.PriceText = priceMatch.Groups[1].Value.Trim();
+                                    }
+                                    else
+                                    {
+                                        var discMatch = Regex.Match(html, @"<div class=""discount_final_price"">([^<]+)</div>", RegexOptions.IgnoreCase);
+                                        if (discMatch.Success)
+                                        {
+                                            result.PriceText = discMatch.Groups[1].Value.Trim();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        catch (Exception pEx)
+                        {
+                            _logger.LogDebug(pEx, "Store page HTML extraction skipped for AppId={AppId}", result.AppId);
+                        }
+                    }
+
+                    // 1.9 Release Date fallback
                     if (string.IsNullOrWhiteSpace(result.Version) &&
                         data.TryGetProperty("release_date", out var rd) &&
                         rd.TryGetProperty("date", out var dateProp))
@@ -577,12 +762,37 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                         }
                     }
 
+                    result.HasDrm = hasDrm || !string.IsNullOrWhiteSpace(drmName);
+                    result.DrmNotice = drmNotice;
+                    result.DrmName = drmName;
+                    result.HasExternalLauncher = hasExternalLauncher || !string.IsNullOrWhiteSpace(launcherName);
+                    result.LauncherName = launcherName;
+                    result.LauncherNotice = launcherNotice;
+                    result.HasAntiCheat = !string.IsNullOrWhiteSpace(antiCheatName);
+                    result.AntiCheatName = antiCheatName;
+                    result.AntiCheatNotice = antiCheatNotice;
+                    result.HasAccount = hasExternalLauncher || !string.IsNullOrWhiteSpace(accountName);
+                    result.AccountName = accountName;
+                    result.AccountNotice = accountNotice;
+                    result.HasEula = !string.IsNullOrWhiteSpace(eulaName);
+                    result.EulaName = eulaName;
+                    result.EulaNotice = eulaNotice;
+                    result.IsEnriched = true;
+
                     // Also persist into local repo if available
-                    if (_localRepo != null && (drmName != null || launcherName != null || result.DlcCount > 0))
+                    if (_localRepo != null && (drmName != null || launcherName != null || antiCheatName != null || accountName != null || eulaName != null || result.DlcCount > 0))
                     {
                         try
                         {
-                            await _localRepo.UpdateAppDrmAndLauncherAsync(result.AppId, drmName, launcherName, result.DlcCount > 0 ? result.DlcCount : null, ct).ConfigureAwait(false);
+                            await _localRepo.UpdateAppDrmAndLauncherAsync(
+                                result.AppId,
+                                drmName,
+                                launcherName,
+                                result.DlcCount > 0 ? result.DlcCount : null,
+                                antiCheatName,
+                                accountName,
+                                eulaName,
+                                ct).ConfigureAwait(false);
                         }
                         catch { }
                     }
@@ -604,7 +814,16 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                             result.Version,
                             result.HasExternalLauncher,
                             result.DrmName,
-                            result.LauncherName
+                            result.LauncherName,
+                            result.AntiCheatName,
+                            result.AntiCheatNotice,
+                            result.AccountName,
+                            result.AccountNotice,
+                            result.EulaName,
+                            result.EulaNotice,
+                            result.PriceText,
+                            result.PriceCents,
+                            result.DiscountPercent
                         );
                         try { await _cache.SetAsync(cacheKey, item, TimeSpan.FromDays(7), ct).ConfigureAwait(false); } catch { }
                     }

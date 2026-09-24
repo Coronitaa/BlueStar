@@ -25,9 +25,18 @@ public class SearchResult : INotifyPropertyChanged
     private bool _hasDrm;
     private string? _drmNotice;
     private string? _drmName;
+    private bool _hasAntiCheat;
+    private string? _antiCheatName;
+    private string? _antiCheatNotice;
     private bool _hasExternalLauncher;
     private string? _launcherName;
     private string? _launcherNotice;
+    private bool _hasAccount;
+    private string? _accountName;
+    private string? _accountNotice;
+    private bool _hasEula;
+    private string? _eulaName;
+    private string? _eulaNotice;
     private int? _priceCents;
     private long? _releaseDateUtc;
     private bool _isCreating;
@@ -168,8 +177,14 @@ public class SearchResult : INotifyPropertyChanged
     /// </summary>
     public bool HasDrm
     {
-        get => _hasDrm;
-        set => SetField(ref _hasDrm, value);
+        get => _hasDrm || !string.IsNullOrWhiteSpace(_drmName);
+        set
+        {
+            if (SetField(ref _hasDrm, value))
+            {
+                OnPropertyChanged(nameof(DrmBadgeText));
+            }
+        }
     }
 
     /// <summary>
@@ -337,16 +352,16 @@ public class SearchResult : INotifyPropertyChanged
 
     /// <summary>
     /// Current price as the store formats it, or a free-to-play marker.
-    /// Falls back dynamically to <see cref="PriceCents"/> if explicit text is absent.
+    /// Regional pricing and discounts are preserved; does not fabricate static US dollar prices for paid games.
     /// </summary>
     public string? PriceText
     {
         get
         {
             if (!string.IsNullOrWhiteSpace(_priceText)) return _priceText;
-            if (_priceCents.HasValue)
+            if (_priceCents.HasValue && _priceCents.Value == 0)
             {
-                return _priceCents.Value == 0 ? "Free" : $"${_priceCents.Value / 100.0:F2}";
+                return "Free";
             }
             return null;
         }
@@ -434,8 +449,14 @@ public class SearchResult : INotifyPropertyChanged
     /// </summary>
     public bool HasExternalLauncher
     {
-        get => _hasExternalLauncher;
-        set => SetField(ref _hasExternalLauncher, value);
+        get => _hasExternalLauncher || !string.IsNullOrWhiteSpace(_launcherName);
+        set
+        {
+            if (SetField(ref _hasExternalLauncher, value))
+            {
+                OnPropertyChanged(nameof(LauncherBadgeText));
+            }
+        }
     }
 
     /// <summary>
@@ -476,6 +497,174 @@ public class SearchResult : INotifyPropertyChanged
     /// Formatted badge text for external launcher (e.g. "Rockstar", "EA App"), or "Launcher" when system name is unknown.
     /// </summary>
     public string LauncherBadgeText => !string.IsNullOrWhiteSpace(_launcherName) ? _launcherName : "Launcher";
+
+    /// <summary>
+    /// Whether the app incorporates anti-cheat software (e.g. Easy Anti-Cheat, Denuvo, BattlEye, Vanguard).
+    /// </summary>
+    public bool HasAntiCheat
+    {
+        get => _hasAntiCheat || !string.IsNullOrWhiteSpace(_antiCheatName);
+        set
+        {
+            if (SetField(ref _hasAntiCheat, value))
+            {
+                OnPropertyChanged(nameof(AntiCheatBadgeText));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the anti-cheat notice or details.
+    /// </summary>
+    public string? AntiCheatNotice
+    {
+        get => _antiCheatNotice;
+        set
+        {
+            if (SetField(ref _antiCheatNotice, value))
+            {
+                if (!string.IsNullOrWhiteSpace(value) && string.IsNullOrWhiteSpace(_antiCheatName))
+                {
+                    AntiCheatName = Helpers.ThirdPartyNoticeParser.ExtractAntiCheatName(value);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the anti-cheat system name (e.g. "Easy Anti-Cheat", "BattlEye", "Denuvo", "VAC").
+    /// </summary>
+    public string? AntiCheatName
+    {
+        get => _antiCheatName;
+        set
+        {
+            if (SetField(ref _antiCheatName, value))
+            {
+                OnPropertyChanged(nameof(AntiCheatBadgeText));
+                if (!string.IsNullOrWhiteSpace(value)) HasAntiCheat = true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Formatted badge text for anti-cheat software, or "Anti-Cheat" if name is generic.
+    /// </summary>
+    public string AntiCheatBadgeText => !string.IsNullOrWhiteSpace(_antiCheatName) ? _antiCheatName : "Anti-Cheat";
+
+    /// <summary>
+    /// Whether the app requires a 3rd-party account (e.g. 2K Sports, EA, Rockstar, PlayStation Network).
+    /// </summary>
+    public bool HasAccount
+    {
+        get => _hasAccount || _hasExternalLauncher || !string.IsNullOrWhiteSpace(_accountName) || !string.IsNullOrWhiteSpace(_launcherName);
+        set
+        {
+            if (SetField(ref _hasAccount, value))
+            {
+                OnPropertyChanged(nameof(AccountBadgeText));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the 3rd-party account requirement notice.
+    /// </summary>
+    public string? AccountNotice
+    {
+        get => _accountNotice ?? _launcherNotice;
+        set
+        {
+            if (SetField(ref _accountNotice, value))
+            {
+                if (!string.IsNullOrWhiteSpace(value) && string.IsNullOrWhiteSpace(_accountName))
+                {
+                    AccountName = Helpers.ThirdPartyNoticeParser.ExtractAccountName(value);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the 3rd-party account name (e.g. "2K Sports", "Rockstar", "EA Account").
+    /// </summary>
+    public string? AccountName
+    {
+        get => _accountName ?? _launcherName;
+        set
+        {
+            if (SetField(ref _accountName, value))
+            {
+                OnPropertyChanged(nameof(AccountBadgeText));
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    HasAccount = true;
+                    if (string.IsNullOrWhiteSpace(_launcherName)) LauncherName = value;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Formatted badge text for 3rd-party account.
+    /// </summary>
+    public string AccountBadgeText => !string.IsNullOrWhiteSpace(_accountName)
+        ? _accountName
+        : (!string.IsNullOrWhiteSpace(_launcherName) ? _launcherName : "Account");
+
+    /// <summary>
+    /// Whether the app requires accepting a 3rd-party EULA / ALUF.
+    /// </summary>
+    public bool HasEula
+    {
+        get => _hasEula || !string.IsNullOrWhiteSpace(_eulaName);
+        set
+        {
+            if (SetField(ref _hasEula, value))
+            {
+                OnPropertyChanged(nameof(EulaBadgeText));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the EULA/ALUF notice or URL.
+    /// </summary>
+    public string? EulaNotice
+    {
+        get => _eulaNotice;
+        set
+        {
+            if (SetField(ref _eulaNotice, value))
+            {
+                if (!string.IsNullOrWhiteSpace(value) && string.IsNullOrWhiteSpace(_eulaName))
+                {
+                    EulaName = Helpers.ThirdPartyNoticeParser.ExtractEulaName(value);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the EULA/ALUF display name (e.g. "ARC Raiders EULA", "NBA 2K25 EULA", or "ALUF").
+    /// </summary>
+    public string? EulaName
+    {
+        get => _eulaName;
+        set
+        {
+            if (SetField(ref _eulaName, value))
+            {
+                OnPropertyChanged(nameof(EulaBadgeText));
+                if (!string.IsNullOrWhiteSpace(value)) HasEula = true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Formatted badge text for EULA/ALUF.
+    /// </summary>
+    public string EulaBadgeText => !string.IsNullOrWhiteSpace(_eulaName) ? _eulaName : "ALUF";
 
     /// <summary>
     /// Whether the <c>appdetails</c> pass has run for this result. Until it has, DRM, external

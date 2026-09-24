@@ -95,6 +95,9 @@ public sealed class SearchPipeline : ISearchPipeline
             MaxPriceCents = request.MaxPriceCents,
             NoDrm = request.NoDrm,
             NoExternalLauncher = request.NoExternalLauncher,
+            NoAntiCheat = request.NoAntiCheat,
+            NoAccount = request.NoAccount,
+            NoEula = request.NoEula,
             HideAdult = request.HideAdult,
             DiscountedOnly = request.DiscountedOnly,
             IncludedTagIds = request.IncludedTagIds?.ToList(),
@@ -402,6 +405,9 @@ public sealed class SearchPipeline : ISearchPipeline
                     MaxPriceCents = request.MaxPriceCents,
                     NoDrm = request.NoDrm,
                     NoExternalLauncher = request.NoExternalLauncher,
+                    NoAntiCheat = request.NoAntiCheat,
+                    NoAccount = request.NoAccount,
+                    NoEula = request.NoEula,
                     HideAdult = request.HideAdult,
                     DiscountedOnly = request.DiscountedOnly,
                     IncludedTagIds = request.IncludedTagIds?.ToList(),
@@ -412,14 +418,17 @@ public sealed class SearchPipeline : ISearchPipeline
                 };
 
                 var (localBrowseItems, totalLocalCount) = await _localRepo.QueryAsync(localBrowseQuery, ct).ConfigureAwait(false);
-                return new SearchResponse
+                if (totalLocalCount > 0)
                 {
-                    Items = localBrowseItems.Select(ToSearchResult).ToList(),
-                    TotalCount = totalLocalCount,
-                    Start = request.Start,
-                    ResolutionType = SearchResolutionType.FullText,
-                    IsFromLocalCatalog = true
-                };
+                    return new SearchResponse
+                    {
+                        Items = localBrowseItems.Select(ToSearchResult).ToList(),
+                        TotalCount = totalLocalCount,
+                        Start = request.Start,
+                        ResolutionType = SearchResolutionType.FullText,
+                        IsFromLocalCatalog = true
+                    };
+                }
             }
         }
 
@@ -550,6 +559,9 @@ public sealed class SearchPipeline : ISearchPipeline
             MaxPriceCents = request.MaxPriceCents,
             NoDrm = request.NoDrm,
             NoExternalLauncher = request.NoExternalLauncher,
+            NoAntiCheat = request.NoAntiCheat,
+            NoAccount = request.NoAccount,
+            NoEula = request.NoEula,
             HideAdult = request.HideAdult,
             DiscountedOnly = request.DiscountedOnly,
             IncludedTagIds = request.IncludedTagIds?.ToList(),
@@ -614,6 +626,9 @@ public sealed class SearchPipeline : ISearchPipeline
                     MaxPriceCents = request.MaxPriceCents,
                     NoDrm = request.NoDrm,
                     NoExternalLauncher = request.NoExternalLauncher,
+                    NoAntiCheat = request.NoAntiCheat,
+                    NoAccount = request.NoAccount,
+                    NoEula = request.NoEula,
                     HideAdult = request.HideAdult,
                     DiscountedOnly = request.DiscountedOnly,
                     IncludedTagIds = request.IncludedTagIds?.ToList(),
@@ -940,6 +955,9 @@ public sealed class SearchPipeline : ISearchPipeline
     {
         var hasDrm = item.HasDrm || !string.IsNullOrWhiteSpace(item.DrmName);
         var hasLauncher = item.HasExternalLauncher || !string.IsNullOrWhiteSpace(item.LauncherName);
+        var hasAntiCheat = item.HasAntiCheat || !string.IsNullOrWhiteSpace(item.AntiCheatName);
+        var hasAccount = item.HasAccount || !string.IsNullOrWhiteSpace(item.AccountName);
+        var hasEula = item.HasEula || !string.IsNullOrWhiteSpace(item.EulaName);
 
         return new SearchResult
         {
@@ -956,6 +974,12 @@ public sealed class SearchPipeline : ISearchPipeline
             HasExternalLauncher = hasLauncher,
             LauncherName = item.LauncherName,
             DlcCount = item.DlcCount,
+            HasAntiCheat = hasAntiCheat,
+            AntiCheatName = item.AntiCheatName,
+            HasAccount = hasAccount,
+            AccountName = item.AccountName,
+            HasEula = hasEula,
+            EulaName = item.EulaName,
             ReviewPercent = item.ReviewPercent,
             ReviewSummary = item.ReviewPercent.HasValue
                 ? RatingEngine.GetReviewSummary(item.ReviewPercent.Value, item.ReviewCount ?? 100)
@@ -966,7 +990,7 @@ public sealed class SearchPipeline : ISearchPipeline
             ReleaseDateUtc = item.ReleaseDateUtc,
             ReleaseDateText = item.ReleaseDateText,
             TagIds = item.TagIds,
-            IsEnriched = true // Catalog items are pre-indexed; instantaneous display with zero delay
+            IsEnriched = item.IsEnriched
         };
     }
 
@@ -992,13 +1016,20 @@ public sealed class SearchPipeline : ISearchPipeline
             HasExternalLauncher = result.HasExternalLauncher || !string.IsNullOrWhiteSpace(result.LauncherName),
             LauncherName = result.LauncherName,
             DlcCount = result.DlcCount,
+            HasAntiCheat = result.HasAntiCheat || !string.IsNullOrWhiteSpace(result.AntiCheatName),
+            AntiCheatName = result.AntiCheatName,
+            HasAccount = result.HasAccount || !string.IsNullOrWhiteSpace(result.AccountName),
+            AccountName = result.AccountName,
+            HasEula = result.HasEula || !string.IsNullOrWhiteSpace(result.EulaName),
+            EulaName = result.EulaName,
             ReviewPercent = result.ReviewPercent,
             PriceCents = result.PriceCents,
             PriceText = result.PriceText,
             DiscountPercent = result.DiscountPercent,
             ReleaseDateUtc = result.ReleaseDateUtc,
             ReleaseDateText = result.ReleaseDateText,
-            TagIds = result.TagIds
+            TagIds = result.TagIds,
+            IsEnriched = result.IsEnriched
         };
     }
 }

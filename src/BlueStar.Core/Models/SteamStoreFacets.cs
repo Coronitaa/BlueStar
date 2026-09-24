@@ -303,6 +303,9 @@ public static class SteamStoreFacets
     [
         new(SteamFacetKind.LocalPostFilter, "no_drm", "No third-party DRM"),
         new(SteamFacetKind.LocalPostFilter, "no_launcher", "No external launcher"),
+        new(SteamFacetKind.LocalPostFilter, "no_anticheat", "No third-party anti-cheat"),
+        new(SteamFacetKind.LocalPostFilter, "no_account", "No third-party account"),
+        new(SteamFacetKind.LocalPostFilter, "no_eula", "No third-party EULA"),
         new(SteamFacetKind.LocalPostFilter, "has_dlc", "Has DLC"),
         new(SteamFacetKind.LocalPostFilter, "hide_adult", "Hide adult content")
     ];

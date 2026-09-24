@@ -23,6 +23,9 @@ public sealed class LocalCatalogQuery
     public int? MaxRatingPercent { get; init; }
     public bool? NoDrm { get; init; }
     public bool? NoExternalLauncher { get; init; }
+    public bool? NoAntiCheat { get; init; }
+    public bool? NoAccount { get; init; }
+    public bool? NoEula { get; init; }
     public bool? HideAdult { get; init; }
     public bool? DiscountedOnly { get; init; }
     public int? MaxPriceCents { get; init; }
@@ -105,8 +108,16 @@ public interface ILocalCatalogRepository : IDisposable
     Task UpdateAppMetadataBatchAsync(IEnumerable<AppMetadataEnrichment> batch, CancellationToken ct = default);
 
     /// <summary>
-    /// Updates DRM, external launcher, and DLC count for a specific app.
+    /// Updates DRM, anti-cheat, external launcher/account, EULA, and DLC count for a specific app.
     /// </summary>
-    Task UpdateAppDrmAndLauncherAsync(uint appId, string? drmName, string? launcherName, int? dlcCount, CancellationToken ct = default);
+    Task UpdateAppDrmAndLauncherAsync(
+        uint appId,
+        string? drmName,
+        string? launcherName,
+        int? dlcCount,
+        string? antiCheatName = null,
+        string? accountName = null,
+        string? eulaName = null,
+        CancellationToken ct = default);
 }
 

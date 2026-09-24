@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Threading;
 using System.Windows;
@@ -796,6 +796,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         var view = new InstanceDetailView();
         var vm = App.Services.GetRequiredService<InstanceDetailViewModel>();
         vm.OnNavigateBack = () => Navigate("Library");
+        vm.OnFindSimilarRequested = OpenSimilarInExplore;
+        vm.OnOpenTagRequested = OpenTagInExplore;
         view.DataContext = vm;
         _ = vm.LoadInstanceAsync(instance, autoCheckDepotUpdates: autoCheckUpdates);
         CurrentView = view;
@@ -814,6 +816,17 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // Resolving the tags may need a round trip to the store page, so this is deliberately
         // not awaited: Explore is already on screen and fills in when the answer arrives.
         _ = GetExploreView().ViewModel.FindSimilarAsync(target);
+    }
+
+    /// <summary>
+    /// Switches to Explore and filters it by the given store tag name.
+    /// </summary>
+    public void OpenTagInExplore(string tagName)
+    {
+        if (string.IsNullOrWhiteSpace(tagName)) return;
+
+        Navigate("Explore");
+        _ = GetExploreView().ViewModel.FilterByTag(tagName);
     }
 
     /// <summary>

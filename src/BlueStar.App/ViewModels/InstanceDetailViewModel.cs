@@ -2264,6 +2264,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         string? InstalledDateText);
 
     public Action? OnNavigateBack { get; set; }
+    public Action<string>? OnOpenTagRequested { get; set; }
+    public Action<SearchResult>? OnFindSimilarRequested { get; set; }
 
     public InstanceDetailViewModel(
         IInstanceManager instanceManager,
@@ -7453,6 +7455,47 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private void GoBack() => OnNavigateBack?.Invoke();
+
+    [RelayCommand]
+    public void OpenTagInExplore(string? tagName)
+    {
+        if (string.IsNullOrWhiteSpace(tagName)) return;
+        OnOpenTagRequested?.Invoke(tagName);
+    }
+
+    [RelayCommand]
+    public void FindSimilarGames()
+    {
+        if (Instance == null || Instance.AppId == 0) return;
+
+        var tagList = new List<string>();
+        if (CommunityTags != null && CommunityTags.Count > 0)
+            tagList.AddRange(CommunityTags);
+        else if (Instance.Metadata?.StoreTags != null && Instance.Metadata.StoreTags.Count > 0)
+            tagList.AddRange(Instance.Metadata.StoreTags);
+
+        if (GenreTags != null && GenreTags.Count > 0)
+            tagList.AddRange(GenreTags.Where(g => !tagList.Contains(g, StringComparer.OrdinalIgnoreCase)));
+        else if (Instance.Metadata?.Genres != null)
+            tagList.AddRange(Instance.Metadata.Genres.Where(g => !tagList.Contains(g, StringComparer.OrdinalIgnoreCase)));
+
+        if (FeatureTags != null && FeatureTags.Count > 0)
+            tagList.AddRange(FeatureTags.Where(f => !tagList.Contains(f, StringComparer.OrdinalIgnoreCase)));
+        else if (Instance.Metadata?.Categories != null)
+            tagList.AddRange(Instance.Metadata.Categories.Where(f => !tagList.Contains(f, StringComparer.OrdinalIgnoreCase)));
+
+        var tags = tagList.Select(t => new StoreTagRef(t, false)).ToList();
+
+        var target = new SearchResult
+        {
+            AppId = Instance.AppId,
+            Name = Instance.Name,
+            HeaderImageUrl = Instance.HeaderImageUrl,
+            StoreTags = tags
+        };
+
+        OnFindSimilarRequested?.Invoke(target);
+    }
 
     // ── Instance Deletion Commands ──
     [RelayCommand]

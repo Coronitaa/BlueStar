@@ -28,7 +28,7 @@ public sealed record CatalogAppItem
     {
         get => !string.IsNullOrWhiteSpace(_priceText)
             ? _priceText
-            : (PriceCents.HasValue ? (PriceCents.Value == 0 ? "Free" : $"${PriceCents.Value / 100.0:F2}") : null);
+            : (PriceCents.HasValue && PriceCents.Value == 0 ? "Free" : null);
         init => _priceText = value;
     }
 
@@ -53,9 +53,16 @@ public sealed record CatalogAppItem
     public bool IsNsfw { get; init; }
     public bool HasDrm { get; init; }
     public string? DrmName { get; init; }
+    public bool HasAntiCheat { get; init; }
+    public string? AntiCheatName { get; init; }
     public bool HasExternalLauncher { get; init; }
     public string? LauncherName { get; init; }
+    public bool HasAccount { get; init; }
+    public string? AccountName { get; init; }
+    public bool HasEula { get; init; }
+    public string? EulaName { get; init; }
     public int? DlcCount { get; init; }
+    public bool IsEnriched { get; init; }
     public IReadOnlyList<int> TagIds { get; init; } = [];
 
     /// <summary>
@@ -131,6 +138,10 @@ public sealed record AppMetadataEnrichment(
     string? LauncherName = null,
     int? DlcCount = null,
     string? ReleaseDateText = null,
-    string? PriceText = null
+    string? PriceText = null,
+    string? AntiCheatName = null,
+    string? AccountName = null,
+    string? EulaName = null,
+    bool IsEnriched = false
 );
 

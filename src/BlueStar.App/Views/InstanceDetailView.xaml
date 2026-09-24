@@ -110,18 +110,32 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border CornerRadius="{StaticResource RadiusSm}"
-                                                Padding="7,2"
-                                                Margin="0,0,6,4"
-                                                Background="{Binding Type, Converter={StaticResource TagTypeToBgBrushConverter}}"
-                                                BorderBrush="{Binding Type, Converter={StaticResource TagTypeToBorderBrushConverter}}"
-                                                BorderThickness="1"
-                                                ToolTip="{Binding Tooltip}">
-                                            <TextBlock Text="{Binding Text}"
-                                                       FontSize="11"
-                                                       FontWeight="Normal"
-                                                       Foreground="{Binding Type, Converter={StaticResource TagTypeToBrushConverter}}"/>
-                                        </Border>
+                                        <Button Cursor="Hand"
+                                                Command="{Binding DataContext.OpenTagInExploreCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding Text}">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border x:Name="border"
+                                                            CornerRadius="{StaticResource RadiusSm}"
+                                                            Padding="7,2"
+                                                            Margin="0,0,6,4"
+                                                            Background="{Binding Type, Converter={StaticResource TagTypeToBgBrushConverter}}"
+                                                            BorderBrush="{Binding Type, Converter={StaticResource TagTypeToBorderBrushConverter}}"
+                                                            BorderThickness="1"
+                                                            ToolTip="{Binding Tooltip}">
+                                                        <TextBlock Text="{Binding Text}"
+                                                                   FontSize="11"
+                                                                   FontWeight="Normal"
+                                                                   Foreground="{Binding Type, Converter={StaticResource TagTypeToBrushConverter}}"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="border" Property="Opacity" Value="0.8"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
@@ -129,6 +143,12 @@
 
                         <!-- Primary Action Buttons (Play & Shortcut) -->
                         <StackPanel Grid.Column="3" VerticalAlignment="Center" Orientation="Horizontal">
+                            <Button Style="{StaticResource IconButton}" Margin="0,0,8,0"
+                                    ToolTip="{DynamicResource String_SimilarGames}" Command="{Binding FindSimilarGamesCommand}">
+                                <Path Data="{StaticResource IconSimilar}" Fill="{StaticResource SecondaryTextBrush}"
+                                      Stretch="Uniform" Width="15" Height="15"/>
+                            </Button>
+
                             <Button Style="{StaticResource IconButton}" Margin="0,0,8,0"
                                     ToolTip="{DynamicResource String_OpenGameDirTooltip}" Command="{Binding OpenFolderCommand}">
                                 <Path Data="{StaticResource IconFolder}" Fill="{StaticResource SecondaryTextBrush}"
@@ -602,7 +622,22 @@
                             <Border Style="{StaticResource Card}" Margin="0,0,0,18"
                                     Visibility="{Binding HasAnyTags, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <StackPanel>
-                                    <TextBlock Text="{DynamicResource String_OverviewTagsTitle}" Style="{StaticResource H2}"/>
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{DynamicResource String_OverviewTagsTitle}" Style="{StaticResource H2}" VerticalAlignment="Center"/>
+                                        <Button Grid.Column="1" Style="{StaticResource SecondaryButton}" Padding="10,5"
+                                                Command="{Binding FindSimilarGamesCommand}"
+                                                ToolTip="{DynamicResource String_SimilarGames}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Path Data="{StaticResource IconSimilar}" Fill="{StaticResource SecondaryTextBrush}"
+                                                      Stretch="Uniform" Width="12" Height="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{DynamicResource String_SimilarGames}" FontSize="12"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </Grid>
                                     <TextBlock Text="{DynamicResource String_OverviewTagsDesc}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,5,0,14"/>
 
                                     <StackPanel Margin="0,0,0,14" Visibility="{Binding HasGenreTags, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -614,10 +649,23 @@
                                             </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Style="{StaticResource StoreTagChip}"
-                                                            Background="{StaticResource AccentBgBrush}" BorderBrush="{StaticResource AccentBrush}">
-                                                        <TextBlock Text="{Binding}" Style="{StaticResource StoreTagChipText}" Foreground="{StaticResource AccentBrush}"/>
-                                                    </Border>
+                                                    <Button Cursor="Hand"
+                                                            Command="{Binding DataContext.OpenTagInExploreCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            CommandParameter="{Binding}">
+                                                        <Button.Template>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Border x:Name="border" Style="{StaticResource StoreTagChip}"
+                                                                        Background="{StaticResource AccentBgBrush}" BorderBrush="{StaticResource AccentBrush}">
+                                                                    <TextBlock Text="{Binding}" Style="{StaticResource StoreTagChipText}" Foreground="{StaticResource AccentBrush}"/>
+                                                                </Border>
+                                                                <ControlTemplate.Triggers>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter TargetName="border" Property="Opacity" Value="0.8"/>
+                                                                    </Trigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Button.Template>
+                                                    </Button>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
@@ -632,10 +680,23 @@
                                             </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Style="{StaticResource StoreTagChip}"
-                                                            Background="{StaticResource InfoBgBrush}" BorderBrush="{StaticResource InfoBrush}">
-                                                        <TextBlock Text="{Binding}" Style="{StaticResource StoreTagChipText}" Foreground="{StaticResource InfoBrush}"/>
-                                                    </Border>
+                                                    <Button Cursor="Hand"
+                                                            Command="{Binding DataContext.OpenTagInExploreCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            CommandParameter="{Binding}">
+                                                        <Button.Template>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Border x:Name="border" Style="{StaticResource StoreTagChip}"
+                                                                        Background="{StaticResource InfoBgBrush}" BorderBrush="{StaticResource InfoBrush}">
+                                                                    <TextBlock Text="{Binding}" Style="{StaticResource StoreTagChipText}" Foreground="{StaticResource InfoBrush}"/>
+                                                                </Border>
+                                                                <ControlTemplate.Triggers>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter TargetName="border" Property="Opacity" Value="0.8"/>
+                                                                    </Trigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Button.Template>
+                                                    </Button>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
@@ -650,9 +711,22 @@
                                             </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Style="{StaticResource StoreTagChip}">
-                                                        <TextBlock Text="{Binding}" Style="{StaticResource StoreTagChipText}"/>
-                                                    </Border>
+                                                    <Button Cursor="Hand"
+                                                            Command="{Binding DataContext.OpenTagInExploreCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            CommandParameter="{Binding}">
+                                                        <Button.Template>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Border x:Name="border" Style="{StaticResource StoreTagChip}">
+                                                                    <TextBlock Text="{Binding}" Style="{StaticResource StoreTagChipText}"/>
+                                                                </Border>
+                                                                <ControlTemplate.Triggers>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter TargetName="border" Property="Opacity" Value="0.8"/>
+                                                                    </Trigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Button.Template>
+                                                    </Button>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>

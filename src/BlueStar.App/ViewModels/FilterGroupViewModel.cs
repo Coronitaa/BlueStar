@@ -258,13 +258,70 @@ public partial class FilterGroupViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Normalizes a string by stripping non-alphanumeric characters for fuzzy matching.
+    /// </summary>
+    public static string CleanKey(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return string.Empty;
+        var sb = new System.Text.StringBuilder();
+        foreach (var c in s)
+        {
+            if (char.IsLetterOrDigit(c)) sb.Append(char.ToLowerInvariant(c));
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Adds or activates an ad-hoc custom option into this filter group.
+    /// </summary>
+    public void AddCustomOption(FilterOptionItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        var existing = _all.FirstOrDefault(o => o.Key == item.Key || o.Option.Value == item.Option.Value);
+        if (existing != null)
+        {
+            existing.State = FacetState.Include;
+            existing.IsPinned = true;
+        }
+        else
+        {
+            item.State = FacetState.Include;
+            item.IsPinned = true;
+            _all.Add(item);
+        }
+        _usage[item.Key] = _usage.TryGetValue(item.Key, out var used) ? used + 1 : 1;
+        Refresh();
+        _onChanged();
+    }
+
+    /// <summary>
     /// Activates an option by its display name, pinning it so it stays visible. Used when a tag
     /// is clicked on a result card or picked from the "similar games" action.
     /// </summary>
     /// <returns><c>true</c> if the group owns an option with that name.</returns>
     public bool ActivateByName(string name)
     {
-        var match = _all.FirstOrDefault(o => o.DisplayName.Equals(name, StringComparison.CurrentCultureIgnoreCase));
+        if (string.IsNullOrWhiteSpace(name)) return false;
+
+        var cleanTarget = CleanKey(name);
+        var match = _all.FirstOrDefault(o =>
+            string.Equals(o.DisplayName, name, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(o.Option.FallbackName, name, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(CleanKey(o.DisplayName), cleanTarget, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(CleanKey(o.Option.FallbackName), cleanTarget, StringComparison.OrdinalIgnoreCase));
+
+        // Substring / keyword fuzzy match for compound feature names (e.g. "DualShock Controller Support" vs "DUALSHOCK support")
+        if (match is null && cleanTarget.Length >= 4)
+        {
+            match = _all.FirstOrDefault(o =>
+            {
+                var cleanDisplay = CleanKey(o.DisplayName);
+                var cleanFallback = CleanKey(o.Option.FallbackName);
+                return (cleanDisplay.Length >= 4 && (cleanTarget.Contains(cleanDisplay) || cleanDisplay.Contains(cleanTarget))) ||
+                       (cleanFallback.Length >= 4 && (cleanTarget.Contains(cleanFallback) || cleanFallback.Contains(cleanTarget)));
+            });
+        }
+
         if (match is null) return false;
 
         match.State = FacetState.Include;

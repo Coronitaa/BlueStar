@@ -882,6 +882,9 @@
     <sys:String x:Key="String_Facet_Toggle_hidef2p">Ocultar free to play</sys:String>
     <sys:String x:Key="String_Facet_LocalPostFilter_no_drm">Sin DRM de terceros</sys:String>
     <sys:String x:Key="String_Facet_LocalPostFilter_no_launcher">Sin launcher externo</sys:String>
+    <sys:String x:Key="String_Facet_LocalPostFilter_no_anticheat">Sin anti-cheat de terceros</sys:String>
+    <sys:String x:Key="String_Facet_LocalPostFilter_no_account">Sin cuenta de terceros</sys:String>
+    <sys:String x:Key="String_Facet_LocalPostFilter_no_eula">Sin ALUF / EULA de terceros</sys:String>
     <sys:String x:Key="String_Facet_LocalPostFilter_has_dlc">Con DLC disponibles</sys:String>
     <sys:String x:Key="String_Facet_LocalPostFilter_hide_adult">Ocultar contenido +18</sys:String>
     <sys:String x:Key="String_Facet_LocalPostFilter_rating_min_95">Extremadamente positivas (95%+)</sys:String>
@@ -940,4 +943,6 @@
     <sys:String x:Key="String_Sort_Name">Nombre</sys:String>
     <sys:String x:Key="String_Sort_Price">Precio</sys:String>
     <sys:String x:Key="String_Sort_DeckCompatDate">Revisión de Steam Deck</sys:String>
+    <sys:String x:Key="String_ExploreLoadingFilters">Cargando filtros y catálogo…</sys:String>
+    <sys:String x:Key="String_ExploreLoadingDiscover">Descubriendo juegos…</sys:String>
 </ResourceDictionary>

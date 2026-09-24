@@ -128,6 +128,14 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     private SearchState _searchState = SearchState.Idle;
 
     [ObservableProperty]
+    private bool _isFirstLoad = true;
+
+    [ObservableProperty]
+    private string _loadingStatusText = "Loading Explore Catalog…";
+
+    private Task? _initTask;
+
+    [ObservableProperty]
     private bool _isCreatingInstance;
 
     [ObservableProperty]
@@ -323,7 +331,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
             _settingsService.SettingsChanged += _settingsChangedHandler;
         }
 
-        _ = InitializeAsync();
+        _initTask = InitializeAsync();
     }
 
     /// <summary>
@@ -332,8 +340,11 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     /// </summary>
     private async Task InitializeAsync()
     {
+        LoadingStatusText = Localize("ExploreLoadingFilters", "Loading filters and catalog…");
         await LoadUsageAsync().ConfigureAwait(true);
         await BuildFilterGroupsAsync().ConfigureAwait(true);
+
+        LoadingStatusText = Localize("ExploreLoadingDiscover", "Discovering games…");
 
         // Opening state: If local catalog is authoritative, open on whole local catalog ("").
         // Otherwise, open on Steam's popular new releases.
@@ -803,6 +814,9 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                     out var maxRating,
                     out var noDrm,
                     out var noLauncher,
+                    out var noAnticheat,
+                    out var noAccount,
+                    out var noEula,
                     out var discounted,
                     out var maxPriceCents);
 
@@ -851,6 +865,9 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                         MaxRatingPercent = maxRating,
                         NoDrm = noDrm,
                         NoExternalLauncher = noLauncher,
+                        NoAntiCheat = noAnticheat,
+                        NoAccount = noAccount,
+                        NoEula = noEula,
                         DiscountedOnly = discounted,
                         MaxPriceCents = maxPriceCents,
                         HideAdult = !(_settingsService?.ShowNsfwContent ?? false),
@@ -1030,6 +1047,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
             {
                 IsSearching = false;
                 IsLoadingMore = false;
+                IsFirstLoad = false;
                 RefreshActiveFilters();
             }
         }
@@ -1145,6 +1163,9 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         out int? maxRating,
         out bool? noDrm,
         out bool? noLauncher,
+        out bool? noAnticheat,
+        out bool? noAccount,
+        out bool? noEula,
         out bool? discounted,
         out int? maxPriceCents)
     {
@@ -1185,8 +1206,36 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         hasLinux = platGroup?.AllOptions.FirstOrDefault(o => o.Option.Value == "linux")?.State == FacetState.Include ? true : null;
 
         var contentGroup = FilterGroups.FirstOrDefault(g => g.Key == "content");
-        noDrm = contentGroup?.AllOptions.FirstOrDefault(o => o.Option.Value == "no_drm")?.State == FacetState.Include ? true : null;
-        noLauncher = contentGroup?.AllOptions.FirstOrDefault(o => o.Option.Value == "no_launcher")?.State == FacetState.Include ? true : null;
+        noDrm = contentGroup?.AllOptions.FirstOrDefault(o => o.Option.Value == "no_drm")?.State switch
+        {
+            FacetState.Include => true,
+            FacetState.Exclude => false,
+            _ => null
+        };
+        noLauncher = contentGroup?.AllOptions.FirstOrDefault(o => o.Option.Value == "no_launcher")?.State switch
+        {
+            FacetState.Include => true,
+            FacetState.Exclude => false,
+            _ => null
+        };
+        noAnticheat = contentGroup?.AllOptions.FirstOrDefault(o => o.Option.Value == "no_anticheat")?.State switch
+        {
+            FacetState.Include => true,
+            FacetState.Exclude => false,
+            _ => null
+        };
+        noAccount = contentGroup?.AllOptions.FirstOrDefault(o => o.Option.Value == "no_account")?.State switch
+        {
+            FacetState.Include => true,
+            FacetState.Exclude => false,
+            _ => null
+        };
+        noEula = contentGroup?.AllOptions.FirstOrDefault(o => o.Option.Value == "no_eula")?.State switch
+        {
+            FacetState.Include => true,
+            FacetState.Exclude => false,
+            _ => null
+        };
 
         var priceGroup = FilterGroups.FirstOrDefault(g => g.Key == "price");
         discounted = priceGroup?.AllOptions.FirstOrDefault(o => o.Option.Value == "specials")?.State == FacetState.Include ? true : null;
@@ -1561,10 +1610,14 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
 
         var noDrm = StateOf(content, "no_drm");
         var noLauncher = StateOf(content, "no_launcher");
+        var noAnticheat = StateOf(content, "no_anticheat");
+        var noAccount = StateOf(content, "no_account");
+        var noEula = StateOf(content, "no_eula");
         var hasDlc = StateOf(content, "has_dlc");
         var hideAdult = StateOf(content, "hide_adult");
 
         var anyContentFilter = noDrm != FacetState.Neutral || noLauncher != FacetState.Neutral
+                               || noAnticheat != FacetState.Neutral || noAccount != FacetState.Neutral || noEula != FacetState.Neutral
                                || hasDlc != FacetState.Neutral || hideAdult != FacetState.Neutral;
 
         // These answers only exist once appdetails has been read for this result. Until then the
@@ -1576,6 +1629,15 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
 
         if (noLauncher == FacetState.Include && item.HasExternalLauncher) return false;
         if (noLauncher == FacetState.Exclude && !item.HasExternalLauncher) return false;
+
+        if (noAnticheat == FacetState.Include && item.HasAntiCheat) return false;
+        if (noAnticheat == FacetState.Exclude && !item.HasAntiCheat) return false;
+
+        if (noAccount == FacetState.Include && item.HasAccount) return false;
+        if (noAccount == FacetState.Exclude && !item.HasAccount) return false;
+
+        if (noEula == FacetState.Include && item.HasEula) return false;
+        if (noEula == FacetState.Exclude && !item.HasEula) return false;
 
         var carriesDlc = item.DlcCount is > 0;
         if (hasDlc == FacetState.Include && !carriesDlc) return false;
@@ -2071,20 +2133,53 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     /// Activates a store tag from a result card, so clicking a bubble on a card filters by it.
     /// </summary>
     [RelayCommand]
-    public void FilterByTag(string? tagName)
+    public async Task FilterByTag(string? tagName)
     {
         if (string.IsNullOrWhiteSpace(tagName)) return;
 
-        _suppressSearch = true;
-        var applied = FilterGroups.Any(g => g.ActivateByName(tagName));
-        _suppressSearch = false;
+        if (_initTask != null) await _initTask.ConfigureAwait(true);
 
-        if (!applied) return;
+        _suppressSearch = true;
+        // Search across the whole catalog
+        SelectedStoreList = StoreListOptions.FirstOrDefault(o => string.IsNullOrEmpty(o.Value));
+        SearchQuery = string.Empty;
+
+        var applied = FilterGroups.Any(g => g.ActivateByName(tagName));
+
+        // If not found in loaded groups, resolve ad-hoc from tag catalog
+        if (!applied && _tagCatalog != null)
+        {
+            try
+            {
+                var cat = await _tagCatalog.GetCatalogAsync(_cts.Token).ConfigureAwait(true);
+                var clean = FilterGroupViewModel.CleanKey(tagName);
+                var found = cat.Values.FirstOrDefault(t =>
+                    string.Equals(t.Name, tagName, StringComparison.OrdinalIgnoreCase) ||
+                    FilterGroupViewModel.CleanKey(t.Name) == clean);
+
+                if (found != null)
+                {
+                    var targetGroup = FilterGroups.FirstOrDefault(g => g.Key == "genre") ?? FilterGroups.FirstOrDefault();
+                    if (targetGroup != null)
+                    {
+                        var opt = new FilterOptionItem(found.ToFacet(), found.Name, found.ProductCount);
+                        targetGroup.AddCustomOption(opt);
+                        applied = true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Could not resolve ad-hoc tag {Tag}", tagName);
+            }
+        }
+
+        _suppressSearch = false;
 
         CurrentPage = 1;
         RefreshActiveFilters();
         _ = SaveUsageAsync();
-        _ = RunSearchAsync();
+        await RunSearchAsync().ConfigureAwait(true);
     }
 
     /// <summary>
@@ -2113,20 +2208,6 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     /// Closes the detail panel and filters by the featured tags of the product that was open,
     /// which is what "similar games" means here.
     /// </summary>
-    /// <remarks>
-    /// The tags have to be found before they can be applied, and where they come from depends on
-    /// where the product did. A card from a faceted search already carries them. A card handed
-    /// over from Home does not: those come from the community feed and Steam's featured
-    /// categories, which ship a name and a capsule and nothing else — so the old version read an
-    /// empty list, returned, and left Explore sitting there unfiltered, which is exactly what
-    /// "similar games does nothing" was.
-    /// <para>
-    /// So: the card's own tags, else the tag ids Steam ships with a search row, else the store
-    /// page itself. And a tag only counts once a group has actually taken it — the filter panel
-    /// holds five thematic groups, not the whole catalogue, so walking the first four names and
-    /// hoping is how a title tagged entirely outside them ended up applying nothing.
-    /// </para>
-    /// </remarks>
     [RelayCommand]
     public async Task FindSimilarAsync(SearchResult? result)
     {
@@ -2134,6 +2215,8 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         if (target is null) return;
 
         CloseDetail();
+
+        if (_initTask != null) await _initTask.ConfigureAwait(true);
 
         var token = _cts.Token;
         var featured = await ResolveFeaturedTagsAsync(target, token).ConfigureAwait(true);
@@ -2149,6 +2232,9 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         }
 
         _suppressSearch = true;
+        // Search across the whole catalog
+        SelectedStoreList = StoreListOptions.FirstOrDefault(o => string.IsNullOrEmpty(o.Value));
+        SearchQuery = string.Empty;
         foreach (var group in FilterGroups) group.ClearSelection();
 
         var applied = new List<string>();

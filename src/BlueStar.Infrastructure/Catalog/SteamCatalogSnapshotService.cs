@@ -506,16 +506,12 @@ public sealed class SteamCatalogSnapshotService : ICatalogSnapshotService
                         relDateUtc = rUtc;
                     }
 
-                    // Price cents
+                    // Price cents: only pre-record Free games (0 cents). Paid games vary by region and discounts,
+                    // so leave null to let client query real-time regional store pricing.
                     int? priceCents = null;
                     if (el.TryGetProperty("is_free", out var isFreeProp) && isFreeProp.GetBoolean())
                     {
                         priceCents = 0;
-                    }
-                    else if (el.TryGetProperty("best_purchase_option", out var bpo) && bpo.TryGetProperty("final_price_in_cents", out var fpc))
-                    {
-                        if (fpc.ValueKind == JsonValueKind.Number && fpc.TryGetInt32(out var cents)) priceCents = cents;
-                        else if (fpc.ValueKind == JsonValueKind.String && int.TryParse(fpc.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedCents)) priceCents = parsedCents;
                     }
 
                     // Reviews
@@ -564,9 +560,9 @@ public sealed class SteamCatalogSnapshotService : ICatalogSnapshotService
                     }
 
                     string? priceText = null;
-                    if (priceCents.HasValue)
+                    if (priceCents.HasValue && priceCents.Value == 0)
                     {
-                        priceText = priceCents.Value == 0 ? "Free" : $"${priceCents.Value / 100.0:F2}";
+                        priceText = "Free";
                     }
 
                     result.Add(new AppMetadataEnrichment(

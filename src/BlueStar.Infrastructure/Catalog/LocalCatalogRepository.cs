@@ -105,7 +105,11 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
                         price_cents INTEGER,
                         drm_name TEXT,
                         launcher_name TEXT,
-                        dlc_count INTEGER NOT NULL DEFAULT 0
+                        dlc_count INTEGER NOT NULL DEFAULT 0,
+                        anticheat_name TEXT,
+                        account_name TEXT,
+                        eula_name TEXT,
+                        is_enriched INTEGER NOT NULL DEFAULT 0
                     );
 
                     CREATE TABLE IF NOT EXISTS catalog_metadata (
@@ -128,6 +132,14 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
                 altCmd.CommandText = "ALTER TABLE apps ADD COLUMN launcher_name TEXT;";
                 try { await altCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false); } catch { }
                 altCmd.CommandText = "ALTER TABLE apps ADD COLUMN dlc_count INTEGER DEFAULT 0;";
+                try { await altCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false); } catch { }
+                altCmd.CommandText = "ALTER TABLE apps ADD COLUMN anticheat_name TEXT;";
+                try { await altCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false); } catch { }
+                altCmd.CommandText = "ALTER TABLE apps ADD COLUMN account_name TEXT;";
+                try { await altCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false); } catch { }
+                altCmd.CommandText = "ALTER TABLE apps ADD COLUMN eula_name TEXT;";
+                try { await altCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false); } catch { }
+                altCmd.CommandText = "ALTER TABLE apps ADD COLUMN is_enriched INTEGER DEFAULT 0;";
                 try { await altCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false); } catch { }
             }
 
@@ -308,14 +320,14 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
                 negative_reviews, rating_updated_at, header_image_url, price_text,
                 discount_percent, release_date_text, has_windows, has_mac, has_linux,
                 is_nsfw, has_drm, has_external_launcher, tag_ids, release_date_utc, price_cents,
-                drm_name, launcher_name, dlc_count
+                drm_name, launcher_name, dlc_count, anticheat_name, account_name, eula_name, is_enriched
             ) VALUES (
                 @app_id, @name, @normalized_name, @compact_name, @app_type, @last_modified,
                 @price_change_number, @review_percent, @review_count, @positive_reviews,
                 @negative_reviews, @rating_updated_at, @header_image_url, @price_text,
                 @discount_percent, @release_date_text, @has_windows, @has_mac, @has_linux,
                 @is_nsfw, @has_drm, @has_external_launcher, @tag_ids, @release_date_utc, @price_cents,
-                @drm_name, @launcher_name, @dlc_count
+                @drm_name, @launcher_name, @dlc_count, @anticheat_name, @account_name, @eula_name, @is_enriched
             )
             ON CONFLICT(app_id) DO UPDATE SET
                 name = excluded.name,
@@ -342,6 +354,10 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
                 drm_name = COALESCE(excluded.drm_name, apps.drm_name),
                 launcher_name = COALESCE(excluded.launcher_name, apps.launcher_name),
                 dlc_count = CASE WHEN excluded.dlc_count > 0 THEN excluded.dlc_count ELSE apps.dlc_count END,
+                anticheat_name = COALESCE(excluded.anticheat_name, apps.anticheat_name),
+                account_name = COALESCE(excluded.account_name, apps.account_name),
+                eula_name = COALESCE(excluded.eula_name, apps.eula_name),
+                is_enriched = CASE WHEN excluded.is_enriched = 1 THEN 1 ELSE apps.is_enriched END,
                 tag_ids = COALESCE(excluded.tag_ids, apps.tag_ids),
                 release_date_utc = COALESCE(excluded.release_date_utc, apps.release_date_utc),
                 price_cents = COALESCE(excluded.price_cents, apps.price_cents);
@@ -375,6 +391,10 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
         var pDrmName = cmd.Parameters.Add("@drm_name", SqliteType.Text);
         var pLauncherName = cmd.Parameters.Add("@launcher_name", SqliteType.Text);
         var pDlcCount = cmd.Parameters.Add("@dlc_count", SqliteType.Integer);
+        var pAntiCheat = cmd.Parameters.Add("@anticheat_name", SqliteType.Text);
+        var pAccount = cmd.Parameters.Add("@account_name", SqliteType.Text);
+        var pEula = cmd.Parameters.Add("@eula_name", SqliteType.Text);
+        var pIsEnriched = cmd.Parameters.Add("@is_enriched", SqliteType.Integer);
 
         foreach (var app in apps)
         {
@@ -418,6 +438,10 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             pDrmName.Value = (object?)app.DrmName ?? DBNull.Value;
             pLauncherName.Value = (object?)app.LauncherName ?? DBNull.Value;
             pDlcCount.Value = app.DlcCount.HasValue ? app.DlcCount.Value : 0;
+            pAntiCheat.Value = (object?)app.AntiCheatName ?? DBNull.Value;
+            pAccount.Value = (object?)app.AccountName ?? DBNull.Value;
+            pEula.Value = (object?)app.EulaName ?? DBNull.Value;
+            pIsEnriched.Value = app.IsEnriched ? 1 : 0;
 
             await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         }
@@ -615,17 +639,30 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
 
             if (hasGames && !hasSoftware)
             {
-                whereClauses.Add("LOWER(a.app_type) = 'game'");
+                whereClauses.Add("(LOWER(a.app_type) = 'game' AND a.tag_ids NOT LIKE '%,8013,%' AND a.tag_ids NOT LIKE '%,87,%' AND a.tag_ids NOT LIKE '%,84,%' AND a.tag_ids NOT LIKE '%,872,%' AND a.tag_ids NOT LIKE '%,1027,%')");
             }
             else if (hasSoftware && !hasGames)
             {
-                whereClauses.Add("LOWER(a.app_type) IN ('software', 'application', 'tool', 'utility')");
+                whereClauses.Add("(LOWER(a.app_type) IN ('software', 'application', 'tool', 'utility') OR a.tag_ids LIKE '%,8013,%' OR a.tag_ids LIKE '%,87,%' OR a.tag_ids LIKE '%,84,%' OR a.tag_ids LIKE '%,872,%' OR a.tag_ids LIKE '%,1027,%' OR a.tag_ids LIKE '%,784,%' OR a.tag_ids LIKE '%,1445,%')");
             }
         }
 
         // Content filters
-        if (query.NoDrm == true) whereClauses.Add("a.has_drm = 0");
-        if (query.NoExternalLauncher == true) whereClauses.Add("a.has_external_launcher = 0");
+        if (query.NoDrm == true) whereClauses.Add("a.has_drm = 0 AND (a.drm_name IS NULL OR a.drm_name = '')");
+        else if (query.NoDrm == false) whereClauses.Add("(a.has_drm = 1 OR (a.drm_name IS NOT NULL AND a.drm_name != ''))");
+
+        if (query.NoExternalLauncher == true) whereClauses.Add("a.has_external_launcher = 0 AND (a.launcher_name IS NULL OR a.launcher_name = '')");
+        else if (query.NoExternalLauncher == false) whereClauses.Add("(a.has_external_launcher = 1 OR (a.launcher_name IS NOT NULL AND a.launcher_name != ''))");
+
+        if (query.NoAntiCheat == true) whereClauses.Add("(a.anticheat_name IS NULL OR a.anticheat_name = '')");
+        else if (query.NoAntiCheat == false) whereClauses.Add("(a.anticheat_name IS NOT NULL AND a.anticheat_name != '')");
+
+        if (query.NoAccount == true) whereClauses.Add("(a.account_name IS NULL OR a.account_name = '') AND a.has_external_launcher = 0");
+        else if (query.NoAccount == false) whereClauses.Add("((a.account_name IS NOT NULL AND a.account_name != '') OR a.has_external_launcher = 1)");
+
+        if (query.NoEula == true) whereClauses.Add("(a.eula_name IS NULL OR a.eula_name = '')");
+        else if (query.NoEula == false) whereClauses.Add("(a.eula_name IS NOT NULL AND a.eula_name != '')");
+
         if (query.HideAdult == true) whereClauses.Add("a.is_nsfw = 0");
         if (query.DiscountedOnly == true) whereClauses.Add("a.discount_percent > 0");
         if (query.MaxPriceCents.HasValue)
@@ -1135,6 +1172,38 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
         }
         catch { }
 
+        string? antiCheatName = null;
+        try
+        {
+            var acOrd = reader.GetOrdinal("anticheat_name");
+            if (acOrd >= 0 && !reader.IsDBNull(acOrd)) antiCheatName = reader.GetString(acOrd);
+        }
+        catch { }
+
+        string? accountName = null;
+        try
+        {
+            var accOrd = reader.GetOrdinal("account_name");
+            if (accOrd >= 0 && !reader.IsDBNull(accOrd)) accountName = reader.GetString(accOrd);
+        }
+        catch { }
+
+        string? eulaName = null;
+        try
+        {
+            var euOrd = reader.GetOrdinal("eula_name");
+            if (euOrd >= 0 && !reader.IsDBNull(euOrd)) eulaName = reader.GetString(euOrd);
+        }
+        catch { }
+
+        bool isEnriched = false;
+        try
+        {
+            var enrOrd = reader.GetOrdinal("is_enriched");
+            if (enrOrd >= 0 && !reader.IsDBNull(enrOrd)) isEnriched = reader.GetInt32(enrOrd) == 1;
+        }
+        catch { }
+
         return new CatalogAppItem
         {
             AppId = appId,
@@ -1164,7 +1233,14 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             HasExternalLauncher = hasExternalLauncher || !string.IsNullOrWhiteSpace(launcherName),
             LauncherName = launcherName,
             DlcCount = dlcCount,
-            TagIds = tagIds
+            TagIds = tagIds,
+            AntiCheatName = antiCheatName,
+            HasAntiCheat = !string.IsNullOrWhiteSpace(antiCheatName),
+            AccountName = accountName,
+            HasAccount = !string.IsNullOrWhiteSpace(accountName) || hasExternalLauncher,
+            EulaName = eulaName,
+            HasEula = !string.IsNullOrWhiteSpace(eulaName),
+            IsEnriched = isEnriched || !string.IsNullOrWhiteSpace(antiCheatName) || !string.IsNullOrWhiteSpace(accountName) || !string.IsNullOrWhiteSpace(eulaName) || !string.IsNullOrWhiteSpace(drmName)
         };
     }
 
@@ -1221,7 +1297,11 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
                     has_external_launcher = CASE WHEN @launcher IS NOT NULL AND @launcher != '' THEN 1 ELSE has_external_launcher END,
                     dlc_count = CASE WHEN @dlc IS NOT NULL AND @dlc > 0 THEN @dlc ELSE dlc_count END,
                     release_date_text = COALESCE(@relText, release_date_text),
-                    price_text = COALESCE(@priceText, price_text)
+                    price_text = COALESCE(@priceText, price_text),
+                    anticheat_name = COALESCE(@antiCheat, anticheat_name),
+                    account_name = COALESCE(@account, account_name),
+                    eula_name = COALESCE(@eula, eula_name),
+                    is_enriched = CASE WHEN @isEnriched = 1 THEN 1 ELSE is_enriched END
                 WHERE app_id = @id;
                 """;
 
@@ -1240,6 +1320,10 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             var pDlc = cmd.Parameters.Add("@dlc", SqliteType.Integer);
             var pRelText = cmd.Parameters.Add("@relText", SqliteType.Text);
             var pPriceText = cmd.Parameters.Add("@priceText", SqliteType.Text);
+            var pAntiCheat = cmd.Parameters.Add("@antiCheat", SqliteType.Text);
+            var pAccount = cmd.Parameters.Add("@account", SqliteType.Text);
+            var pEula = cmd.Parameters.Add("@eula", SqliteType.Text);
+            var pIsEnriched = cmd.Parameters.Add("@isEnriched", SqliteType.Integer);
 
             foreach (var item in batch)
             {
@@ -1258,6 +1342,10 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
                 pDlc.Value = (object?)item.DlcCount ?? DBNull.Value;
                 pRelText.Value = (object?)item.ReleaseDateText ?? DBNull.Value;
                 pPriceText.Value = (object?)item.PriceText ?? DBNull.Value;
+                pAntiCheat.Value = (object?)item.AntiCheatName ?? DBNull.Value;
+                pAccount.Value = (object?)item.AccountName ?? DBNull.Value;
+                pEula.Value = (object?)item.EulaName ?? DBNull.Value;
+                pIsEnriched.Value = item.IsEnriched ? 1 : 0;
 
                 await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             }
@@ -1271,7 +1359,15 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
     }
 
     /// <inheritdoc />
-    public async Task UpdateAppDrmAndLauncherAsync(uint appId, string? drmName, string? launcherName, int? dlcCount, CancellationToken ct = default)
+    public async Task UpdateAppDrmAndLauncherAsync(
+        uint appId,
+        string? drmName,
+        string? launcherName,
+        int? dlcCount,
+        string? antiCheatName = null,
+        string? accountName = null,
+        string? eulaName = null,
+        CancellationToken ct = default)
     {
         await InitializeAsync(ct).ConfigureAwait(false);
 
@@ -1288,13 +1384,20 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
                     has_drm = CASE WHEN @drm IS NOT NULL AND @drm != '' THEN 1 ELSE has_drm END,
                     launcher_name = COALESCE(@launcher, launcher_name),
                     has_external_launcher = CASE WHEN @launcher IS NOT NULL AND @launcher != '' THEN 1 ELSE has_external_launcher END,
-                    dlc_count = CASE WHEN @dlc IS NOT NULL AND @dlc > 0 THEN @dlc ELSE dlc_count END
+                    dlc_count = CASE WHEN @dlc IS NOT NULL AND @dlc > 0 THEN @dlc ELSE dlc_count END,
+                    anticheat_name = COALESCE(@antiCheat, anticheat_name),
+                    account_name = COALESCE(@account, account_name),
+                    eula_name = COALESCE(@eula, eula_name),
+                    is_enriched = 1
                 WHERE app_id = @id;
                 """;
             cmd.Parameters.AddWithValue("@id", appId);
             cmd.Parameters.AddWithValue("@drm", (object?)drmName ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@launcher", (object?)launcherName ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@dlc", (object?)dlcCount ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@antiCheat", (object?)antiCheatName ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@account", (object?)accountName ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@eula", (object?)eulaName ?? DBNull.Value);
 
             await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         }

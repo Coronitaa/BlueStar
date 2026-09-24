@@ -35,6 +35,9 @@ public sealed record SearchRequest
     public int? MaxRatingPercent { get; init; }
     public bool? NoDrm { get; init; }
     public bool? NoExternalLauncher { get; init; }
+    public bool? NoAntiCheat { get; init; }
+    public bool? NoAccount { get; init; }
+    public bool? NoEula { get; init; }
     public bool? HideAdult { get; init; }
     public bool? DiscountedOnly { get; init; }
     public int? MaxPriceCents { get; init; }
