@@ -451,8 +451,8 @@ public sealed class SearchPipeline : ISearchPipeline
                 items = items.Where(i =>
                 {
                     var dt = ParseReleaseDate(i.ReleaseDateText);
-                    if (dt == DateTime.MinValue) return true; // keep upcoming/unreleased items
-                    return dt >= cutoff;
+                    if (dt == null) return true; // keep upcoming/unreleased items
+                    return dt.Value >= cutoff;
                 }).ToList();
             }
 
@@ -729,21 +729,69 @@ public sealed class SearchPipeline : ISearchPipeline
         };
     }
 
-    private static DateTime ParseReleaseDate(string? text)
+    public static DateTime? ParseReleaseDate(string? text)
     {
-        if (string.IsNullOrWhiteSpace(text)) return DateTime.MinValue;
+        if (string.IsNullOrWhiteSpace(text)) return null;
         var trimmed = text.Trim();
-        if (DateTime.TryParse(trimmed, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt)) return dt;
-        if (DateTime.TryParse(trimmed, CultureInfo.CurrentCulture, DateTimeStyles.None, out dt)) return dt;
-        if (DateTime.TryParse(trimmed, CultureInfo.GetCultureInfo("en-US"), DateTimeStyles.None, out dt)) return dt;
 
-        var match = System.Text.RegularExpressions.Regex.Match(trimmed, @"\b(19\d\d|20\d\d)\b");
-        if (match.Success && int.TryParse(match.Value, out var year))
+        // 1. Standard DateTime parsing
+        if (DateTime.TryParse(trimmed, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt)) return dt;
+        if (DateTime.TryParse(trimmed, CultureInfo.GetCultureInfo("en-US"), DateTimeStyles.None, out dt)) return dt;
+        if (DateTime.TryParse(trimmed, CultureInfo.CurrentCulture, DateTimeStyles.None, out dt)) return dt;
+
+        // 2. Quarters: "Q1 2027", "2027 Q2", "1Q 2026", "Q4 2026"
+        var qMatch = System.Text.RegularExpressions.Regex.Match(trimmed, @"(?:Q([1-4])\s*(\d{4})|(\d{4})\s*Q([1-4])|([1-4])Q\s*(\d{4}))", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (qMatch.Success)
         {
-            return new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            var qStr = qMatch.Groups[1].Success ? qMatch.Groups[1].Value : (qMatch.Groups[4].Success ? qMatch.Groups[4].Value : qMatch.Groups[5].Value);
+            var yStr = qMatch.Groups[2].Success ? qMatch.Groups[2].Value : (qMatch.Groups[3].Success ? qMatch.Groups[3].Value : qMatch.Groups[6].Value);
+            if (int.TryParse(qStr, out var quarter) && int.TryParse(yStr, out var qYear))
+            {
+                var month = quarter switch { 1 => 1, 2 => 4, 3 => 7, 4 => 10, _ => 1 };
+                return new DateTime(qYear, month, 1, 0, 0, 0, DateTimeKind.Utc);
+            }
         }
 
-        return DateTime.MinValue;
+        // 3. Seasons: "Spring 2027", "Fall 2026", "Primavera 2026"
+        var seasonMatch = System.Text.RegularExpressions.Regex.Match(trimmed, @"\b(Spring|Summer|Fall|Autumn|Winter|Primavera|Verano|Otoño|Invierno)\s*(\d{4})\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (seasonMatch.Success && int.TryParse(seasonMatch.Groups[2].Value, out var sYear))
+        {
+            var season = seasonMatch.Groups[1].Value.ToLowerInvariant();
+            var month = season switch
+            {
+                "spring" or "primavera" => 3,
+                "summer" or "verano" => 6,
+                "fall" or "autumn" or "otoño" => 9,
+                "winter" or "invierno" => 12,
+                _ => 1
+            };
+            return new DateTime(sYear, month, 1, 0, 0, 0, DateTimeKind.Utc);
+        }
+
+        // 4. Early / Mid / Late + Year: "Late 2026", "Early 2027"
+        var modifierMatch = System.Text.RegularExpressions.Regex.Match(trimmed, @"\b(Early|Mid|Late)\s*(\d{4})\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (modifierMatch.Success && int.TryParse(modifierMatch.Groups[2].Value, out var mYear))
+        {
+            var mod = modifierMatch.Groups[1].Value.ToLowerInvariant();
+            var month = mod switch { "early" => 2, "mid" => 6, "late" => 10, _ => 1 };
+            return new DateTime(mYear, month, 1, 0, 0, 0, DateTimeKind.Utc);
+        }
+
+        // 5. Month and Year: "October 2026", "Nov 2027"
+        var myMatch = System.Text.RegularExpressions.Regex.Match(trimmed, @"\b(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[,\s]+(\d{4})\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (myMatch.Success && DateTime.TryParse(myMatch.Value, CultureInfo.GetCultureInfo("en-US"), DateTimeStyles.None, out var myDt))
+        {
+            return myDt;
+        }
+
+        // 6. Year alone: "2026", "2027"
+        var match = System.Text.RegularExpressions.Regex.Match(trimmed, @"\b(19\d\d|20\d\d)\b");
+        if (match.Success && int.TryParse(match.Value, out var plainYear))
+        {
+            return new DateTime(plainYear, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        }
+
+        return null;
     }
 
     private static decimal ParsePrice(string? text)
@@ -791,20 +839,30 @@ public sealed class SearchPipeline : ISearchPipeline
                 : items.OrderBy(i => i.AppId).ToList(),
             "price" => descending
                 ? items.Select(i => (Item: i, Price: ParsePrice(i.PriceText), Date: ParseReleaseDate(i.ReleaseDateText)))
-                       .OrderByDescending(p => p.Price).ThenByDescending(p => p.Date).ThenByDescending(p => p.Item.AppId)
+                       .OrderByDescending(p => p.Price)
+                       .ThenByDescending(p => p.Date.HasValue)
+                       .ThenByDescending(p => p.Date)
+                       .ThenByDescending(p => p.Item.AppId)
                        .Select(p => p.Item).ToList()
                 : items.Select(i => (Item: i, Price: ParsePrice(i.PriceText), Date: ParseReleaseDate(i.ReleaseDateText)))
-                       .OrderBy(p => p.Price).ThenByDescending(p => p.Date).ThenBy(p => p.Item.AppId)
+                       .OrderBy(p => p.Price)
+                       .ThenByDescending(p => p.Date.HasValue)
+                       .ThenByDescending(p => p.Date)
+                       .ThenBy(p => p.Item.AppId)
                        .Select(p => p.Item).ToList(),
             "discount" => descending
                 ? items.OrderByDescending(i => i.DiscountPercent).ThenByDescending(i => i.AppId).ToList()
                 : items.OrderBy(i => i.DiscountPercent).ThenBy(i => i.AppId).ToList(),
             "released" => descending
                 ? items.Select(i => (Item: i, Date: ParseReleaseDate(i.ReleaseDateText)))
-                       .OrderByDescending(p => p.Date).ThenByDescending(p => p.Item.AppId)
+                       .OrderByDescending(p => p.Date.HasValue) // Confirmed dates first, TBA/null at the end
+                       .ThenByDescending(p => p.Date)
+                       .ThenByDescending(p => p.Item.AppId)
                        .Select(p => p.Item).ToList()
                 : items.Select(i => (Item: i, Date: ParseReleaseDate(i.ReleaseDateText)))
-                       .OrderBy(p => p.Date).ThenBy(p => p.Item.AppId)
+                       .OrderByDescending(p => p.Date.HasValue) // Confirmed dates first, TBA/null at the end
+                       .ThenBy(p => p.Date)
+                       .ThenBy(p => p.Item.AppId)
                        .Select(p => p.Item).ToList(),
             "deckcompatdate" or "deck" => descending
                 ? items.OrderByDescending(i => i.DeckCompatibility ?? string.Empty).ThenByDescending(i => i.AppId).ToList()

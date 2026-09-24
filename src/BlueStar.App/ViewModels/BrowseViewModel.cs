@@ -1817,6 +1817,18 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     /// </remarks>
     partial void OnSelectedSortChanged(SortOptionItem? value)
     {
+        var isComingSoon = string.Equals(SelectedStoreList?.Value, "comingsoon", StringComparison.OrdinalIgnoreCase);
+
+        // Under "Coming soon", Price sort is deactivated
+        if (isComingSoon && string.Equals(value?.Value, "Price", StringComparison.OrdinalIgnoreCase))
+        {
+            _suppressSearch = true;
+            SelectedSort = SortOptions.FirstOrDefault(o => string.IsNullOrEmpty(o.Value))
+                           ?? SortOptions.FirstOrDefault();
+            _suppressSearch = false;
+            return;
+        }
+
         if (!CanChooseSort && !string.IsNullOrEmpty(value?.Value))
         {
             _suppressSearch = true;
@@ -1830,9 +1842,17 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
 
         // Each field has a direction people mean by default: newest first, best reviewed first,
         // but A-Z and cheapest first. The button is there to disagree.
+        // For Coming soon with Released, default to soonest upcoming first (ascending).
         if (!string.IsNullOrEmpty(value?.Value))
         {
-            IsSortDescending = SteamStoreFacets.PrefersDescending(value.Value);
+            if (isComingSoon && string.Equals(value.Value, "Released", StringComparison.OrdinalIgnoreCase))
+            {
+                IsSortDescending = false;
+            }
+            else
+            {
+                IsSortDescending = SteamStoreFacets.PrefersDescending(value.Value);
+            }
         }
 
         if (_suppressSearch) return;
@@ -1847,6 +1867,30 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     /// </summary>
     partial void OnSelectedStoreListChanged(SortOptionItem? value)
     {
+        var isComingSoon = string.Equals(value?.Value, "comingsoon", StringComparison.OrdinalIgnoreCase);
+
+        // Under "Coming soon", Price sort option is disabled
+        var priceOption = SortOptions.FirstOrDefault(o => o.Value.Equals("Price", StringComparison.OrdinalIgnoreCase));
+        if (priceOption != null)
+        {
+            priceOption.IsEnabled = !isComingSoon;
+        }
+
+        // If Price was selected before switching to Coming soon, reset to 'No particular order'
+        if (isComingSoon && string.Equals(SelectedSort?.Value, "Price", StringComparison.OrdinalIgnoreCase))
+        {
+            _suppressSearch = true;
+            SelectedSort = SortOptions.FirstOrDefault(o => string.IsNullOrEmpty(o.Value))
+                           ?? SortOptions.FirstOrDefault();
+            _suppressSearch = false;
+        }
+
+        // When switching to Coming soon with Released selected, default to soonest upcoming first (ascending)
+        if (isComingSoon && string.Equals(SelectedSort?.Value, "Released", StringComparison.OrdinalIgnoreCase))
+        {
+            IsSortDescending = false;
+        }
+
         var allowsSort = SteamStoreFacets.AllowsSorting(value?.Value);
         if (!allowsSort && !string.IsNullOrEmpty(SelectedSort?.Value))
         {

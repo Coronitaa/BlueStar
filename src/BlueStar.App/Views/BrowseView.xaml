@@ -669,7 +669,13 @@
                           AutomationProperties.Name="{DynamicResource String_SortBy}"
                           ItemsSource="{Binding SortOptions}" SelectedItem="{Binding SelectedSort}"
                           DisplayMemberPath="DisplayName" MinWidth="152"
-                          IsEnabled="{Binding CanChooseSort}"/>
+                          IsEnabled="{Binding CanChooseSort}">
+                    <ComboBox.ItemContainerStyle>
+                        <Style TargetType="ComboBoxItem" BasedOn="{StaticResource DarkComboBoxItem}">
+                            <Setter Property="IsEnabled" Value="{Binding IsEnabled}"/>
+                        </Style>
+                    </ComboBox.ItemContainerStyle>
+                </ComboBox>
 
                 <!-- Direction. -->
                 <Button Margin="6,0,0,0" Width="34" Height="34" Padding="0"

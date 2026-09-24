@@ -458,6 +458,110 @@ public class BrowseViewModelPhase1RegressionTests
         Assert.True(vm.HasMoreResults, "HasMoreResults must remain true while offset < TotalCount");
     }
 
+    /// <summary>
+    /// TEST T — Coming Soon: Price Sort Must Be Disabled and Reset to None If Selected
+    /// </summary>
+    [Fact]
+    public void TestT_ComingSoon_PriceSortMustBeDisabled_AndResetToNoneIfSelected()
+    {
+        var vm = CreateViewModel();
+
+        // 1. Initially on Whole catalog, Price sort option must be enabled
+        var priceOption = vm.SortOptions.First(o => o.Value.Equals("Price", StringComparison.OrdinalIgnoreCase));
+        Assert.True(priceOption.IsEnabled, "Price sort should be enabled for general catalog");
+
+        // 2. Select Price sort
+        vm.SelectedSort = priceOption;
+        Assert.Equal("Price", vm.SelectedSort?.Value);
+
+        // 3. Switch to 'Coming soon'
+        var comingSoonOption = vm.StoreListOptions.First(o => o.Value.Equals("comingsoon", StringComparison.OrdinalIgnoreCase));
+        vm.SelectedStoreList = comingSoonOption;
+
+        // Price option must now be disabled, and SelectedSort must have reset to 'No particular order' (empty)
+        Assert.False(priceOption.IsEnabled, "Price sort must be disabled when Coming soon is selected");
+        Assert.True(string.IsNullOrEmpty(vm.SelectedSort?.Value), "SelectedSort must reset to empty (No particular order) when entering Coming soon");
+
+        // 4. Attempting to select Price sort while Coming soon is active must be rejected
+        vm.SelectedSort = priceOption;
+        Assert.True(string.IsNullOrEmpty(vm.SelectedSort?.Value), "Selecting Price sort while Coming soon is active must remain rejected/empty");
+
+        // 5. Switching back away from Coming soon (e.g. to Whole catalog) must re-enable Price
+        var wholeCatalogOption = vm.StoreListOptions.First(o => string.IsNullOrEmpty(o.Value));
+        vm.SelectedStoreList = wholeCatalogOption;
+        Assert.True(priceOption.IsEnabled, "Price sort must be re-enabled when exiting Coming soon");
+    }
+
+    /// <summary>
+    /// TEST U — Coming Soon: Release Date Sort Must Default to Ascending (Soonest First)
+    /// </summary>
+    [Fact]
+    public void TestU_ComingSoon_ReleaseDateSort_MustBeAscendingSoonestFirst()
+    {
+        var vm = CreateViewModel();
+        var comingSoonOption = vm.StoreListOptions.First(o => o.Value.Equals("comingsoon", StringComparison.OrdinalIgnoreCase));
+        vm.SelectedStoreList = comingSoonOption;
+
+        var releasedOption = vm.SortOptions.First(o => o.Value.Equals("Released", StringComparison.OrdinalIgnoreCase));
+        vm.SelectedSort = releasedOption;
+
+        // In Coming soon, Released must default to Ascending (soonest upcoming release first, IsSortDescending = false)
+        Assert.False(vm.IsSortDescending, "Coming soon + Released must default to Ascending (soonest first)");
+    }
+
+    /// <summary>
+    /// TEST V — SearchPipeline: Future Release Dates, Quarters, and TBA NULLS LAST
+    /// </summary>
+    [Fact]
+    public void TestV_ReleaseDate_FutureDatesAndQuarters_ParsedAndSortedChronologically()
+    {
+        // Test parsing of various Steam upcoming release formats
+        var d1 = BlueStar.Infrastructure.Search.SearchPipeline.ParseReleaseDate("Q1 2027");
+        Assert.NotNull(d1);
+        Assert.Equal(2027, d1.Value.Year);
+        Assert.Equal(1, d1.Value.Month);
+
+        var d2 = BlueStar.Infrastructure.Search.SearchPipeline.ParseReleaseDate("Spring 2026");
+        Assert.NotNull(d2);
+        Assert.Equal(2026, d2.Value.Year);
+        Assert.Equal(3, d2.Value.Month);
+
+        var d3 = BlueStar.Infrastructure.Search.SearchPipeline.ParseReleaseDate("Late 2026");
+        Assert.NotNull(d3);
+        Assert.Equal(2026, d3.Value.Year);
+        Assert.Equal(10, d3.Value.Month);
+
+        var d4 = BlueStar.Infrastructure.Search.SearchPipeline.ParseReleaseDate("To be announced");
+        Assert.Null(d4);
+
+        // Test sorting in ApplyLocalSort: Ascending (soonest first)
+        var items = new List<SearchResult>
+        {
+            new SearchResult { AppId = 1, Name = "TBA Game", ReleaseDateText = "Coming Soon" },
+            new SearchResult { AppId = 2, Name = "Late 2026 Game", ReleaseDateText = "Late 2026" },
+            new SearchResult { AppId = 3, Name = "Spring 2026 Game", ReleaseDateText = "Spring 2026" },
+            new SearchResult { AppId = 4, Name = "2027 Game", ReleaseDateText = "Q1 2027" },
+            new SearchResult { AppId = 5, Name = "Unannounced", ReleaseDateText = "To be announced" },
+        };
+
+        var sortedAsc = BlueStar.Infrastructure.Search.SearchPipeline.ApplyLocalSort(items, "released", descending: false);
+
+        // Ascending: Spring 2026 (Mar 2026) -> Late 2026 (Oct 2026) -> Q1 2027 -> TBA/Unannounced at the very end!
+        Assert.Equal((uint)3, sortedAsc[0].AppId); // Spring 2026
+        Assert.Equal((uint)2, sortedAsc[1].AppId); // Late 2026
+        Assert.Equal((uint)4, sortedAsc[2].AppId); // Q1 2027
+        Assert.Contains(sortedAsc[3].AppId, new uint[] { 1, 5 }); // TBA
+        Assert.Contains(sortedAsc[4].AppId, new uint[] { 1, 5 }); // TBA
+
+        // Descending: Furthest first -> Q1 2027 -> Late 2026 -> Spring 2026 -> TBA at the end!
+        var sortedDesc = BlueStar.Infrastructure.Search.SearchPipeline.ApplyLocalSort(items, "released", descending: true);
+        Assert.Equal((uint)4, sortedDesc[0].AppId); // Q1 2027
+        Assert.Equal((uint)2, sortedDesc[1].AppId); // Late 2026
+        Assert.Equal((uint)3, sortedDesc[2].AppId); // Spring 2026
+        Assert.Contains(sortedDesc[3].AppId, new uint[] { 1, 5 }); // TBA
+        Assert.Contains(sortedDesc[4].AppId, new uint[] { 1, 5 }); // TBA
+    }
+
     private sealed class SpySearchPipeline : ISearchPipeline
     {
         public SearchRequest? LastRequest { get; private set; }

@@ -210,22 +210,9 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
 
     public static long? ParseReleaseDateToUtcSeconds(string? text)
     {
-        if (string.IsNullOrWhiteSpace(text)) return null;
-        var trimmed = text.Trim();
-        if (DateTime.TryParse(trimmed, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
-            return new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc)).ToUnixTimeSeconds();
-        if (DateTime.TryParse(trimmed, CultureInfo.CurrentCulture, DateTimeStyles.None, out dt))
-            return new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc)).ToUnixTimeSeconds();
-        if (DateTime.TryParse(trimmed, CultureInfo.GetCultureInfo("en-US"), DateTimeStyles.None, out dt))
-            return new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc)).ToUnixTimeSeconds();
-
-        var match = System.Text.RegularExpressions.Regex.Match(trimmed, @"\b(19\d\d|20\d\d)\b");
-        if (match.Success && int.TryParse(match.Value, out var year))
-        {
-            return new DateTimeOffset(new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Utc)).ToUnixTimeSeconds();
-        }
-
-        return null;
+        var dt = Search.SearchPipeline.ParseReleaseDate(text);
+        if (dt == null) return null;
+        return new DateTimeOffset(DateTime.SpecifyKind(dt.Value, DateTimeKind.Utc)).ToUnixTimeSeconds();
     }
 
     public static int? ParsePriceToCents(string? text)

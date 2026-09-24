@@ -154,6 +154,8 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
                 ? (_viewport.Width > 0 ? _viewport.Width : 1200)
                 : availableSize.Width;
 
+            if (availableWidth <= 0) availableWidth = 1200;
+
             int columns = Math.Max(1, (int)(availableWidth / itemWidth));
             int rows = (int)Math.Ceiling((double)itemCount / columns);
 
@@ -162,58 +164,20 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
 
             UpdateScrollDimensions(extentWidth, extentHeight, availableWidth, double.IsInfinity(availableSize.Height) ? extentHeight : availableSize.Height);
 
-            // Determine visible viewport range
-            double offsetY = _canVerticallyScroll ? _offset.Y : 0;
-            double viewportHeight = availableSize.Height;
-
-            if (double.IsInfinity(viewportHeight) || viewportHeight <= 0)
-            {
-                if (_ancestorScroller != null)
-                {
-                    try
-                    {
-                        var transform = TransformToAncestor(_ancestorScroller);
-                        var panelTopInScroller = transform.Transform(new Point(0, 0));
-                        offsetY = Math.Max(0, -panelTopInScroller.Y);
-                        viewportHeight = _ancestorScroller.ViewportHeight > 0 ? _ancestorScroller.ViewportHeight : _ancestorScroller.ActualHeight;
-                    }
-                    catch
-                    {
-                        viewportHeight = 1000;
-                    }
-                }
-                else
-                {
-                    viewportHeight = 1000;
-                }
-            }
-
-            int firstRow = Math.Max(0, (int)Math.Floor(offsetY / itemHeight) - 1);
-            int lastRow = Math.Min(rows - 1, (int)Math.Ceiling((offsetY + viewportHeight) / itemHeight) + 1);
-
-            if (firstRow > lastRow || firstRow * columns >= itemCount)
-            {
-                firstRow = 0;
-                lastRow = Math.Min(rows - 1, (int)Math.Ceiling(viewportHeight / itemHeight) + 1);
-            }
-
-            int firstIndex = Math.Clamp(firstRow * columns, 0, Math.Max(0, itemCount - 1));
-            int lastIndex = Math.Clamp(((lastRow + 1) * columns) - 1, firstIndex, Math.Max(0, itemCount - 1));
-
             var generator = ItemContainerGenerator;
             if (generator != null)
             {
-                var startPos = generator.GeneratorPositionFromIndex(firstIndex);
+                var startPos = generator.GeneratorPositionFromIndex(0);
                 int childIndex = (startPos.Offset == 0) ? startPos.Index : startPos.Index + 1;
 
                 using (generator.StartAt(startPos, GeneratorDirection.Forward, true))
                 {
-                    for (int i = firstIndex; i <= lastIndex; i++)
+                    for (int i = 0; i < itemCount; i++)
                     {
                         var child = generator.GenerateNext(out bool isNewlyRealized) as UIElement;
                         if (child == null) break;
 
-                        if (isNewlyRealized)
+                        if (isNewlyRealized || childIndex >= InternalChildren.Count || !ReferenceEquals(InternalChildren[childIndex], child))
                         {
                             if (childIndex >= InternalChildren.Count)
                             {
@@ -230,7 +194,10 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
                     }
                 }
 
-                CleanUpItems(firstIndex, lastIndex);
+                if (InternalChildren.Count > itemCount)
+                {
+                    RemoveInternalChildRange(itemCount, InternalChildren.Count - itemCount);
+                }
             }
             else
             {
@@ -259,86 +226,25 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         }
     }
 
-    private void CleanUpItems(int minIndex, int maxIndex)
-    {
-        var generator = ItemContainerGenerator;
-        if (generator == null) return;
-
-        for (int i = InternalChildren.Count - 1; i >= 0; i--)
-        {
-            try
-            {
-                var pos = new GeneratorPosition(i, 0);
-                int itemIndex = generator.IndexFromGeneratorPosition(pos);
-                if (itemIndex < 0 || itemIndex < minIndex || itemIndex > maxIndex)
-                {
-                    try
-                    {
-                        if (generator is IRecyclingItemContainerGenerator recyclingGen)
-                        {
-                            recyclingGen.Recycle(pos, 1);
-                        }
-                        else
-                        {
-                            generator.Remove(pos, 1);
-                        }
-                    }
-                    catch (Exception)
-                    {
-                        // Ignore generator desynchronization
-                    }
-                    RemoveInternalChildRange(i, 1);
-                }
-            }
-            catch (Exception)
-            {
-                // In case of generator desynchronization during rapid UI collection updates,
-                // safely remove visual child directly to prevent WPF layout crash
-                try
-                {
-                    RemoveInternalChildRange(i, 1);
-                }
-                catch
-                {
-                    // Ignore
-                }
-            }
-        }
-    }
-
     protected override Size ArrangeOverride(Size finalSize)
     {
         try
         {
-            var generator = ItemContainerGenerator;
             double itemWidth = ItemWidth > 0 ? ItemWidth : 300;
             double itemHeight = ItemHeight > 0 ? ItemHeight : 350;
 
             int columns = Math.Max(1, (int)(finalSize.Width / itemWidth));
-            double verticalOffset = _canVerticallyScroll ? _offset.Y : 0;
 
             for (int i = 0; i < InternalChildren.Count; i++)
             {
                 var child = InternalChildren[i];
                 if (child == null) continue;
 
-                int itemIndex = -1;
-                try
-                {
-                    itemIndex = generator?.IndexFromGeneratorPosition(new GeneratorPosition(i, 0)) ?? i;
-                }
-                catch
-                {
-                    itemIndex = i;
-                }
-
-                if (itemIndex < 0) itemIndex = i;
-
-                int row = itemIndex / columns;
-                int col = itemIndex % columns;
+                int row = i / columns;
+                int col = i % columns;
 
                 double x = col * itemWidth;
-                double y = (row * itemHeight) - verticalOffset;
+                double y = row * itemHeight;
 
                 child.Arrange(new Rect(x, y, itemWidth, itemHeight));
             }

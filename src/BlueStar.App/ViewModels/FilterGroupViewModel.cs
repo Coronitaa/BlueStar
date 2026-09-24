@@ -362,6 +362,18 @@ public partial class FilterGroupViewModel : ObservableObject
 /// <summary>
 /// One entry in the sort selector.
 /// </summary>
-/// <param name="Value">Steam's sort token, e.g. <c>Reviews_DESC</c>.</param>
-/// <param name="DisplayName">Label shown in the selector.</param>
-public sealed record SortOptionItem(string Value, string DisplayName);
+public sealed partial class SortOptionItem : ObservableObject
+{
+    public string Value { get; }
+    public string DisplayName { get; }
+
+    [ObservableProperty]
+    private bool _isEnabled = true;
+
+    public SortOptionItem(string value, string displayName, bool isEnabled = true)
+    {
+        Value = value;
+        DisplayName = displayName;
+        _isEnabled = isEnabled;
+    }
+}
