@@ -198,11 +198,10 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     private readonly List<SearchResult> _fetched = [];
 
     /// <summary>
-    /// Ceiling on how many cards stay alive at once. The card grid wraps rather than scrolling a
-    /// uniform list, so WPF cannot virtualise it; past this point the person narrows the filters
-    /// instead of scrolling forever.
+    /// Upper safety limit on loaded search cards. Allows deep scrolling through
+    /// many pages of titles while preventing unbounded memory consumption.
     /// </summary>
-    private const int MaxMaterialized = 200;
+    private const int MaxMaterialized = 500;
 
     /// <summary>
     /// One step of the search: a set of tags to require, and the term to require with them.
@@ -1520,6 +1519,15 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     /// </remarks>
     partial void OnSelectedSortChanged(SortOptionItem? value)
     {
+        if (!CanChooseSort && !string.IsNullOrEmpty(value?.Value))
+        {
+            _suppressSearch = true;
+            SelectedSort = SortOptions.FirstOrDefault(o => string.IsNullOrEmpty(o.Value))
+                           ?? SortOptions.FirstOrDefault();
+            _suppressSearch = false;
+            return;
+        }
+
         OnPropertyChanged(nameof(CanInvertSort));
 
         // Each field has a direction people mean by default: newest first, best reviewed first,
@@ -1536,10 +1544,20 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     }
 
     /// <summary>
-    /// Applies a newly chosen curated list, leaving the order alone.
+    /// Applies a newly chosen curated list. If the curated list disables custom sorting (e.g. Coming soon),
+    /// any previously active sort is automatically reset to 'No particular order'.
     /// </summary>
     partial void OnSelectedStoreListChanged(SortOptionItem? value)
     {
+        var allowsSort = SteamStoreFacets.AllowsSorting(value?.Value);
+        if (!allowsSort && !string.IsNullOrEmpty(SelectedSort?.Value))
+        {
+            _suppressSearch = true;
+            SelectedSort = SortOptions.FirstOrDefault(o => string.IsNullOrEmpty(o.Value))
+                           ?? SortOptions.FirstOrDefault();
+            _suppressSearch = false;
+        }
+
         OnPropertyChanged(nameof(CanChooseSort));
         OnPropertyChanged(nameof(CanInvertSort));
 

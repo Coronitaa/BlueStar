@@ -68,6 +68,10 @@ public sealed class SearchPipeline : ISearchPipeline
 
         // Normalize Sort and Direction
         var (sortBase, descending) = NormalizeSort(request.SortBy, request.Descending);
+        if (!SteamStoreFacets.AllowsSorting(request.Pool))
+        {
+            sortBase = string.Empty;
+        }
 
         // Stage 3: Store Browsing (No keyword query entered)
         // When browsing without an active search term, query the store according to the selected pool and filters.
@@ -376,6 +380,50 @@ public sealed class SearchPipeline : ISearchPipeline
         var isCuratedPool = !string.IsNullOrWhiteSpace(request.Pool) &&
                             !string.Equals(request.Pool, "all", StringComparison.OrdinalIgnoreCase);
 
+        // If general explore (pool is "all" or null), prioritize the local catalog candidate universe
+        // only when the local catalog is authoritative (full index, not a partial ad-hoc cache).
+        if (!isCuratedPool)
+        {
+            var completeness = await _localRepo.GetCompletenessAsync(ct).ConfigureAwait(false);
+            if (completeness.IsAuthoritative)
+            {
+                var localBrowseQuery = new LocalCatalogQuery
+                {
+                    Term = null,
+                    AppTypes = request.AppTypes,
+                    SortBy = sortBase,
+                    Descending = descending,
+                    HasWindows = request.HasWindows,
+                    HasMac = request.HasMac,
+                    HasLinux = request.HasLinux,
+                    MinRatingPercent = request.MinRatingPercent,
+                    MaxRatingPercent = request.MaxRatingPercent,
+                    NoDrm = request.NoDrm,
+                    NoExternalLauncher = request.NoExternalLauncher,
+                    HideAdult = request.HideAdult,
+                    DiscountedOnly = request.DiscountedOnly,
+                    IncludedTagIds = request.IncludedTagIds?.ToList(),
+                    ExcludedTagIds = request.ExcludedTagIds?.ToList(),
+                    RestrictToAppIds = request.RestrictToAppIds?.ToList(),
+                    Offset = request.Start,
+                    Limit = request.Count
+                };
+
+                var (localBrowseItems, totalLocalCount) = await _localRepo.QueryAsync(localBrowseQuery, ct).ConfigureAwait(false);
+                if (totalLocalCount > 0)
+                {
+                    return new SearchResponse
+                    {
+                        Items = localBrowseItems.Select(ToSearchResult).ToList(),
+                        TotalCount = totalLocalCount,
+                        Start = request.Start,
+                        ResolutionType = SearchResolutionType.FullText,
+                        IsFromLocalCatalog = true
+                    };
+                }
+            }
+        }
+
         // Curated pools (popularnew, globaltopsellers, comingsoon) have their own intrinsic Steam ranking.
         // Sending sort_by to Steam on curated lists breaks them (e.g. popularnew returns 2006-2017 games, or comingsoon breaks).
         // Therefore, for curated lists we fetch the natural pool and apply any user-selected sort locally.
@@ -392,8 +440,8 @@ public sealed class SearchPipeline : ISearchPipeline
         {
             var page = await _steamSearchService.SearchAsync(steamQuery, ct).ConfigureAwait(false);
 
-            // Anomaly validation
-            var validation = _validator.ValidateResponse(steamQuery, "{\"results_html\":\"ok\"}", page.Items, page.TotalCount);
+            // Anomaly validation using actual payload if available
+            var validation = _validator.ValidateResponse(steamQuery, page.RawPayload ?? "{\"results_html\":\"ok\"}", page.Items, page.TotalCount);
             IReadOnlyList<SearchResult> items = page.Items.Where(i => MatchesRequestFilters(i, request)).ToList();
 
             // When browsing "popularnew" (Popular new releases), filter out legacy releases
@@ -491,7 +539,7 @@ public sealed class SearchPipeline : ISearchPipeline
         try
         {
             var page = await _steamSearchService.SearchAsync(steamQuery, ct).ConfigureAwait(false);
-            var validation = _validator.ValidateResponse(steamQuery, "{\"results_html\":\"ok\"}", page.Items, page.TotalCount);
+            var validation = _validator.ValidateResponse(steamQuery, page.RawPayload ?? "{\"results_html\":\"ok\"}", page.Items, page.TotalCount);
             var items = page.Items.Where(i => MatchesRequestFilters(i, request)).ToList();
 
             if (!string.IsNullOrEmpty(sortBase))

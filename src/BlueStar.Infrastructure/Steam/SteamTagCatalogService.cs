@@ -32,6 +32,7 @@ public sealed class SteamTagCatalogService : ISteamTagCatalogService
     private readonly HttpClient _http;
     private readonly ISteamCatalogSearchService _search;
     private readonly ICacheService? _cache;
+    private readonly ILocalCatalogRepository? _localRepo;
     private readonly ILogger<SteamTagCatalogService> _logger;
     private readonly string _language;
 
@@ -46,18 +47,21 @@ public sealed class SteamTagCatalogService : ISteamTagCatalogService
     /// <param name="search">Search service, used to count how many products carry a tag.</param>
     /// <param name="logger">Logger instance.</param>
     /// <param name="cache">Optional persistent cache.</param>
+    /// <param name="localRepo">Optional local catalog repository for offline tag counting.</param>
     /// <param name="language">Steam language token for display names.</param>
     public SteamTagCatalogService(
         HttpClient http,
         ISteamCatalogSearchService search,
         ILogger<SteamTagCatalogService> logger,
         ICacheService? cache = null,
+        ILocalCatalogRepository? localRepo = null,
         string language = "english")
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _search = search ?? throw new ArgumentNullException(nameof(search));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _cache = cache;
+        _localRepo = localRepo;
         _language = string.IsNullOrWhiteSpace(language) ? "english" : language;
     }
 
@@ -163,6 +167,30 @@ public sealed class SteamTagCatalogService : ISteamTagCatalogService
 
         var pending = tags.Where(t => t is { ProductCount: null }).ToList();
         if (pending.Count == 0) return;
+
+        // Try local catalog first when available
+        if (_localRepo != null)
+        {
+            try
+            {
+                var completeness = await _localRepo.GetCompletenessAsync(ct).ConfigureAwait(false);
+                var localCounts = await _localRepo.GetTagCountsAsync(pending.Select(t => t.TagId), ct).ConfigureAwait(false);
+                foreach (var tag in pending)
+                {
+                    if (localCounts.TryGetValue(tag.TagId, out var count) && (count > 0 || completeness.TagsComplete))
+                    {
+                        tag.ProductCount = count;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to resolve tag counts from local catalog");
+            }
+
+            pending = tags.Where(t => t is { ProductCount: null }).ToList();
+            if (pending.Count == 0) return;
+        }
 
         // Two at a time: enough to feel instant, gentle enough not to trip Steam's rate limit.
         await Parallel.ForEachAsync(

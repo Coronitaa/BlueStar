@@ -11,7 +11,8 @@ namespace BlueStar.Core.Models;
 public sealed record SteamSearchPage(
     IReadOnlyList<SearchResult> Items,
     int TotalCount,
-    int Start)
+    int Start,
+    string? RawPayload = null)
 {
     /// <summary>An empty page, for failed or cancelled requests.</summary>
     public static SteamSearchPage Empty { get; } = new([], 0, 0);

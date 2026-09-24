@@ -189,4 +189,71 @@ public class LocalCatalogRepositoryTests : IDisposable
         Assert.Equal("Beta Game", sortedByName[1].Name);
         Assert.Equal("Gamma Game", sortedByName[2].Name);
     }
+
+    [Fact]
+    public async Task InitializeAsync_PreExistingOldSchemaWithoutReleaseDateUtc_MigratesSuccessfullyWithoutThrowing()
+    {
+        var legacyDbPath = Path.Combine(Path.GetTempPath(), $"legacy_catalog_{Guid.NewGuid():N}.sqlite");
+
+        try
+        {
+            // 1. Manually create database with OLD schema (no release_date_utc, no price_cents)
+            using (var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={legacyDbPath};"))
+            {
+                await conn.OpenAsync();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = """
+                    CREATE TABLE apps (
+                        app_id INTEGER PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        normalized_name TEXT NOT NULL,
+                        compact_name TEXT NOT NULL,
+                        app_type TEXT NOT NULL,
+                        last_modified INTEGER NOT NULL,
+                        price_change_number INTEGER NOT NULL DEFAULT 0,
+                        review_percent INTEGER,
+                        review_count INTEGER,
+                        positive_reviews INTEGER,
+                        negative_reviews INTEGER,
+                        rating_updated_at INTEGER,
+                        header_image_url TEXT,
+                        price_text TEXT,
+                        discount_percent INTEGER NOT NULL DEFAULT 0,
+                        release_date_text TEXT,
+                        has_windows INTEGER NOT NULL DEFAULT 1,
+                        has_mac INTEGER NOT NULL DEFAULT 0,
+                        has_linux INTEGER NOT NULL DEFAULT 0,
+                        is_nsfw INTEGER NOT NULL DEFAULT 0,
+                        has_drm INTEGER NOT NULL DEFAULT 0,
+                        has_external_launcher INTEGER NOT NULL DEFAULT 0,
+                        tag_ids TEXT
+                    );
+                    INSERT INTO apps (app_id, name, normalized_name, compact_name, app_type, last_modified)
+                    VALUES (730, 'Counter-Strike 2', 'counter strike 2', 'counterstrike2', 'Game', 1700000000);
+                    """;
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            // 2. Initialize LocalCatalogRepository on top of the pre-existing legacy database
+            using var repo = new LocalCatalogRepository(NullLogger<LocalCatalogRepository>.Instance, legacyDbPath);
+
+            // Must NOT throw 'SQLite Error 1: no such column: release_date_utc'
+            var exception = await Record.ExceptionAsync(() => repo.InitializeAsync());
+            Assert.Null(exception);
+
+            // 3. Completeness and query work seamlessly
+            var completeness = await repo.GetCompletenessAsync();
+            Assert.Equal(1, completeness.TotalIndexedApps);
+
+            var (results, count) = await repo.QueryAsync(new LocalCatalogQuery { Term = "Counter-Strike" });
+            Assert.Equal(1, count);
+            Assert.Equal(730u, results[0].AppId);
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            try { if (File.Exists(legacyDbPath)) File.Delete(legacyDbPath); } catch { }
+        }
+    }
 }
+

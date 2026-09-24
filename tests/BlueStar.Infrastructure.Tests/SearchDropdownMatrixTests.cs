@@ -565,6 +565,29 @@ public class SearchDropdownMatrixTests : IDisposable
         Assert.Contains(resp.Items, i => i.AppId == 50);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_ComingSoonPool_SortOptionsDisabled_EnforcesNoParticularOrder()
+    {
+        _fakeSteam.StubResults.Clear();
+        _fakeSteam.StubResults.Add(new SearchResult { AppId = 12345, Name = "Upcoming Game", ReleaseDateText = "Coming soon" });
+
+        var req = new SearchRequest
+        {
+            Pool = "comingsoon",
+            SortBy = "reviews", // User reviews was selected previously
+            Descending = true,
+            RawQuery = ""
+        };
+
+        var resp = await _pipeline.ExecuteAsync(req);
+
+        // Sort must be forced to empty for comingsoon pool
+        Assert.NotNull(_fakeSteam.LastQuery);
+        Assert.Equal("comingsoon", _fakeSteam.LastQuery!.StoreList);
+        Assert.True(string.IsNullOrEmpty(_fakeSteam.LastQuery.SortBy), "Expected empty sort_by for comingsoon pool");
+        Assert.NotEmpty(resp.Items);
+    }
+
     private sealed class FakeMetadataProvider : IMetadataProvider
     {
         public Dictionary<uint, GameMetadata> MetaDatabase { get; } = new();

@@ -17,7 +17,7 @@ namespace BlueStar.Infrastructure.Catalog;
 /// Never embeds a Steam Web API key in the client binary.
 /// Operates offline-first: if remote manifest or downloads fail, the local database remains intact and active.
 /// </summary>
-public sealed class SteamCatalogSnapshotService
+public sealed class SteamCatalogSnapshotService : ICatalogSnapshotService
 {
     private readonly HttpClient _http;
     private readonly ILocalCatalogRepository _catalogRepo;
@@ -181,13 +181,16 @@ public sealed class SteamCatalogSnapshotService
                 var lastMod = el.TryGetProperty("last_modified", out var lm) && lm.TryGetInt64(out var mod) ? mod : 0;
                 var priceChg = el.TryGetProperty("price_change_number", out var pcn) && pcn.TryGetUInt32(out var pchg) ? pchg : 0;
 
+                var rawType = el.TryGetProperty("type", out var tp) ? tp.GetString() : null;
+                var appType = SteamAppTaxonomy.ToTaxonomyString(SteamAppTaxonomy.Parse(rawType ?? "game"));
+
                 batch.Add(new CatalogAppItem
                 {
                     AppId = appId,
                     Name = name,
                     NormalizedName = BlueStar.Core.Helpers.DeterministicNormalizer.Normalize(name),
                     CompactName = BlueStar.Core.Helpers.DeterministicNormalizer.ToCompactKey(name),
-                    AppType = "Game",
+                    AppType = appType,
                     LastModified = lastMod,
                     PriceChangeNumber = priceChg,
                     HeaderImageUrl = $"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{appId}/header.jpg"

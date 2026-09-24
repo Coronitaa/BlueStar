@@ -1,140 +1,202 @@
-# BlueStar Search Engine Audit (FASE 0 — Baseline)
+# BlueStar Search Engine Audit (FASE 0 — Baseline & Real Code Verification)
 
 **Fecha**: 2026-09-23  
-**Auditor**: Principal Software Engineer  
-**Rama**: `main`  
+**Auditor**: Principal Systems & Architecture Engineer  
+**Rama**: `feature/search-engine-refactor`  
 **Solución**: `BlueStar.sln` (.NET 8.0)  
-**Resultado Baseline de Tests**: 282 pasados / 282 totales (Core: 35, Infrastructure: 247, 0 fallidos)
+**Baseline Test Results**: 387 pruebas pasadas (Core: 77, Infrastructure: 310, 0 fallidas)  
+**Git Working Tree**: Limpio (HEAD: `746c6cb feat(search): complete refactor of search and browse engine`)
 
 ---
 
-## 1. Arquitectura Actual del Motor de Búsqueda / Explore
+## 1. Resumen Ejecutivo de la Auditoría
 
-### 1.1 Diagrama de Flujo de Datos
+El análisis estricto contra el código fuente real revela una disparidad crítica entre los componentes declarados en commits previos y su integración y comportamiento efectivo en tiempo de ejecución:
+
+1. **Explore con query vacía sigue dependiendo de peticiones HTTP a Steam**:
+   En `SearchPipeline.cs:74-77`, si no hay término de búsqueda, se ejecuta `ExecuteStoreBrowseAsync`, el cual realiza una petición HTTP directa a `https://store.steampowered.com/search/results/`. El catálogo local SQLite sólo se utiliza como fallback si Steam arroja una excepción de red.
+2. **El catálogo SQLite local NO es un catálogo completo**:
+   En una instalación limpia, la base de datos ni siquiera existe en `%APPDATA%\BlueStar\catalog\catalog.sqlite`. Sólo se puebla de forma reactiva con los resultados que Steam devuelve durante búsquedas y navegaciones.
+3. **El servicio de snapshot (`SteamCatalogSnapshotService`) está desconectado y es parcial**:
+   No está registrado en el contenedor de dependencias (`App.xaml.cs`) ni es invocado por ninguna parte de la aplicación. Además, su método de sincronización fuerza `AppType = "Game"` para todas las entradas de `GetAppList` e ignora tags, géneros, categorías y fechas de lanzamiento.
+4. **Filtros aplicados sobre un subconjunto parcial de 50 elementos**:
+   Los filtros de contenido y rating se evalúan en memoria en `BrowseViewModel.cs` sobre la colección `_fetched`. Si Steam devuelve 50 juegos y ninguno tiene rating >= 90%, el usuario ve 0 resultados, ignorando los cientos o miles de juegos calificados presentes en el índice local.
+5. **Ordenamiento por fecha de lanzamiento es conceptualmente incorrecto**:
+   `LocalCatalogRepository.cs:536` ordena por `a.last_modified` cuando se solicita `released`. No existe una columna de marca de tiempo (`release_date_utc` o `release_timestamp`). `ReleaseDate != LastModified`.
+6. **Detector de anomalías recibe payloads falsificados**:
+   `SearchPipeline.cs:396` y `SearchPipeline.cs:494` llaman a `_validator.ValidateResponse(..., "{\"results_html\":\"ok\"}", ...)` pasando un JSON artificial porque el payload real de Steam es descartado en `SteamCatalogSearchService.GetEnvelopeAsync`.
+7. **Virtualización ausente y tope artificial `MaxMaterialized = 200` activo**:
+   `VirtualizingWrapPanel.cs` existe en el proyecto, pero `BrowseView.xaml` usa un `WrapPanel` estándar no virtualizado dentro de un `ScrollViewer`. En consecuencia, `BrowseViewModel.cs:205` mantiene `MaxMaterialized = 200`, impidiendo la navegación del catálogo más allá de 200 elementos.
+8. **Inundación de red por tags**:
+   `SteamTagCatalogService.ResolveCountsAsync` ejecuta una solicitud HTTP de sondeo a Steam por cada tag visible, comprometiendo la cuota de peticiones.
+9. **SingleFlight existe pero no está integrado**:
+   `BlueStar.Core.Helpers.SingleFlight` tiene pruebas unitarias pero no se utiliza en `SteamCatalogSearchService` ni en `SteamStoreApiClient` (que usa una implementación separada llamada `RequestCoordinator`).
+
+---
+
+## 2. Diagramas del Flujo Actual
+
+### 2.1 Flujo de Navegación / Búsqueda Actual (UI → Steam / Local)
 
 ```
 [UI: BrowseView.xaml]
       │
-      ▼ (Two-way binding: SearchQuery, Filters, Sort, Paging)
-[ViewModel: BrowseViewModel.cs]
+      ▼ (Two-way binding: SearchQuery, Filters, SelectedSort, SelectedStoreList)
+[BrowseViewModel.cs]
       │
-      ├───────────────────────────────┬───────────────────────────────┐
-      │ (Faceted search query)         │ (Lazy tag/metadata resolve)   │ (Catalog building)
-      ▼                               ▼                               ▼
-[ISteamCatalogSearchService]     [IMetadataProvider]          [ISteamTagCatalogService]
-[SteamCatalogSearchService.cs]   [SteamStoreApiClient.cs]     [SteamTagCatalogService.cs]
-      │                               │                               │
-      ├───────────────────────────────┴───────────────────────────────┘
-      ▼ (L1 Memory + L2 File cache)
-[ICacheService / FileCacheService.cs]
-      │ (Cache miss)
-      ▼ (Semaphore & 1600ms pace)
-[SteamRequestGate.cs]
+      ▼ (req: SearchRequest)
+[SearchPipeline.cs]
       │
-      ▼ (HTTP GET)
-[Steam Web / Store Endpoints]
-  - https://store.steampowered.com/search/results/
-  - https://store.steampowered.com/api/featuredcategories/
-  - https://store.steampowered.com/api/storesearch/
-  - https://store.steampowered.com/api/appdetails
+      ├─────────────────────────────────────────────────────────────────────────────┐
+      │ (A) ¿Query vacía?                                                          │ (B) ¿Tiene término de texto?
+      ▼                                                                             ▼
+[ExecuteStoreBrowseAsync]                                                  [LocalCatalogRepository.cs]
+      │                                                                             │
+      ├─► Consulta HTTP a Steam Search API (50 items)                               ├─► SQLite FTS5 (apps_fts)
+      │   │                                                                         │
+      │   ├─► Éxito: items parseados de HTML                                        ├─► ¿totalCount > 0?
+      │   │   - Validador con fake JSON '{"results_html":"ok"}'                     │   ├─► SÍ: Devuelve resultados locales
+      │   │   - Background upsert a SQLite                                          │   │
+      │   │   - Sort local sobre 50 items (si es curated pool)                      │   └─► NO: [ExecuteSteamFallbackSearchAsync]
+      │   │                                                                         │       - Consulta HTTP a Steam
+      │   └─► Fallo de Red: Fallback a SQLite LocalCatalogRepository               │       - Background upsert a SQLite
+      ▼                                                                             ▼
+[BrowseViewModel._fetched] ◄────────────────────────────────────────────────────────┘
+      │
+      ▼ (Filtros en memoria: PassesLocalFilters sobre los items devueltos)
+      │  - PassesRating (evalúa ReviewPercent sobre los <= 50 items recibidos)
+      │  - HasDrm / HasExternalLauncher / Adult / DLC
+      ▼
+[BrowseViewModel.Results]
+      │
+      ▼ (ItemsControl con WrapPanel estándar - NO VIRTUALIZADO)
+[Visual Tree de WPF] (Tope forzado: MaxMaterialized = 200)
 ```
 
-### 1.2 Componentes Identificados y Roles
+---
 
-1. **`BrowseView.xaml` / `BrowseView.xaml.cs`**:
-   - Vista WPF con barra de búsqueda con debounce, selectores de orden (`SelectedSort`) y lista de tienda (`SelectedStoreList`), chips de filtros activos y panel lateral de filtros (`FilterGroups`).
-   - Contenedor de resultados implementado con un `ItemsControl` estándar cuyo panel es un `WrapPanel` (modo grid) o `StackPanel` (modo lista). No dispone de virtualización de UI: cada elemento visual instanciado permanece vivo en memoria.
-   - Estado vacío controlado mediante `MultiDataTrigger` sobre `IsSearching == False`, `IsLoadingMore == False` y `Results.Count == 0`.
-   - Estado de carga mostrado mediante esqueletos (`SkeletonSlots`).
+## 3. Origen Real de los Resultados por Escenario
 
-2. **`BrowseViewModel.cs`**:
-   - Orquesta la búsqueda, gestión de filtros (`FilterGroups`), histórico de uso (`_facetUsage`), paginación por scroll infinito (`LoadMoreCommand`) y cola de enriquecimiento en segundo plano (`_enrichQueue`).
-   - Implementa un sistema de "escalera" (`_ladder` y `SearchRung`) que genera combinaciones de tags si la búsqueda con todos los tags seleccionados no devuelve resultados.
-   - Resuelve sugerencias de títulos llamando a `SuggestTitlesAsync` cuando no hay coincidencias directas.
-   - Limita de manera artificial los resultados a 200 (`MaxMaterialized = 200`) expresamente debido a la falta de virtualización en el `WrapPanel`.
-
-3. **`ISteamCatalogSearchService` / `SteamCatalogSearchService.cs`**:
-   - Consume el endpoint HTML/JSON no documentado de Steam: `https://store.steampowered.com/search/results/?query=&term=...&category1=...&infinite=1&json=1`.
-   - Parsea el fragmento `results_html` mediante expresiones regulares compiladas (`RowRegex`, `TitleRegex`, `ReviewRegex`, etc.).
-   - Parsea `total_count` para la paginación.
-   - Proporciona sondeo de conteo de productos (`GetMatchCountAsync`), eventos activos (`GetStoreEventsAsync`) y autocompletado (`SuggestTitlesAsync`).
-
-4. **`SteamSearchQuery.cs`**:
-   - Modela los parámetros de búsqueda enviados a Steam: `Term`, `AppTypes`, `SortBy`, `StoreList`, `Start`, `Count`, `Facets`, `RestrictToAppIds`.
-   - Genera la URL con `ToUrl()`.
-
-5. **`SteamStoreFacets.cs`**:
-   - Define constantes y metadatos de tipos de aplicación, listas curadas, opciones de ordenamiento y facetas (jugadores, SO, accesibilidad, controles, etc.).
-
-6. **`SteamRequestGate.cs`**:
-   - Mecanismo estático de limitación de tasa con un `SemaphoreSlim(1, 1)` y espaciado de 1600ms entre solicitudes para `store.steampowered.com`.
-   - Registra bloqueos consecutivos ante 429/403 con enfriamiento exponencial de 3 a 20 minutos.
-
-7. **`ICacheService` / `FileCacheService.cs`**:
-   - Cache de dos niveles: L1 en memoria (`ConcurrentDictionary`) con tope de 1000 entradas y L2 en disco guardando archivos JSON bajo `%APPDATA%/BlueStar/cache/{sha256}.json`.
-
-8. **`IMetadataProvider` / `SteamStoreApiClient.cs`**:
-   - Cliente para `https://store.steampowered.com/api/appdetails?appids={appId}`.
-   - Provee datos enriquecidos: soporte de SO, DLC count, imágenes, descripción DRM, cuenta de terceros, géneros y descriptores NSFW.
+| Escenario | Origen Real de los Datos | Mecanismo | Fallas Identificadas |
+|---|---|---|---|
+| **a) Query vacía (Explore)** | **Steam HTTP Store Search** | Petición HTTP a `store.steampowered.com/search/results/`. Si falla la red, recurre a SQLite como fallback. | Dependencia de red; sólo se obtienen los primeros 50 elementos del pool de Steam; no usa el catálogo local completo como fuente primaria. |
+| **b) Query con texto** | **SQLite FTS5 / Steam HTTP Fallback** | Consulta FTS5 en tabla `apps_fts`. Si hay coincidencias, devuelve local. Si hay 0, consulta Steam Store Search. | Funciona si la app ya fue cacheada; si el índice local está vacío o incompleto, consulta Steam. |
+| **c) Query es AppID numérico** | **SQLite -> MetadataProvider -> DepotId -> Steam Search** | Primero busca en `LocalCatalogRepository.GetByAppIdAsync`. Si no existe, llama a `IMetadataProvider.GetMetadataAsync(appId)`. | Buen fallback, pero si la app no está en SQLite depende de la disponibilidad del endpoint de appdetails. |
+| **d) Cambio de Filtro** | **Steam HTTP o SQLite + In-Memory Post-Filter** | Si la query está vacía, repite la llamada HTTP a Steam con facets. Luego `BrowseViewModel.RebuildVisible` aplica `PassesLocalFilters` sobre `_fetched`. | **Crítico**: Si la primera página de Steam de 50 items no contiene juegos que cumplan el filtro (ej. rating >= 90%), BlueStar muestra 0 resultados aunque en el catálogo haya miles. |
+| **e) Cambio de Sort** | **Steam HTTP o SQLite ORDER BY** | Para query vacía, envía `sort_by` a Steam (o reordena los 50 items localmente si es curated pool). Para query con texto, aplica `ORDER BY` en SQLite. | **Crítico**: `ORDER BY a.last_modified` se usa para `released`. Steam a menudo ignora `Reviews_ASC` o `Name_DESC` respondiendo HTTP 200 con la misma lista sin ser detectado debidamente. |
+| **f) Load More (Paginación)** | **Steam HTTP (start=N) o SQLite OFFSET** | Incrementa `Start = _fetched.Count`. Si la query está vacía, hace otra petición HTTP a Steam. | Provoca 1 HTTP request por cada página cuando se navega sin texto. Limitado rígidamente por `MaxMaterialized = 200`. |
 
 ---
 
-## 2. Problemas Críticos Encontrados
+## 4. Auditoría de Datos y Base de Datos Local
 
-| ID | Problema | Severidad | Archivo(s) Afectado(s) | Evidencia en Código |
-|---|---|---|---|---|
-| **BUG-01** | **Flicker severo en transiciones de búsqueda** | Alta | `BrowseViewModel.cs`, `BrowseView.xaml` | `BrowseViewModel.cs:655`: `if (Results.Count > 0) Results = [];`. `BrowseView.xaml:941`: `Condition Results.Count == 0 && IsSearching == False`. Al iniciar búsqueda se vacía la lista y se disparan triggers visuales antagónicos antes y durante la carga. |
-| **BUG-02** | **Búsqueda por AppID inexistente / rota** | Alta | `BrowseViewModel.cs`, `SteamSearchQuery.cs`, `SteamCatalogSearchService.cs` | No existe detector ni parser para AppID numérico, ni prefijos `appid:`, `app:`, URLs de Steam o `steam://`. Se envían como `term=123` a Store Search, que devuelve juegos arbitrarios o vacíos en vez del juego exacto. |
-| **BUG-03** | **API engañosa / código muerto: `RestrictToAppIds`** | Media | `SteamSearchQuery.cs` | `SteamSearchQuery.cs:53` define `RestrictToAppIds`, pero en `ToUrl()` (líneas 60-162) **nunca se serializa ni llega a la solicitud**. |
-| **BUG-04** | **Confusión semántica grave: `HasExternalLauncher = HasDrm`** | Alta | `BrowseViewModel.cs`, `SteamStoreApiClient.cs` | `BrowseViewModel.cs:1230`: `item.HasExternalLauncher = item.HasDrm;`. Además, en `SteamStoreApiClient.cs:516`, `ext_user_account_notice` enciende `hasDrm = true`. Son conceptos distintos (launcher de terceros vs DRM anti-tamper). |
-| **BUG-05** | **Dependencia absoluta de Steam Store Search HTML** | Crítica | `SteamCatalogSearchService.cs` | Si Steam está caído, bloqueado (403/429) o cambia la estructura de `results_html`, la búsqueda deja de funcionar completamente. No existe catálogo local maestro. |
-| **BUG-06** | **Falta de virtualización UI y tope artificial de 200 items** | Alta | `BrowseView.xaml`, `BrowseViewModel.cs` | `BrowseView.xaml:888` usa `WrapPanel` sin virtualizar; cada card se materializa en el visual tree de WPF. Por eso en `BrowseViewModel.cs:192` se impone `MaxMaterialized = 200`. |
-| **BUG-07** | **Ratings filtrados solo client-side sobre la página actual** | Alta | `BrowseViewModel.cs`, `SteamStoreFacets.cs` | `SteamStoreFacets.cs:328` marca Ratings como `LocalPostFilter`. `BrowseViewModel.cs:1073` los evalúa sólo sobre los 50 elementos devueltos por Steam. Si la primera página no tiene juegos 95%+, la vista queda vacía aunque existan miles de juegos elegibles. |
-| **BUG-08** | **Sorts no soportados por Steam generan resultados engañosos** | Alta | `SteamStoreFacets.cs`, `BrowseViewModel.cs` | Steam ignora tokens como `Reviews_ASC`, `Name_DESC`, `Released_ASC`. Steam responde HTTP 200 con la lista desordenada o idéntica. BlueStar no detecta la anomalía ni ordena localmente. |
-| **BUG-09** | **Liberación prematura del lease de limitación de tasa** | Alta | `SteamStoreApiClient.cs` | `SteamStoreApiClient.cs:73`: `lease.Dispose()` se invoca antes de hacer la llamada HTTP `_http.GetAsync()`. El semáforo se libera mientras el request sigue en curso, permitiendo múltiples requests concurrentes contra Steam. |
-| **BUG-10** | **Falta de SingleFlight y Negative Caching en `ICacheService`** | Media | `FileCacheService.cs` | Peticiones concurrentes para el mismo AppID disparan múltiples requests HTTP reales idénticos. Respuestas vacías o fallidas no se cachean negativamente, martillando el rate limit. |
-| **BUG-11** | **SteamRequestGate único para dominios distintos** | Media | `SteamRequestGate.cs` | `store.steampowered.com` y `api.steampowered.com` comparten la misma lógica y no tienen circuit breaker real ni jitter. |
+### 4.1 Estado Real de SQLite
+- **Ubicación prevista**: `%APPDATA%\BlueStar\catalog\catalog.sqlite`.
+- **Existencia en instalación real**: **NO EXISTE** inicialmente. SQLite no contiene un catálogo completo, sino únicamente una base de datos creada bajo demanda que acumula resultados descubiertos en búsquedas previas.
+- **Estado de Snapshot**:
+  - `SteamCatalogSnapshotService` **nunca se ejecuta**. No hay inyección de dependencias en `App.xaml.cs`.
+  - No existe URL de distribución configurada para `catalog-manifest.json` o snapshots zst/sqlite.
+  - No existe pipeline de descarga, validación SHA256 ni sustitución atómica activo en la aplicación.
 
----
+### 4.2 Inventario de Campos en `LocalCatalogRepository` (`apps` table)
 
-## 3. Hipótesis de Causa Raíz
-
-1. **Arquitectura orientada a páginas web externas en lugar de datos de catálogo**:
-   Explore fue concebido originalmente como un visor rápido sobre `store.steampowered.com/search/results/`. Al crecer en funcionalidades (filtros DRM, rating, adult content), se intentó parchar con post-filtros locales aplicados sobre cada lote de 50 resultados, lo que destruye la coherencia de la paginación y el ordenamiento.
-
-2. **Acoplamiento del estado visual al recuento de colecciones**:
-   El parpadeo (flicker) surge porque el XAML vincula la visibilidad del "Empty State" directamente a `Results.Count == 0`, mientras que el ViewModel vacía la colección en `reset = true` antes de iniciar la petición asíncrona. La ausencia de una máquina de estados explícita (`SearchState`) provoca transiciones efímeras no deseadas.
-
-3. **Asunciones sobre la fiabilidad semántica de HTTP 200 en Steam**:
-   El código asume que si Steam responde HTTP 200 con HTML válido, el ordenamiento y los filtros solicitados fueron respetados, cuando en la práctica Steam descarta silenciosamente parámetros no reconocidos y devuelve la lista por defecto.
-
----
-
-## 4. Estado de los Tests
-
-### Tests Existentes
-- **`BlueStar.Core.Tests`**: 35 tests (validación de modelos de instancias, rutas, accesos directos, orígenes de instancias).
-- **`BlueStar.Infrastructure.Tests`**: 247 tests (parsers de DepotBox Lua, zip manifests, cache de archivos básico, emuladores, detección de motor, integración DepotDownloader).
-
-### Tests Faltantes en el Subsistema de Búsqueda
-- **`SteamCatalogSearchService`**: 0 tests.
-- **`BrowseViewModel`**: 0 tests.
-- **`QueryParser` / Detección de AppID**: 0 tests.
-- **Ordenamiento y filtros de facetas**: 0 tests.
-- **Detector de anomalías de Steam**: 0 tests.
-- **Detección de 429 / 403 / Circuit breaker**: 0 tests.
-- **SingleFlight / Negative caching**: 0 tests.
-- **Virtualización / Integración offline**: 0 tests.
+| Campo Requerido | Presencia en `apps` | Tipo / Detalle Técnico | Limitación Actual |
+|---|---|---|---|
+| **AppID** | SÍ | `app_id INTEGER PRIMARY KEY` | Correcto. |
+| **Name** | SÍ | `name TEXT NOT NULL`, `normalized_name`, `compact_name` | Correcto. Indexado con FTS5. |
+| **Type** | PARCIAL | `app_type TEXT NOT NULL` | Presente, pero `SteamCatalogSnapshotService` hardcodea `"Game"` para todas las apps al sincronizar. |
+| **Tags** | PARCIAL | `tag_ids TEXT` | Columna existe (formato `,{id},`), pero los snapshots desde `GetAppList` la dejan vacía. |
+| **Genres** | **NO** | Ausente en esquema | No existe columna para géneros. |
+| **Categories** | **NO** | Ausente en esquema | No existe columna para categorías de Steam. |
+| **ReleaseDate** | INCORRECTO | `release_date_text TEXT` | Solo guarda texto legible (ej. "Oct 24, 2023"). No hay timestamp numérico. El sort usa `last_modified`. |
+| **ReviewPercent** | SÍ | `review_percent INTEGER` | Presente (0-100). |
+| **ReviewCount** | SÍ | `review_count INTEGER` | Presente. |
+| **Price** | PARCIAL | `price_text TEXT` | Texto libre (ej. "$19.99"). Sort en SQLite hace conversiones de string complejas y propensas a fallos. |
+| **Discount** | SÍ | `discount_percent INTEGER` | Presente (0-100). |
+| **PlayerCount** | **NO** | Ausente en esquema | No existe almacenamiento de jugadores concurrentes. |
+| **Platforms** | SÍ | `has_windows`, `has_mac`, `has_linux INTEGER` | Presente. |
+| **DRM** | SÍ | `has_drm INTEGER` | Presente. |
+| **ExternalLauncher** | SÍ | `has_external_launcher INTEGER` | Presente. |
+| **DLC** | PARCIAL | `positive_reviews`, `negative_reviews` | No se almacena recuento de DLC ni relación padre/hijo en la tabla `apps`. |
 
 ---
 
-## 5. Estrategia de Solución
+## 5. Auditoría de UI: Virtualización y Ciclo de Vida de Búsqueda
 
-1. **Fase 1**: Resolver bugs urgentes (AppID parser determinista, corrección de `RestrictToAppIds`, eliminación de flicker con `SearchState`, separación de `HasExternalLauncher` y `HasDrm`).
-2. **Fase 2-3**: Catálogo local en SQLite + FTS5 con snapshot offline y normalizador de texto.
-3. **Fase 4-5**: Pipeline de búsqueda por capas (`ParseQuery` → `ResolveIntent` → `LocalCandidateSearch` → `Filter` → `Sort` → `Page` → `Enrich`) con soporte para 2 dropdowns consistentes.
-4. **Fase 6**: `SteamResponseValidator` y `SteamResponseFingerprint` para detección de anomalías y degradación elegante.
-5. **Fase 7-9**: Almacenamiento local de ratings (wilson/bayesian + steam original), enrichment lazy con prioridades, cache con L1/L2, SingleFlight, stale-while-revalidate y negative cache.
-6. **Fase 10-12**: Rate Governor centralizado por dominio (`store` y `api`), Circuit Breaker, pools cacheados para StoreLists.
-7. **Fase 13-15**: Virtualización en WPF (`VirtualizingWrapPanel`), SearchCoordinator con debounce seguro y soporte 100% offline.
-8. **Fase 16-19**: Suite exhaustiva de pruebas unitarias/integración con fixtures, herramienta de smoke tests en vivo y documentación completa.
+### 5.1 Estado de Virtualización
+- El control `VirtualizingWrapPanel.cs` existe en `src/BlueStar.App/Controls/VirtualizingWrapPanel.cs`.
+- Sin embargo, en `src/BlueStar.App/Views/BrowseView.xaml:908-933`:
+  ```xml
+  <ItemsControl ItemsSource="{Binding Results}">
+      <ItemsControl.Style>
+          <Style TargetType="ItemsControl">
+              <Setter Property="ItemTemplate" Value="{StaticResource ResultCardTemplate}"/>
+              <Setter Property="ItemsPanel">
+                  <Setter.Value>
+                      <ItemsPanelTemplate>
+                          <WrapPanel Orientation="Horizontal"/>
+                      </ItemsPanelTemplate>
+                  </Setter.Value>
+              </Setter>
+          </Style>
+      </ItemsControl.Style>
+  </ItemsControl>
+  ```
+- **Conclusión**: El visual tree de WPF materializa **cada una de las tarjetas** en memoria. Por este motivo, `BrowseViewModel.cs:205` impone `private const int MaxMaterialized = 200;` cortando artificialmente los resultados.
+
+### 5.2 Ciclo de Vida de `SearchState` y Parpadeo (Flicker)
+- En `BrowseViewModel.RunSearchAsync(reset: true)`:
+  - `_fetched.Clear()` borra los datos internos.
+  - Si `Results.Count == 0`, `SearchState = LoadingInitial` (muestra esqueletos).
+  - Si `Results.Count > 0`, `SearchState = Refreshing` (mantiene resultados previos y muestra un spinner).
+  - Al completar: `SearchState = Results.Count > 0 ? SearchState.ShowingResults : SearchState.Empty;`
+  - Esto evita el parpadeo en búsquedas con resultados, pero si un filtro elimina los 50 elementos de la página de Steam, pasa a `Empty` de forma errónea.
+
+---
+
+## 6. Inventario de Componentes y Estado de Integración
+
+| Componente | Estado de Integración | Observaciones |
+|---|---|---|
+| `BrowseViewModel` | IMPLEMENTADO Y USADO | Mantiene `MaxMaterialized=200`, filtra client-side sobre lote parcial, procesa cola de counts HTTP. |
+| `BrowseView.xaml` | IMPLEMENTADO Y USADO | No usa `VirtualizingWrapPanel`; usa `WrapPanel` estándar. |
+| `SearchPipeline` | IMPLEMENTADO Y USADO | Browse sin query va directo a Steam; usa payload falso para validación. |
+| `LocalCatalogRepository` | IMPLEMENTADO Y USADO | FTS5 funcional, pero falta esquema de fecha numérica, tags completos y completitud de catálogo. |
+| `SteamCatalogSnapshotService` | IMPLEMENTADO PERO NO INTEGRADO | No registrado en DI, sin URL de distribución, no se ejecuta en arranque. |
+| `SteamCatalogSearchService` | IMPLEMENTADO Y USADO | Descarta payload JSON crudo en `GetEnvelopeAsync`. |
+| `SteamRequestGate` / `DomainRateGovernor` | IMPLEMENTADO Y USADO | Circuit breaker por dominio y límite de tasa implementados con tests. |
+| `SingleFlight` | IMPLEMENTADO PERO NO INTEGRADO | Clase en Core con pruebas unitarias, pero huérfana en el pipeline de búsqueda. |
+| `RatingEngine` | PARCIAL | Cálculo Wilson implementado pero no conectado al ranking de búsqueda; solo se usa `GetReviewSummary`. |
+| `VirtualizingWrapPanel` | IMPLEMENTADO PERO NO INTEGRADO | Clase en Controls, pero nunca instanciada en BrowseView.xaml. |
+| `SteamResponseValidator` | PARCIAL | La lógica existe, pero recibe payloads hardcodeados `"{\"results_html\":\"ok\"}"`. |
+
+---
+
+## 7. Plan de Acción Técnico Hacia la Arquitectura Objetivo
+
+Para cumplir la especificación completa, el pipeline de Explore debe evolucionar hacia:
+
+```
+CATÁLOGO MAESTRO (Snapshot SQLite + Manifest)
+        │
+        ▼
+ÍNDICE LOCAL (SQLite FTS5 + Índices Numéricos de Rating/Release/Price/Tags)
+        │
+        ▼
+EVALUADOR DE COMPLETITUD (CatalogCompleteness)
+        │  ├─► IdentityComplete
+        │  ├─► MetadataComplete
+        │  └─► Local Authoritative vs Fallback Mode
+        ▼
+PIPELINE DE BÚSQUEDA:
+ParseQuery → ResolveIntent → CandidateUniverse (Local) → Filter → Sort → Pagination
+        │
+        ▼
+FALLBACK A STEAM (Solo cuando la query es desconocida o metadata esencial no está indexada)
+        │
+        ▼
+ENRIQUECIMIENTO LAZY PRIORIZADO (P0: Detalle activo, P1: Filtros, P2: Visible)
+        │
+        ▼
+VISTA WPF (VirtualizingWrapPanel real conectado, sin límite artificial de 200)
+```

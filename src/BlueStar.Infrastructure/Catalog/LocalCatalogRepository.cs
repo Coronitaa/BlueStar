@@ -74,67 +74,126 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             pragmaCmd.CommandText = "PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA temp_store = MEMORY;";
             await pragmaCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
 
-            using var cmd = connection.CreateCommand();
-            cmd.CommandText = """
-                CREATE TABLE IF NOT EXISTS apps (
-                    app_id INTEGER PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    normalized_name TEXT NOT NULL,
-                    compact_name TEXT NOT NULL,
-                    app_type TEXT NOT NULL,
-                    last_modified INTEGER NOT NULL,
-                    price_change_number INTEGER NOT NULL DEFAULT 0,
-                    review_percent INTEGER,
-                    review_count INTEGER,
-                    positive_reviews INTEGER,
-                    negative_reviews INTEGER,
-                    rating_updated_at INTEGER,
-                    header_image_url TEXT,
-                    price_text TEXT,
-                    discount_percent INTEGER NOT NULL DEFAULT 0,
-                    release_date_text TEXT,
-                    has_windows INTEGER NOT NULL DEFAULT 1,
-                    has_mac INTEGER NOT NULL DEFAULT 0,
-                    has_linux INTEGER NOT NULL DEFAULT 0,
-                    is_nsfw INTEGER NOT NULL DEFAULT 0,
-                    has_drm INTEGER NOT NULL DEFAULT 0,
-                    has_external_launcher INTEGER NOT NULL DEFAULT 0,
-                    tag_ids TEXT
-                );
+            using (var cmd = connection.CreateCommand())
+            {
+                cmd.CommandText = """
+                    CREATE TABLE IF NOT EXISTS apps (
+                        app_id INTEGER PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        normalized_name TEXT NOT NULL,
+                        compact_name TEXT NOT NULL,
+                        app_type TEXT NOT NULL,
+                        last_modified INTEGER NOT NULL,
+                        price_change_number INTEGER NOT NULL DEFAULT 0,
+                        review_percent INTEGER,
+                        review_count INTEGER,
+                        positive_reviews INTEGER,
+                        negative_reviews INTEGER,
+                        rating_updated_at INTEGER,
+                        header_image_url TEXT,
+                        price_text TEXT,
+                        discount_percent INTEGER NOT NULL DEFAULT 0,
+                        release_date_text TEXT,
+                        has_windows INTEGER NOT NULL DEFAULT 1,
+                        has_mac INTEGER NOT NULL DEFAULT 0,
+                        has_linux INTEGER NOT NULL DEFAULT 0,
+                        is_nsfw INTEGER NOT NULL DEFAULT 0,
+                        has_drm INTEGER NOT NULL DEFAULT 0,
+                        has_external_launcher INTEGER NOT NULL DEFAULT 0,
+                        tag_ids TEXT,
+                        release_date_utc INTEGER,
+                        price_cents INTEGER
+                    );
+                    """;
+                await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
 
-                CREATE INDEX IF NOT EXISTS idx_apps_normalized ON apps(normalized_name);
-                CREATE INDEX IF NOT EXISTS idx_apps_compact ON apps(compact_name);
-                CREATE INDEX IF NOT EXISTS idx_apps_review_percent ON apps(review_percent);
-                CREATE INDEX IF NOT EXISTS idx_apps_last_modified ON apps(last_modified);
+            // CRITICAL: Ensure columns exist on pre-existing database tables BEFORE creating indexes on them
+            using (var altCmd = connection.CreateCommand())
+            {
+                altCmd.CommandText = "ALTER TABLE apps ADD COLUMN release_date_utc INTEGER;";
+                try { await altCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false); } catch { }
+                altCmd.CommandText = "ALTER TABLE apps ADD COLUMN price_cents INTEGER;";
+                try { await altCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false); } catch { }
+            }
 
-                CREATE VIRTUAL TABLE IF NOT EXISTS apps_fts USING fts5(
-                    name,
-                    normalized_name,
-                    compact_name,
-                    content='apps',
-                    content_rowid='app_id',
-                    tokenize = 'unicode61 remove_diacritics 2'
-                );
+            bool ftsExisted;
+            using (var checkCmd = connection.CreateCommand())
+            {
+                checkCmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'apps_fts';";
+                ftsExisted = Convert.ToInt64(await checkCmd.ExecuteScalarAsync(ct).ConfigureAwait(false)) > 0;
+            }
 
-                CREATE TRIGGER IF NOT EXISTS apps_ai AFTER INSERT ON apps BEGIN
-                    INSERT INTO apps_fts(rowid, name, normalized_name, compact_name)
-                    VALUES (new.app_id, new.name, new.normalized_name, new.compact_name);
-                END;
+            using (var idxCmd = connection.CreateCommand())
+            {
+                idxCmd.CommandText = """
+                    CREATE INDEX IF NOT EXISTS idx_apps_normalized ON apps(normalized_name);
+                    CREATE INDEX IF NOT EXISTS idx_apps_compact ON apps(compact_name);
+                    CREATE INDEX IF NOT EXISTS idx_apps_review_percent ON apps(review_percent);
+                    CREATE INDEX IF NOT EXISTS idx_apps_last_modified ON apps(last_modified);
+                    CREATE INDEX IF NOT EXISTS idx_apps_release_utc ON apps(release_date_utc);
+                    CREATE INDEX IF NOT EXISTS idx_apps_price_cents ON apps(price_cents);
 
-                CREATE TRIGGER IF NOT EXISTS apps_ad AFTER DELETE ON apps BEGIN
-                    INSERT INTO apps_fts(apps_fts, rowid, name, normalized_name, compact_name)
-                    VALUES ('delete', old.app_id, old.name, old.normalized_name, old.compact_name);
-                END;
+                    CREATE VIRTUAL TABLE IF NOT EXISTS apps_fts USING fts5(
+                        name,
+                        normalized_name,
+                        compact_name,
+                        content='apps',
+                        content_rowid='app_id',
+                        tokenize = 'unicode61 remove_diacritics 2'
+                    );
 
-                CREATE TRIGGER IF NOT EXISTS apps_au AFTER UPDATE ON apps BEGIN
-                    INSERT INTO apps_fts(apps_fts, rowid, name, normalized_name, compact_name)
-                    VALUES ('delete', old.app_id, old.name, old.normalized_name, old.compact_name);
-                    INSERT INTO apps_fts(rowid, name, normalized_name, compact_name)
-                    VALUES (new.app_id, new.name, new.normalized_name, new.compact_name);
-                END;
-                """;
+                    CREATE TRIGGER IF NOT EXISTS apps_ai AFTER INSERT ON apps BEGIN
+                        INSERT INTO apps_fts(rowid, name, normalized_name, compact_name)
+                        VALUES (new.app_id, new.name, new.normalized_name, new.compact_name);
+                    END;
 
-            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                    CREATE TRIGGER IF NOT EXISTS apps_ad AFTER DELETE ON apps BEGIN
+                        INSERT INTO apps_fts(apps_fts, rowid, name, normalized_name, compact_name)
+                        VALUES ('delete', old.app_id, old.name, old.normalized_name, old.compact_name);
+                    END;
+
+                    CREATE TRIGGER IF NOT EXISTS apps_au AFTER UPDATE ON apps BEGIN
+                        INSERT INTO apps_fts(apps_fts, rowid, name, normalized_name, compact_name)
+                        VALUES ('delete', old.app_id, old.name, old.normalized_name, old.compact_name);
+                        INSERT INTO apps_fts(rowid, name, normalized_name, compact_name)
+                        VALUES (new.app_id, new.name, new.normalized_name, new.compact_name);
+                    END;
+                    """;
+                await idxCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
+
+            var needsRebuild = !ftsExisted;
+            if (ftsExisted)
+            {
+                using var checkCmd = connection.CreateCommand();
+                checkCmd.CommandText = "SELECT 1 FROM apps_fts_docsize LIMIT 1;";
+                try
+                {
+                    var hasFtsData = await checkCmd.ExecuteScalarAsync(ct).ConfigureAwait(false) != null;
+                    if (!hasFtsData)
+                    {
+                        checkCmd.CommandText = "SELECT 1 FROM apps LIMIT 1;";
+                        var hasApps = await checkCmd.ExecuteScalarAsync(ct).ConfigureAwait(false) != null;
+                        if (hasApps)
+                        {
+                            needsRebuild = true;
+                        }
+                    }
+                }
+                catch
+                {
+                    // Ignore if shadow table is not accessible
+                }
+            }
+
+            if (needsRebuild)
+            {
+                using var rebuildCmd = connection.CreateCommand();
+                rebuildCmd.CommandText = "INSERT INTO apps_fts(apps_fts) VALUES('rebuild');";
+                try { await rebuildCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false); } catch { }
+            }
+
             _initialized = true;
             _logger.LogInformation("LocalCatalogRepository initialized at {Path}", _dbPath);
         }
@@ -142,6 +201,46 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
         {
             _lock.Release();
         }
+    }
+
+    public static long? ParseReleaseDateToUtcSeconds(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var trimmed = text.Trim();
+        if (DateTime.TryParse(trimmed, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
+            return new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc)).ToUnixTimeSeconds();
+        if (DateTime.TryParse(trimmed, CultureInfo.CurrentCulture, DateTimeStyles.None, out dt))
+            return new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc)).ToUnixTimeSeconds();
+        if (DateTime.TryParse(trimmed, CultureInfo.GetCultureInfo("en-US"), DateTimeStyles.None, out dt))
+            return new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc)).ToUnixTimeSeconds();
+
+        var match = System.Text.RegularExpressions.Regex.Match(trimmed, @"\b(19\d\d|20\d\d)\b");
+        if (match.Success && int.TryParse(match.Value, out var year))
+        {
+            return new DateTimeOffset(new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Utc)).ToUnixTimeSeconds();
+        }
+
+        return null;
+    }
+
+    public static int? ParsePriceToCents(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var lower = text.ToLowerInvariant();
+        if (lower.Contains("free") || lower.Contains("gratis") || lower == "$0" || lower == "$0.00" || lower == "0€")
+            return 0;
+
+        var sb = new StringBuilder();
+        foreach (var ch in text)
+        {
+            if (char.IsDigit(ch) || ch == '.' || ch == ',') sb.Append(ch);
+        }
+        var cleaned = sb.ToString().Replace(',', '.');
+        if (decimal.TryParse(cleaned, NumberStyles.Any, CultureInfo.InvariantCulture, out var val))
+        {
+            return (int)Math.Round(val * 100);
+        }
+        return null;
     }
 
     /// <inheritdoc />
@@ -162,13 +261,13 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
                 price_change_number, review_percent, review_count, positive_reviews,
                 negative_reviews, rating_updated_at, header_image_url, price_text,
                 discount_percent, release_date_text, has_windows, has_mac, has_linux,
-                is_nsfw, has_drm, has_external_launcher, tag_ids
+                is_nsfw, has_drm, has_external_launcher, tag_ids, release_date_utc, price_cents
             ) VALUES (
                 @app_id, @name, @normalized_name, @compact_name, @app_type, @last_modified,
                 @price_change_number, @review_percent, @review_count, @positive_reviews,
                 @negative_reviews, @rating_updated_at, @header_image_url, @price_text,
                 @discount_percent, @release_date_text, @has_windows, @has_mac, @has_linux,
-                @is_nsfw, @has_drm, @has_external_launcher, @tag_ids
+                @is_nsfw, @has_drm, @has_external_launcher, @tag_ids, @release_date_utc, @price_cents
             )
             ON CONFLICT(app_id) DO UPDATE SET
                 name = excluded.name,
@@ -192,7 +291,9 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
                 is_nsfw = excluded.is_nsfw,
                 has_drm = excluded.has_drm,
                 has_external_launcher = excluded.has_external_launcher,
-                tag_ids = COALESCE(excluded.tag_ids, apps.tag_ids);
+                tag_ids = COALESCE(excluded.tag_ids, apps.tag_ids),
+                release_date_utc = COALESCE(excluded.release_date_utc, apps.release_date_utc),
+                price_cents = COALESCE(excluded.price_cents, apps.price_cents);
             """;
 
         var pAppId = cmd.Parameters.Add("@app_id", SqliteType.Integer);
@@ -218,6 +319,8 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
         var pDrm = cmd.Parameters.Add("@has_drm", SqliteType.Integer);
         var pLauncher = cmd.Parameters.Add("@has_external_launcher", SqliteType.Integer);
         var pTags = cmd.Parameters.Add("@tag_ids", SqliteType.Text);
+        var pReleaseUtc = cmd.Parameters.Add("@release_date_utc", SqliteType.Integer);
+        var pPriceCents = cmd.Parameters.Add("@price_cents", SqliteType.Integer);
 
         foreach (var app in apps)
         {
@@ -254,6 +357,10 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             pTags.Value = app.TagIds.Count > 0
                 ? "," + string.Join(',', app.TagIds) + ","
                 : DBNull.Value;
+            pReleaseUtc.Value = (object?)app.ReleaseDateUtc
+                ?? (ParseReleaseDateToUtcSeconds(app.ReleaseDateText) ?? (object)DBNull.Value);
+            pPriceCents.Value = (object?)app.PriceCents
+                ?? (ParsePriceToCents(app.PriceText) ?? (object)DBNull.Value);
 
             await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         }
@@ -533,10 +640,10 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
         var sortSql = (query.SortBy ?? string.Empty).ToLowerInvariant() switch
         {
             "name" => $"ORDER BY a.name {dir}",
-            "released" => $"ORDER BY a.last_modified {dir}",
+            "released" => $"ORDER BY a.release_date_utc {dir} NULLS LAST, a.last_modified {dir}",
             "reviews" => $"ORDER BY a.review_percent {dir} NULLS LAST, a.review_count DESC",
             "reviewcount" or "reviews_count" => $"ORDER BY a.review_count {dir} NULLS LAST",
-            "price" => $"ORDER BY (CASE WHEN a.price_text IS NULL OR a.price_text = '' THEN 999999 WHEN LOWER(a.price_text) LIKE '%free%' OR LOWER(a.price_text) LIKE '%gratis%' THEN 0 ELSE CAST(REPLACE(REPLACE(REPLACE(a.price_text, '$', ''), '€', ''), ',', '.') AS REAL) END) {dir}, a.last_modified DESC",
+            "price" => $"ORDER BY (CASE WHEN a.price_cents IS NOT NULL THEN a.price_cents WHEN a.price_text IS NULL OR a.price_text = '' THEN 999999 WHEN LOWER(a.price_text) LIKE '%free%' OR LOWER(a.price_text) LIKE '%gratis%' THEN 0 ELSE CAST(REPLACE(REPLACE(REPLACE(a.price_text, '$', ''), '€', ''), ',', '.') AS REAL) * 100 END) {dir}, a.last_modified DESC",
             "discount" => $"ORDER BY a.discount_percent {dir}",
             "appid" => $"ORDER BY a.app_id {dir}",
             _ => hasFts ? "ORDER BY rank" : $"ORDER BY a.last_modified {dir}"
@@ -592,22 +699,142 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
         if (!File.Exists(sqliteFilePath))
             throw new FileNotFoundException("Snapshot database file not found.", sqliteFilePath);
 
+        // Pre-validation: verify candidate SQLite integrity before touching existing database
+        var testCsb = new SqliteConnectionStringBuilder
+        {
+            DataSource = sqliteFilePath,
+            Mode = SqliteOpenMode.ReadOnly
+        };
+        using (var testConn = new SqliteConnection(testCsb.ToString()))
+        {
+            await testConn.OpenAsync(ct).ConfigureAwait(false);
+            using var pragma = testConn.CreateCommand();
+            pragma.CommandText = "PRAGMA quick_check;";
+            var checkRes = await pragma.ExecuteScalarAsync(ct).ConfigureAwait(false);
+            if (checkRes is not string s || !s.Equals("ok", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException($"Candidate snapshot failed SQLite quick_check: {checkRes}");
+            }
+        }
+
         await _lock.WaitAsync(ct).ConfigureAwait(false);
+        var dir = Path.GetDirectoryName(_dbPath)!;
+        Directory.CreateDirectory(dir);
+
+        var stagingPath = _dbPath + ".staging";
+        var backupPath = _dbPath + ".bak";
+
         try
         {
             SqliteConnection.ClearAllPools();
-            var backupDir = Path.GetDirectoryName(_dbPath)!;
-            Directory.CreateDirectory(backupDir);
 
-            File.Copy(sqliteFilePath, _dbPath, overwrite: true);
+            // 1. Copy candidate to staging
+            File.Copy(sqliteFilePath, stagingPath, overwrite: true);
+
+            // 2. Safely backup existing database if present
+            if (File.Exists(_dbPath))
+            {
+                try { if (File.Exists(backupPath)) File.Delete(backupPath); } catch { }
+                File.Move(_dbPath, backupPath);
+            }
+
+            // 3. Promote staging to active database
+            File.Move(stagingPath, _dbPath);
+
+            // 4. Cleanup backup
+            if (File.Exists(backupPath))
+            {
+                try { File.Delete(backupPath); } catch { }
+            }
+
             _initialized = false;
+        }
+        catch
+        {
+            // Rollback if active file is missing and backup exists
+            if (!File.Exists(_dbPath) && File.Exists(backupPath))
+            {
+                try { File.Move(backupPath, _dbPath); } catch { }
+            }
+            throw;
         }
         finally
         {
+            try { if (File.Exists(stagingPath)) File.Delete(stagingPath); } catch { }
             _lock.Release();
         }
 
         await InitializeAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task<CatalogCompleteness> GetCompletenessAsync(CancellationToken ct = default)
+    {
+        await InitializeAsync(ct).ConfigureAwait(false);
+
+        using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT 
+                COUNT(*) as total,
+                SUM(CASE WHEN review_percent IS NOT NULL THEN 1 ELSE 0 END) as with_reviews,
+                SUM(CASE WHEN release_date_text IS NOT NULL AND release_date_text != '' THEN 1 ELSE 0 END) as with_release,
+                SUM(CASE WHEN price_text IS NOT NULL AND price_text != '' THEN 1 ELSE 0 END) as with_pricing,
+                SUM(CASE WHEN tag_ids IS NOT NULL AND tag_ids != '' THEN 1 ELSE 0 END) as with_tags
+            FROM apps;
+            """;
+
+        using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        if (await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            var total = reader.GetInt32(0);
+            if (total == 0) return CatalogCompleteness.Empty;
+
+            var withReviews = reader.GetInt32(1);
+            var withRelease = reader.GetInt32(2);
+            var withPricing = reader.GetInt32(3);
+            var withTags = reader.GetInt32(4);
+
+            return new CatalogCompleteness
+            {
+                TotalIndexedApps = total,
+                IdentityComplete = total >= 100,
+                ReviewsCoverage = (double)withReviews / total,
+                ReleaseDateCoverage = (double)withRelease / total,
+                PricingCoverage = (double)withPricing / total,
+                TagsComplete = withTags > 0 && ((double)withTags / total) > 0.5,
+                GenresComplete = false
+            };
+        }
+
+        return CatalogCompleteness.Empty;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<int, int>> GetTagCountsAsync(IEnumerable<int> tagIds, CancellationToken ct = default)
+    {
+        await InitializeAsync(ct).ConfigureAwait(false);
+
+        var distinct = tagIds.Distinct().ToList();
+        var result = new Dictionary<int, int>();
+        if (distinct.Count == 0) return result;
+
+        using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+
+        foreach (var tagId in distinct)
+        {
+            ct.ThrowIfCancellationRequested();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = "SELECT COUNT(*) FROM apps WHERE tag_ids LIKE @pat";
+            cmd.Parameters.AddWithValue("@pat", $"%,{tagId},%");
+            var scalar = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
+            result[tagId] = scalar != null && scalar != DBNull.Value ? Convert.ToInt32(scalar) : 0;
+        }
+
+        return result;
     }
 
     private static CatalogAppItem ReadApp(SqliteDataReader reader)
@@ -659,6 +886,22 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             }
         }
 
+        long? releaseDateUtc = null;
+        try
+        {
+            var relOrd = reader.GetOrdinal("release_date_utc");
+            if (relOrd >= 0 && !reader.IsDBNull(relOrd)) releaseDateUtc = reader.GetInt64(relOrd);
+        }
+        catch { }
+
+        int? priceCents = null;
+        try
+        {
+            var prcOrd = reader.GetOrdinal("price_cents");
+            if (prcOrd >= 0 && !reader.IsDBNull(prcOrd)) priceCents = reader.GetInt32(prcOrd);
+        }
+        catch { }
+
         return new CatalogAppItem
         {
             AppId = appId,
@@ -675,8 +918,10 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             RatingUpdatedAt = ratingUpdatedAt,
             HeaderImageUrl = headerImageUrl,
             PriceText = priceText,
+            PriceCents = priceCents,
             DiscountPercent = discountPercent,
             ReleaseDateText = releaseDateText,
+            ReleaseDateUtc = releaseDateUtc,
             HasWindows = hasWindows,
             HasMac = hasMac,
             HasLinux = hasLinux,

@@ -72,4 +72,15 @@ public interface ILocalCatalogRepository : IDisposable
     /// Imports or replaces the catalog database from an external snapshot SQLite file.
     /// </summary>
     Task ImportSnapshotAsync(string sqliteFilePath, CancellationToken ct = default);
+
+    /// <summary>
+    /// Gets the current completeness and metadata coverage of the local catalog index.
+    /// </summary>
+    Task<CatalogCompleteness> GetCompletenessAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Gets the count of applications associated with specific tag IDs from the local catalog.
+    /// </summary>
+    Task<IReadOnlyDictionary<int, int>> GetTagCountsAsync(IEnumerable<int> tagIds, CancellationToken ct = default);
 }
+

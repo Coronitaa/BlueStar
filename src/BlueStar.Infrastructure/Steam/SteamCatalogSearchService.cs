@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using BlueStar.Core.Helpers;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
 using Microsoft.Extensions.Logging;
@@ -28,6 +29,7 @@ public sealed partial class SteamCatalogSearchService : ISteamCatalogSearchServi
     private readonly HttpClient _http;
     private readonly ICacheService? _cache;
     private readonly ILogger<SteamCatalogSearchService> _logger;
+    private readonly SingleFlight _singleFlight = new();
 
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(12);
 
@@ -106,32 +108,35 @@ public sealed partial class SteamCatalogSearchService : ISteamCatalogSearchServi
             }
         }
 
-        var envelope = await GetEnvelopeAsync(url, SteamRequestPriority.Interactive, ct).ConfigureAwait(false);
-        if (envelope is null) return SteamSearchPage.Empty;
-
-        var items = ParseRows(envelope.Value.Html, query.AppTypes);
-        if (query.RestrictToAppIds is { Count: > 0 } restrictSet)
+        return await _singleFlight.ExecuteAsync(cacheKey, async token =>
         {
-            var set = restrictSet.ToHashSet();
-            items = items.Where(i => set.Contains(i.AppId)).ToList();
-        }
-        var page = new SteamSearchPage(items, envelope.Value.TotalCount, query.Start);
+            var envelope = await GetEnvelopeAsync(url, SteamRequestPriority.Interactive, token).ConfigureAwait(false);
+            if (envelope is null) return SteamSearchPage.Empty;
 
-        if (_cache != null && items.Count > 0)
-        {
-            try
+            var items = ParseRows(envelope.Value.Html, query.AppTypes);
+            if (query.RestrictToAppIds is { Count: > 0 } restrictSet)
             {
-                await _cache.SetAsync(cacheKey,
-                    new CachedPage { Items = items, TotalCount = envelope.Value.TotalCount },
-                    PageCacheTtl, ct).ConfigureAwait(false);
+                var set = restrictSet.ToHashSet();
+                items = items.Where(i => set.Contains(i.AppId)).ToList();
             }
-            catch
-            {
-                // Caching is best effort.
-            }
-        }
+            var page = new SteamSearchPage(items, envelope.Value.TotalCount, query.Start, envelope.Value.RawPayload);
 
-        return page;
+            if (_cache != null && items.Count > 0)
+            {
+                try
+                {
+                    await _cache.SetAsync(cacheKey,
+                        new CachedPage { Items = items, TotalCount = envelope.Value.TotalCount },
+                        PageCacheTtl, token).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Caching is best effort.
+                }
+            }
+
+            return page;
+        }, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -155,26 +160,29 @@ public sealed partial class SteamCatalogSearchService : ISteamCatalogSearchServi
             }
         }
 
-        var envelope = await GetEnvelopeAsync(url, SteamRequestPriority.Background, ct).ConfigureAwait(false);
-
-        // Unknown is not zero: a blocked or failed probe leaves the bubble without a number
-        // rather than claiming the tag matches nothing.
-        if (envelope is null) return null;
-
-        if (_cache != null)
+        return await _singleFlight.ExecuteAsync(cacheKey, async token =>
         {
-            try
-            {
-                await _cache.SetAsync(cacheKey, new CachedCount { Value = envelope.Value.TotalCount },
-                    CountCacheTtl, ct).ConfigureAwait(false);
-            }
-            catch
-            {
-                // Ignored.
-            }
-        }
+            var envelope = await GetEnvelopeAsync(url, SteamRequestPriority.Background, token).ConfigureAwait(false);
 
-        return envelope.Value.TotalCount;
+            // Unknown is not zero: a blocked or failed probe leaves the bubble without a number
+            // rather than claiming the tag matches nothing.
+            if (envelope is null) return (int?)null;
+
+            if (_cache != null)
+            {
+                try
+                {
+                    await _cache.SetAsync(cacheKey, new CachedCount { Value = envelope.Value.TotalCount },
+                        CountCacheTtl, token).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Ignored.
+                }
+            }
+
+            return (int?)envelope.Value.TotalCount;
+        }, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -202,76 +210,79 @@ public sealed partial class SteamCatalogSearchService : ISteamCatalogSearchServi
         var url = "https://store.steampowered.com/api/storesearch/?term="
                   + Uri.EscapeDataString(trimmed) + "&l=english&cc=US";
 
-        try
+        return await _singleFlight.ExecuteAsync(cacheKey, async token =>
         {
-            using var lease = await SteamRequestGate
-                .AcquireAsync(SteamRequestPriority.Interactive, ct).ConfigureAwait(false);
-
-            if (lease is null) return [];
-
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(RequestTimeout);
-
-            using var response = await _http.GetAsync(url, cts.Token).ConfigureAwait(false);
-
-            if (response.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.Forbidden)
+            try
             {
-                SteamRequestGate.ReportBlocked(response.StatusCode);
+                using var lease = await SteamRequestGate
+                    .AcquireAsync(SteamRequestPriority.Interactive, token).ConfigureAwait(false);
+
+                if (lease is null) return (IReadOnlyList<SteamTitleSuggestion>)[];
+
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
+                cts.CancelAfter(RequestTimeout);
+
+                using var response = await _http.GetAsync(url, cts.Token).ConfigureAwait(false);
+
+                if (response.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.Forbidden)
+                {
+                    SteamRequestGate.ReportBlocked(response.StatusCode);
+                    return [];
+                }
+
+                if (!response.IsSuccessStatusCode) return [];
+
+                var payload = await response.Content.ReadAsStringAsync(cts.Token).ConfigureAwait(false);
+                SteamRequestGate.ReportSuccess();
+
+                using var doc = JsonDocument.Parse(payload);
+
+                if (!doc.RootElement.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+                {
+                    return [];
+                }
+
+                var suggestions = new List<SteamTitleSuggestion>();
+                var seen = new HashSet<uint>();
+
+                foreach (var item in items.EnumerateArray())
+                {
+                    if (!item.TryGetProperty("id", out var idProp) || !idProp.TryGetUInt32(out var appId) || appId == 0)
+                    {
+                        continue;
+                    }
+
+                    var name = item.TryGetProperty("name", out var n) ? n.GetString() : null;
+                    if (string.IsNullOrWhiteSpace(name)) continue;
+                    if (!seen.Add(appId)) continue;
+
+                    suggestions.Add(new SteamTitleSuggestion(appId, WebUtility.HtmlDecode(name).Trim()));
+                }
+
+                if (_cache != null && suggestions.Count > 0)
+                {
+                    try
+                    {
+                        await _cache.SetAsync(cacheKey, suggestions, SuggestCacheTtl, token).ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        // Caching is best effort.
+                    }
+                }
+
+                return suggestions;
+            }
+            catch (OperationCanceledException)
+            {
                 return [];
             }
-
-            if (!response.IsSuccessStatusCode) return [];
-
-            var payload = await response.Content.ReadAsStringAsync(cts.Token).ConfigureAwait(false);
-            SteamRequestGate.ReportSuccess();
-
-            using var doc = JsonDocument.Parse(payload);
-
-            if (!doc.RootElement.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+            catch (Exception ex) when (ex is HttpRequestException or JsonException)
             {
+                _logger.LogDebug(ex, "Steam title autocomplete failed for {Term}", trimmed);
                 return [];
             }
-
-            var suggestions = new List<SteamTitleSuggestion>();
-            var seen = new HashSet<uint>();
-
-            foreach (var item in items.EnumerateArray())
-            {
-                if (!item.TryGetProperty("id", out var idProp) || !idProp.TryGetUInt32(out var appId) || appId == 0)
-                {
-                    continue;
-                }
-
-                var name = item.TryGetProperty("name", out var n) ? n.GetString() : null;
-                if (string.IsNullOrWhiteSpace(name)) continue;
-                if (!seen.Add(appId)) continue;
-
-                suggestions.Add(new SteamTitleSuggestion(appId, WebUtility.HtmlDecode(name).Trim()));
-            }
-
-            if (_cache != null && suggestions.Count > 0)
-            {
-                try
-                {
-                    await _cache.SetAsync(cacheKey, suggestions, SuggestCacheTtl, ct).ConfigureAwait(false);
-                }
-                catch
-                {
-                    // Caching is best effort.
-                }
-            }
-
-            return suggestions;
-        }
-        catch (OperationCanceledException)
-        {
-            return [];
-        }
-        catch (Exception ex) when (ex is HttpRequestException or JsonException)
-        {
-            _logger.LogDebug(ex, "Steam title autocomplete failed for {Term}", trimmed);
-            return [];
-        }
+        }, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -447,7 +458,7 @@ public sealed partial class SteamCatalogSearchService : ISteamCatalogSearchServi
         };
     }
 
-    private async Task<(string Html, int TotalCount)?> GetEnvelopeAsync(
+    private async Task<(string Html, int TotalCount, string RawPayload)?> GetEnvelopeAsync(
         string url, SteamRequestPriority priority, CancellationToken ct)
     {
         using var lease = await SteamRequestGate.AcquireAsync(priority, ct).ConfigureAwait(false);
@@ -480,7 +491,7 @@ public sealed partial class SteamCatalogSearchService : ISteamCatalogSearchServi
             var html = doc.RootElement.TryGetProperty("results_html", out var h) ? h.GetString() ?? string.Empty : string.Empty;
             var total = doc.RootElement.TryGetProperty("total_count", out var t) && t.TryGetInt32(out var parsed) ? parsed : 0;
 
-            return (html, total);
+            return (html, total, payload);
         }
         catch (OperationCanceledException)
         {

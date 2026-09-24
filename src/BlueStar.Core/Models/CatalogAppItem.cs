@@ -23,8 +23,10 @@ public sealed record CatalogAppItem
     public DateTimeOffset? RatingUpdatedAt { get; init; }
     public string? HeaderImageUrl { get; init; }
     public string? PriceText { get; init; }
+    public int? PriceCents { get; init; }
     public int DiscountPercent { get; init; }
     public string? ReleaseDateText { get; init; }
+    public long? ReleaseDateUtc { get; init; }
     public bool HasWindows { get; init; } = true;
     public bool HasMac { get; init; }
     public bool HasLinux { get; init; }
