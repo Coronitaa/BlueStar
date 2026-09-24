@@ -56,6 +56,7 @@ jobs:
               catalog-dist/catalog.sqlite.zst \
               catalog-dist/catalog-manifest.json \
               --repo "$TARGET_REPO" \
+              --target main \
               --title "Steam Catalog Snapshot ($RELEASE_DATE)" \
               --notes "Automated snapshot containing the complete Steam catalog indexed for BlueStar. Compressed with Zstandard."
           fi
