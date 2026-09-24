@@ -219,10 +219,10 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     /// is a lot of requests for the fourth or fifth tag; the sizes that match the most tags are
     /// generated first, so the cap only ever cuts the least exact ones.
     /// </summary>
-    private const int MaxLadderRungs = 12;
+    private const int MaxLadderRungs = 64;
 
     /// <summary>How many empty steps one call may walk through before giving the screen back.</summary>
-    private const int MaxEmptyHops = 4;
+    private const int MaxEmptyHops = 6;
 
     private readonly List<SearchRung> _ladder = [];
 
@@ -232,7 +232,6 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     private List<int> _selectedExcludedTagIds = [];
     private int _ladderRung;
     private int _rungStart;
-    private int _steamQueryOffset;
 
     private readonly PriorityQueue<SearchResult, int> _priorityEnrichQueue = new();
     private readonly HashSet<uint> _enqueuedEnrichAppIds = [];
@@ -545,8 +544,8 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                     {
                         try
                         {
-                            var total = await _localRepo.GetCountAsync(_cts.Token).ConfigureAwait(false);
-                            if (total > 0)
+                            var comp = await _localRepo.GetCompletenessAsync(_cts.Token).ConfigureAwait(false);
+                            if (comp.IsAuthoritative && comp.TagsComplete)
                             {
                                 var counts = await _localRepo.GetTagCountsAsync(tagMap.Keys, _cts.Token).ConfigureAwait(false);
                                 if (counts.Count > 0)
@@ -754,7 +753,6 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
             _searchGeneration++;
 
             _fetched.Clear();
-            _steamQueryOffset = 0;
 
             // DO NOT clear Results here! Preserving Results during Refreshing prevents visual flicker.
             if (Results.Count == 0)
@@ -780,6 +778,13 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         if (reset) IsSearching = true; else IsLoadingMore = true;
         ErrorMessage = null;
 
+        // Deterministic AppID lookup: bypass store search ladder if a numeric AppID or Steam URL was entered
+        if (SteamQueryParser.TryParseAppId(SearchQuery, out var parsedAppId))
+        {
+            await ResolveAppIdSearchAsync(parsedAppId, generation, token).ConfigureAwait(true);
+            return;
+        }
+
         try
         {
             // If ISearchPipeline is present, execute queries through the layered pipeline (offline-first, FTS5, deterministic AppID)
@@ -804,96 +809,110 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                 _selectedTagIds = includedTags;
                 _selectedExcludedTagIds = excludedTags;
 
-                var activeFacets = GetAllActiveFacets();
-                var queryStart = reset ? 0 : _steamQueryOffset;
+                var pipelineLanded = 0;
 
-                var req = new SearchRequest
+                for (var hop = 0; hop <= MaxEmptyHops; hop++)
                 {
-                    RawQuery = SearchQuery,
-                    Pool = poolName ?? "all",
-                    SortBy = sortName,
-                    Descending = IsSortDescending,
-                    AppTypes = SelectedAppType,
-                    Start = queryStart,
-                    Count = PageSize,
-                    IncludedTagIds = includedTags,
-                    ExcludedTagIds = excludedTags,
-                    HasWindows = hasWin,
-                    HasMac = hasMac,
-                    HasLinux = hasLinux,
-                    MinRatingPercent = minRating,
-                    MaxRatingPercent = maxRating,
-                    NoDrm = noDrm,
-                    NoExternalLauncher = noLauncher,
-                    DiscountedOnly = discounted,
-                    MaxPriceCents = maxPriceCents,
-                    HideAdult = !(_settingsService?.ShowNsfwContent ?? false),
-                    Facets = activeFacets
-                };
+                    if (_ladderRung >= _ladder.Count)
+                    {
+                        // The tags and the typed term are spent. Before calling it empty, ask Steam
+                        // what that half-typed title might have been.
+                        if (pipelineLanded > 0 || !await TryAppendSuggestionRungsAsync(token).ConfigureAwait(true))
+                        {
+                            break;
+                        }
 
-                var res = await _searchPipeline.ExecuteAsync(req, token).ConfigureAwait(true);
-                if (_isDisposed || generation != _searchGeneration) return;
+                        if (_isDisposed || generation != _searchGeneration) return;
+                    }
 
-                _steamQueryOffset = queryStart + PageSize;
+                    var rung = _ladder[_ladderRung];
+                    var rungTagIds = rung.Tags
+                        .Select(t => int.TryParse(t.Value, out var id) ? id : 0)
+                        .Where(id => id > 0)
+                        .ToList();
 
-                ExactMatchCount = res.TotalCount;
-                TotalResults = res.TotalCount;
+                    var queryStart = _rungStart;
 
-                var known = _fetched.Select(f => f.AppId).ToHashSet();
-                var fresh = res.Items.Where(i => known.Add(i.AppId)).ToList();
+                    var req = new SearchRequest
+                    {
+                        RawQuery = rung.Term,
+                        Pool = poolName ?? "all",
+                        SortBy = sortName,
+                        Descending = IsSortDescending,
+                        AppTypes = SelectedAppType,
+                        Start = queryStart,
+                        Count = PageSize,
+                        IncludedTagIds = rungTagIds,
+                        ExcludedTagIds = excludedTags,
+                        HasWindows = hasWin,
+                        HasMac = hasMac,
+                        HasLinux = hasLinux,
+                        MinRatingPercent = minRating,
+                        MaxRatingPercent = maxRating,
+                        NoDrm = noDrm,
+                        NoExternalLauncher = noLauncher,
+                        DiscountedOnly = discounted,
+                        MaxPriceCents = maxPriceCents,
+                        HideAdult = !(_settingsService?.ShowNsfwContent ?? false),
+                        Facets = BuildFacets(rung.Tags)
+                    };
 
-                // If this page returned 0 fresh items due to post-filtering, but Steam has more results,
-                // auto-advance up to MaxEmptyPagingHops to find matching items without stalling the user
-                var emptyHops = 0;
-                const int MaxEmptyPagingHops = 3;
-                while (fresh.Count == 0 && _steamQueryOffset < res.TotalCount && emptyHops < MaxEmptyPagingHops && !token.IsCancellationRequested)
-                {
-                    emptyHops++;
-                    queryStart = _steamQueryOffset;
-                    req = req with { Start = queryStart };
-                    var nextRes = await _searchPipeline.ExecuteAsync(req, token).ConfigureAwait(true);
+                    var res = await _searchPipeline.ExecuteAsync(req, token).ConfigureAwait(true);
                     if (_isDisposed || generation != _searchGeneration) return;
 
-                    _steamQueryOffset = queryStart + PageSize;
-                    var nextFresh = nextRes.Items.Where(i => known.Add(i.AppId)).ToList();
-                    if (nextFresh.Count > 0)
+                    if (_ladderRung == 0) ExactMatchCount = res.TotalCount;
+
+                    var known = _fetched.Select(f => f.AppId).ToHashSet();
+                    var fresh = res.Items.Where(i => known.Add(i.AppId)).ToList();
+
+                    if (_ladderRung > 0 && _ladder.Count > 1 && fresh.Count > 0)
                     {
-                        fresh = nextFresh;
-                        res = nextRes;
-                        break;
+                        IsShowingRelated = true;
                     }
+
+                    foreach (var item in fresh)
+                    {
+                        var directMatch = _selectedTagIds.Count == 0
+                            ? 0
+                            : item.TagIds.Count(id => _selectedTagIds.Contains(id));
+                        item.MatchedTagCount = Math.Max(directMatch, rungTagIds.Count);
+                    }
+
+                    _fetched.AddRange(fresh);
+                    _rungStart = queryStart + PageSize;
+                    pipelineLanded += fresh.Count;
+
+                    if (res.TotalCount == 0 || _rungStart >= res.TotalCount)
+                    {
+                        if (rung.IsSuggestion) SuggestedTerm = rung.Term;
+
+                        _ladderRung++;
+                        _rungStart = 0;
+                    }
+                    else if (rung.IsSuggestion)
+                    {
+                        SuggestedTerm = rung.Term;
+                    }
+
+                    TotalResults = _ladderRung == 0 ? res.TotalCount : _fetched.Count;
+                    HasMoreResults = _ladderRung < _ladder.Count && _fetched.Count < MaxMaterialized;
+
+                    RebuildVisible();
+                    SearchState = Results.Count > 0 ? SearchState.ShowingResults : SearchState.Empty;
+
+                    _ = ResolveResultTagsAsync(fresh);
+                    QueueEnrichment(fresh);
+
+                    if (pipelineLanded > 0) break;
                 }
 
-                foreach (var item in fresh)
+                if (_ladderRung >= _ladder.Count) HasMoreResults = false;
+
+                if (generation == _searchGeneration && (SearchState == SearchState.Refreshing || SearchState == SearchState.LoadingInitial))
                 {
-                    item.MatchedTagCount = _selectedTagIds.Count == 0
-                        ? 0
-                        : item.TagIds.Count(id => _selectedTagIds.Contains(id));
+                    SearchState = Results.Count > 0 ? SearchState.ShowingResults : SearchState.Empty;
                 }
 
-                _fetched.AddRange(fresh);
-
-                if (!string.IsNullOrEmpty(sortName))
-                {
-                    var sorted = SearchPipeline.ApplyLocalSort(_fetched, sortName, IsSortDescending);
-                    _fetched.Clear();
-                    _fetched.AddRange(sorted);
-                }
-
-                HasMoreResults = _steamQueryOffset < res.TotalCount && _fetched.Count < MaxMaterialized;
-
-                RebuildVisible();
-                SearchState = Results.Count > 0 ? SearchState.ShowingResults : SearchState.Empty;
-
-                _ = ResolveResultTagsAsync(fresh);
-                QueueEnrichment(fresh);
-                return;
-            }
-
-            // Deterministic AppID lookup: bypass store search ladder if a numeric AppID or Steam URL was entered
-            if (SteamQueryParser.TryParseAppId(SearchQuery, out var parsedAppId))
-            {
-                await ResolveAppIdSearchAsync(parsedAppId, generation, token).ConfigureAwait(true);
                 return;
             }
 
@@ -1538,11 +1557,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
             if (item.TagIds.Any(t => _selectedExcludedTagIds.Contains(t))) return false;
         }
 
-        // Included tags
-        if (_selectedTagIds != null && _selectedTagIds.Count > 0 && item.TagIds != null)
-        {
-            if (!_selectedTagIds.All(t => item.TagIds.Contains(t))) return false;
-        }
+
 
         var noDrm = StateOf(content, "no_drm");
         var noLauncher = StateOf(content, "no_launcher");

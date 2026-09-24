@@ -38,7 +38,7 @@ public class SearchArchitectureRegressionTests : IDisposable
         try { if (File.Exists(_tempDb)) File.Delete(_tempDb); } catch { }
     }
 
-    private async Task PopulateCatalogAsync(int count, Func<int, CatalogAppItem>? customizer = null)
+    private async Task PopulateCatalogAsync(int count, Func<int, CatalogAppItem>? customizer = null, bool markComplete = true)
     {
         var items = new List<CatalogAppItem>(count);
         for (int i = 1; i <= count; i++)
@@ -59,6 +59,12 @@ public class SearchArchitectureRegressionTests : IDisposable
             items.Add(item);
         }
         await _localRepo.UpsertAppsAsync(items);
+
+        if (markComplete)
+        {
+            await _localRepo.SetMetadataAsync("identity_complete", "true");
+            await _localRepo.SetMetadataAsync("expected_app_count", count.ToString());
+        }
     }
 
     /// <summary>
@@ -260,9 +266,9 @@ public class SearchArchitectureRegressionTests : IDisposable
     [Fact]
     public async Task Test7_PartialLocalCatalog_NotMarkedAuthoritative()
     {
-        // When only a handful of items exist and no completeness state is marked complete,
-        // it should report partial/incomplete.
-        await PopulateCatalogAsync(10);
+        // When only a handful or browsing-cached items exist (e.g. 10 or 1205) and no completeness state is marked complete,
+        // it should report partial/incomplete, NOT authoritative.
+        await PopulateCatalogAsync(1205, markComplete: false);
 
         var completeness = await _localRepo.GetCompletenessAsync();
         Assert.False(completeness.IsAuthoritative, "A partial catalog without full snapshot must not be marked authoritative.");

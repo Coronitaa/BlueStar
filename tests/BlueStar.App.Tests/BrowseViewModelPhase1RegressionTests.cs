@@ -27,7 +27,7 @@ public class BrowseViewModelPhase1RegressionTests
     private readonly Mock<ISteamCatalogSearchService> _mockCatalogSearch = new();
     private readonly SpySearchPipeline _spyPipeline = new();
 
-    private BrowseViewModel CreateViewModel()
+    private BrowseViewModel CreateViewModel(ISteamTagCatalogService? tagCatalog = null, ILocalCatalogRepository? localRepo = null)
     {
         return new BrowseViewModel(
             _mockApiClient.Object,
@@ -36,7 +36,9 @@ public class BrowseViewModelPhase1RegressionTests
             _mockEngineDetector.Object,
             NullLogger<BrowseViewModel>.Instance,
             catalogSearch: _mockCatalogSearch.Object,
-            searchPipeline: _spyPipeline);
+            tagCatalog: tagCatalog,
+            searchPipeline: _spyPipeline,
+            localRepo: localRepo);
     }
 
     /// <summary>
@@ -560,6 +562,139 @@ public class BrowseViewModelPhase1RegressionTests
         Assert.Equal((uint)3, sortedDesc[2].AppId); // Spring 2026
         Assert.Contains(sortedDesc[3].AppId, new uint[] { 1, 5 }); // TBA
         Assert.Contains(sortedDesc[4].AppId, new uint[] { 1, 5 }); // TBA
+    }
+
+    /// <summary>
+    /// TEST U — Multi-Tag Ladder Progression & Max-AND-to-Min-AND Ordering with Infinite Scroll
+    /// Verifies that filtering by multiple tags walks the ladder rungs (strict AND first, then relaxed subsets),
+    /// assigns MatchedTagCount accordingly, keeps highest AND matches at the top, and allows infinite scroll.
+    /// </summary>
+    [Fact]
+    public async Task TestU_MultiTagLadder_OrdersMaxAndToMinAnd_WithInfiniteScrollProgression()
+    {
+        var mockTagCatalog = new Mock<ISteamTagCatalogService>();
+        mockTagCatalog.Setup(t => t.GetGroupAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<SteamTag>
+            {
+                new() { TagId = 19, Name = "Action", CanonicalName = "Action" },
+                new() { TagId = 4182, Name = "Singleplayer", CanonicalName = "Singleplayer" }
+            });
+
+        var vm = CreateViewModel(tagCatalog: mockTagCatalog.Object);
+
+        // Include 2 tags (e.g. first two tags found in FilterGroups)
+        var allTagOptions = vm.FilterGroups
+            .SelectMany(g => g.AllOptions)
+            .Where(o => o.Option.Kind == SteamFacetKind.Tag)
+            .Take(2)
+            .ToList();
+
+        Assert.True(allTagOptions.Count >= 2, "Expected at least 2 tag options available");
+        allTagOptions[0].State = FacetState.Include;
+        allTagOptions[1].State = FacetState.Include;
+
+        var tag0Id = int.Parse(allTagOptions[0].Option.Value);
+        var tag1Id = int.Parse(allTagOptions[1].Option.Value);
+
+        var requestedTagSets = new List<List<int>>();
+
+        _spyPipeline.Handler = req =>
+        {
+            var curTags = req.IncludedTagIds.ToList();
+            requestedTagSets.Add(curTags);
+
+            // If querying both tags (Rung 0: 2 tags in AND)
+            if (curTags.Count == 2)
+            {
+                return Task.FromResult(new SearchResponse
+                {
+                    Items = [
+                        new SearchResult { AppId = 100, Name = "Exact Match 1", TagIds = [tag0Id, tag1Id] },
+                        new SearchResult { AppId = 101, Name = "Exact Match 2", TagIds = [tag0Id, tag1Id] }
+                    ],
+                    TotalCount = 2,
+                    Start = req.Start,
+                    IsFromLocalCatalog = false
+                });
+            }
+
+            // If querying 1 tag (Rung 1: relaxed subset)
+            return Task.FromResult(new SearchResponse
+            {
+                Items = [
+                    new SearchResult { AppId = 200, Name = "Relaxed Match 1", TagIds = [curTags[0]] },
+                    new SearchResult { AppId = 201, Name = "Relaxed Match 2", TagIds = [curTags[0]] }
+                ],
+                TotalCount = 50,
+                Start = req.Start,
+                IsFromLocalCatalog = false
+            });
+        };
+
+        // 1. Initial search: Rung 0 (2 tags) executes
+        await vm.RunSearchAsync(reset: true);
+
+        Assert.Equal(2, vm.ExactMatchCount);
+        Assert.False(vm.IsShowingRelated, "IsShowingRelated must be false while on Rung 0 exact matches");
+        Assert.Equal(2, vm.Results.Count);
+        Assert.All(vm.Results, r => Assert.Equal(2, r.MatchedTagCount));
+        Assert.True(vm.HasMoreResults, "HasMoreResults must remain true so infinite scroll can relax tags");
+
+        // 2. Load next page (infinite scroll): Rung 0 was exhausted (TotalCount=2 reached), so it advances to Rung 1
+        await vm.RunSearchAsync(reset: false);
+
+        Assert.True(vm.IsShowingRelated, "IsShowingRelated must become true when ladder relaxes to fewer tags");
+        Assert.Equal(4, vm.Results.Count);
+
+        // Crucial requirement: Results must be ordered from highest matched tags to lowest!
+        Assert.Equal(2, vm.Results[0].MatchedTagCount);
+        Assert.Equal(2, vm.Results[1].MatchedTagCount);
+        Assert.Equal(1, vm.Results[2].MatchedTagCount);
+        Assert.Equal(1, vm.Results[3].MatchedTagCount);
+
+        Assert.Equal(100u, vm.Results[0].AppId);
+        Assert.Equal(101u, vm.Results[1].AppId);
+    }
+
+    /// <summary>
+    /// TEST V — RequestCountsFor Non-Authoritative Fallback
+    /// Verifies that when a local catalog is not authoritative and tags coverage is not complete,
+    /// RequestCountsFor falls back to remote Steam tag counts rather than reporting tiny cached counts.
+    /// </summary>
+    [Fact]
+    public async Task TestV_RequestCountsFor_NonAuthoritativeCatalog_DoesNotReportLocalCounts()
+    {
+        var mockLocal = new Mock<ILocalCatalogRepository>();
+        // Simulate a browsing cache of 1,205 apps that is NOT authoritative
+        mockLocal.Setup(m => m.GetCompletenessAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CatalogCompleteness
+            {
+                IdentityComplete = false,
+                ExpectedAppCount = 0,
+                IndexedAppCount = 1205,
+                TagsCoverage = 0.35
+            });
+
+        var mockTagCatalog = new Mock<ISteamTagCatalogService>();
+        mockTagCatalog.Setup(t => t.GetGroupAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<SteamTag>
+            {
+                new() { TagId = 19, Name = "Action", CanonicalName = "Action" },
+                new() { TagId = 4182, Name = "Singleplayer", CanonicalName = "Singleplayer" }
+            });
+
+        var vm = CreateViewModel(tagCatalog: mockTagCatalog.Object, localRepo: mockLocal.Object);
+
+        var tagGroup = vm.FilterGroups.FirstOrDefault(g => g.Items.Any(i => i.Option.Kind == SteamFacetKind.Tag));
+        Assert.NotNull(tagGroup);
+
+        tagGroup.IsExpanded = true;
+
+        // Give the background task a moment
+        await Task.Delay(150);
+
+        // Local repository GetTagCountsAsync should NOT be called because completeness.IsAuthoritative is false
+        mockLocal.Verify(m => m.GetTagCountsAsync(It.IsAny<IEnumerable<int>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private sealed class SpySearchPipeline : ISearchPipeline

@@ -122,6 +122,48 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
                 try { await altCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false); } catch { }
             }
 
+            // Backfill release_date_utc and price_cents for legacy rows if any exist
+            using (var backfillCmd = connection.CreateCommand())
+            {
+                backfillCmd.CommandText = """
+                    SELECT app_id, release_date_text, price_text 
+                    FROM apps 
+                    WHERE (release_date_utc IS NULL AND release_date_text IS NOT NULL AND release_date_text != '')
+                       OR (price_cents IS NULL AND price_text IS NOT NULL AND price_text != '');
+                    """;
+                var toUpdate = new List<(uint id, long? relUtc, int? prcCents)>();
+                using (var reader = await backfillCmd.ExecuteReaderAsync(ct).ConfigureAwait(false))
+                {
+                    while (await reader.ReadAsync(ct).ConfigureAwait(false))
+                    {
+                        var id = (uint)reader.GetInt64(0);
+                        var relText = reader.IsDBNull(1) ? null : reader.GetString(1);
+                        var prcText = reader.IsDBNull(2) ? null : reader.GetString(2);
+                        toUpdate.Add((id, ParseReleaseDateToUtcSeconds(relText), ParsePriceToCents(prcText)));
+                    }
+                }
+
+                if (toUpdate.Count > 0)
+                {
+                    using var updateTx = connection.BeginTransaction();
+                    using var upCmd = connection.CreateCommand();
+                    upCmd.Transaction = updateTx;
+                    upCmd.CommandText = "UPDATE apps SET release_date_utc = @rel, price_cents = @prc WHERE app_id = @id;";
+                    var pId = upCmd.Parameters.Add("@id", Microsoft.Data.Sqlite.SqliteType.Integer);
+                    var pRel = upCmd.Parameters.Add("@rel", Microsoft.Data.Sqlite.SqliteType.Integer);
+                    var pPrc = upCmd.Parameters.Add("@prc", Microsoft.Data.Sqlite.SqliteType.Integer);
+
+                    foreach (var (id, rel, prc) in toUpdate)
+                    {
+                        pId.Value = id;
+                        pRel.Value = rel.HasValue ? rel.Value : DBNull.Value;
+                        pPrc.Value = prc.HasValue ? prc.Value : DBNull.Value;
+                        await upCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                    }
+                    await updateTx.CommitAsync(ct).ConfigureAwait(false);
+                }
+            }
+
             bool ftsExisted;
             using (var checkCmd = connection.CreateCommand())
             {
@@ -903,7 +945,7 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             var withPricing = reader.GetInt32(3);
             var withTags = reader.GetInt32(4);
 
-            bool identityComplete = isIdentityExplicit || (expectedApps > 0 && total >= (int)(expectedApps * 0.95)) || (expectedApps == 0 && total >= 100);
+            bool identityComplete = isIdentityExplicit || (expectedApps > 0 && total >= (int)(expectedApps * 0.95)) || (expectedApps == 0 && total >= 50_000);
 
             return new CatalogCompleteness
             {

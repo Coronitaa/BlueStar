@@ -60,6 +60,8 @@ public class NetworkGateAndGovernorTests : IDisposable
             });
         }
         await _localRepo.UpsertAppsAsync(items);
+        await _localRepo.SetMetadataAsync("identity_complete", "true");
+        await _localRepo.SetMetadataAsync("expected_app_count", count.ToString());
     }
 
     [Fact]

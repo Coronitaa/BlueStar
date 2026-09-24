@@ -37,7 +37,7 @@ public sealed record CatalogCompleteness
         (
             IdentityComplete ||
             (ExpectedAppCount > 0 && IndexedAppCount >= (int)(ExpectedAppCount * 0.95)) ||
-            (ExpectedAppCount == 0 && IndexedAppCount >= 100)
+            (ExpectedAppCount == 0 && IndexedAppCount >= 50_000)
         );
 
     /// <summary>
