@@ -625,26 +625,22 @@ public class BrowseViewModelPhase1RegressionTests
                     new SearchResult { AppId = 200, Name = "Relaxed Match 1", TagIds = [curTags[0]] },
                     new SearchResult { AppId = 201, Name = "Relaxed Match 2", TagIds = [curTags[0]] }
                 ],
-                TotalCount = 50,
+                TotalCount = 500,
                 Start = req.Start,
                 IsFromLocalCatalog = false
             });
         };
 
-        // 1. Initial search: Rung 0 (2 tags) executes
+        // 1. Initial search: Rung 0 (2 tags) has only 2 exact matches.
+        // Instead of halting prematurely at 2 items (which would leave the page empty and without scrollbar),
+        // the engine seamlessly walks down the ladder to Rung 1 to fetch relaxed matches, ordering them
+        // strictly from highest matched tags (2) to lowest (1).
         await vm.RunSearchAsync(reset: true);
 
         Assert.Equal(2, vm.ExactMatchCount);
-        Assert.False(vm.IsShowingRelated, "IsShowingRelated must be false while on Rung 0 exact matches");
-        Assert.Equal(2, vm.Results.Count);
-        Assert.All(vm.Results, r => Assert.Equal(2, r.MatchedTagCount));
-        Assert.True(vm.HasMoreResults, "HasMoreResults must remain true so infinite scroll can relax tags");
-
-        // 2. Load next page (infinite scroll): Rung 0 was exhausted (TotalCount=2 reached), so it advances to Rung 1
-        await vm.RunSearchAsync(reset: false);
-
-        Assert.True(vm.IsShowingRelated, "IsShowingRelated must become true when ladder relaxes to fewer tags");
+        Assert.True(vm.IsShowingRelated, "IsShowingRelated must become true when ladder relaxes to fewer tags to fill results");
         Assert.Equal(4, vm.Results.Count);
+        Assert.True(vm.HasMoreResults, "HasMoreResults must remain true so infinite scroll can continue fetching");
 
         // Crucial requirement: Results must be ordered from highest matched tags to lowest!
         Assert.Equal(2, vm.Results[0].MatchedTagCount);
@@ -654,6 +650,12 @@ public class BrowseViewModelPhase1RegressionTests
 
         Assert.Equal(100u, vm.Results[0].AppId);
         Assert.Equal(101u, vm.Results[1].AppId);
+
+        // 2. Load next page (infinite scroll): continues fetching more results down the ladder
+        await vm.RunSearchAsync(reset: false);
+
+        Assert.True(vm.IsShowingRelated);
+        Assert.True(vm.Results.Count >= 4, "Infinite scroll must continue accumulating results");
     }
 
     /// <summary>

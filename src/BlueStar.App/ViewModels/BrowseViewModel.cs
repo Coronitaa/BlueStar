@@ -230,7 +230,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     private const int MaxLadderRungs = 64;
 
     /// <summary>How many empty steps one call may walk through before giving the screen back.</summary>
-    private const int MaxEmptyHops = 6;
+    private const int MaxEmptyHops = 32;
 
     private readonly List<SearchRung> _ladder = [];
 
@@ -882,11 +882,6 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                     var known = _fetched.Select(f => f.AppId).ToHashSet();
                     var fresh = res.Items.Where(i => known.Add(i.AppId)).ToList();
 
-                    if (_ladderRung > 0 && _ladder.Count > 1 && fresh.Count > 0)
-                    {
-                        IsShowingRelated = true;
-                    }
-
                     foreach (var item in fresh)
                     {
                         var directMatch = _selectedTagIds.Count == 0
@@ -899,7 +894,9 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                     _rungStart = queryStart + PageSize;
                     pipelineLanded += fresh.Count;
 
-                    if (res.TotalCount == 0 || _rungStart >= res.TotalCount)
+                    var isRungDone = res.TotalCount == 0 || _rungStart >= res.TotalCount;
+
+                    if (isRungDone)
                     {
                         if (rung.IsSuggestion) SuggestedTerm = rung.Term;
 
@@ -911,7 +908,20 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                         SuggestedTerm = rung.Term;
                     }
 
-                    TotalResults = _ladderRung == 0 ? res.TotalCount : _fetched.Count;
+                    if (_ladderRung > 0 && _ladder.Count > 1 && _fetched.Count > ExactMatchCount)
+                    {
+                        IsShowingRelated = true;
+                    }
+
+                    if (_ladder.Count <= 1)
+                    {
+                        TotalResults = res.TotalCount;
+                    }
+                    else
+                    {
+                        TotalResults = Math.Max(_fetched.Count, res.TotalCount);
+                    }
+
                     HasMoreResults = _ladderRung < _ladder.Count && _fetched.Count < MaxMaterialized;
 
                     RebuildVisible();
@@ -920,7 +930,11 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                     _ = ResolveResultTagsAsync(fresh);
                     QueueEnrichment(fresh);
 
-                    if (pipelineLanded > 0) break;
+                    if (pipelineLanded > 0)
+                    {
+                        if (_ladder.Count <= 1) break;
+                        if (!isRungDone || pipelineLanded >= 6) break;
+                    }
                 }
 
                 if (_ladderRung >= _ladder.Count) HasMoreResults = false;
@@ -996,20 +1010,34 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                 _rungStart += Math.Max(page.Items.Count, 1);
                 landed += fresh.Count;
 
-                if (page.Items.Count == 0 || _rungStart >= page.TotalCount)
+                var isRungDone = page.Items.Count == 0 || _rungStart >= page.TotalCount;
+
+                if (isRungDone)
                 {
                     if (rung.IsSuggestion) SuggestedTerm = rung.Term;
 
                     _ladderRung++;
                     _rungStart = 0;
-                    if (_ladderRung > 0 && _ladder.Count > 1) IsShowingRelated = true;
                 }
                 else if (rung.IsSuggestion)
                 {
                     SuggestedTerm = rung.Term;
                 }
 
-                TotalResults = _ladderRung == 0 ? page.TotalCount : _fetched.Count;
+                if (_ladderRung > 0 && _ladder.Count > 1 && _fetched.Count > ExactMatchCount)
+                {
+                    IsShowingRelated = true;
+                }
+
+                if (_ladder.Count <= 1)
+                {
+                    TotalResults = page.TotalCount;
+                }
+                else
+                {
+                    TotalResults = Math.Max(_fetched.Count, page.TotalCount);
+                }
+
                 HasMoreResults = _ladderRung < _ladder.Count && _fetched.Count < MaxMaterialized;
 
                 RebuildVisible();
@@ -1018,7 +1046,11 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                 _ = ResolveResultTagsAsync(fresh);
                 QueueEnrichment(fresh);
 
-                if (landed > 0) break;
+                if (landed > 0)
+                {
+                    if (_ladder.Count <= 1) break;
+                    if (!isRungDone || landed >= 6) break;
+                }
             }
 
             if (_ladderRung >= _ladder.Count) HasMoreResults = false;
@@ -2223,7 +2255,17 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
 
         if (_isDisposed) return;
 
-        if (featured.Count == 0)
+        // Filter out connectivity, multiplayer, hardware, and technical tags
+        var contentCandidates = featured
+            .Where(t => !SteamTagFilterHelper.IsConnectivityOrTechnicalTag(t))
+            .ToList();
+
+        if (contentCandidates.Count == 0 && featured.Count > 0)
+        {
+            contentCandidates = featured.ToList();
+        }
+
+        if (contentCandidates.Count == 0)
         {
             _notificationService?.ShowInfo(
                 "No tags to match",
@@ -2237,16 +2279,51 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         SearchQuery = string.Empty;
         foreach (var group in FilterGroups) group.ClearSelection();
 
+        // Only search and activate in content/genre/theme/gameplay/pace/style groups
+        var contentGroupKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "genre", "setting", "gameplay", "pace", "style"
+        };
+
         var applied = new List<string>();
 
-        foreach (var tag in featured)
+        foreach (var tag in contentCandidates)
         {
+            var activated = false;
             foreach (var group in FilterGroups)
             {
-                if (!group.ActivateByName(tag)) continue;
+                if (!contentGroupKeys.Contains(group.Key)) continue;
 
-                applied.Add(tag);
-                break;
+                if (group.ActivateByName(tag))
+                {
+                    applied.Add(tag);
+                    activated = true;
+                    break;
+                }
+            }
+
+            if (!activated && _tagCatalog != null)
+            {
+                try
+                {
+                    var catalog = await _tagCatalog.GetCatalogAsync(token).ConfigureAwait(true);
+                    var cleanTag = FilterGroupViewModel.CleanKey(tag);
+                    var found = catalog.Values.FirstOrDefault(t =>
+                        string.Equals(t.Name, tag, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(FilterGroupViewModel.CleanKey(t.Name), cleanTag, StringComparison.OrdinalIgnoreCase));
+
+                    if (found != null && !SteamTagFilterHelper.IsConnectivityOrTechnicalTag(found.Name))
+                    {
+                        var targetGroup = FilterGroups.FirstOrDefault(g => g.Key == "gameplay") ?? FilterGroups.First();
+                        var opt = new FilterOptionItem(found.ToFacet(), found.Name, found.ProductCount);
+                        targetGroup.AddCustomOption(opt);
+                        applied.Add(found.Name);
+                    }
+                }
+                catch
+                {
+                    // best effort
+                }
             }
 
             if (applied.Count == 4) break;

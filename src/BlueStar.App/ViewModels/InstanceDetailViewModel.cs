@@ -7468,30 +7468,54 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     {
         if (Instance == null || Instance.AppId == 0) return;
 
-        var tagList = new List<string>();
+        var candidates = new List<string>();
+
+        // 1. Community tags have the highest fidelity for game identity, gameplay, theme, and art style.
         if (CommunityTags != null && CommunityTags.Count > 0)
-            tagList.AddRange(CommunityTags);
+        {
+            candidates.AddRange(CommunityTags);
+        }
         else if (Instance.Metadata?.StoreTags != null && Instance.Metadata.StoreTags.Count > 0)
-            tagList.AddRange(Instance.Metadata.StoreTags);
+        {
+            candidates.AddRange(Instance.Metadata.StoreTags);
+        }
 
+        // 2. Fall back to / augment with genre tags (e.g. Action, RPG, Utilities for software)
         if (GenreTags != null && GenreTags.Count > 0)
-            tagList.AddRange(GenreTags.Where(g => !tagList.Contains(g, StringComparer.OrdinalIgnoreCase)));
+        {
+            candidates.AddRange(GenreTags.Where(g => !candidates.Contains(g, StringComparer.OrdinalIgnoreCase)));
+        }
         else if (Instance.Metadata?.Genres != null)
-            tagList.AddRange(Instance.Metadata.Genres.Where(g => !tagList.Contains(g, StringComparer.OrdinalIgnoreCase)));
+        {
+            candidates.AddRange(Instance.Metadata.Genres.Where(g => !candidates.Contains(g, StringComparer.OrdinalIgnoreCase)));
+        }
 
-        if (FeatureTags != null && FeatureTags.Count > 0)
-            tagList.AddRange(FeatureTags.Where(f => !tagList.Contains(f, StringComparer.OrdinalIgnoreCase)));
-        else if (Instance.Metadata?.Categories != null)
-            tagList.AddRange(Instance.Metadata.Categories.Where(f => !tagList.Contains(f, StringComparer.OrdinalIgnoreCase)));
+        // 3. Filter out connectivity (co-op, multiplayer, singleplayer, pvp), hardware (controllers, VR),
+        //    and technical tags (Steam achievements, cloud, remote play) so recommendations are strictly
+        //    about the game's actual content, genre, style, and mechanics.
+        var contentTags = candidates
+            .Where(t => !SteamTagFilterHelper.IsConnectivityOrTechnicalTag(t))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(6)
+            .Select(t => new StoreTagRef(t, false))
+            .ToList();
 
-        var tags = tagList.Select(t => new StoreTagRef(t, false)).ToList();
+        // If no content tags survived (e.g. only generic tags were found), fall back to whatever tags were present
+        if (contentTags.Count == 0 && candidates.Count > 0)
+        {
+            contentTags = candidates
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(4)
+                .Select(t => new StoreTagRef(t, false))
+                .ToList();
+        }
 
         var target = new SearchResult
         {
             AppId = Instance.AppId,
             Name = Instance.Name,
             HeaderImageUrl = Instance.HeaderImageUrl,
-            StoreTags = tags
+            StoreTags = contentTags
         };
 
         OnFindSimilarRequested?.Invoke(target);

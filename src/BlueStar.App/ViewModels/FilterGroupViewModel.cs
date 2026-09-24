@@ -310,16 +310,19 @@ public partial class FilterGroupViewModel : ObservableObject
             string.Equals(CleanKey(o.DisplayName), cleanTarget, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(CleanKey(o.Option.FallbackName), cleanTarget, StringComparison.OrdinalIgnoreCase));
 
-        // Substring / keyword fuzzy match for compound feature names (e.g. "DualShock Controller Support" vs "DUALSHOCK support")
+        // Substring / keyword fuzzy match for compound feature names (e.g. "DualShock Controller Support" vs "DUALSHOCK support" in controller/features)
         if (match is null && cleanTarget.Length >= 4)
         {
-            match = _all.FirstOrDefault(o =>
+            if (Key is "controller" or "features" or "accessibility")
             {
-                var cleanDisplay = CleanKey(o.DisplayName);
-                var cleanFallback = CleanKey(o.Option.FallbackName);
-                return (cleanDisplay.Length >= 4 && (cleanTarget.Contains(cleanDisplay) || cleanDisplay.Contains(cleanTarget))) ||
-                       (cleanFallback.Length >= 4 && (cleanTarget.Contains(cleanFallback) || cleanFallback.Contains(cleanTarget)));
-            });
+                match = _all.FirstOrDefault(o =>
+                {
+                    var cleanDisplay = CleanKey(o.DisplayName);
+                    var cleanFallback = CleanKey(o.Option.FallbackName);
+                    return (cleanDisplay.Length >= 4 && (cleanTarget.Contains(cleanDisplay) || cleanDisplay.Contains(cleanTarget))) ||
+                           (cleanFallback.Length >= 4 && (cleanTarget.Contains(cleanFallback) || cleanFallback.Contains(cleanTarget)));
+                });
+            }
         }
 
         if (match is null) return false;
