@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using BlueStar.App.ViewModels;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
+using BlueStar.Infrastructure.Search;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
@@ -279,6 +280,126 @@ public class BrowseViewModelPhase1RegressionTests
 
         // Verify SelectedSort was NOT reset to No particular order
         Assert.Equal("Released", vm.SelectedSort?.Value);
+    }
+
+    /// <summary>
+    /// TEST O — Steam Paging Offset Drift Prevention
+    /// Verifies that subsequent page fetches advance Start by PageSize (e.g. 25)
+    /// even when earlier pages had items filtered out (e.g. returning only 5 items).
+    /// </summary>
+    [Fact]
+    public async Task TestO_SteamPagingOffsetDrift_WhenCuratedItemsFiltered_OffsetMustAdvanceByPageSize()
+    {
+        var vm = CreateViewModel();
+        var capturedStarts = new List<int>();
+
+        _spyPipeline.Handler = req =>
+        {
+            capturedStarts.Add(req.Start);
+            // Return only 5 items even though Count requested was 25
+            var items = Enumerable.Range(req.Start, 5)
+                .Select(i => new SearchResult { AppId = (uint)i + 1, Name = $"Game {i}" })
+                .ToList();
+
+            return Task.FromResult(new SearchResponse
+            {
+                Items = items,
+                TotalCount = 100,
+                Start = req.Start,
+                IsFromLocalCatalog = false
+            });
+        };
+
+        // First page
+        await vm.RunSearchAsync(reset: true);
+        Assert.Single(capturedStarts);
+        Assert.Equal(0, capturedStarts[0]);
+        Assert.Equal(5, vm.Results.Count);
+
+        // Second page (LoadMore)
+        await vm.RunSearchAsync(reset: false);
+        Assert.Equal(2, capturedStarts.Count);
+        // Start must be PageSize (BrowseViewModel.PageSize = 50), NOT _fetched.Count (5)!
+        Assert.Equal(BrowseViewModel.PageSize, capturedStarts[1]);
+        Assert.Equal(10, vm.Results.Count);
+    }
+
+    /// <summary>
+    /// TEST P — ApplyLocalSort Strict AppId Determinism & Tie-Breaking
+    /// Verifies that ties in price, reviews, or release dates are deterministically
+    /// resolved by AppId.
+    /// </summary>
+    [Fact]
+    public void TestP_ApplyLocalSort_StrictAppIdDeterminism_TiesMustBeResolvedByAppId()
+    {
+        var items = new List<SearchResult>
+        {
+            new() { AppId = 300, Name = "Same Game", PriceText = "$9.99", ReleaseDateText = "1 Jan, 2024", ReviewPercent = 85 },
+            new() { AppId = 100, Name = "Same Game", PriceText = "$9.99", ReleaseDateText = "1 Jan, 2024", ReviewPercent = 85 },
+            new() { AppId = 200, Name = "Same Game", PriceText = "$9.99", ReleaseDateText = "1 Jan, 2024", ReviewPercent = 85 }
+        };
+
+        // Sort ascending by price: ties resolved by AppId ascending (100, 200, 300)
+        var priceSortedAsc = SearchPipeline.ApplyLocalSort(items, "price", descending: false);
+        Assert.Equal([100u, 200u, 300u], priceSortedAsc.Select(i => i.AppId));
+
+        // Sort descending by price: ties resolved by AppId descending (300, 200, 100)
+        var priceSortedDesc = SearchPipeline.ApplyLocalSort(items, "price", descending: true);
+        Assert.Equal([300u, 200u, 100u], priceSortedDesc.Select(i => i.AppId));
+
+        // Sort ascending by reviews: ties resolved by AppId ascending
+        var reviewSortedAsc = SearchPipeline.ApplyLocalSort(items, "reviews", descending: false);
+        Assert.Equal([100u, 200u, 300u], reviewSortedAsc.Select(i => i.AppId));
+
+        // Sort descending by reviews: ties resolved by AppId descending
+        var reviewSortedDesc = SearchPipeline.ApplyLocalSort(items, "reviews", descending: true);
+        Assert.Equal([300u, 200u, 100u], reviewSortedDesc.Select(i => i.AppId));
+
+        // Sort ascending by release date: ties resolved by AppId ascending
+        var releaseSortedAsc = SearchPipeline.ApplyLocalSort(items, "released", descending: false);
+        Assert.Equal([100u, 200u, 300u], releaseSortedAsc.Select(i => i.AppId));
+
+        // Sort descending by release date: ties resolved by AppId descending
+        var releaseSortedDesc = SearchPipeline.ApplyLocalSort(items, "released", descending: true);
+        Assert.Equal([300u, 200u, 100u], releaseSortedDesc.Select(i => i.AppId));
+    }
+
+    /// <summary>
+    /// TEST Q — VR Only Filtering Must Reject Apps Without VR Tag (Empty/Null Tags)
+    /// Verifies that both BrowseViewModel.PassesLocalFilters and SearchPipeline.MatchesRequestFilters
+    /// reject games without tag 21978 when VR only is requested.
+    /// </summary>
+    [Fact]
+    public async Task TestQ_MatchesRequestFilters_VrOnly_MustRejectAppWithoutTags()
+    {
+        var vm = CreateViewModel();
+
+        var platGroup = vm.FilterGroups.FirstOrDefault(g => g.Key == "platform");
+        Assert.NotNull(platGroup);
+        var vrOpt = platGroup.AllOptions.FirstOrDefault(o => o.Option.Value == "401");
+        Assert.NotNull(vrOpt);
+        vrOpt.State = FacetState.Include;
+
+        _spyPipeline.Handler = req =>
+        {
+            var vrGame = new SearchResult { AppId = 1, Name = "Half-Life: Alyx", TagIds = [21978] };
+            var regularGameNoTags = new SearchResult { AppId = 2, Name = "No Tags Game", TagIds = null! };
+            var regularGameOtherTags = new SearchResult { AppId = 3, Name = "Other Tags Game", TagIds = [19, 492] };
+
+            return Task.FromResult(new SearchResponse
+            {
+                Items = [vrGame, regularGameNoTags, regularGameOtherTags],
+                TotalCount = 3,
+                IsFromLocalCatalog = false
+            });
+        };
+
+        await vm.RunSearchAsync(reset: true);
+
+        // Only the game with tag 21978 should be present
+        Assert.Single(vm.Results);
+        Assert.Equal(1u, vm.Results[0].AppId);
+        Assert.Equal("Half-Life: Alyx", vm.Results[0].Name);
     }
 
     private sealed class SpySearchPipeline : ISearchPipeline

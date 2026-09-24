@@ -773,32 +773,42 @@ public sealed class SearchPipeline : ISearchPipeline
         return decimal.TryParse(cleaned, NumberStyles.Any, CultureInfo.InvariantCulture, out var price) ? price : decimal.MaxValue;
     }
 
-    private static IReadOnlyList<SearchResult> ApplyLocalSort(IReadOnlyList<SearchResult> items, string sortBase, bool descending)
+    public static IReadOnlyList<SearchResult> ApplyLocalSort(IReadOnlyList<SearchResult> items, string sortBase, bool descending)
     {
+        if (items.Count <= 1 || string.IsNullOrWhiteSpace(sortBase)) return items;
+
         var key = sortBase.ToLowerInvariant();
         return key switch
         {
             "name" => descending
-                ? items.OrderByDescending(i => i.Name, StringComparer.CurrentCultureIgnoreCase).ToList()
-                : items.OrderBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase).ToList(),
+                ? items.OrderByDescending(i => i.Name, StringComparer.CurrentCultureIgnoreCase).ThenByDescending(i => i.AppId).ToList()
+                : items.OrderBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(i => i.AppId).ToList(),
             "reviews" => descending
-                ? items.OrderByDescending(i => i.ReviewPercent ?? 0).ThenByDescending(i => i.MatchedTagCount).ToList()
-                : items.OrderBy(i => i.ReviewPercent ?? 100).ThenBy(i => i.MatchedTagCount).ToList(),
+                ? items.OrderByDescending(i => i.ReviewPercent ?? 0).ThenByDescending(i => i.MatchedTagCount).ThenByDescending(i => i.AppId).ToList()
+                : items.OrderBy(i => i.ReviewPercent ?? 100).ThenBy(i => i.MatchedTagCount).ThenBy(i => i.AppId).ToList(),
             "appid" => descending
                 ? items.OrderByDescending(i => i.AppId).ToList()
                 : items.OrderBy(i => i.AppId).ToList(),
             "price" => descending
-                ? items.OrderByDescending(i => ParsePrice(i.PriceText)).ThenByDescending(i => ParseReleaseDate(i.ReleaseDateText)).ToList()
-                : items.OrderBy(i => ParsePrice(i.PriceText)).ThenByDescending(i => ParseReleaseDate(i.ReleaseDateText)).ToList(),
+                ? items.Select(i => (Item: i, Price: ParsePrice(i.PriceText), Date: ParseReleaseDate(i.ReleaseDateText)))
+                       .OrderByDescending(p => p.Price).ThenByDescending(p => p.Date).ThenByDescending(p => p.Item.AppId)
+                       .Select(p => p.Item).ToList()
+                : items.Select(i => (Item: i, Price: ParsePrice(i.PriceText), Date: ParseReleaseDate(i.ReleaseDateText)))
+                       .OrderBy(p => p.Price).ThenByDescending(p => p.Date).ThenBy(p => p.Item.AppId)
+                       .Select(p => p.Item).ToList(),
             "discount" => descending
-                ? items.OrderByDescending(i => i.DiscountPercent).ToList()
-                : items.OrderBy(i => i.DiscountPercent).ToList(),
+                ? items.OrderByDescending(i => i.DiscountPercent).ThenByDescending(i => i.AppId).ToList()
+                : items.OrderBy(i => i.DiscountPercent).ThenBy(i => i.AppId).ToList(),
             "released" => descending
-                ? items.OrderByDescending(i => ParseReleaseDate(i.ReleaseDateText)).ToList()
-                : items.OrderBy(i => ParseReleaseDate(i.ReleaseDateText)).ToList(),
+                ? items.Select(i => (Item: i, Date: ParseReleaseDate(i.ReleaseDateText)))
+                       .OrderByDescending(p => p.Date).ThenByDescending(p => p.Item.AppId)
+                       .Select(p => p.Item).ToList()
+                : items.Select(i => (Item: i, Date: ParseReleaseDate(i.ReleaseDateText)))
+                       .OrderBy(p => p.Date).ThenBy(p => p.Item.AppId)
+                       .Select(p => p.Item).ToList(),
             "deckcompatdate" or "deck" => descending
-                ? items.OrderByDescending(i => i.DeckCompatibility ?? string.Empty).ToList()
-                : items.OrderBy(i => i.DeckCompatibility ?? string.Empty).ToList(),
+                ? items.OrderByDescending(i => i.DeckCompatibility ?? string.Empty).ThenByDescending(i => i.AppId).ToList()
+                : items.OrderBy(i => i.DeckCompatibility ?? string.Empty).ThenBy(i => i.AppId).ToList(),
             _ => items
         };
     }
@@ -829,7 +839,7 @@ public sealed class SearchPipeline : ISearchPipeline
         // VR only
         if (req.Facets != null && req.Facets.Any(f => f.Key.Kind == SteamFacetKind.Vr && f.Key.Value == "401" && f.Value == FacetState.Include))
         {
-            if (res.TagIds != null && res.TagIds.Count > 0 && !res.TagIds.Contains(21978))
+            if (res.TagIds == null || !res.TagIds.Contains(21978))
             {
                 return false;
             }

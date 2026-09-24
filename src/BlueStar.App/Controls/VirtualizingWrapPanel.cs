@@ -274,7 +274,14 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
                 {
                     try
                     {
-                        generator.Remove(pos, 1);
+                        if (generator is IRecyclingItemContainerGenerator recyclingGen)
+                        {
+                            recyclingGen.Recycle(pos, 1);
+                        }
+                        else
+                        {
+                            generator.Remove(pos, 1);
+                        }
                     }
                     catch (Exception)
                     {

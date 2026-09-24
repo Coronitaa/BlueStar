@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using BlueStar.Core.Helpers;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
+using BlueStar.Infrastructure.Search;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -231,6 +232,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     private List<int> _selectedExcludedTagIds = [];
     private int _ladderRung;
     private int _rungStart;
+    private int _steamQueryOffset;
 
     private readonly PriorityQueue<SearchResult, int> _priorityEnrichQueue = new();
     private readonly HashSet<uint> _enqueuedEnrichAppIds = [];
@@ -752,6 +754,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
             _searchGeneration++;
 
             _fetched.Clear();
+            _steamQueryOffset = 0;
 
             // DO NOT clear Results here! Preserving Results during Refreshing prevents visual flicker.
             if (Results.Count == 0)
@@ -802,6 +805,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                 _selectedExcludedTagIds = excludedTags;
 
                 var activeFacets = GetAllActiveFacets();
+                var queryStart = reset ? 0 : _steamQueryOffset;
 
                 var req = new SearchRequest
                 {
@@ -810,7 +814,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                     SortBy = sortName,
                     Descending = IsSortDescending,
                     AppTypes = SelectedAppType,
-                    Start = reset ? 0 : _fetched.Count,
+                    Start = queryStart,
                     Count = PageSize,
                     IncludedTagIds = includedTags,
                     ExcludedTagIds = excludedTags,
@@ -830,6 +834,8 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                 var res = await _searchPipeline.ExecuteAsync(req, token).ConfigureAwait(true);
                 if (_isDisposed || generation != _searchGeneration) return;
 
+                _steamQueryOffset = queryStart + PageSize;
+
                 ExactMatchCount = res.TotalCount;
                 TotalResults = res.TotalCount;
 
@@ -844,7 +850,15 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                 }
 
                 _fetched.AddRange(fresh);
-                HasMoreResults = _fetched.Count < res.TotalCount && fresh.Count > 0 && _fetched.Count < MaxMaterialized;
+
+                if (!string.IsNullOrEmpty(sortName))
+                {
+                    var sorted = SearchPipeline.ApplyLocalSort(_fetched, sortName, IsSortDescending);
+                    _fetched.Clear();
+                    _fetched.AddRange(sorted);
+                }
+
+                HasMoreResults = _steamQueryOffset < res.TotalCount && fresh.Count > 0 && _fetched.Count < MaxMaterialized;
 
                 RebuildVisible();
                 SearchState = Results.Count > 0 ? SearchState.ShowingResults : SearchState.Empty;
@@ -1485,7 +1499,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         // VR only
         if (StateOf(platGroup, "401") == FacetState.Include)
         {
-            if (item.TagIds != null && item.TagIds.Count > 0 && !item.TagIds.Contains(21978))
+            if (item.TagIds == null || !item.TagIds.Contains(21978))
             {
                 return false;
             }
