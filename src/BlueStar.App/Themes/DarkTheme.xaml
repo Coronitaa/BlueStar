@@ -38,5 +38,7 @@
     <conv:CachedImageConverter x:Key="CachedImageConverter"/>
     <conv:LogSeverityToBrushConverter x:Key="LogSeverityToBrushConverter"/>
     <conv:LogSeverityToBgBrushConverter x:Key="LogSeverityToBgBrushConverter"/>
+    <conv:ReviewScoreToBrushConverter x:Key="ReviewScoreToBrushConverter"/>
+
 
 </ResourceDictionary>

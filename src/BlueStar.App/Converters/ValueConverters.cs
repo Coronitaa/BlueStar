@@ -889,3 +889,58 @@ public sealed class LogSeverityToBgBrushConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
+
+/// <summary>
+/// Converts review percent or review summary to Steam store color brush:
+/// - Positive (>= 70%): Steam Store Light Blue #66C0F4
+/// - Mixed (40% - 69%): Steam Store Khaki / Brown #B9A074
+/// - Negative (< 40%): Steam Store Red / Orange #C35C2C
+/// - Unrated / null: Muted Gray #8F98A0
+/// </summary>
+public sealed class ReviewScoreToBrushConverter : IValueConverter
+{
+    private static readonly SolidColorBrush PositiveBrush = new(Color.FromRgb(102, 192, 244)); // #66C0F4
+    private static readonly SolidColorBrush MixedBrush = new(Color.FromRgb(185, 160, 116));    // #B9A074
+    private static readonly SolidColorBrush NegativeBrush = new(Color.FromRgb(195, 92, 44));   // #C35C2C
+    private static readonly SolidColorBrush MutedBrush = new(Color.FromRgb(143, 152, 160));    // #8F98A0
+
+    static ReviewScoreToBrushConverter()
+    {
+        PositiveBrush.Freeze();
+        MixedBrush.Freeze();
+        NegativeBrush.Freeze();
+        MutedBrush.Freeze();
+    }
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is int percent)
+        {
+            if (percent >= 70) return PositiveBrush;
+            if (percent >= 40) return MixedBrush;
+            if (percent > 0) return NegativeBrush;
+            return MutedBrush;
+        }
+
+        if (value is string str && !string.IsNullOrWhiteSpace(str))
+        {
+            if (str.Contains("Positive", StringComparison.OrdinalIgnoreCase)) return PositiveBrush;
+            if (str.Contains("Mixed", StringComparison.OrdinalIgnoreCase)) return MixedBrush;
+            if (str.Contains("Negative", StringComparison.OrdinalIgnoreCase)) return NegativeBrush;
+
+            var cleaned = str.Replace("%", "").Trim();
+            if (int.TryParse(cleaned, NumberStyles.Integer, CultureInfo.InvariantCulture, out var p))
+            {
+                if (p >= 70) return PositiveBrush;
+                if (p >= 40) return MixedBrush;
+                if (p > 0) return NegativeBrush;
+            }
+        }
+
+        return PositiveBrush;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+

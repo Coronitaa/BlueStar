@@ -103,5 +103,10 @@ public interface ILocalCatalogRepository : IDisposable
     /// Updates enriched metadata (tags, release dates, prices, ratings, platforms) for a batch of apps in a single transaction.
     /// </summary>
     Task UpdateAppMetadataBatchAsync(IEnumerable<AppMetadataEnrichment> batch, CancellationToken ct = default);
+
+    /// <summary>
+    /// Updates DRM, external launcher, and DLC count for a specific app.
+    /// </summary>
+    Task UpdateAppDrmAndLauncherAsync(uint appId, string? drmName, string? launcherName, int? dlcCount, CancellationToken ct = default);
 }
 

@@ -556,6 +556,19 @@ public sealed class SteamCatalogSnapshotService : ICatalogSnapshotService
                         isNsfw = true;
                     }
 
+                    string? relDateText = null;
+                    if (relDateUtc.HasValue && relDateUtc.Value > 0)
+                    {
+                        relDateText = DateTimeOffset.FromUnixTimeSeconds(relDateUtc.Value)
+                            .ToString("MMM d, yyyy", CultureInfo.InvariantCulture);
+                    }
+
+                    string? priceText = null;
+                    if (priceCents.HasValue)
+                    {
+                        priceText = priceCents.Value == 0 ? "Free" : $"${priceCents.Value / 100.0:F2}";
+                    }
+
                     result.Add(new AppMetadataEnrichment(
                         appId,
                         tagIds,
@@ -566,7 +579,9 @@ public sealed class SteamCatalogSnapshotService : ICatalogSnapshotService
                         hasWin,
                         hasMac,
                         hasLin,
-                        isNsfw
+                        isNsfw,
+                        ReleaseDateText: relDateText,
+                        PriceText: priceText
                     ));
                 }
 

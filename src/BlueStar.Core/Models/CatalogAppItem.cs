@@ -22,17 +22,40 @@ public sealed record CatalogAppItem
     public int? NegativeReviews { get; init; }
     public DateTimeOffset? RatingUpdatedAt { get; init; }
     public string? HeaderImageUrl { get; init; }
-    public string? PriceText { get; init; }
+
+    private readonly string? _priceText;
+    public string? PriceText
+    {
+        get => !string.IsNullOrWhiteSpace(_priceText)
+            ? _priceText
+            : (PriceCents.HasValue ? (PriceCents.Value == 0 ? "Free" : $"${PriceCents.Value / 100.0:F2}") : null);
+        init => _priceText = value;
+    }
+
     public int? PriceCents { get; init; }
     public int DiscountPercent { get; init; }
-    public string? ReleaseDateText { get; init; }
+
+    private readonly string? _releaseDateText;
+    public string? ReleaseDateText
+    {
+        get => !string.IsNullOrWhiteSpace(_releaseDateText)
+            ? _releaseDateText
+            : (ReleaseDateUtc.HasValue && ReleaseDateUtc.Value > 0
+                ? DateTimeOffset.FromUnixTimeSeconds(ReleaseDateUtc.Value).ToString("MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture)
+                : null);
+        init => _releaseDateText = value;
+    }
+
     public long? ReleaseDateUtc { get; init; }
     public bool HasWindows { get; init; } = true;
     public bool HasMac { get; init; }
     public bool HasLinux { get; init; }
     public bool IsNsfw { get; init; }
     public bool HasDrm { get; init; }
+    public string? DrmName { get; init; }
     public bool HasExternalLauncher { get; init; }
+    public string? LauncherName { get; init; }
+    public int? DlcCount { get; init; }
     public IReadOnlyList<int> TagIds { get; init; } = [];
 
     /// <summary>
@@ -103,6 +126,11 @@ public sealed record AppMetadataEnrichment(
     bool HasWindows,
     bool HasMac,
     bool HasLinux,
-    bool IsNsfw
+    bool IsNsfw,
+    string? DrmName = null,
+    string? LauncherName = null,
+    int? DlcCount = null,
+    string? ReleaseDateText = null,
+    string? PriceText = null
 );
 

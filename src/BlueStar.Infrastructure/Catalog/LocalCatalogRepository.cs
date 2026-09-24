@@ -102,7 +102,10 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
                         has_external_launcher INTEGER NOT NULL DEFAULT 0,
                         tag_ids TEXT,
                         release_date_utc INTEGER,
-                        price_cents INTEGER
+                        price_cents INTEGER,
+                        drm_name TEXT,
+                        launcher_name TEXT,
+                        dlc_count INTEGER NOT NULL DEFAULT 0
                     );
 
                     CREATE TABLE IF NOT EXISTS catalog_metadata (
@@ -119,6 +122,12 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
                 altCmd.CommandText = "ALTER TABLE apps ADD COLUMN release_date_utc INTEGER;";
                 try { await altCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false); } catch { }
                 altCmd.CommandText = "ALTER TABLE apps ADD COLUMN price_cents INTEGER;";
+                try { await altCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false); } catch { }
+                altCmd.CommandText = "ALTER TABLE apps ADD COLUMN drm_name TEXT;";
+                try { await altCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false); } catch { }
+                altCmd.CommandText = "ALTER TABLE apps ADD COLUMN launcher_name TEXT;";
+                try { await altCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false); } catch { }
+                altCmd.CommandText = "ALTER TABLE apps ADD COLUMN dlc_count INTEGER DEFAULT 0;";
                 try { await altCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false); } catch { }
             }
 
@@ -298,13 +307,15 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
                 price_change_number, review_percent, review_count, positive_reviews,
                 negative_reviews, rating_updated_at, header_image_url, price_text,
                 discount_percent, release_date_text, has_windows, has_mac, has_linux,
-                is_nsfw, has_drm, has_external_launcher, tag_ids, release_date_utc, price_cents
+                is_nsfw, has_drm, has_external_launcher, tag_ids, release_date_utc, price_cents,
+                drm_name, launcher_name, dlc_count
             ) VALUES (
                 @app_id, @name, @normalized_name, @compact_name, @app_type, @last_modified,
                 @price_change_number, @review_percent, @review_count, @positive_reviews,
                 @negative_reviews, @rating_updated_at, @header_image_url, @price_text,
                 @discount_percent, @release_date_text, @has_windows, @has_mac, @has_linux,
-                @is_nsfw, @has_drm, @has_external_launcher, @tag_ids, @release_date_utc, @price_cents
+                @is_nsfw, @has_drm, @has_external_launcher, @tag_ids, @release_date_utc, @price_cents,
+                @drm_name, @launcher_name, @dlc_count
             )
             ON CONFLICT(app_id) DO UPDATE SET
                 name = excluded.name,
@@ -326,8 +337,11 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
                 has_mac = excluded.has_mac,
                 has_linux = excluded.has_linux,
                 is_nsfw = excluded.is_nsfw,
-                has_drm = excluded.has_drm,
-                has_external_launcher = excluded.has_external_launcher,
+                has_drm = CASE WHEN excluded.has_drm = 1 OR (excluded.drm_name IS NOT NULL AND excluded.drm_name != '') THEN 1 ELSE apps.has_drm END,
+                has_external_launcher = CASE WHEN excluded.has_external_launcher = 1 OR (excluded.launcher_name IS NOT NULL AND excluded.launcher_name != '') THEN 1 ELSE apps.has_external_launcher END,
+                drm_name = COALESCE(excluded.drm_name, apps.drm_name),
+                launcher_name = COALESCE(excluded.launcher_name, apps.launcher_name),
+                dlc_count = CASE WHEN excluded.dlc_count > 0 THEN excluded.dlc_count ELSE apps.dlc_count END,
                 tag_ids = COALESCE(excluded.tag_ids, apps.tag_ids),
                 release_date_utc = COALESCE(excluded.release_date_utc, apps.release_date_utc),
                 price_cents = COALESCE(excluded.price_cents, apps.price_cents);
@@ -358,6 +372,9 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
         var pTags = cmd.Parameters.Add("@tag_ids", SqliteType.Text);
         var pReleaseUtc = cmd.Parameters.Add("@release_date_utc", SqliteType.Integer);
         var pPriceCents = cmd.Parameters.Add("@price_cents", SqliteType.Integer);
+        var pDrmName = cmd.Parameters.Add("@drm_name", SqliteType.Text);
+        var pLauncherName = cmd.Parameters.Add("@launcher_name", SqliteType.Text);
+        var pDlcCount = cmd.Parameters.Add("@dlc_count", SqliteType.Integer);
 
         foreach (var app in apps)
         {
@@ -389,8 +406,8 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             pMac.Value = app.HasMac ? 1 : 0;
             pLin.Value = app.HasLinux ? 1 : 0;
             pNsfw.Value = app.IsNsfw ? 1 : 0;
-            pDrm.Value = app.HasDrm ? 1 : 0;
-            pLauncher.Value = app.HasExternalLauncher ? 1 : 0;
+            pDrm.Value = (app.HasDrm || !string.IsNullOrWhiteSpace(app.DrmName)) ? 1 : 0;
+            pLauncher.Value = (app.HasExternalLauncher || !string.IsNullOrWhiteSpace(app.LauncherName)) ? 1 : 0;
             pTags.Value = app.TagIds.Count > 0
                 ? "," + string.Join(',', app.TagIds) + ","
                 : DBNull.Value;
@@ -398,6 +415,9 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
                 ?? (ParseReleaseDateToUtcSeconds(app.ReleaseDateText) ?? (object)DBNull.Value);
             pPriceCents.Value = (object?)app.PriceCents
                 ?? (ParsePriceToCents(app.PriceText) ?? (object)DBNull.Value);
+            pDrmName.Value = (object?)app.DrmName ?? DBNull.Value;
+            pLauncherName.Value = (object?)app.LauncherName ?? DBNull.Value;
+            pDlcCount.Value = app.DlcCount.HasValue ? app.DlcCount.Value : 0;
 
             await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         }
@@ -1091,6 +1111,30 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
         }
         catch { }
 
+        string? drmName = null;
+        try
+        {
+            var drmOrd = reader.GetOrdinal("drm_name");
+            if (drmOrd >= 0 && !reader.IsDBNull(drmOrd)) drmName = reader.GetString(drmOrd);
+        }
+        catch { }
+
+        string? launcherName = null;
+        try
+        {
+            var lchOrd = reader.GetOrdinal("launcher_name");
+            if (lchOrd >= 0 && !reader.IsDBNull(lchOrd)) launcherName = reader.GetString(lchOrd);
+        }
+        catch { }
+
+        int? dlcCount = null;
+        try
+        {
+            var dlcOrd = reader.GetOrdinal("dlc_count");
+            if (dlcOrd >= 0 && !reader.IsDBNull(dlcOrd)) dlcCount = reader.GetInt32(dlcOrd);
+        }
+        catch { }
+
         return new CatalogAppItem
         {
             AppId = appId,
@@ -1115,8 +1159,11 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             HasMac = hasMac,
             HasLinux = hasLinux,
             IsNsfw = isNsfw,
-            HasDrm = hasDrm,
-            HasExternalLauncher = hasExternalLauncher,
+            HasDrm = hasDrm || !string.IsNullOrWhiteSpace(drmName),
+            DrmName = drmName,
+            HasExternalLauncher = hasExternalLauncher || !string.IsNullOrWhiteSpace(launcherName),
+            LauncherName = launcherName,
+            DlcCount = dlcCount,
             TagIds = tagIds
         };
     }
@@ -1167,7 +1214,14 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
                     has_windows = @win,
                     has_mac = @mac,
                     has_linux = @lin,
-                    is_nsfw = CASE WHEN @nsfw = 1 THEN 1 ELSE is_nsfw END
+                    is_nsfw = CASE WHEN @nsfw = 1 THEN 1 ELSE is_nsfw END,
+                    drm_name = COALESCE(@drm, drm_name),
+                    has_drm = CASE WHEN @drm IS NOT NULL AND @drm != '' THEN 1 ELSE has_drm END,
+                    launcher_name = COALESCE(@launcher, launcher_name),
+                    has_external_launcher = CASE WHEN @launcher IS NOT NULL AND @launcher != '' THEN 1 ELSE has_external_launcher END,
+                    dlc_count = CASE WHEN @dlc IS NOT NULL AND @dlc > 0 THEN @dlc ELSE dlc_count END,
+                    release_date_text = COALESCE(@relText, release_date_text),
+                    price_text = COALESCE(@priceText, price_text)
                 WHERE app_id = @id;
                 """;
 
@@ -1181,6 +1235,11 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             var pMac = cmd.Parameters.Add("@mac", SqliteType.Integer);
             var pLin = cmd.Parameters.Add("@lin", SqliteType.Integer);
             var pNsfw = cmd.Parameters.Add("@nsfw", SqliteType.Integer);
+            var pDrm = cmd.Parameters.Add("@drm", SqliteType.Text);
+            var pLauncher = cmd.Parameters.Add("@launcher", SqliteType.Text);
+            var pDlc = cmd.Parameters.Add("@dlc", SqliteType.Integer);
+            var pRelText = cmd.Parameters.Add("@relText", SqliteType.Text);
+            var pPriceText = cmd.Parameters.Add("@priceText", SqliteType.Text);
 
             foreach (var item in batch)
             {
@@ -1194,11 +1253,50 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
                 pMac.Value = item.HasMac ? 1 : 0;
                 pLin.Value = item.HasLinux ? 1 : 0;
                 pNsfw.Value = item.IsNsfw ? 1 : 0;
+                pDrm.Value = (object?)item.DrmName ?? DBNull.Value;
+                pLauncher.Value = (object?)item.LauncherName ?? DBNull.Value;
+                pDlc.Value = (object?)item.DlcCount ?? DBNull.Value;
+                pRelText.Value = (object?)item.ReleaseDateText ?? DBNull.Value;
+                pPriceText.Value = (object?)item.PriceText ?? DBNull.Value;
 
                 await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             }
 
             await tx.CommitAsync(ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task UpdateAppDrmAndLauncherAsync(uint appId, string? drmName, string? launcherName, int? dlcCount, CancellationToken ct = default)
+    {
+        await InitializeAsync(ct).ConfigureAwait(false);
+
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(ct).ConfigureAwait(false);
+
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = """
+                UPDATE apps SET
+                    drm_name = COALESCE(@drm, drm_name),
+                    has_drm = CASE WHEN @drm IS NOT NULL AND @drm != '' THEN 1 ELSE has_drm END,
+                    launcher_name = COALESCE(@launcher, launcher_name),
+                    has_external_launcher = CASE WHEN @launcher IS NOT NULL AND @launcher != '' THEN 1 ELSE has_external_launcher END,
+                    dlc_count = CASE WHEN @dlc IS NOT NULL AND @dlc > 0 THEN @dlc ELSE dlc_count END
+                WHERE app_id = @id;
+                """;
+            cmd.Parameters.AddWithValue("@id", appId);
+            cmd.Parameters.AddWithValue("@drm", (object?)drmName ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@launcher", (object?)launcherName ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@dlc", (object?)dlcCount ?? DBNull.Value);
+
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         }
         finally
         {

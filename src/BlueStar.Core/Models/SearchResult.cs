@@ -24,6 +24,12 @@ public class SearchResult : INotifyPropertyChanged
     private bool _isNsfw;
     private bool _hasDrm;
     private string? _drmNotice;
+    private string? _drmName;
+    private bool _hasExternalLauncher;
+    private string? _launcherName;
+    private string? _launcherNotice;
+    private int? _priceCents;
+    private long? _releaseDateUtc;
     private bool _isCreating;
     private string? _creationStatus;
 
@@ -60,8 +66,21 @@ public class SearchResult : INotifyPropertyChanged
     public int? DlcCount
     {
         get => _dlcCount;
-        set => SetField(ref _dlcCount, value);
+        set
+        {
+            if (SetField(ref _dlcCount, value))
+            {
+                OnPropertyChanged(nameof(DlcBadgeText));
+            }
+        }
     }
+
+    /// <summary>
+    /// Formatted badge text for DLC count (e.g. "27 DLCs", "1 DLC"), or null when 0.
+    /// </summary>
+    public string? DlcBadgeText => _dlcCount.HasValue && _dlcCount.Value > 0
+        ? (_dlcCount.Value == 1 ? "1 DLC" : $"{_dlcCount.Value} DLCs")
+        : null;
 
     /// <summary>
     /// Gets or sets the URL to the header image / banner for the game.
@@ -159,8 +178,38 @@ public class SearchResult : INotifyPropertyChanged
     public string? DrmNotice
     {
         get => _drmNotice;
-        set => SetField(ref _drmNotice, value);
+        set
+        {
+            if (SetField(ref _drmNotice, value))
+            {
+                if (!string.IsNullOrWhiteSpace(value) && string.IsNullOrWhiteSpace(_drmName))
+                {
+                    DrmName = Helpers.ThirdPartyNoticeParser.ExtractDrmName(value);
+                }
+            }
+        }
     }
+
+    /// <summary>
+    /// Gets or sets the specific DRM system name (e.g. "DENUVO", "VMProtect", "SecuROM").
+    /// </summary>
+    public string? DrmName
+    {
+        get => _drmName;
+        set
+        {
+            if (SetField(ref _drmName, value))
+            {
+                OnPropertyChanged(nameof(DrmBadgeText));
+                if (!string.IsNullOrWhiteSpace(value)) HasDrm = true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Formatted badge text for DRM (e.g. "DENUVO", "VMProtect"), or "DRM" when system name is unknown.
+    /// </summary>
+    public string DrmBadgeText => !string.IsNullOrWhiteSpace(_drmName) ? _drmName.ToUpperInvariant() : "DRM";
 
     /// <summary>
     /// Gets or sets whether an instance is actively being created for this item.
@@ -200,7 +249,6 @@ public class SearchResult : INotifyPropertyChanged
     private int _discountPercent;
     private string? _deckCompatibility;
     private string? _releaseDateText;
-    private bool _hasExternalLauncher;
     private bool _isEnriched;
     private RequirementsVerdict _requirements = RequirementsVerdict.Unknown;
     private int _matchedTagCount;
@@ -289,11 +337,35 @@ public class SearchResult : INotifyPropertyChanged
 
     /// <summary>
     /// Current price as the store formats it, or a free-to-play marker.
+    /// Falls back dynamically to <see cref="PriceCents"/> if explicit text is absent.
     /// </summary>
     public string? PriceText
     {
-        get => _priceText;
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(_priceText)) return _priceText;
+            if (_priceCents.HasValue)
+            {
+                return _priceCents.Value == 0 ? "Free" : $"${_priceCents.Value / 100.0:F2}";
+            }
+            return null;
+        }
         set => SetField(ref _priceText, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the price in integer cents (e.g. 5999 for $59.99, 0 for Free).
+    /// </summary>
+    public int? PriceCents
+    {
+        get => _priceCents;
+        set
+        {
+            if (SetField(ref _priceCents, value))
+            {
+                OnPropertyChanged(nameof(PriceText));
+            }
+        }
     }
 
     /// <summary>
@@ -325,22 +397,85 @@ public class SearchResult : INotifyPropertyChanged
 
     /// <summary>
     /// Release date as the store prints it.
+    /// Falls back dynamically to <see cref="ReleaseDateUtc"/> if explicit text is absent.
     /// </summary>
     public string? ReleaseDateText
     {
-        get => _releaseDateText;
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(_releaseDateText)) return _releaseDateText;
+            if (_releaseDateUtc.HasValue && _releaseDateUtc.Value > 0)
+            {
+                return DateTimeOffset.FromUnixTimeSeconds(_releaseDateUtc.Value)
+                    .ToString("MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
+            }
+            return null;
+        }
         set => SetField(ref _releaseDateText, value);
     }
 
     /// <summary>
+    /// Gets or sets the Unix epoch release timestamp in seconds.
+    /// </summary>
+    public long? ReleaseDateUtc
+    {
+        get => _releaseDateUtc;
+        set
+        {
+            if (SetField(ref _releaseDateUtc, value))
+            {
+                OnPropertyChanged(nameof(ReleaseDateText));
+            }
+        }
+    }
+
+    /// <summary>
     /// Whether the app requires a third-party account or launcher (EA, Ubisoft Connect, PSN…).
-    /// Only meaningful once <see cref="IsEnriched"/> is true.
     /// </summary>
     public bool HasExternalLauncher
     {
         get => _hasExternalLauncher;
         set => SetField(ref _hasExternalLauncher, value);
     }
+
+    /// <summary>
+    /// Gets or sets the 3rd-party launcher / account description notice if present.
+    /// </summary>
+    public string? LauncherNotice
+    {
+        get => _launcherNotice;
+        set
+        {
+            if (SetField(ref _launcherNotice, value))
+            {
+                if (!string.IsNullOrWhiteSpace(value) && string.IsNullOrWhiteSpace(_launcherName))
+                {
+                    LauncherName = Helpers.ThirdPartyNoticeParser.ExtractLauncherName(value);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the specific external launcher system name (e.g. "Rockstar", "EA App", "Ubisoft").
+    /// </summary>
+    public string? LauncherName
+    {
+        get => _launcherName;
+        set
+        {
+            if (SetField(ref _launcherName, value))
+            {
+                OnPropertyChanged(nameof(LauncherBadgeText));
+                if (!string.IsNullOrWhiteSpace(value)) HasExternalLauncher = true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Formatted badge text for external launcher (e.g. "Rockstar", "EA App"), or "Launcher" when system name is unknown.
+    /// </summary>
+    public string LauncherBadgeText => !string.IsNullOrWhiteSpace(_launcherName) ? _launcherName : "Launcher";
 
     /// <summary>
     /// Whether the <c>appdetails</c> pass has run for this result. Until it has, DRM, external

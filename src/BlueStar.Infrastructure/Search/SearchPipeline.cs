@@ -938,6 +938,9 @@ public sealed class SearchPipeline : ISearchPipeline
 
     public static SearchResult ToSearchResult(CatalogAppItem item)
     {
+        var hasDrm = item.HasDrm || !string.IsNullOrWhiteSpace(item.DrmName);
+        var hasLauncher = item.HasExternalLauncher || !string.IsNullOrWhiteSpace(item.LauncherName);
+
         return new SearchResult
         {
             AppId = item.AppId,
@@ -948,17 +951,22 @@ public sealed class SearchPipeline : ISearchPipeline
             HasMac = item.HasMac,
             HasLinux = item.HasLinux,
             IsNsfw = item.IsNsfw,
-            HasDrm = item.HasDrm,
-            HasExternalLauncher = item.HasExternalLauncher,
+            HasDrm = hasDrm,
+            DrmName = item.DrmName,
+            HasExternalLauncher = hasLauncher,
+            LauncherName = item.LauncherName,
+            DlcCount = item.DlcCount,
             ReviewPercent = item.ReviewPercent,
             ReviewSummary = item.ReviewPercent.HasValue
                 ? RatingEngine.GetReviewSummary(item.ReviewPercent.Value, item.ReviewCount ?? 100)
                 : null,
+            PriceCents = item.PriceCents,
             PriceText = item.PriceText,
             DiscountPercent = item.DiscountPercent,
+            ReleaseDateUtc = item.ReleaseDateUtc,
             ReleaseDateText = item.ReleaseDateText,
             TagIds = item.TagIds,
-            IsEnriched = item.HasDrm || item.HasExternalLauncher || item.ReviewPercent.HasValue
+            IsEnriched = true // Catalog items are pre-indexed; instantaneous display with zero delay
         };
     }
 
@@ -979,11 +987,16 @@ public sealed class SearchPipeline : ISearchPipeline
             HasMac = result.HasMac,
             HasLinux = result.HasLinux,
             IsNsfw = result.IsNsfw,
-            HasDrm = result.HasDrm,
-            HasExternalLauncher = result.HasExternalLauncher,
+            HasDrm = result.HasDrm || !string.IsNullOrWhiteSpace(result.DrmName),
+            DrmName = result.DrmName,
+            HasExternalLauncher = result.HasExternalLauncher || !string.IsNullOrWhiteSpace(result.LauncherName),
+            LauncherName = result.LauncherName,
+            DlcCount = result.DlcCount,
             ReviewPercent = result.ReviewPercent,
+            PriceCents = result.PriceCents,
             PriceText = result.PriceText,
             DiscountPercent = result.DiscountPercent,
+            ReleaseDateUtc = result.ReleaseDateUtc,
             ReleaseDateText = result.ReleaseDateText,
             TagIds = result.TagIds
         };

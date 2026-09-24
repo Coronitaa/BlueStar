@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using System.Text.Json;
+using BlueStar.Core.Helpers;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
 using BlueStar.Infrastructure.Services;
@@ -37,20 +38,25 @@ public sealed class SteamStoreApiClient : IMetadataProvider
     /// <param name="http">HTTP client configured for Steam Store API.</param>
     /// <param name="logger">Logger instance.</param>
     /// <param name="cache">Optional persistent cache service.</param>
+    private readonly ILocalCatalogRepository? _localRepo;
+
     /// <param name="coordinator">Optional request coordinator for in-flight deduplication.</param>
     /// <param name="metrics">Optional network metrics observer.</param>
+    /// <param name="localRepo">Optional local catalog repository for metadata persistence.</param>
     public SteamStoreApiClient(
         HttpClient http,
         ILogger<SteamStoreApiClient> logger,
         ICacheService? cache = null,
         IRequestCoordinator? coordinator = null,
-        INetworkMetricsObserver? metrics = null)
+        INetworkMetricsObserver? metrics = null,
+        ILocalCatalogRepository? localRepo = null)
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _cache = cache;
         _coordinator = coordinator ?? RequestCoordinator.Instance;
         _metrics = metrics;
+        _localRepo = localRepo;
     }
 
     /// <summary>
@@ -287,7 +293,9 @@ public sealed class SteamStoreApiClient : IMetadataProvider
         bool HasDrm,
         string? DrmNotice,
         string? Version,
-        bool HasExternalLauncher = false
+        bool HasExternalLauncher = false,
+        string? DrmName = null,
+        string? LauncherName = null
     );
 
     /// <inheritdoc />
@@ -295,7 +303,7 @@ public sealed class SteamStoreApiClient : IMetadataProvider
     {
         if (result == null || result.AppId == 0) return;
 
-        var cacheKey = $"steam_enrich_{result.AppId}_v3";
+        var cacheKey = $"steam_enrich_{result.AppId}_v4";
         if (_cache != null)
         {
             try
@@ -313,7 +321,9 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                     result.IsNsfw = cached.IsNsfw;
                     result.HasDrm = cached.HasDrm;
                     result.DrmNotice = cached.DrmNotice;
+                    if (!string.IsNullOrWhiteSpace(cached.DrmName)) result.DrmName = cached.DrmName;
                     result.HasExternalLauncher = cached.HasExternalLauncher;
+                    if (!string.IsNullOrWhiteSpace(cached.LauncherName)) result.LauncherName = cached.LauncherName;
                     if (!string.IsNullOrWhiteSpace(cached.Version)) result.Version = cached.Version;
                     return;
                 }
@@ -501,7 +511,9 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                     // 1.6 DRM and 3rd-Party Account / Launcher
                     bool hasDrm = false;
                     string? drmNotice = null;
+                    string? drmName = null;
                     bool hasExternalLauncher = false;
+                    string? launcherName = null;
 
                     if (data.TryGetProperty("drm_notice", out var drmProp) && drmProp.ValueKind == JsonValueKind.String)
                     {
@@ -510,6 +522,7 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                         {
                             hasDrm = true;
                             drmNotice = notice.Trim();
+                            drmName = ThirdPartyNoticeParser.ParseDrmName(drmNotice);
                         }
                     }
 
@@ -519,6 +532,7 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                         if (!string.IsNullOrWhiteSpace(notice))
                         {
                             hasExternalLauncher = true;
+                            launcherName = ThirdPartyNoticeParser.ParseLauncherName(notice.Trim());
                             if (string.IsNullOrWhiteSpace(drmNotice))
                             {
                                 drmNotice = notice.Trim();
@@ -538,6 +552,8 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                             legal.Contains("VMProtect", StringComparison.OrdinalIgnoreCase))
                         {
                             hasDrm = true;
+                            if (string.IsNullOrWhiteSpace(drmName))
+                                drmName = ThirdPartyNoticeParser.ParseDrmName(legal);
                             if (string.IsNullOrWhiteSpace(drmNotice))
                                 drmNotice = "Incorporates 3rd-party DRM";
                         }
@@ -545,7 +561,9 @@ public sealed class SteamStoreApiClient : IMetadataProvider
 
                     result.HasDrm = hasDrm;
                     result.DrmNotice = drmNotice;
+                    result.DrmName = drmName;
                     result.HasExternalLauncher = hasExternalLauncher;
+                    result.LauncherName = launcherName;
 
                     // 1.7 Release Date fallback
                     if (string.IsNullOrWhiteSpace(result.Version) &&
@@ -557,6 +575,16 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                         {
                             result.Version = dateStr;
                         }
+                    }
+
+                    // Also persist into local repo if available
+                    if (_localRepo != null && (drmName != null || launcherName != null || result.DlcCount > 0))
+                    {
+                        try
+                        {
+                            await _localRepo.UpdateAppDrmAndLauncherAsync(result.AppId, drmName, launcherName, result.DlcCount > 0 ? result.DlcCount : null, ct).ConfigureAwait(false);
+                        }
+                        catch { }
                     }
 
                     // Save enriched payload in persistent cache
@@ -574,7 +602,9 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                             result.HasDrm,
                             result.DrmNotice,
                             result.Version,
-                            result.HasExternalLauncher
+                            result.HasExternalLauncher,
+                            result.DrmName,
+                            result.LauncherName
                         );
                         try { await _cache.SetAsync(cacheKey, item, TimeSpan.FromDays(7), ct).ConfigureAwait(false); } catch { }
                     }
