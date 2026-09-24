@@ -842,6 +842,28 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                 var known = _fetched.Select(f => f.AppId).ToHashSet();
                 var fresh = res.Items.Where(i => known.Add(i.AppId)).ToList();
 
+                // If this page returned 0 fresh items due to post-filtering, but Steam has more results,
+                // auto-advance up to MaxEmptyPagingHops to find matching items without stalling the user
+                var emptyHops = 0;
+                const int MaxEmptyPagingHops = 3;
+                while (fresh.Count == 0 && _steamQueryOffset < res.TotalCount && emptyHops < MaxEmptyPagingHops && !token.IsCancellationRequested)
+                {
+                    emptyHops++;
+                    queryStart = _steamQueryOffset;
+                    req = req with { Start = queryStart };
+                    var nextRes = await _searchPipeline.ExecuteAsync(req, token).ConfigureAwait(true);
+                    if (_isDisposed || generation != _searchGeneration) return;
+
+                    _steamQueryOffset = queryStart + PageSize;
+                    var nextFresh = nextRes.Items.Where(i => known.Add(i.AppId)).ToList();
+                    if (nextFresh.Count > 0)
+                    {
+                        fresh = nextFresh;
+                        res = nextRes;
+                        break;
+                    }
+                }
+
                 foreach (var item in fresh)
                 {
                     item.MatchedTagCount = _selectedTagIds.Count == 0
@@ -858,7 +880,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                     _fetched.AddRange(sorted);
                 }
 
-                HasMoreResults = _steamQueryOffset < res.TotalCount && fresh.Count > 0 && _fetched.Count < MaxMaterialized;
+                HasMoreResults = _steamQueryOffset < res.TotalCount && _fetched.Count < MaxMaterialized;
 
                 RebuildVisible();
                 SearchState = Results.Count > 0 ? SearchState.ShowingResults : SearchState.Empty;

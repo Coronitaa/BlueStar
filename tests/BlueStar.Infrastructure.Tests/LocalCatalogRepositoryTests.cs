@@ -255,5 +255,57 @@ public class LocalCatalogRepositoryTests : IDisposable
             try { if (File.Exists(legacyDbPath)) File.Delete(legacyDbPath); } catch { }
         }
     }
+
+    [Fact]
+    public async Task Test_QueryAsync_PriceSort_TiesResolvedByReleaseDateAndAppId()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"price_sort_test_{Guid.NewGuid():N}.sqlite");
+        try
+        {
+            using var repo = new LocalCatalogRepository(NullLogger<LocalCatalogRepository>.Instance, dbPath);
+            await repo.InitializeAsync();
+
+            var app1 = new CatalogAppItem
+            {
+                AppId = 300,
+                Name = "Game C",
+                PriceCents = 999,
+                ReleaseDateUtc = 1600000000
+            };
+            var app2 = new CatalogAppItem
+            {
+                AppId = 100,
+                Name = "Game A",
+                PriceCents = 999,
+                ReleaseDateUtc = 1700000000
+            };
+            var app3 = new CatalogAppItem
+            {
+                AppId = 200,
+                Name = "Game B",
+                PriceCents = 999,
+                ReleaseDateUtc = 1700000000
+            };
+
+            await repo.UpsertAppsAsync([app1, app2, app3]);
+
+            var (items, count) = await repo.QueryAsync(new LocalCatalogQuery
+            {
+                SortBy = "price",
+                Descending = false,
+                Limit = 10
+            });
+
+            Assert.Equal(3, count);
+            Assert.Equal(100u, items[0].AppId);
+            Assert.Equal(200u, items[1].AppId);
+            Assert.Equal(300u, items[2].AppId);
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            try { if (File.Exists(dbPath)) File.Delete(dbPath); } catch { }
+        }
+    }
 }
 

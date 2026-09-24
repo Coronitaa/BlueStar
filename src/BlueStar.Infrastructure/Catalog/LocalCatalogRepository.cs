@@ -253,7 +253,10 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
     {
         await InitializeAsync(ct).ConfigureAwait(false);
 
-        using var connection = new SqliteConnection(_connectionString);
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(ct).ConfigureAwait(false);
 
         using var transaction = connection.BeginTransaction();
@@ -370,7 +373,12 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         }
 
-        await transaction.CommitAsync(ct).ConfigureAwait(false);
+            await transaction.CommitAsync(ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 
     /// <inheritdoc />
@@ -654,7 +662,7 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             "modified" or "last_modified" => $"ORDER BY a.last_modified {dir}, a.app_id {dir}",
             "reviews" or "rating" => $"ORDER BY a.review_percent {dir} NULLS LAST, a.review_count DESC, a.app_id {dir}",
             "reviewcount" or "reviews_count" => $"ORDER BY a.review_count {dir} NULLS LAST, a.app_id {dir}",
-            "price" => $"ORDER BY (CASE WHEN a.price_cents IS NOT NULL THEN a.price_cents WHEN a.price_text IS NULL OR a.price_text = '' THEN 999999 WHEN LOWER(a.price_text) LIKE '%free%' OR LOWER(a.price_text) LIKE '%gratis%' THEN 0 ELSE CAST(REPLACE(REPLACE(REPLACE(a.price_text, '$', ''), '€', ''), ',', '.') AS REAL) * 100 END) {dir}, a.app_id {dir}",
+            "price" => $"ORDER BY (CASE WHEN a.price_cents IS NOT NULL THEN a.price_cents WHEN a.price_text IS NULL OR a.price_text = '' THEN 999999 WHEN LOWER(a.price_text) LIKE '%free%' OR LOWER(a.price_text) LIKE '%gratis%' THEN 0 ELSE CAST(REPLACE(REPLACE(REPLACE(a.price_text, '$', ''), '€', ''), ',', '.') AS REAL) * 100 END) {dir}, a.release_date_utc DESC NULLS LAST, a.app_id {dir}",
             "discount" => $"ORDER BY a.discount_percent {dir}, a.app_id {dir}",
             "appid" => $"ORDER BY a.app_id {dir}",
             _ => hasFts ? "ORDER BY rank" : "ORDER BY a.app_id ASC"
@@ -738,25 +746,24 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
         try
         {
             SqliteConnection.ClearAllPools();
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
 
             // 1. Copy candidate to staging
-            File.Copy(sqliteFilePath, stagingPath, overwrite: true);
+            SafeFileCopy(sqliteFilePath, stagingPath, overwrite: true);
 
             // 2. Safely backup existing database if present
             if (File.Exists(_dbPath))
             {
-                try { if (File.Exists(backupPath)) File.Delete(backupPath); } catch { }
-                File.Move(_dbPath, backupPath);
+                SafeFileDelete(backupPath);
+                SafeFileMove(_dbPath, backupPath);
             }
 
             // 3. Promote staging to active database
-            File.Move(stagingPath, _dbPath);
+            SafeFileMove(stagingPath, _dbPath);
 
             // 4. Cleanup backup
-            if (File.Exists(backupPath))
-            {
-                try { File.Delete(backupPath); } catch { }
-            }
+            SafeFileDelete(backupPath);
 
             _initialized = false;
         }
@@ -765,17 +772,78 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             // Rollback if active file is missing and backup exists
             if (!File.Exists(_dbPath) && File.Exists(backupPath))
             {
-                try { File.Move(backupPath, _dbPath); } catch { }
+                try { SafeFileMove(backupPath, _dbPath); } catch { }
             }
             throw;
         }
         finally
         {
-            try { if (File.Exists(stagingPath)) File.Delete(stagingPath); } catch { }
+            SafeFileDelete(stagingPath);
             _lock.Release();
         }
 
         await InitializeAsync(ct).ConfigureAwait(false);
+    }
+
+    private static void SafeFileCopy(string source, string destination, bool overwrite, int maxRetries = 5, int delayMs = 50)
+    {
+        for (var i = 0; i < maxRetries; i++)
+        {
+            try
+            {
+                File.Copy(source, destination, overwrite);
+                return;
+            }
+            catch (IOException) when (i < maxRetries - 1)
+            {
+                SqliteConnection.ClearAllPools();
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                Thread.Sleep(delayMs);
+            }
+        }
+        File.Copy(source, destination, overwrite);
+    }
+
+    private static void SafeFileMove(string source, string destination, int maxRetries = 5, int delayMs = 50)
+    {
+        for (var i = 0; i < maxRetries; i++)
+        {
+            try
+            {
+                File.Move(source, destination);
+                return;
+            }
+            catch (IOException) when (i < maxRetries - 1)
+            {
+                SqliteConnection.ClearAllPools();
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                Thread.Sleep(delayMs);
+            }
+        }
+        File.Move(source, destination);
+    }
+
+    private static void SafeFileDelete(string path, int maxRetries = 5, int delayMs = 50)
+    {
+        if (!File.Exists(path)) return;
+        for (var i = 0; i < maxRetries; i++)
+        {
+            try
+            {
+                File.Delete(path);
+                return;
+            }
+            catch (Exception) when (i < maxRetries - 1)
+            {
+                SqliteConnection.ClearAllPools();
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                Thread.Sleep(delayMs);
+            }
+        }
+        try { File.Delete(path); } catch { }
     }
 
     /// <inheritdoc />

@@ -402,6 +402,62 @@ public class BrowseViewModelPhase1RegressionTests
         Assert.Equal("Half-Life: Alyx", vm.Results[0].Name);
     }
 
+    /// <summary>
+    /// TEST R — Paging Deadlock Prevention & Auto-Advance
+    /// Verifies that when a page returns 0 items due to strict post-filtering (e.g. VR Only),
+    /// BrowseViewModel auto-advances to find matching items in subsequent pages, and
+    /// HasMoreResults is NOT killed prematurely while offset < TotalCount.
+    /// </summary>
+    [Fact]
+    public async Task TestR_PagingDeadlock_WhenFullChunkFilteredOut_MustAutoAdvanceAndPreserveHasMoreResults()
+    {
+        var vm = CreateViewModel();
+        var capturedStarts = new List<int>();
+
+        _spyPipeline.Handler = req =>
+        {
+            capturedStarts.Add(req.Start);
+            if (req.Start == 0)
+            {
+                // First page: all items discarded by post-filters, returning 0 fresh items
+                return Task.FromResult(new SearchResponse
+                {
+                    Items = [],
+                    TotalCount = 200,
+                    Start = 0,
+                    IsFromLocalCatalog = false
+                });
+            }
+
+            // Second page (Start == 50): 5 items pass the filter
+            var matching = Enumerable.Range(req.Start, 5)
+                .Select(i => new SearchResult { AppId = (uint)i + 1, Name = $"Matching Game {i}" })
+                .ToList();
+
+            return Task.FromResult(new SearchResponse
+            {
+                Items = matching,
+                TotalCount = 200,
+                Start = req.Start,
+                IsFromLocalCatalog = false
+            });
+        };
+
+        // Initial search: must auto-advance past empty page 0 to page 50
+        await vm.RunSearchAsync(reset: true);
+
+        // Captured starts should show auto-advance from 0 to 50
+        Assert.Equal(2, capturedStarts.Count);
+        Assert.Equal(0, capturedStarts[0]);
+        Assert.Equal(50, capturedStarts[1]);
+
+        // Results should contain the 5 items found on page 50
+        Assert.Equal(5, vm.Results.Count);
+
+        // HasMoreResults must remain true because _steamQueryOffset (100) < TotalCount (200)
+        Assert.True(vm.HasMoreResults, "HasMoreResults must remain true while offset < TotalCount");
+    }
+
     private sealed class SpySearchPipeline : ISearchPipeline
     {
         public SearchRequest? LastRequest { get; private set; }
