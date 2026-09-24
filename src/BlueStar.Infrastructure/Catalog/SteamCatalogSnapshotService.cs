@@ -93,13 +93,19 @@ public sealed class SteamCatalogSnapshotService : ICatalogSnapshotService
             if (manifest == null) return false;
 
             var currentVersion = await GetCurrentVersionAsync(ct).ConfigureAwait(false);
-            if (manifest.Version <= currentVersion)
+            var currentSha = await _catalogRepo.GetMetadataAsync("snapshot_sha256", ct).ConfigureAwait(false);
+
+            bool isNewerVersion = manifest.Version > currentVersion;
+            bool isHashDifferent = !string.IsNullOrWhiteSpace(manifest.Sha256) &&
+                                   !string.Equals(manifest.Sha256, currentSha, StringComparison.OrdinalIgnoreCase);
+
+            if (!isNewerVersion && !isHashDifferent)
             {
                 _logger.LogInformation("Catalog is up-to-date (Local: {Current}, Remote: {Remote})", currentVersion, manifest.Version);
                 return false;
             }
 
-            _logger.LogInformation("New catalog version {Remote} available. Downloading from {Url}...", manifest.Version, manifest.DownloadUrl);
+            _logger.LogInformation("New catalog version {Remote} (SHA: {Sha}) available. Downloading from {Url}...", manifest.Version, manifest.Sha256, manifest.DownloadUrl);
             var tempDownloaded = Path.GetTempFileName();
             var tempSqlite = Path.GetTempFileName();
 
@@ -151,6 +157,10 @@ public sealed class SteamCatalogSnapshotService : ICatalogSnapshotService
 
                 // Update persistent metadata in SQLite
                 await _catalogRepo.SetMetadataAsync("snapshot_version", manifest.Version.ToString(CultureInfo.InvariantCulture), ct).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(manifest.Sha256))
+                {
+                    await _catalogRepo.SetMetadataAsync("snapshot_sha256", manifest.Sha256, ct).ConfigureAwait(false);
+                }
                 if (manifest.TotalApps > 0)
                 {
                     await _catalogRepo.SetMetadataAsync("expected_app_count", manifest.TotalApps.ToString(CultureInfo.InvariantCulture), ct).ConfigureAwait(false);
