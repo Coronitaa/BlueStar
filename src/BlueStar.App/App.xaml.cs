@@ -207,7 +207,7 @@ public partial class App : Application
             new LocalCatalogRepository(sp.GetRequiredService<ILogger<LocalCatalogRepository>>(), catalogDbPath));
         services.AddHttpClient<ICatalogSnapshotService, SteamCatalogSnapshotService>((sp, client) =>
         {
-            client.Timeout = TimeSpan.FromSeconds(30);
+            client.Timeout = TimeSpan.FromMinutes(3);
             client.DefaultRequestHeaders.UserAgent.ParseAdd(BrowserUserAgent);
         });
         services.AddSingleton<SteamResponseValidator>();

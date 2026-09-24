@@ -1,0 +1,50 @@
+name: Build and Publish Steam Catalog Snapshot
+
+on:
+  schedule:
+    - cron: '0 4 * * 0' # Every Sunday at 04:00 UTC
+  workflow_dispatch:
+    inputs:
+      steam_api_key:
+        description: 'Optional Steam Web API Key override (leave empty to use secret)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    name: Build & Publish Catalog Snapshot
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build CatalogBuilder Tool
+        run: dotnet build src/BlueStar.CatalogBuilder/BlueStar.CatalogBuilder.csproj -c Release
+
+      - name: Ingest Steam Catalog and Generate Snapshot
+        env:
+          STEAM_API_KEY: ${{ secrets.STEAM_API_KEY || inputs.steam_api_key }}
+        run: |
+          dotnet run --project src/BlueStar.CatalogBuilder/BlueStar.CatalogBuilder.csproj -c Release -- \
+            --out catalog-dist \
+            --download-url "https://github.com/${{ github.repository }}/releases/latest/download/catalog.sqlite.zst"
+
+      - name: Publish Catalog Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RELEASE_DATE=$(date -u +"%Y-%m-%d")
+          gh release create catalog-latest \
+            catalog-dist/catalog.sqlite.zst \
+            catalog-dist/catalog-manifest.json \
+            --title "Steam Catalog Snapshot ($RELEASE_DATE)" \
+            --notes "Automated snapshot containing the complete Steam catalog indexed for BlueStar. Compressed with Zstandard." \
+            --clobber

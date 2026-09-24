@@ -250,4 +250,88 @@ public sealed class SteamCatalogSnapshotService : ICatalogSnapshotService
 
         return totalSynced;
     }
+
+    /// <summary>
+    /// Synchronizes apps from Steam's public ISteamApps/GetAppList/v2 endpoint (no API key required).
+    /// Batches insertion into the repository.
+    /// </summary>
+    public static async Task<int> SyncFromSteamPublicAppListAsync(
+        HttpClient http,
+        ILocalCatalogRepository repo,
+        int? limit = null,
+        CancellationToken ct = default)
+    {
+        var url = "https://api.steampowered.com/ISteamApps/GetAppList/v2/";
+        using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+
+        if (!doc.RootElement.TryGetProperty("applist", out var applist) ||
+            !applist.TryGetProperty("apps", out var appsArray) ||
+            appsArray.ValueKind != JsonValueKind.Array)
+        {
+            return 0;
+        }
+
+        var batch = new List<CatalogAppItem>(5000);
+        var totalSynced = 0;
+
+        foreach (var el in appsArray.EnumerateArray())
+        {
+            if (ct.IsCancellationRequested) break;
+            if (limit.HasValue && totalSynced + batch.Count >= limit.Value) break;
+
+            if (!el.TryGetProperty("appid", out var idProp) || !idProp.TryGetUInt32(out var appId) || appId == 0)
+                continue;
+
+            var name = el.TryGetProperty("name", out var n) ? n.GetString() ?? $"App {appId}" : $"App {appId}";
+            if (string.IsNullOrWhiteSpace(name)) continue;
+
+            batch.Add(new CatalogAppItem
+            {
+                AppId = appId,
+                Name = name,
+                NormalizedName = BlueStar.Core.Helpers.DeterministicNormalizer.Normalize(name),
+                CompactName = BlueStar.Core.Helpers.DeterministicNormalizer.ToCompactKey(name),
+                AppType = "game",
+                HeaderImageUrl = $"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{appId}/header.jpg"
+            });
+
+            if (batch.Count >= 5000)
+            {
+                await repo.UpsertAppsAsync(batch, ct).ConfigureAwait(false);
+                totalSynced += batch.Count;
+                batch.Clear();
+            }
+        }
+
+        if (batch.Count > 0)
+        {
+            await repo.UpsertAppsAsync(batch, ct).ConfigureAwait(false);
+            totalSynced += batch.Count;
+        }
+
+        return totalSynced;
+    }
+
+    /// <summary>
+    /// Compresses a file using Zstandard algorithm (level 19 for maximum distribution ratio).
+    /// </summary>
+    public static async Task CompressToZstdAsync(
+        string inputFilePath,
+        string outputZstdPath,
+        int compressionLevel = 19,
+        CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(inputFilePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputZstdPath);
+
+        await using var inputStream = File.OpenRead(inputFilePath);
+        await using var outputStream = File.Create(outputZstdPath);
+        using var zstdStream = new ZstdSharp.CompressionStream(outputStream, compressionLevel);
+        await inputStream.CopyToAsync(zstdStream, ct).ConfigureAwait(false);
+    }
 }
+
