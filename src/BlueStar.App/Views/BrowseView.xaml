@@ -905,14 +905,16 @@
                         </ItemsControl>
 
                         <!-- Cards. The view toggle swaps both the panel and the item template. -->
-                        <ItemsControl ItemsSource="{Binding Results}">
+                        <ItemsControl ItemsSource="{Binding Results}"
+                                      VirtualizingPanel.IsVirtualizing="True"
+                                      VirtualizingPanel.VirtualizationMode="Recycling">
                             <ItemsControl.Style>
                                 <Style TargetType="ItemsControl">
                                     <Setter Property="ItemTemplate" Value="{StaticResource ResultCardTemplate}"/>
                                     <Setter Property="ItemsPanel">
                                         <Setter.Value>
                                             <ItemsPanelTemplate>
-                                                <WrapPanel Orientation="Horizontal"/>
+                                                <ctrl:VirtualizingWrapPanel ItemWidth="300" ItemHeight="350"/>
                                             </ItemsPanelTemplate>
                                         </Setter.Value>
                                     </Setter>
@@ -922,7 +924,7 @@
                                             <Setter Property="ItemsPanel">
                                                 <Setter.Value>
                                                     <ItemsPanelTemplate>
-                                                        <StackPanel Orientation="Vertical"/>
+                                                        <VirtualizingStackPanel Orientation="Vertical"/>
                                                     </ItemsPanelTemplate>
                                                 </Setter.Value>
                                             </Setter>

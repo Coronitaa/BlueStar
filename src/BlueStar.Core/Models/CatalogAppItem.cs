@@ -68,11 +68,24 @@ public sealed record CatalogAppItem
 /// </summary>
 public sealed record CatalogManifest
 {
+    [System.Text.Json.Serialization.JsonPropertyName("version")]
     public int Version { get; init; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("created_at")]
     public DateTimeOffset GeneratedAt { get; init; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("app_count")]
     public int TotalApps { get; init; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("sha256")]
     public string Sha256 { get; init; } = string.Empty;
+
+    [System.Text.Json.Serialization.JsonPropertyName("download_url")]
     public string DownloadUrl { get; init; } = string.Empty;
+
+    [System.Text.Json.Serialization.JsonPropertyName("compressed_size_bytes")]
     public long CompressedSizeBytes { get; init; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("schema_version")]
     public string FormatVersion { get; init; } = "1.0";
 }

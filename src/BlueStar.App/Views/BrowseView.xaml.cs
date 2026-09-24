@@ -95,7 +95,8 @@ public partial class BrowseView : UserControl
 
     private async void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(BrowseViewModel.SearchState) && _viewModel?.SearchState == SearchState.LoadingInitial)
+        if ((e.PropertyName == nameof(BrowseViewModel.SearchState) && _viewModel?.SearchState == SearchState.LoadingInitial)
+            || (e.PropertyName == nameof(BrowseViewModel.Results) && _viewModel?.CurrentPage == 1))
         {
             ResultsScroller.ScrollToTop();
             return;

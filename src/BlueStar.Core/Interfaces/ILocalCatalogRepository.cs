@@ -25,6 +25,7 @@ public sealed class LocalCatalogQuery
     public bool? NoExternalLauncher { get; init; }
     public bool? HideAdult { get; init; }
     public bool? DiscountedOnly { get; init; }
+    public int? MaxPriceCents { get; init; }
     public string? SortBy { get; init; }
     public bool Descending { get; init; } = true;
     public int Offset { get; init; } = 0;
@@ -82,5 +83,15 @@ public interface ILocalCatalogRepository : IDisposable
     /// Gets the count of applications associated with specific tag IDs from the local catalog.
     /// </summary>
     Task<IReadOnlyDictionary<int, int>> GetTagCountsAsync(IEnumerable<int> tagIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// Sets a persistent catalog metadata key-value pair (e.g. snapshot_version, expected_app_count).
+    /// </summary>
+    Task SetMetadataAsync(string key, string value, CancellationToken ct = default);
+
+    /// <summary>
+    /// Retrieves a persistent catalog metadata value by key.
+    /// </summary>
+    Task<string?> GetMetadataAsync(string key, CancellationToken ct = default);
 }
 

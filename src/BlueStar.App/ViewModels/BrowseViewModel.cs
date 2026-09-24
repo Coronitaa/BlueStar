@@ -106,7 +106,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     /// Results asked for per request. Fixed now that the toolbar slot it used to occupy shows
     /// Steam's curated lists instead; the list grows by scrolling, not by page size.
     /// </summary>
-    private const int PageSize = 50;
+    public const int PageSize = 50;
 
     [ObservableProperty]
     private int _currentPage = 1;
@@ -176,6 +176,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
 
     private readonly ISteamCatalogSearchService? _catalogSearch;
     private readonly ISearchPipeline? _searchPipeline;
+    private readonly ILocalCatalogRepository? _localRepo;
     private readonly ISteamTagCatalogService? _tagCatalog;
     private readonly ICacheService? _cache;
     private readonly Dictionary<string, int> _facetUsage = new(StringComparer.Ordinal);
@@ -201,7 +202,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     /// Upper safety limit on loaded search cards. Allows deep scrolling through
     /// many pages of titles while preventing unbounded memory consumption.
     /// </summary>
-    private const int MaxMaterialized = 500;
+    private const int MaxMaterialized = 100_000;
 
     /// <summary>
     /// One step of the search: a set of tags to require, and the term to require with them.
@@ -227,6 +228,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     private bool _suggestionsResolved;
 
     private List<int> _selectedTagIds = [];
+    private List<int> _selectedExcludedTagIds = [];
     private int _ladderRung;
     private int _rungStart;
 
@@ -261,7 +263,8 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         ISteamCatalogSearchService? catalogSearch = null,
         ISteamTagCatalogService? tagCatalog = null,
         ICacheService? cache = null,
-        ISearchPipeline? searchPipeline = null)
+        ISearchPipeline? searchPipeline = null,
+        ILocalCatalogRepository? localRepo = null)
     {
         _apiClient = apiClient;
         _instanceManager = instanceManager;
@@ -279,6 +282,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         _tagCatalog = tagCatalog;
         _cache = cache;
         _searchPipeline = searchPipeline;
+        _localRepo = localRepo;
 
         // Restore the grid-or-list choice before anything can observe it, so switching to
         // Explore does not flash the grid on the way to the list.
@@ -330,11 +334,30 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         await LoadUsageAsync().ConfigureAwait(true);
         await BuildFilterGroupsAsync().ConfigureAwait(true);
 
-        // Opening state: Steam's popular new releases, chosen in the toolbar rather than the panel.
-        // Set quietly, so the opening query is run once below rather than twice.
+        // Opening state: If local catalog is authoritative, open on whole local catalog ("").
+        // Otherwise, open on Steam's popular new releases.
         _suppressSearch = true;
-        SelectedStoreList = StoreListOptions.FirstOrDefault(o => o.Value == "popularnew")
-                            ?? StoreListOptions.FirstOrDefault();
+        var isLocalAuth = false;
+        if (_localRepo != null)
+        {
+            try
+            {
+                var comp = await _localRepo.GetCompletenessAsync(_cts.Token).ConfigureAwait(true);
+                isLocalAuth = comp.IsAuthoritative;
+            }
+            catch { }
+        }
+
+        if (isLocalAuth)
+        {
+            SelectedStoreList = StoreListOptions.FirstOrDefault(o => o.Value == "")
+                                ?? StoreListOptions.FirstOrDefault();
+        }
+        else
+        {
+            SelectedStoreList = StoreListOptions.FirstOrDefault(o => o.Value == "popularnew")
+                                ?? StoreListOptions.FirstOrDefault();
+        }
         _suppressSearch = false;
 
         await RunSearchAsync().ConfigureAwait(true);
@@ -491,10 +514,73 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     /// </remarks>
     private void RequestCountsFor(FilterGroupViewModel group)
     {
-        if (_tagCatalog is null || _catalogSearch is null || _isDisposed) return;
+        if (_isDisposed) return;
 
         // A collapsed group's bubbles are not on screen; their counts can wait until it opens.
         if (!group.IsExpanded) return;
+
+        // If local catalog repository is available, query tag counts locally in a single fast batch
+        if (_localRepo != null)
+        {
+            var uncounted = group.Items
+                .Where(i => i.ProductCount == null && i.Option.Kind == SteamFacetKind.Tag)
+                .ToList();
+
+            if (uncounted.Count > 0)
+            {
+                var tagMap = new Dictionary<int, FilterOptionItem>();
+                foreach (var item in uncounted)
+                {
+                    if (int.TryParse(item.Option.Value, out var tagId))
+                    {
+                        tagMap[tagId] = item;
+                    }
+                }
+
+                if (tagMap.Count > 0)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var total = await _localRepo.GetCountAsync(_cts.Token).ConfigureAwait(false);
+                            if (total > 0)
+                            {
+                                var counts = await _localRepo.GetTagCountsAsync(tagMap.Keys, _cts.Token).ConfigureAwait(false);
+                                if (counts.Count > 0)
+                                {
+                                    App.Current?.Dispatcher?.Invoke(() =>
+                                    {
+                                        foreach (var (tagId, count) in counts)
+                                        {
+                                            if (tagMap.TryGetValue(tagId, out var opt))
+                                            {
+                                                opt.ProductCount = count;
+                                            }
+                                        }
+                                    });
+                                    return;
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogDebug(ex, "Failed to resolve tag counts locally");
+                        }
+
+                        EnqueueRemoteCounts(group);
+                    });
+                    return;
+                }
+            }
+        }
+
+        EnqueueRemoteCounts(group);
+    }
+
+    private void EnqueueRemoteCounts(FilterGroupViewModel group)
+    {
+        if (_tagCatalog is null || _catalogSearch is null || _isDisposed) return;
 
         var queued = false;
 
@@ -699,6 +785,24 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                 var poolName = string.IsNullOrEmpty(SelectedStoreList?.Value) ? null : SelectedStoreList!.Value;
                 var sortName = SelectedSort?.Value ?? string.Empty;
 
+                ExtractActiveFilters(
+                    out var includedTags,
+                    out var excludedTags,
+                    out var hasWin,
+                    out var hasMac,
+                    out var hasLinux,
+                    out var minRating,
+                    out var maxRating,
+                    out var noDrm,
+                    out var noLauncher,
+                    out var discounted,
+                    out var maxPriceCents);
+
+                _selectedTagIds = includedTags;
+                _selectedExcludedTagIds = excludedTags;
+
+                var activeFacets = GetAllActiveFacets();
+
                 var req = new SearchRequest
                 {
                     RawQuery = SearchQuery,
@@ -708,8 +812,19 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                     AppTypes = SelectedAppType,
                     Start = reset ? 0 : _fetched.Count,
                     Count = PageSize,
-                    IncludedTagIds = _selectedTagIds,
-                    HideAdult = !(_settingsService?.ShowNsfwContent ?? false)
+                    IncludedTagIds = includedTags,
+                    ExcludedTagIds = excludedTags,
+                    HasWindows = hasWin,
+                    HasMac = hasMac,
+                    HasLinux = hasLinux,
+                    MinRatingPercent = minRating,
+                    MaxRatingPercent = maxRating,
+                    NoDrm = noDrm,
+                    NoExternalLauncher = noLauncher,
+                    DiscountedOnly = discounted,
+                    MaxPriceCents = maxPriceCents,
+                    HideAdult = !(_settingsService?.ShowNsfwContent ?? false),
+                    Facets = activeFacets
                 };
 
                 var res = await _searchPipeline.ExecuteAsync(req, token).ConfigureAwait(true);
@@ -963,6 +1078,108 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
             RebuildVisible();
             SearchState = SearchState.Empty;
         }
+    }
+
+    private void ExtractActiveFilters(
+        out List<int> includedTags,
+        out List<int> excludedTags,
+        out bool? hasWin,
+        out bool? hasMac,
+        out bool? hasLinux,
+        out int? minRating,
+        out int? maxRating,
+        out bool? noDrm,
+        out bool? noLauncher,
+        out bool? discounted,
+        out int? maxPriceCents)
+    {
+        var allTagOptions = FilterGroups
+            .SelectMany(g => g.AllOptions)
+            .Where(o => o.Option.Kind == SteamFacetKind.Tag)
+            .ToList();
+
+        includedTags = allTagOptions
+            .Where(o => o.State == FacetState.Include)
+            .Select(o => int.TryParse(o.Option.Value, out var id) ? id : 0)
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList();
+
+        excludedTags = allTagOptions
+            .Where(o => o.State == FacetState.Exclude)
+            .Select(o => int.TryParse(o.Option.Value, out var id) ? id : 0)
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList();
+
+        var ratingGroup = FilterGroups.FirstOrDefault(g => g.Key == "rating");
+        var chosenRating = ratingGroup?.AllOptions.FirstOrDefault(o => o.State == FacetState.Include)?.Option.Value;
+        minRating = chosenRating switch
+        {
+            "rating_min_95" => 95,
+            "rating_min_80" => 80,
+            "rating_min_70" => 70,
+            "rating_min_40" => 40,
+            _ => null
+        };
+        maxRating = chosenRating == "rating_below_40" ? 40 : null;
+
+        var platGroup = FilterGroups.FirstOrDefault(g => g.Key == "platform");
+        hasWin = platGroup?.AllOptions.FirstOrDefault(o => o.Option.Value == "win")?.State == FacetState.Include ? true : null;
+        hasMac = platGroup?.AllOptions.FirstOrDefault(o => o.Option.Value == "mac")?.State == FacetState.Include ? true : null;
+        hasLinux = platGroup?.AllOptions.FirstOrDefault(o => o.Option.Value == "linux")?.State == FacetState.Include ? true : null;
+
+        var contentGroup = FilterGroups.FirstOrDefault(g => g.Key == "content");
+        noDrm = contentGroup?.AllOptions.FirstOrDefault(o => o.Option.Value == "no_drm")?.State == FacetState.Include ? true : null;
+        noLauncher = contentGroup?.AllOptions.FirstOrDefault(o => o.Option.Value == "no_launcher")?.State == FacetState.Include ? true : null;
+
+        var priceGroup = FilterGroups.FirstOrDefault(g => g.Key == "price");
+        discounted = priceGroup?.AllOptions.FirstOrDefault(o => o.Option.Value == "specials")?.State == FacetState.Include ? true : null;
+        var chosenPrice = priceGroup?.AllOptions.FirstOrDefault(o => o.Option.Value != "specials" && o.State == FacetState.Include)?.Option.Value;
+        maxPriceCents = chosenPrice switch
+        {
+            "free" => 0,
+            "under_5" => 500,
+            "under_10" => 1000,
+            "under_15" => 1500,
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Collects every active facet across all groups (tags, platform, VR, toggle, game mode, features, etc.)
+    /// to send with the SearchRequest.
+    /// </summary>
+    private Dictionary<SteamFacetOption, FacetState> GetAllActiveFacets()
+    {
+        var facets = new Dictionary<SteamFacetOption, FacetState>();
+
+        foreach (var group in FilterGroups)
+        {
+            foreach (var (option, state) in group.ActiveFacets)
+            {
+                if (option.Kind is SteamFacetKind.StoreList or SteamFacetKind.LocalRequirements)
+                {
+                    continue;
+                }
+
+                facets[option] = state;
+            }
+        }
+
+        if (!(_settingsService?.ShowNsfwContent ?? false))
+        {
+            foreach (var id in SteamTagGroups.AdultTagIds)
+            {
+                var option = new SteamFacetOption(
+                    SteamFacetKind.Tag, id.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    string.Empty, SupportsExclude: true);
+
+                if (!facets.ContainsKey(option)) facets[option] = FacetState.Exclude;
+            }
+        }
+
+        return facets;
     }
 
     /// <summary>
@@ -1240,11 +1457,56 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
 
         var content = FilterGroups.FirstOrDefault(g => g.Key == "content");
         var rating = FilterGroups.FirstOrDefault(g => g.Key == "rating");
+        var priceGroup = FilterGroups.FirstOrDefault(g => g.Key == "price");
+        var platGroup = FilterGroups.FirstOrDefault(g => g.Key == "platform");
 
         FacetState StateOf(FilterGroupViewModel? group, string value) =>
             group?.AllOptions.FirstOrDefault(o => o.Option.Value == value)?.State ?? FacetState.Neutral;
 
         if (!PassesRating(item, rating)) return false;
+
+        // Hide free to play
+        if (StateOf(priceGroup, "hidef2p") == FacetState.Include)
+        {
+            var price = (item.PriceText ?? string.Empty).Trim().ToLowerInvariant();
+            if (price.Contains("free") || price.Contains("gratis") || price == "$0" || price == "$0.00" || price == "0€"
+                || (item.TagIds != null && item.TagIds.Contains(113)))
+            {
+                return false;
+            }
+        }
+
+        // Discounted only
+        if (StateOf(priceGroup, "specials") == FacetState.Include && item.DiscountPercent <= 0)
+        {
+            return false;
+        }
+
+        // VR only
+        if (StateOf(platGroup, "401") == FacetState.Include)
+        {
+            if (item.TagIds != null && item.TagIds.Count > 0 && !item.TagIds.Contains(21978))
+            {
+                return false;
+            }
+        }
+
+        // Platform requirements
+        if (StateOf(platGroup, "win") == FacetState.Include && !item.HasWindows) return false;
+        if (StateOf(platGroup, "mac") == FacetState.Include && !item.HasMac) return false;
+        if (StateOf(platGroup, "linux") == FacetState.Include && !item.HasLinux) return false;
+
+        // Excluded tags
+        if (_selectedExcludedTagIds != null && _selectedExcludedTagIds.Count > 0 && item.TagIds != null)
+        {
+            if (item.TagIds.Any(t => _selectedExcludedTagIds.Contains(t))) return false;
+        }
+
+        // Included tags
+        if (_selectedTagIds != null && _selectedTagIds.Count > 0 && item.TagIds != null)
+        {
+            if (!_selectedTagIds.All(t => item.TagIds.Contains(t))) return false;
+        }
 
         var noDrm = StateOf(content, "no_drm");
         var noLauncher = StateOf(content, "no_launcher");

@@ -37,9 +37,11 @@ public sealed record SearchRequest
     public bool? NoExternalLauncher { get; init; }
     public bool? HideAdult { get; init; }
     public bool? DiscountedOnly { get; init; }
+    public int? MaxPriceCents { get; init; }
     public int Start { get; init; } = 0;
     public int Count { get; init; } = 50;
     public IReadOnlyCollection<uint>? RestrictToAppIds { get; init; }
+    public IReadOnlyDictionary<SteamFacetOption, FacetState> Facets { get; init; } = new Dictionary<SteamFacetOption, FacetState>();
 }
 
 /// <summary>

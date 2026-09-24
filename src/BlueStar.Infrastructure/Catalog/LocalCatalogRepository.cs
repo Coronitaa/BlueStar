@@ -104,6 +104,11 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
                         release_date_utc INTEGER,
                         price_cents INTEGER
                     );
+
+                    CREATE TABLE IF NOT EXISTS catalog_metadata (
+                        key TEXT PRIMARY KEY,
+                        value TEXT NOT NULL
+                    );
                     """;
                 await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             }
@@ -566,6 +571,11 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
         if (query.NoExternalLauncher == true) whereClauses.Add("a.has_external_launcher = 0");
         if (query.HideAdult == true) whereClauses.Add("a.is_nsfw = 0");
         if (query.DiscountedOnly == true) whereClauses.Add("a.discount_percent > 0");
+        if (query.MaxPriceCents.HasValue)
+        {
+            whereClauses.Add("(a.price_cents IS NOT NULL AND a.price_cents <= @maxPriceCents)");
+            parameters.Add(new SqliteParameter("@maxPriceCents", query.MaxPriceCents.Value));
+        }
 
         // Rating filters
         if (query.MinRatingPercent.HasValue)
@@ -639,14 +649,15 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
         var dir = query.Descending ? "DESC" : "ASC";
         var sortSql = (query.SortBy ?? string.Empty).ToLowerInvariant() switch
         {
-            "name" => $"ORDER BY a.name {dir}",
-            "released" => $"ORDER BY a.release_date_utc {dir} NULLS LAST, a.last_modified {dir}",
-            "reviews" => $"ORDER BY a.review_percent {dir} NULLS LAST, a.review_count DESC",
-            "reviewcount" or "reviews_count" => $"ORDER BY a.review_count {dir} NULLS LAST",
-            "price" => $"ORDER BY (CASE WHEN a.price_cents IS NOT NULL THEN a.price_cents WHEN a.price_text IS NULL OR a.price_text = '' THEN 999999 WHEN LOWER(a.price_text) LIKE '%free%' OR LOWER(a.price_text) LIKE '%gratis%' THEN 0 ELSE CAST(REPLACE(REPLACE(REPLACE(a.price_text, '$', ''), '€', ''), ',', '.') AS REAL) * 100 END) {dir}, a.last_modified DESC",
-            "discount" => $"ORDER BY a.discount_percent {dir}",
+            "name" => $"ORDER BY a.name {dir}, a.app_id {dir}",
+            "released" => $"ORDER BY a.release_date_utc {dir} NULLS LAST, a.app_id {dir}",
+            "modified" or "last_modified" => $"ORDER BY a.last_modified {dir}, a.app_id {dir}",
+            "reviews" or "rating" => $"ORDER BY a.review_percent {dir} NULLS LAST, a.review_count DESC, a.app_id {dir}",
+            "reviewcount" or "reviews_count" => $"ORDER BY a.review_count {dir} NULLS LAST, a.app_id {dir}",
+            "price" => $"ORDER BY (CASE WHEN a.price_cents IS NOT NULL THEN a.price_cents WHEN a.price_text IS NULL OR a.price_text = '' THEN 999999 WHEN LOWER(a.price_text) LIKE '%free%' OR LOWER(a.price_text) LIKE '%gratis%' THEN 0 ELSE CAST(REPLACE(REPLACE(REPLACE(a.price_text, '$', ''), '€', ''), ',', '.') AS REAL) * 100 END) {dir}, a.app_id {dir}",
+            "discount" => $"ORDER BY a.discount_percent {dir}, a.app_id {dir}",
             "appid" => $"ORDER BY a.app_id {dir}",
-            _ => hasFts ? "ORDER BY rank" : $"ORDER BY a.last_modified {dir}"
+            _ => hasFts ? "ORDER BY rank" : "ORDER BY a.app_id ASC"
         };
 
         // 3. Paging
@@ -775,13 +786,53 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
         using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(ct).ConfigureAwait(false);
 
+        // 1. Read metadata table
+        int snapshotVer = 0;
+        int expectedApps = 0;
+        bool isIdentityExplicit = false;
+        DateTimeOffset? lastSync = null;
+
+        using (var metaCmd = connection.CreateCommand())
+        {
+            metaCmd.CommandText = "SELECT key, value FROM catalog_metadata;";
+            try
+            {
+                using var metaReader = await metaCmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                while (await metaReader.ReadAsync(ct).ConfigureAwait(false))
+                {
+                    var k = metaReader.GetString(0);
+                    var v = metaReader.GetString(1);
+                    switch (k.ToLowerInvariant())
+                    {
+                        case "snapshot_version":
+                            int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out snapshotVer);
+                            break;
+                        case "expected_app_count":
+                            int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out expectedApps);
+                            break;
+                        case "identity_complete":
+                            isIdentityExplicit = v == "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase);
+                            break;
+                        case "last_sync_at":
+                            if (DateTimeOffset.TryParse(v, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
+                                lastSync = dt;
+                            break;
+                    }
+                }
+            }
+            catch
+            {
+                // Ignored if table not yet populated
+            }
+        }
+
         using var cmd = connection.CreateCommand();
         cmd.CommandText = """
             SELECT 
                 COUNT(*) as total,
                 SUM(CASE WHEN review_percent IS NOT NULL THEN 1 ELSE 0 END) as with_reviews,
-                SUM(CASE WHEN release_date_text IS NOT NULL AND release_date_text != '' THEN 1 ELSE 0 END) as with_release,
-                SUM(CASE WHEN price_text IS NOT NULL AND price_text != '' THEN 1 ELSE 0 END) as with_pricing,
+                SUM(CASE WHEN release_date_utc IS NOT NULL OR (release_date_text IS NOT NULL AND release_date_text != '') THEN 1 ELSE 0 END) as with_release,
+                SUM(CASE WHEN price_cents IS NOT NULL OR (price_text IS NOT NULL AND price_text != '') THEN 1 ELSE 0 END) as with_pricing,
                 SUM(CASE WHEN tag_ids IS NOT NULL AND tag_ids != '' THEN 1 ELSE 0 END) as with_tags
             FROM apps;
             """;
@@ -797,19 +848,60 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             var withPricing = reader.GetInt32(3);
             var withTags = reader.GetInt32(4);
 
+            bool identityComplete = isIdentityExplicit || (expectedApps > 0 && total >= (int)(expectedApps * 0.95)) || (expectedApps == 0 && total >= 100);
+
             return new CatalogCompleteness
             {
-                TotalIndexedApps = total,
-                IdentityComplete = total >= 100,
-                ReviewsCoverage = (double)withReviews / total,
+                IdentityComplete = identityComplete,
+                SnapshotVersion = snapshotVer,
+                ExpectedAppCount = expectedApps,
+                IndexedAppCount = total,
+                LastSyncAt = lastSync,
+                RatingCoverage = (double)withReviews / total,
                 ReleaseDateCoverage = (double)withRelease / total,
-                PricingCoverage = (double)withPricing / total,
-                TagsComplete = withTags > 0 && ((double)withTags / total) > 0.5,
+                PriceCoverage = (double)withPricing / total,
+                TagsCoverage = (double)withTags / total,
                 GenresComplete = false
             };
         }
 
         return CatalogCompleteness.Empty;
+    }
+
+    /// <inheritdoc />
+    public async Task SetMetadataAsync(string key, string value, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        ArgumentNullException.ThrowIfNull(value);
+        await InitializeAsync(ct).ConfigureAwait(false);
+
+        using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO catalog_metadata (key, value) VALUES (@key, @value)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+            """;
+        cmd.Parameters.AddWithValue("@key", key);
+        cmd.Parameters.AddWithValue("@value", value);
+        await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task<string?> GetMetadataAsync(string key, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        await InitializeAsync(ct).ConfigureAwait(false);
+
+        using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT value FROM catalog_metadata WHERE key = @key LIMIT 1;";
+        cmd.Parameters.AddWithValue("@key", key);
+        var res = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
+        return res?.ToString();
     }
 
     /// <inheritdoc />

@@ -92,6 +92,7 @@ public sealed class SearchPipeline : ISearchPipeline
             HasLinux = request.HasLinux,
             MinRatingPercent = request.MinRatingPercent,
             MaxRatingPercent = request.MaxRatingPercent,
+            MaxPriceCents = request.MaxPriceCents,
             NoDrm = request.NoDrm,
             NoExternalLauncher = request.NoExternalLauncher,
             HideAdult = request.HideAdult,
@@ -381,7 +382,7 @@ public sealed class SearchPipeline : ISearchPipeline
                             !string.Equals(request.Pool, "all", StringComparison.OrdinalIgnoreCase);
 
         // If general explore (pool is "all" or null), prioritize the local catalog candidate universe
-        // only when the local catalog is authoritative (full index, not a partial ad-hoc cache).
+        // whenever the local catalog has indexed apps.
         if (!isCuratedPool)
         {
             var completeness = await _localRepo.GetCompletenessAsync(ct).ConfigureAwait(false);
@@ -398,6 +399,7 @@ public sealed class SearchPipeline : ISearchPipeline
                     HasLinux = request.HasLinux,
                     MinRatingPercent = request.MinRatingPercent,
                     MaxRatingPercent = request.MaxRatingPercent,
+                    MaxPriceCents = request.MaxPriceCents,
                     NoDrm = request.NoDrm,
                     NoExternalLauncher = request.NoExternalLauncher,
                     HideAdult = request.HideAdult,
@@ -410,17 +412,14 @@ public sealed class SearchPipeline : ISearchPipeline
                 };
 
                 var (localBrowseItems, totalLocalCount) = await _localRepo.QueryAsync(localBrowseQuery, ct).ConfigureAwait(false);
-                if (totalLocalCount > 0)
+                return new SearchResponse
                 {
-                    return new SearchResponse
-                    {
-                        Items = localBrowseItems.Select(ToSearchResult).ToList(),
-                        TotalCount = totalLocalCount,
-                        Start = request.Start,
-                        ResolutionType = SearchResolutionType.FullText,
-                        IsFromLocalCatalog = true
-                    };
-                }
+                    Items = localBrowseItems.Select(ToSearchResult).ToList(),
+                    TotalCount = totalLocalCount,
+                    Start = request.Start,
+                    ResolutionType = SearchResolutionType.FullText,
+                    IsFromLocalCatalog = true
+                };
             }
         }
 
@@ -440,8 +439,8 @@ public sealed class SearchPipeline : ISearchPipeline
         {
             var page = await _steamSearchService.SearchAsync(steamQuery, ct).ConfigureAwait(false);
 
-            // Anomaly validation using actual payload if available
-            var validation = _validator.ValidateResponse(steamQuery, page.RawPayload ?? "{\"results_html\":\"ok\"}", page.Items, page.TotalCount);
+            // Anomaly validation using actual payload
+            var validation = _validator.ValidateResponse(steamQuery, page.RawPayload ?? string.Empty, page.Items, page.TotalCount);
             IReadOnlyList<SearchResult> items = page.Items.Where(i => MatchesRequestFilters(i, request)).ToList();
 
             // When browsing "popularnew" (Popular new releases), filter out legacy releases
@@ -455,6 +454,46 @@ public sealed class SearchPipeline : ISearchPipeline
                     if (dt == DateTime.MinValue) return true; // keep upcoming/unreleased items
                     return dt >= cutoff;
                 }).ToList();
+            }
+
+            if (validation.RequiresLocalSortFallback)
+            {
+                var localBrowseQuery = new LocalCatalogQuery
+                {
+                    Term = null,
+                    AppTypes = request.AppTypes,
+                    SortBy = sortBase,
+                    Descending = descending,
+                    HasWindows = request.HasWindows,
+                    HasMac = request.HasMac,
+                    HasLinux = request.HasLinux,
+                    MinRatingPercent = request.MinRatingPercent,
+                    MaxRatingPercent = request.MaxRatingPercent,
+                    MaxPriceCents = request.MaxPriceCents,
+                    NoDrm = request.NoDrm,
+                    NoExternalLauncher = request.NoExternalLauncher,
+                    HideAdult = request.HideAdult,
+                    DiscountedOnly = request.DiscountedOnly,
+                    IncludedTagIds = request.IncludedTagIds?.ToList(),
+                    ExcludedTagIds = request.ExcludedTagIds?.ToList(),
+                    RestrictToAppIds = request.RestrictToAppIds?.ToList(),
+                    Offset = request.Start,
+                    Limit = request.Count
+                };
+
+                var (localSortedItems, totalLocalCount) = await _localRepo.QueryAsync(localBrowseQuery, ct).ConfigureAwait(false);
+                if (totalLocalCount > 0)
+                {
+                    return new SearchResponse
+                    {
+                        Items = localSortedItems.Select(ToSearchResult).ToList(),
+                        TotalCount = totalLocalCount,
+                        Start = request.Start,
+                        ResolutionType = SearchResolutionType.FullText,
+                        IsFromLocalCatalog = true,
+                        AnomalyDetected = validation.Description
+                    };
+                }
             }
 
             if (!string.IsNullOrEmpty(sortBase))
@@ -508,6 +547,7 @@ public sealed class SearchPipeline : ISearchPipeline
             HasLinux = request.HasLinux,
             MinRatingPercent = request.MinRatingPercent,
             MaxRatingPercent = request.MaxRatingPercent,
+            MaxPriceCents = request.MaxPriceCents,
             NoDrm = request.NoDrm,
             NoExternalLauncher = request.NoExternalLauncher,
             HideAdult = request.HideAdult,
@@ -539,13 +579,8 @@ public sealed class SearchPipeline : ISearchPipeline
         try
         {
             var page = await _steamSearchService.SearchAsync(steamQuery, ct).ConfigureAwait(false);
-            var validation = _validator.ValidateResponse(steamQuery, page.RawPayload ?? "{\"results_html\":\"ok\"}", page.Items, page.TotalCount);
+            var validation = _validator.ValidateResponse(steamQuery, page.RawPayload ?? string.Empty, page.Items, page.TotalCount);
             var items = page.Items.Where(i => MatchesRequestFilters(i, request)).ToList();
-
-            if (!string.IsNullOrEmpty(sortBase))
-            {
-                items = ApplyLocalSort(items, sortBase, descending).ToList();
-            }
 
             // Cache discovered games in local SQLite catalog
             if (items.Count > 0)
@@ -561,6 +596,51 @@ public sealed class SearchPipeline : ISearchPipeline
                         _logger?.LogDebug(ex, "Background upsert of Steam search results failed");
                     }
                 }, CancellationToken.None);
+            }
+
+            if (validation.RequiresLocalSortFallback)
+            {
+                var localQuery = new LocalCatalogQuery
+                {
+                    Term = term,
+                    AppTypes = request.AppTypes,
+                    SortBy = sortBase,
+                    Descending = descending,
+                    HasWindows = request.HasWindows,
+                    HasMac = request.HasMac,
+                    HasLinux = request.HasLinux,
+                    MinRatingPercent = request.MinRatingPercent,
+                    MaxRatingPercent = request.MaxRatingPercent,
+                    MaxPriceCents = request.MaxPriceCents,
+                    NoDrm = request.NoDrm,
+                    NoExternalLauncher = request.NoExternalLauncher,
+                    HideAdult = request.HideAdult,
+                    DiscountedOnly = request.DiscountedOnly,
+                    IncludedTagIds = request.IncludedTagIds?.ToList(),
+                    ExcludedTagIds = request.ExcludedTagIds?.ToList(),
+                    RestrictToAppIds = request.RestrictToAppIds?.ToList(),
+                    Offset = request.Start,
+                    Limit = request.Count
+                };
+
+                var (localSortedItems, totalLocalCount) = await _localRepo.QueryAsync(localQuery, ct).ConfigureAwait(false);
+                if (totalLocalCount > 0)
+                {
+                    return new SearchResponse
+                    {
+                        Items = localSortedItems.Select(ToSearchResult).ToList(),
+                        TotalCount = totalLocalCount,
+                        Start = request.Start,
+                        ResolutionType = SearchResolutionType.FullText,
+                        IsFromLocalCatalog = true,
+                        AnomalyDetected = validation.Description
+                    };
+                }
+            }
+
+            if (!string.IsNullOrEmpty(sortBase))
+            {
+                items = ApplyLocalSort(items, sortBase, descending).ToList();
             }
 
             return new SearchResponse
@@ -597,6 +677,17 @@ public sealed class SearchPipeline : ISearchPipeline
     private static SteamSearchQuery BuildSteamQuery(SearchRequest request, string? term, string sortBy)
     {
         var facets = new Dictionary<SteamFacetOption, FacetState>();
+
+        if (request.Facets != null)
+        {
+            foreach (var (k, v) in request.Facets)
+            {
+                if (k.Kind is not (SteamFacetKind.StoreList or SteamFacetKind.LocalPostFilter or SteamFacetKind.LocalRequirements))
+                {
+                    facets[k] = v;
+                }
+            }
+        }
 
         if (request.IncludedTagIds != null)
         {
@@ -723,6 +814,42 @@ public sealed class SearchPipeline : ISearchPipeline
         if (req.DiscountedOnly == true && res.DiscountPercent <= 0) return false;
         if (req.MinRatingPercent.HasValue && (res.ReviewPercent ?? 0) < req.MinRatingPercent.Value) return false;
         if (req.MaxRatingPercent.HasValue && (res.ReviewPercent ?? 100) >= req.MaxRatingPercent.Value) return false;
+
+        // Hide free to play
+        if (req.Facets != null && req.Facets.Any(f => f.Key.Kind == SteamFacetKind.Toggle && f.Key.Value == "hidef2p" && f.Value == FacetState.Include))
+        {
+            var price = (res.PriceText ?? string.Empty).Trim().ToLowerInvariant();
+            if (price.Contains("free") || price.Contains("gratis") || price == "$0" || price == "$0.00" || price == "0€"
+                || (res.TagIds != null && res.TagIds.Contains(113)))
+            {
+                return false;
+            }
+        }
+
+        // VR only
+        if (req.Facets != null && req.Facets.Any(f => f.Key.Kind == SteamFacetKind.Vr && f.Key.Value == "401" && f.Value == FacetState.Include))
+        {
+            if (res.TagIds != null && res.TagIds.Count > 0 && !res.TagIds.Contains(21978))
+            {
+                return false;
+            }
+        }
+
+        // Tag matching
+        if (req.IncludedTagIds != null && req.IncludedTagIds.Count > 0)
+        {
+            if (res.TagIds == null || !req.IncludedTagIds.All(t => res.TagIds.Contains(t)))
+            {
+                return false;
+            }
+        }
+        if (req.ExcludedTagIds != null && req.ExcludedTagIds.Count > 0)
+        {
+            if (res.TagIds != null && req.ExcludedTagIds.Any(t => res.TagIds.Contains(t)))
+            {
+                return false;
+            }
+        }
 
         if (!string.IsNullOrWhiteSpace(req.AppTypes))
         {

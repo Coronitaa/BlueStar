@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -46,6 +47,18 @@ public sealed class SteamCatalogSnapshotService : ICatalogSnapshotService
     /// </summary>
     public async Task<int> GetCurrentVersionAsync(CancellationToken ct = default)
     {
+        // 1. Try reading snapshot_version directly from repository metadata table
+        try
+        {
+            var metaVer = await _catalogRepo.GetMetadataAsync("snapshot_version", ct).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(metaVer) && int.TryParse(metaVer, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedMetaVer))
+            {
+                return parsedMetaVer;
+            }
+        }
+        catch { }
+
+        // 2. Fall back to state file
         if (!File.Exists(_stateFilePath)) return 0;
         try
         {
@@ -66,7 +79,7 @@ public sealed class SteamCatalogSnapshotService : ICatalogSnapshotService
 
     /// <summary>
     /// Checks a remote manifest URL for catalog snapshot updates. If a newer version is found,
-    /// downloads the snapshot, verifies its SHA256 checksum, imports it into the repository,
+    /// downloads the snapshot, verifies its SHA256 checksum, decompresses if .zst, imports it into the repository,
     /// and updates the local version state.
     /// </summary>
     public async Task<bool> CheckAndUpdateSnapshotAsync(string manifestUrl, CancellationToken ct = default)
@@ -87,7 +100,8 @@ public sealed class SteamCatalogSnapshotService : ICatalogSnapshotService
             }
 
             _logger.LogInformation("New catalog version {Remote} available. Downloading from {Url}...", manifest.Version, manifest.DownloadUrl);
-            var tempSnapshot = Path.GetTempFileName();
+            var tempDownloaded = Path.GetTempFileName();
+            var tempSqlite = Path.GetTempFileName();
 
             try
             {
@@ -95,14 +109,14 @@ public sealed class SteamCatalogSnapshotService : ICatalogSnapshotService
                 {
                     response.EnsureSuccessStatusCode();
                     await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-                    await using var fileStream = File.Create(tempSnapshot);
+                    await using var fileStream = File.Create(tempDownloaded);
                     await stream.CopyToAsync(fileStream, ct).ConfigureAwait(false);
                 }
 
-                // Verify SHA256 if declared
+                // Verify SHA256 of downloaded archive/file if declared
                 if (!string.IsNullOrWhiteSpace(manifest.Sha256))
                 {
-                    await using var verifyStream = File.OpenRead(tempSnapshot);
+                    await using var verifyStream = File.OpenRead(tempDownloaded);
                     var hashBytes = await SHA256.HashDataAsync(verifyStream, ct).ConfigureAwait(false);
                     var computedHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
 
@@ -113,22 +127,48 @@ public sealed class SteamCatalogSnapshotService : ICatalogSnapshotService
                     }
                 }
 
+                // Determine if decompression is needed (.zst or .zstandard)
+                bool isZstd = manifest.DownloadUrl.EndsWith(".zst", StringComparison.OrdinalIgnoreCase) ||
+                              manifest.DownloadUrl.EndsWith(".zstandard", StringComparison.OrdinalIgnoreCase);
+
+                string fileToImport;
+                if (isZstd)
+                {
+                    _logger.LogInformation("Decompressing Zstandard catalog snapshot...");
+                    await using var compressedStream = File.OpenRead(tempDownloaded);
+                    await using var decompressedStream = File.Create(tempSqlite);
+                    using var zstdStream = new ZstdSharp.DecompressionStream(compressedStream);
+                    await zstdStream.CopyToAsync(decompressedStream, ct).ConfigureAwait(false);
+                    fileToImport = tempSqlite;
+                }
+                else
+                {
+                    fileToImport = tempDownloaded;
+                }
+
                 // Import verified snapshot
-                await _catalogRepo.ImportSnapshotAsync(tempSnapshot, ct).ConfigureAwait(false);
+                await _catalogRepo.ImportSnapshotAsync(fileToImport, ct).ConfigureAwait(false);
+
+                // Update persistent metadata in SQLite
+                await _catalogRepo.SetMetadataAsync("snapshot_version", manifest.Version.ToString(CultureInfo.InvariantCulture), ct).ConfigureAwait(false);
+                if (manifest.TotalApps > 0)
+                {
+                    await _catalogRepo.SetMetadataAsync("expected_app_count", manifest.TotalApps.ToString(CultureInfo.InvariantCulture), ct).ConfigureAwait(false);
+                    await _catalogRepo.SetMetadataAsync("identity_complete", "1", ct).ConfigureAwait(false);
+                }
+                await _catalogRepo.SetMetadataAsync("last_sync_at", DateTimeOffset.UtcNow.ToString("O"), ct).ConfigureAwait(false);
 
                 // Update state file
-                var stateJson = JsonSerializer.Serialize(new { version = manifest.Version, updatedAt = DateTimeOffset.UtcNow });
+                var stateJson = JsonSerializer.Serialize(new { version = manifest.Version, updatedAt = DateTimeOffset.UtcNow, appCount = manifest.TotalApps });
                 await File.WriteAllTextAsync(_stateFilePath, stateJson, ct).ConfigureAwait(false);
 
-                _logger.LogInformation("Catalog successfully updated to version {Version}", manifest.Version);
+                _logger.LogInformation("Catalog successfully updated to version {Version} with {TotalApps} apps", manifest.Version, manifest.TotalApps);
                 return true;
             }
             finally
             {
-                if (File.Exists(tempSnapshot))
-                {
-                    try { File.Delete(tempSnapshot); } catch { }
-                }
+                if (File.Exists(tempDownloaded)) { try { File.Delete(tempDownloaded); } catch { } }
+                if (File.Exists(tempSqlite)) { try { File.Delete(tempSqlite); } catch { } }
             }
         }
         catch (OperationCanceledException)

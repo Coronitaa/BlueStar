@@ -99,7 +99,7 @@ public sealed partial class SteamCatalogSearchService : ISteamCatalogSearchServi
                 var cached = await _cache.GetAsync<CachedPage>(cacheKey, ct).ConfigureAwait(false);
                 if (cached?.Items != null)
                 {
-                    return new SteamSearchPage(cached.Items, cached.TotalCount, query.Start);
+                    return new SteamSearchPage(cached.Items, cached.TotalCount, query.Start, cached.RawPayload);
                 }
             }
             catch
@@ -126,7 +126,7 @@ public sealed partial class SteamCatalogSearchService : ISteamCatalogSearchServi
                 try
                 {
                     await _cache.SetAsync(cacheKey,
-                        new CachedPage { Items = items, TotalCount = envelope.Value.TotalCount },
+                        new CachedPage { Items = items, TotalCount = envelope.Value.TotalCount, RawPayload = envelope.Value.RawPayload },
                         PageCacheTtl, token).ConfigureAwait(false);
                 }
                 catch
@@ -669,6 +669,8 @@ public sealed partial class SteamCatalogSearchService : ISteamCatalogSearchServi
         public List<SearchResult> Items { get; set; } = [];
 
         public int TotalCount { get; set; }
+
+        public string? RawPayload { get; set; }
     }
 
     private sealed class CachedCount

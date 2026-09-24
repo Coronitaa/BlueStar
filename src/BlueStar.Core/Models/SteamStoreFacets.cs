@@ -180,18 +180,9 @@ public static class SteamStoreFacets
 
     /// <summary>
     /// Whether a curated list can be reordered at all.
+    /// Always returns true: curated pools (including Coming Soon) can be sorted locally by SearchPipeline.
     /// </summary>
-    /// <remarks>
-    /// Coming soon cannot. Its products have no real release date and no reviews yet, and every
-    /// sort token turns the query into something else: checked live, the bare list is 14 796
-    /// unreleased products in soonest-first order, while adding <c>sort_by=Released_DESC</c>
-    /// returns 55 086 led by placeholder dates — 31 Dec 9998, 1 Mar 2104, "Coming soon" — and
-    /// <c>sort_by=Reviews_DESC</c> returns two products, because almost nothing unreleased has
-    /// been reviewed. The list's own order is the only one that means anything, so the sort
-    /// selector is switched off while it is chosen rather than handing back that rubbish.
-    /// </remarks>
-    public static bool AllowsSorting(string? storeList) =>
-        !string.Equals(storeList, "comingsoon", System.StringComparison.Ordinal);
+    public static bool AllowsSorting(string? storeList) => true;
 
     /// <summary>
     /// The curated lists Steam offers, as the toolbar presents them.
