@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -41,10 +43,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          RELEASE_TAG="catalog-latest"
           RELEASE_DATE=$(date -u +"%Y-%m-%d")
-          gh release create catalog-latest \
-            catalog-dist/catalog.sqlite.zst \
-            catalog-dist/catalog-manifest.json \
-            --title "Steam Catalog Snapshot ($RELEASE_DATE)" \
-            --notes "Automated snapshot containing the complete Steam catalog indexed for BlueStar. Compressed with Zstandard." \
-            --clobber
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Updating existing release $RELEASE_TAG..."
+            gh release upload "$RELEASE_TAG" catalog-dist/catalog.sqlite.zst catalog-dist/catalog-manifest.json --clobber
+            gh release edit "$RELEASE_TAG" --title "Steam Catalog Snapshot ($RELEASE_DATE)"
+          else
+            echo "Creating new release $RELEASE_TAG..."
+            gh release create "$RELEASE_TAG" \
+              catalog-dist/catalog.sqlite.zst \
+              catalog-dist/catalog-manifest.json \
+              --title "Steam Catalog Snapshot ($RELEASE_DATE)" \
+              --notes "Automated snapshot containing the complete Steam catalog indexed for BlueStar. Compressed with Zstandard."
+          fi
