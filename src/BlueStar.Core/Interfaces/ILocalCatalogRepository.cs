@@ -93,5 +93,15 @@ public interface ILocalCatalogRepository : IDisposable
     /// Retrieves a persistent catalog metadata value by key.
     /// </summary>
     Task<string?> GetMetadataAsync(string key, CancellationToken ct = default);
+
+    /// <summary>
+    /// Retrieves all indexed App IDs in the catalog.
+    /// </summary>
+    Task<IReadOnlyList<uint>> GetAllAppIdsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Updates enriched metadata (tags, release dates, prices, ratings, platforms) for a batch of apps in a single transaction.
+    /// </summary>
+    Task UpdateAppMetadataBatchAsync(IEnumerable<AppMetadataEnrichment> batch, CancellationToken ct = default);
 }
 

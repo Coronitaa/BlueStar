@@ -1121,6 +1121,91 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
         };
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<uint>> GetAllAppIdsAsync(CancellationToken ct = default)
+    {
+        await InitializeAsync(ct).ConfigureAwait(false);
+
+        using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT app_id FROM apps ORDER BY app_id;";
+
+        var list = new List<uint>();
+        using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            list.Add((uint)reader.GetInt64(0));
+        }
+
+        return list;
+    }
+
+    /// <inheritdoc />
+    public async Task UpdateAppMetadataBatchAsync(IEnumerable<AppMetadataEnrichment> batch, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(batch);
+        await InitializeAsync(ct).ConfigureAwait(false);
+
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync(ct).ConfigureAwait(false);
+
+            using var tx = connection.BeginTransaction();
+            using var cmd = connection.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = """
+                UPDATE apps SET
+                    tag_ids = COALESCE(@tags, tag_ids),
+                    release_date_utc = COALESCE(@rel, release_date_utc),
+                    price_cents = COALESCE(@price, price_cents),
+                    review_percent = COALESCE(@revPct, review_percent),
+                    review_count = COALESCE(@revCnt, review_count),
+                    has_windows = @win,
+                    has_mac = @mac,
+                    has_linux = @lin,
+                    is_nsfw = CASE WHEN @nsfw = 1 THEN 1 ELSE is_nsfw END
+                WHERE app_id = @id;
+                """;
+
+            var pId = cmd.Parameters.Add("@id", SqliteType.Integer);
+            var pTags = cmd.Parameters.Add("@tags", SqliteType.Text);
+            var pRel = cmd.Parameters.Add("@rel", SqliteType.Integer);
+            var pPrice = cmd.Parameters.Add("@price", SqliteType.Integer);
+            var pRevPct = cmd.Parameters.Add("@revPct", SqliteType.Integer);
+            var pRevCnt = cmd.Parameters.Add("@revCnt", SqliteType.Integer);
+            var pWin = cmd.Parameters.Add("@win", SqliteType.Integer);
+            var pMac = cmd.Parameters.Add("@mac", SqliteType.Integer);
+            var pLin = cmd.Parameters.Add("@lin", SqliteType.Integer);
+            var pNsfw = cmd.Parameters.Add("@nsfw", SqliteType.Integer);
+
+            foreach (var item in batch)
+            {
+                pId.Value = item.AppId;
+                pTags.Value = (object?)item.TagIds ?? DBNull.Value;
+                pRel.Value = (object?)item.ReleaseDateUtc ?? DBNull.Value;
+                pPrice.Value = (object?)item.PriceCents ?? DBNull.Value;
+                pRevPct.Value = (object?)item.ReviewPercent ?? DBNull.Value;
+                pRevCnt.Value = (object?)item.ReviewCount ?? DBNull.Value;
+                pWin.Value = item.HasWindows ? 1 : 0;
+                pMac.Value = item.HasMac ? 1 : 0;
+                pLin.Value = item.HasLinux ? 1 : 0;
+                pNsfw.Value = item.IsNsfw ? 1 : 0;
+
+                await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
+
+            await tx.CommitAsync(ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed) return;

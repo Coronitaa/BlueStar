@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -25,8 +26,10 @@ public static class Program
         string? apiKey = Environment.GetEnvironmentVariable("STEAM_API_KEY");
         string? fromExisting = null;
         int? limit = null;
+        int? enrichLimit = null;
+        bool skipEnrich = false;
         int version = int.Parse(DateTime.UtcNow.ToString("yyyyMMdd"));
-        string downloadUrl = "https://github.com/Coronitaa/BlueStar/releases/latest/download/catalog.sqlite.zst";
+        string downloadUrl = "https://github.com/Coronitaa/BlueStar-Catalog/releases/latest/download/catalog.sqlite.zst";
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -34,6 +37,8 @@ public static class Program
             else if (args[i] == "--api-key" && i + 1 < args.Length) apiKey = args[++i];
             else if (args[i] == "--from-existing" && i + 1 < args.Length) fromExisting = Path.GetFullPath(args[++i]);
             else if (args[i] == "--limit" && i + 1 < args.Length && int.TryParse(args[++i], out var lim)) limit = lim;
+            else if (args[i] == "--enrich-limit" && i + 1 < args.Length && int.TryParse(args[++i], out var elim)) enrichLimit = elim;
+            else if (args[i] == "--no-enrich") skipEnrich = true;
             else if (args[i] == "--version" && i + 1 < args.Length && int.TryParse(args[++i], out var ver)) version = ver;
             else if (args[i] == "--download-url" && i + 1 < args.Length) downloadUrl = args[++i];
         }
@@ -48,6 +53,8 @@ public static class Program
         if (File.Exists(manifestPath)) File.Delete(manifestPath);
 
         int totalApps = 0;
+        using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar-CatalogBuilder/1.0 (+https://github.com/Coronitaa/BlueStar)");
 
         if (!string.IsNullOrWhiteSpace(fromExisting))
         {
@@ -59,7 +66,7 @@ public static class Program
                 return 1;
             }
 
-            Console.WriteLine($"[1/5] Clonando base de datos existente desde: {fromExisting}");
+            Console.WriteLine($"[1/6] Clonando base de datos existente desde: {fromExisting}");
             File.Copy(fromExisting, sqlitePath, overwrite: true);
 
             var repo = new LocalCatalogRepository(NullLogger<LocalCatalogRepository>.Instance, sqlitePath);
@@ -85,21 +92,56 @@ public static class Program
                 return 1;
             }
 
-            Console.WriteLine($"[1/5] Inicializando nueva base de catálogo en: {sqlitePath}");
+            Console.WriteLine($"[1/6] Inicializando nueva base de catálogo en: {sqlitePath}");
             var repo = new LocalCatalogRepository(NullLogger<LocalCatalogRepository>.Instance, sqlitePath);
             await repo.InitializeAsync().ConfigureAwait(false);
 
-            using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar-CatalogBuilder/1.0 (+https://github.com/Coronitaa/BlueStar)");
-
-            Console.WriteLine("[2/5] Sincronizando catálogo desde Steam IStoreService/GetAppList/v1...");
+            Console.WriteLine("[2/6] Sincronizando catálogo desde Steam IStoreService/GetAppList/v1...");
             var sw = Stopwatch.StartNew();
             totalApps = await SteamCatalogSnapshotService.SyncFromSteamWebToRepositoryAsync(http, repo, apiKey, startAppId: 0).ConfigureAwait(false);
             sw.Stop();
             Console.WriteLine($"✓ Ingestados {totalApps:N0} juegos en {sw.Elapsed.TotalSeconds:F1}s.");
         }
 
-        Console.WriteLine("[3/5] Estableciendo metadatos, optimizando SQLite e índices FTS5...");
+        // Enrichment phase (Tags, release dates, reviews, platforms, prices)
+        if (!skipEnrich)
+        {
+            Console.WriteLine("[3/6] Enriqueciendo metadatos (tags, fechas, precios y reseñas) vía Store Browse API...");
+            var repo = new LocalCatalogRepository(NullLogger<LocalCatalogRepository>.Instance, sqlitePath);
+            await repo.InitializeAsync().ConfigureAwait(false);
+
+            var allAppIds = await repo.GetAllAppIdsAsync().ConfigureAwait(false);
+            var toEnrich = enrichLimit.HasValue ? allAppIds.Take(enrichLimit.Value).ToList() : allAppIds;
+
+            Console.WriteLine($"  -> Procesando {toEnrich.Count:N0} apps en lotes de 100 con concurrencia controlada...");
+            var enrichSw = Stopwatch.StartNew();
+            var lastReportedPercent = -1;
+
+            var totalEnriched = await SteamCatalogSnapshotService.EnrichCatalogMetadataAsync(
+                http,
+                repo,
+                toEnrich,
+                batchSize: 100,
+                maxConcurrency: 6,
+                progressCallback: (done, total) =>
+                {
+                    var pct = (int)((double)done / total * 100);
+                    if (pct != lastReportedPercent && pct % 10 == 0)
+                    {
+                        lastReportedPercent = pct;
+                        Console.WriteLine($"  -> Progreso: {done:N0} / {total:N0} apps ({pct}%) [{enrichSw.Elapsed.TotalSeconds:F0}s]");
+                    }
+                }).ConfigureAwait(false);
+
+            enrichSw.Stop();
+            Console.WriteLine($"✓ Enriquecimiento completado: {totalEnriched:N0} juegos procesados en {enrichSw.Elapsed.TotalSeconds:F1}s.");
+        }
+        else
+        {
+            Console.WriteLine("[3/6] Omitiendo fase de enriquecimiento (--no-enrich).");
+        }
+
+        Console.WriteLine("[4/6] Estableciendo metadatos, optimizando SQLite e índices FTS5...");
         {
             var repo = new LocalCatalogRepository(NullLogger<LocalCatalogRepository>.Instance, sqlitePath);
             await repo.InitializeAsync().ConfigureAwait(false);
@@ -133,7 +175,7 @@ public static class Program
         var uncompressedBytes = new FileInfo(sqlitePath).Length;
         Console.WriteLine($"✓ Base SQLite optimizada. Tamaño: {uncompressedBytes / (1024.0 * 1024.0):F2} MB");
 
-        Console.WriteLine("[4/5] Comprimiendo con Zstandard (Nivel 19)...");
+        Console.WriteLine("[5/6] Comprimiendo con Zstandard (Nivel 19)...");
         var compSw = Stopwatch.StartNew();
         await SteamCatalogSnapshotService.CompressToZstdAsync(sqlitePath, zstdPath, compressionLevel: 19).ConfigureAwait(false);
         compSw.Stop();
@@ -143,7 +185,7 @@ public static class Program
         Console.WriteLine($"✓ Comprimido Zstandard generado en {compSw.Elapsed.TotalSeconds:F1}s.");
         Console.WriteLine($"  Tamaño: {compressedBytes / (1024.0 * 1024.0):F2} MB ({ratio:F1}% de reducción)");
 
-        Console.WriteLine("[5/5] Calculando SHA-256 y generando catalog-manifest.json...");
+        Console.WriteLine("[6/6] Calculando SHA-256 y generando catalog-manifest.json...");
         string sha256;
         await using (var stream = File.OpenRead(zstdPath))
         {

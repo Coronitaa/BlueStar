@@ -255,7 +255,7 @@ public sealed class AppSettingsService
     }
 
     /// <summary>Remote manifest URL for catalog snapshot updates.</summary>
-    public string? CatalogManifestUrl => _current.CatalogManifestUrl ?? "https://github.com/Coronitaa/BlueStar/releases/latest/download/catalog-manifest.json";
+    public string? CatalogManifestUrl => _current.CatalogManifestUrl ?? "https://github.com/Coronitaa/BlueStar-Catalog/releases/latest/download/catalog-manifest.json";
 
     /// <summary>Sets and persists the catalog manifest URL.</summary>
     public async Task SetCatalogManifestUrlAsync(string? url)

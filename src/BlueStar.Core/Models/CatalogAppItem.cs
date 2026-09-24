@@ -89,3 +89,20 @@ public sealed record CatalogManifest
     [System.Text.Json.Serialization.JsonPropertyName("schema_version")]
     public string FormatVersion { get; init; } = "1.0";
 }
+
+/// <summary>
+/// Container for batch metadata enrichment (tags, dates, prices, ratings, platforms).
+/// </summary>
+public sealed record AppMetadataEnrichment(
+    uint AppId,
+    string? TagIds,
+    long? ReleaseDateUtc,
+    int? PriceCents,
+    int? ReviewPercent,
+    int? ReviewCount,
+    bool HasWindows,
+    bool HasMac,
+    bool HasLinux,
+    bool IsNsfw
+);
+

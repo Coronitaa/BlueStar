@@ -333,5 +333,243 @@ public sealed class SteamCatalogSnapshotService : ICatalogSnapshotService
         using var zstdStream = new ZstdSharp.CompressionStream(outputStream, compressionLevel);
         await inputStream.CopyToAsync(zstdStream, ct).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Enriches catalog apps with tags, release dates, reviews, platforms, and prices using Steam's bulk IStoreBrowseService/GetItems endpoint.
+    /// Batches apps into chunks (e.g. 50-100 apps per request) with controlled concurrency and retry on 429.
+    /// </summary>
+    public static async Task<int> EnrichCatalogMetadataAsync(
+        HttpClient http,
+        ILocalCatalogRepository repo,
+        IReadOnlyList<uint> appIds,
+        int batchSize = 100,
+        int maxConcurrency = 4,
+        Action<int, int>? progressCallback = null,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(http);
+        ArgumentNullException.ThrowIfNull(repo);
+        ArgumentNullException.ThrowIfNull(appIds);
+
+        if (appIds.Count == 0) return 0;
+
+        var chunks = new List<List<uint>>();
+        for (var i = 0; i < appIds.Count; i += batchSize)
+        {
+            chunks.Add(appIds.Skip(i).Take(batchSize).ToList());
+        }
+
+        var totalChunks = chunks.Count;
+        var processedChunks = 0;
+        var totalEnriched = 0;
+        var channel = System.Threading.Channels.Channel.CreateBounded<List<AppMetadataEnrichment>>(new System.Threading.Channels.BoundedChannelOptions(50)
+        {
+            FullMode = System.Threading.Channels.BoundedChannelFullMode.Wait,
+            SingleWriter = false,
+            SingleReader = true
+        });
+
+        // Background single DB writer to avoid SQLite database locks
+        var writerTask = Task.Run(async () =>
+        {
+            await foreach (var batch in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+            {
+                if (batch.Count > 0)
+                {
+                    await repo.UpdateAppMetadataBatchAsync(batch, ct).ConfigureAwait(false);
+                    Interlocked.Add(ref totalEnriched, batch.Count);
+                }
+            }
+        }, ct);
+
+        using var semaphore = new SemaphoreSlim(maxConcurrency, maxConcurrency);
+        var tasks = new List<Task>();
+
+        foreach (var chunk in chunks)
+        {
+            if (ct.IsCancellationRequested) break;
+            await semaphore.WaitAsync(ct).ConfigureAwait(false);
+
+            tasks.Add(Task.Run(async () =>
+            {
+                try
+                {
+                    var enrichedItems = await FetchStoreItemsBatchAsync(http, chunk, ct).ConfigureAwait(false);
+                    if (enrichedItems.Count > 0)
+                    {
+                        await channel.Writer.WriteAsync(enrichedItems, ct).ConfigureAwait(false);
+                    }
+                }
+                finally
+                {
+                    semaphore.Release();
+                    var done = Interlocked.Increment(ref processedChunks);
+                    progressCallback?.Invoke(done * batchSize > appIds.Count ? appIds.Count : done * batchSize, appIds.Count);
+                }
+            }, ct));
+        }
+
+        await Task.WhenAll(tasks).ConfigureAwait(false);
+        channel.Writer.Complete();
+        await writerTask.ConfigureAwait(false);
+
+        return totalEnriched;
+    }
+
+    private static async Task<List<AppMetadataEnrichment>> FetchStoreItemsBatchAsync(
+        HttpClient http,
+        List<uint> appIds,
+        CancellationToken ct)
+    {
+        var result = new List<AppMetadataEnrichment>(appIds.Count);
+        const int maxRetries = 3;
+        var delayMs = 1000;
+
+        for (var attempt = 1; attempt <= maxRetries; attempt++)
+        {
+            try
+            {
+                var requestObj = new
+                {
+                    ids = appIds.Select(id => new { appid = id }).ToArray(),
+                    context = new { language = "english", country_code = "US" },
+                    data_request = new
+                    {
+                        include_tag_count = 20,
+                        include_release = true,
+                        include_reviews = true,
+                        include_platforms = true
+                    }
+                };
+
+                var jsonPayload = JsonSerializer.Serialize(requestObj);
+                var url = "https://api.steampowered.com/IStoreBrowseService/GetItems/v1/?input_json=" + Uri.EscapeDataString(jsonPayload);
+
+                using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+                if ((int)response.StatusCode == 429)
+                {
+                    await Task.Delay(delayMs, ct).ConfigureAwait(false);
+                    delayMs *= 2;
+                    continue;
+                }
+
+                response.EnsureSuccessStatusCode();
+
+                await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+                using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+
+                if (!doc.RootElement.TryGetProperty("response", out var resp) ||
+                    !resp.TryGetProperty("store_items", out var items) ||
+                    items.ValueKind != JsonValueKind.Array)
+                {
+                    return result;
+                }
+
+                foreach (var el in items.EnumerateArray())
+                {
+                    if (!el.TryGetProperty("id", out var idProp) && !el.TryGetProperty("appid", out idProp))
+                        continue;
+
+                    var appId = idProp.GetUInt32();
+                    var success = el.TryGetProperty("success", out var sc) ? sc.GetInt32() : 1;
+                    if (success != 1) continue;
+
+                    // Tags: format as ",id1,id2,id3,"
+                    string? tagIds = null;
+                    var tagList = new List<int>();
+                    if (el.TryGetProperty("tagids", out var tagsArr) && tagsArr.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var t in tagsArr.EnumerateArray())
+                        {
+                            if (t.TryGetInt32(out var tid)) tagList.Add(tid);
+                        }
+                    }
+                    if (tagList.Count > 0)
+                    {
+                        tagIds = "," + string.Join(",", tagList) + ",";
+                    }
+
+                    // Release date
+                    long? relDateUtc = null;
+                    if (el.TryGetProperty("release", out var rel) && rel.TryGetProperty("steam_release_date", out var srd) && srd.TryGetInt64(out var rUtc) && rUtc > 0)
+                    {
+                        relDateUtc = rUtc;
+                    }
+
+                    // Price cents
+                    int? priceCents = null;
+                    if (el.TryGetProperty("is_free", out var isFreeProp) && isFreeProp.GetBoolean())
+                    {
+                        priceCents = 0;
+                    }
+                    else if (el.TryGetProperty("best_purchase_option", out var bpo) && bpo.TryGetProperty("final_price_in_cents", out var fpc))
+                    {
+                        if (fpc.ValueKind == JsonValueKind.Number && fpc.TryGetInt32(out var cents)) priceCents = cents;
+                        else if (fpc.ValueKind == JsonValueKind.String && int.TryParse(fpc.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedCents)) priceCents = parsedCents;
+                    }
+
+                    // Reviews
+                    int? revPct = null;
+                    int? revCnt = null;
+                    if (el.TryGetProperty("reviews", out var revs) && revs.TryGetProperty("summary_filtered", out var sf))
+                    {
+                        if (sf.TryGetProperty("percent_positive", out var pp) && pp.TryGetInt32(out var pPct)) revPct = pPct;
+                        if (sf.TryGetProperty("review_count", out var rc) && rc.TryGetInt32(out var pCnt)) revCnt = pCnt;
+                    }
+
+                    // Platforms
+                    var hasWin = true;
+                    var hasMac = false;
+                    var hasLin = false;
+                    if (el.TryGetProperty("platforms", out var plats))
+                    {
+                        if (plats.TryGetProperty("windows", out var w)) hasWin = w.GetBoolean();
+                        if (plats.TryGetProperty("mac", out var m)) hasMac = m.GetBoolean();
+                        if (plats.TryGetProperty("steamos_linux", out var l)) hasLin = l.GetBoolean();
+                    }
+
+                    // NSFW flag
+                    var isNsfw = false;
+                    if (el.TryGetProperty("content_descriptorids", out var descArr) && descArr.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var d in descArr.EnumerateArray())
+                        {
+                            if (d.TryGetInt32(out var did) && (did == 3 || did == 4))
+                            {
+                                isNsfw = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!isNsfw && tagList.Any(t => t == 12095 || t == 5611 || t == 6650))
+                    {
+                        isNsfw = true;
+                    }
+
+                    result.Add(new AppMetadataEnrichment(
+                        appId,
+                        tagIds,
+                        relDateUtc,
+                        priceCents,
+                        revPct,
+                        revCnt,
+                        hasWin,
+                        hasMac,
+                        hasLin,
+                        isNsfw
+                    ));
+                }
+
+                return result;
+            }
+            catch (Exception) when (attempt < maxRetries)
+            {
+                await Task.Delay(delayMs, ct).ConfigureAwait(false);
+                delayMs *= 2;
+            }
+        }
+
+        return result;
+    }
 }
 
