@@ -10,12 +10,6 @@
 
 BlueStar is an all-in-one desktop game management and launcher ecosystem for modern PC gaming. It brings together Steam depot downloads, manifest staging, engine detection, online and LAN multiplayer emulation, DLC unlocking, prerequisite management, and mod injection into a clean, modern dark-themed interface.
 
-<img width="1441" height="882" alt="image" src="https://github.com/user-attachments/assets/676715de-f206-4924-b81e-8e119f5a60e6" />
-<img width="1441" height="880" alt="image" src="https://github.com/user-attachments/assets/6ecb0fd0-bd65-40e5-a1ad-ed125e60003e" />
-<img width="1437" height="867" alt="image" src="https://github.com/user-attachments/assets/add5b36b-2a93-4149-8110-c6ab8fd96586" />
-<img width="1430" height="874" alt="image" src="https://github.com/user-attachments/assets/d5c2f015-0f7b-4e4d-b61d-8d6e0ee57b64" />
-<img width="1434" height="949" alt="image" src="https://github.com/user-attachments/assets/a41cbe5c-3dbb-42aa-b335-33b3481d693c" />
-
 ---
 
 ## ⚡ Quick Download
@@ -35,6 +29,13 @@ BlueStar is an all-in-one desktop game management and launcher ecosystem for mod
 > All release packages are self-contained for 64-bit Windows systems (Windows 10 / 11). No separate .NET runtime installation required.
 
 ---
+
+<img width="1432" height="875" alt="image" src="https://github.com/user-attachments/assets/839d778f-39fd-4d7e-aa96-2e43800623d6" />
+<img width="1429" height="872" alt="image" src="https://github.com/user-attachments/assets/c6465f14-2a4c-4c63-8809-3c4c304fa144" />
+<img width="1437" height="874" alt="image" src="https://github.com/user-attachments/assets/ed4adc8e-f764-40f3-ba01-dbf04e5a76d9" />
+<img width="1434" height="870" alt="image" src="https://github.com/user-attachments/assets/c1fc7ba5-a8e9-4b85-ba7c-259e0443c971" />
+<img width="1422" height="877" alt="image" src="https://github.com/user-attachments/assets/650239fc-2c88-40d4-9323-f7df2f9dfb0c" />
+
 
 ## 🚀 Key Features
 
