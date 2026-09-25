@@ -37,13 +37,24 @@ public partial class HomeView : UserControl
         _viewModel = null;
     }
 
-    private async void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.InvokeAsync(() => OnViewModelPropertyChanged(sender, e));
+            return;
+        }
+
         if (e.PropertyName != nameof(ViewModels.HomeViewModel.DetailUrl)) return;
 
         var url = _viewModel?.DetailUrl;
         if (string.IsNullOrWhiteSpace(url)) return;
 
+        _ = LoadStorePageAsync(url);
+    }
+
+    private async System.Threading.Tasks.Task LoadStorePageAsync(string url)
+    {
         try
         {
             await EnsureWebViewAsync().ConfigureAwait(true);
@@ -78,6 +89,16 @@ public partial class HomeView : UserControl
 
         StorePageView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
         StorePageView.CoreWebView2.Settings.IsStatusBarEnabled = false;
+        StorePageView.CoreWebView2.NewWindowRequested += (s, args) =>
+        {
+            args.Handled = true;
+            if (!string.IsNullOrWhiteSpace(args.Uri))
+            {
+                StorePageView.CoreWebView2.Navigate(args.Uri);
+            }
+        };
+
+        _ = BlueStar.App.Services.SteamWebSessionHelper.TrySyncSteamCookiesAsync(StorePageView.CoreWebView2);
 
         _webViewReady = true;
     }

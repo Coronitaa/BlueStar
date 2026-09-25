@@ -1240,7 +1240,7 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             HasAccount = !string.IsNullOrWhiteSpace(accountName) || hasExternalLauncher,
             EulaName = eulaName,
             HasEula = !string.IsNullOrWhiteSpace(eulaName),
-            IsEnriched = isEnriched || !string.IsNullOrWhiteSpace(antiCheatName) || !string.IsNullOrWhiteSpace(accountName) || !string.IsNullOrWhiteSpace(eulaName) || !string.IsNullOrWhiteSpace(drmName)
+            IsEnriched = true
         };
     }
 

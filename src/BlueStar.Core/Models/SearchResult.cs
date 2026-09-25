@@ -363,6 +363,8 @@ public class SearchResult : INotifyPropertyChanged
             {
                 return "Free";
             }
+            if (_priceCents.HasValue && _priceCents.Value > 0) return $"${_priceCents.Value / 100.0:F2}";
+
             return null;
         }
         set => SetField(ref _priceText, value);
@@ -424,6 +426,7 @@ public class SearchResult : INotifyPropertyChanged
                 return DateTimeOffset.FromUnixTimeSeconds(_releaseDateUtc.Value)
                     .ToString("MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
             }
+            if (!string.IsNullOrWhiteSpace(_version)) return _version;
             return null;
         }
         set => SetField(ref _releaseDateText, value);

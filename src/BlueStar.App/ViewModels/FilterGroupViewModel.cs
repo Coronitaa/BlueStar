@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Windows.Media;
 using BlueStar.Core.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -30,6 +31,18 @@ public partial class FilterOptionItem : ObservableObject
 
     [ObservableProperty]
     private bool _isPinned;
+
+    [ObservableProperty]
+    private bool _isHighlighted;
+
+    [ObservableProperty]
+    private System.Windows.Media.Brush? _hoverBackgroundBrush;
+
+    [ObservableProperty]
+    private System.Windows.Media.Brush? _hoverBorderBrush;
+
+    [ObservableProperty]
+    private System.Windows.Media.Brush? _hoverForegroundBrush;
 
     /// <summary>Whether the bubble is currently part of the query.</summary>
     public bool IsActive => State != FacetState.Neutral;
@@ -86,6 +99,8 @@ public partial class FilterGroupViewModel : ObservableObject
     private readonly IDictionary<string, int> _usage;
     private readonly Action _onChanged;
     private readonly Action<FilterGroupViewModel>? _onNeedsCounts;
+    private int _categorySelectionCounter;
+    private readonly Dictionary<string, int> _lastSelectedAt = new(StringComparer.Ordinal);
 
     /// <summary>Stable group identifier.</summary>
     public string Key { get; }
@@ -106,6 +121,9 @@ public partial class FilterGroupViewModel : ObservableObject
     private bool _isExpanded;
 
     [ObservableProperty]
+    private bool _isExpandedAll;
+
+    [ObservableProperty]
     private string _searchText = string.Empty;
 
     [ObservableProperty]
@@ -116,6 +134,16 @@ public partial class FilterGroupViewModel : ObservableObject
 
     [ObservableProperty]
     private int _hiddenCount;
+
+    /// <summary>Number of selections made within this category, used for highlight decay.</summary>
+    public int CategorySelectionCounter
+    {
+        get => _categorySelectionCounter;
+        internal set => _categorySelectionCounter = value;
+    }
+
+    /// <summary>Index tracking when each option key was last selected.</summary>
+    public IReadOnlyDictionary<string, int> LastSelectedAt => _lastSelectedAt;
 
     /// <summary>
     /// Whether this group can actually filter yet. A group that is not available shows its
@@ -135,7 +163,10 @@ public partial class FilterGroupViewModel : ObservableObject
     public int VisibleCount { get; }
 
     /// <summary>Whether this group holds more options than it can show at once.</summary>
-    public bool IsSearchable => _all.Count > VisibleCount;
+    public bool IsSearchable => _all.Count > VisibleCount || _all.Count > 20;
+
+    /// <summary>Whether this group holds more than 20 tags to display the random pick dice.</summary>
+    public bool HasRandomPick => _all.Count > 20;
 
     /// <summary>Every option in the group, selected or not.</summary>
     public IReadOnlyList<FilterOptionItem> AllOptions => _all;
@@ -178,13 +209,30 @@ public partial class FilterGroupViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Toggles between showing default limited tags and all available tags for this group.
+    /// </summary>
+    [RelayCommand]
+    public void ToggleExpandAll()
+    {
+        IsExpandedAll = !IsExpandedAll;
+        Refresh();
+    }
+
+    /// <summary>
     /// Replaces the group's options and rebuilds the visible list.
     /// </summary>
     public void SetOptions(IEnumerable<FilterOptionItem> options)
     {
         _all.Clear();
-        _all.AddRange(options);
+        int index = 0;
+        foreach (var opt in options)
+        {
+            ApplyCategoryPastelBrushes(opt, index++);
+            _all.Add(opt);
+        }
+        UpdateHighlights();
         OnPropertyChanged(nameof(IsSearchable));
+        OnPropertyChanged(nameof(HasRandomPick));
         Refresh();
     }
 
@@ -282,14 +330,19 @@ public partial class FilterGroupViewModel : ObservableObject
         {
             existing.State = FacetState.Include;
             existing.IsPinned = true;
+            ApplyCategoryPastelBrushes(existing);
         }
         else
         {
             item.State = FacetState.Include;
             item.IsPinned = true;
+            ApplyCategoryPastelBrushes(item);
             _all.Add(item);
         }
         _usage[item.Key] = _usage.TryGetValue(item.Key, out var used) ? used + 1 : 1;
+        _categorySelectionCounter++;
+        _lastSelectedAt[item.Key] = _categorySelectionCounter;
+        UpdateHighlights();
         Refresh();
         _onChanged();
     }
@@ -330,6 +383,9 @@ public partial class FilterGroupViewModel : ObservableObject
         match.State = FacetState.Include;
         match.IsPinned = true;
         _usage[match.Key] = _usage.TryGetValue(match.Key, out var used) ? used + 1 : 1;
+        _categorySelectionCounter++;
+        _lastSelectedAt[match.Key] = _categorySelectionCounter;
+        UpdateHighlights();
         Refresh();
         return true;
     }
@@ -355,11 +411,14 @@ public partial class FilterGroupViewModel : ObservableObject
         if (item.State != FacetState.Neutral)
         {
             _usage[item.Key] = _usage.TryGetValue(item.Key, out var used) ? used + 1 : 1;
+            _categorySelectionCounter++;
+            _lastSelectedAt[item.Key] = _categorySelectionCounter;
 
             // A bubble reached through search earns its place in the visible list.
             if (!string.IsNullOrWhiteSpace(SearchText)) item.IsPinned = true;
         }
 
+        UpdateHighlights();
         SearchText = string.Empty;
         Refresh();
         _onChanged();
@@ -371,6 +430,85 @@ public partial class FilterGroupViewModel : ObservableObject
     public void RefreshBadgeOnly()
     {
         SelectedCount = _all.Count(o => o.State != FacetState.Neutral);
+    }
+
+    private static readonly (Brush bg, Brush border, Brush text)[] PastelPalettes;
+
+    static FilterGroupViewModel()
+    {
+        PastelPalettes = new (Brush, Brush, Brush)[]
+        {
+            CreateFrozenPalette("#221C2E", "#63527D", "#DDD6FE"), // Lavender / Violet
+            CreateFrozenPalette("#18241F", "#466E5E", "#A7F3D0"), // Mint / Emerald
+            CreateFrozenPalette("#261E17", "#7A573E", "#FED7AA"), // Peach / Amber
+            CreateFrozenPalette("#27181F", "#7D4258", "#FECDD3"), // Rose / Coral
+            CreateFrozenPalette("#17222E", "#476887", "#BAE6FD"), // Sky / Cerulean
+            CreateFrozenPalette("#1B1E28", "#4F5A7B", "#C7D2FE"), // Periwinkle / Indigo
+            CreateFrozenPalette("#162424", "#3D6F6F", "#99F6E4"), // Seafoam / Teal
+            CreateFrozenPalette("#262217", "#7A693E", "#FEF08A"), // Warm Butter / Gold
+            CreateFrozenPalette("#271724", "#7D3E6F", "#FBCFE8"), // Orchid / Fuchsia
+            CreateFrozenPalette("#1E2519", "#566E44", "#D9F99D"), // Sage / Lime
+            CreateFrozenPalette("#251B27", "#6D4975", "#E9D5FF"), // Soft Mauve / Lilac
+            CreateFrozenPalette("#281B1B", "#7B4B4B", "#FED7D7")  // Soft Blush / Melon
+        };
+    }
+
+    private static (Brush bg, Brush border, Brush text) CreateFrozenPalette(string bgHex, string borderHex, string textHex)
+    {
+        var bg = new SolidColorBrush((Color)ColorConverter.ConvertFromString(bgHex));
+        var border = new SolidColorBrush((Color)ColorConverter.ConvertFromString(borderHex));
+        var text = new SolidColorBrush((Color)ColorConverter.ConvertFromString(textHex));
+        bg.Freeze();
+        border.Freeze();
+        text.Freeze();
+        return (bg, border, text);
+    }
+
+    /// <summary>
+    /// Restores persisted category selection count and last selected indices for highlight evaluation.
+    /// </summary>
+    public void RestoreCategoryUsage(int counter, IDictionary<string, int>? lastSelectedAt)
+    {
+        _categorySelectionCounter = counter;
+        _lastSelectedAt.Clear();
+        if (lastSelectedAt != null)
+        {
+            foreach (var (k, v) in lastSelectedAt)
+            {
+                _lastSelectedAt[k] = v;
+            }
+        }
+        UpdateHighlights();
+    }
+
+    /// <summary>
+    /// Evaluates highlight state for all options in this group:
+    /// Selected at least 5 times, decaying after 50 selections of other tags in this category.
+    /// </summary>
+    public void UpdateHighlights()
+    {
+        foreach (var option in _all)
+        {
+            var usage = _usage.TryGetValue(option.Key, out var count) ? count : 0;
+            var lastIndex = _lastSelectedAt.TryGetValue(option.Key, out var idx) ? idx : 0;
+            option.IsHighlighted = usage >= 5 && (_categorySelectionCounter - lastIndex) <= 50;
+        }
+    }
+
+    /// <summary>
+    /// Applies varied, soft pastel hover brushes to each individual tag within every category.
+    /// Distributes across 12 low-glare pastel palettes to ensure visual diversity.
+    /// </summary>
+    public void ApplyCategoryPastelBrushes(FilterOptionItem item, int index = -1)
+    {
+        var paletteIndex = index >= 0
+            ? index % PastelPalettes.Length
+            : (Math.Abs(item.DisplayName?.GetHashCode() ?? 0) % PastelPalettes.Length);
+
+        var (bg, border, text) = PastelPalettes[paletteIndex];
+        item.HoverBackgroundBrush = bg;
+        item.HoverBorderBrush = border;
+        item.HoverForegroundBrush = text;
     }
 
     /// <summary>
@@ -388,11 +526,11 @@ public partial class FilterGroupViewModel : ObservableObject
         {
             visible = _all
                 .Where(o => o.DisplayName.Contains(query, StringComparison.CurrentCultureIgnoreCase))
-                .Take(26)
+                .Take(IsExpandedAll ? _all.Count : VisibleCount)
                 .ToList();
             HiddenCount = 0;
         }
-        else if (_all.Count <= VisibleCount)
+        else if (IsExpandedAll || _all.Count <= VisibleCount)
         {
             visible = [.. _all];
             HiddenCount = 0;
@@ -412,6 +550,12 @@ public partial class FilterGroupViewModel : ObservableObject
             var chosen = forced.Concat(filler).ToHashSet();
             visible = _all.Where(chosen.Contains).ToList();
             HiddenCount = _all.Count - visible.Count;
+        }
+
+        if (Items.Count == visible.Count && Items.SequenceEqual(visible))
+        {
+            _onNeedsCounts?.Invoke(this);
+            return;
         }
 
         Items = new ObservableCollection<FilterOptionItem>(visible);

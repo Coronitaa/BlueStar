@@ -38,6 +38,9 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     private bool _isDisposed;
     private readonly EventHandler? _settingsChangedHandler;
 
+    private readonly object _resultsLock = new();
+    private readonly object _activeFiltersLock = new();
+
     [ObservableProperty]
     private string _searchQuery = string.Empty;
 
@@ -252,6 +255,15 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     private Task? _countWorker;
 
     private const string UsageCacheKey = "browse_facet_usage_v1";
+    private const string CategoryUsageCacheKey = "browse_category_usage_v1";
+
+    public sealed class CategoryUsageSnapshot
+    {
+        public Dictionary<string, int> Counters { get; set; } = new(StringComparer.Ordinal);
+        public Dictionary<string, Dictionary<string, int>> LastSelected { get; set; } = new(StringComparer.Ordinal);
+    }
+
+    private CategoryUsageSnapshot _categoryUsage = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BrowseViewModel"/> class.
@@ -331,7 +343,23 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
             _settingsService.SettingsChanged += _settingsChangedHandler;
         }
 
+        System.Windows.Data.BindingOperations.EnableCollectionSynchronization(_results, _resultsLock);
+        System.Windows.Data.BindingOperations.EnableCollectionSynchronization(_activeFilters, _activeFiltersLock);
+
         _initTask = InitializeAsync();
+    }
+
+    private static void Dispatch(Action action)
+    {
+        var dispatcher = App.Current?.Dispatcher;
+        if (dispatcher != null && !dispatcher.CheckAccess())
+        {
+            dispatcher.Invoke(action);
+        }
+        else
+        {
+            action();
+        }
     }
 
     /// <summary>
@@ -340,39 +368,79 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     /// </summary>
     private async Task InitializeAsync()
     {
-        LoadingStatusText = Localize("ExploreLoadingFilters", "Loading filters and catalog…");
-        await LoadUsageAsync().ConfigureAwait(true);
-        await BuildFilterGroupsAsync().ConfigureAwait(true);
-
-        LoadingStatusText = Localize("ExploreLoadingDiscover", "Discovering games…");
-
-        // Opening state: If local catalog is authoritative, open on whole local catalog ("").
-        // Otherwise, open on Steam's popular new releases.
-        _suppressSearch = true;
-        var isLocalAuth = false;
-        if (_localRepo != null)
+        Dispatch(() =>
         {
+            IsFirstLoad = true;
+            LoadingStatusText = Localize("ExploreLoadingFilters", "Loading filters and catalog…");
+        });
+
+        var minDisplayTask = Task.Delay(1300, _cts.Token);
+        try
+        {
+            await LoadUsageAsync().ConfigureAwait(false);
+            await BuildFilterGroupsAsync().ConfigureAwait(false);
+
+            Dispatch(() =>
+            {
+                LoadingStatusText = Localize("ExploreLoadingDiscover", "Discovering games…");
+            });
+
+            // Opening state: If local catalog is authoritative, open on whole local catalog ("").
+            // Otherwise, open on Steam's popular new releases.
+            _suppressSearch = true;
+            var isLocalAuth = false;
+            if (_localRepo != null)
+            {
+                try
+                {
+                    var comp = await _localRepo.GetCompletenessAsync(_cts.Token).ConfigureAwait(false);
+                    isLocalAuth = comp.IsAuthoritative;
+                }
+                catch { }
+            }
+
+            Dispatch(() =>
+            {
+                if (isLocalAuth)
+                {
+                    SelectedStoreList = StoreListOptions.FirstOrDefault(o => o.Value == "")
+                                        ?? StoreListOptions.FirstOrDefault();
+                }
+                else
+                {
+                    SelectedStoreList = StoreListOptions.FirstOrDefault(o => o.Value == "popularnew")
+                                        ?? StoreListOptions.FirstOrDefault();
+                }
+                _suppressSearch = false;
+            });
+
+            var dispatcher = App.Current?.Dispatcher;
+            if (dispatcher != null && !dispatcher.CheckAccess())
+            {
+                await dispatcher.InvokeAsync(async () => await RunSearchAsync().ConfigureAwait(true)).Task.Unwrap();
+            }
+            else
+            {
+                await RunSearchAsync().ConfigureAwait(true);
+            }
+
             try
             {
-                var comp = await _localRepo.GetCompletenessAsync(_cts.Token).ConfigureAwait(true);
-                isLocalAuth = comp.IsAuthoritative;
+                await minDisplayTask.ConfigureAwait(false);
             }
-            catch { }
+            catch (OperationCanceledException) { }
         }
-
-        if (isLocalAuth)
+        catch (Exception ex)
         {
-            SelectedStoreList = StoreListOptions.FirstOrDefault(o => o.Value == "")
-                                ?? StoreListOptions.FirstOrDefault();
+            _logger.LogError(ex, "Failed to initialize Explore catalog");
         }
-        else
+        finally
         {
-            SelectedStoreList = StoreListOptions.FirstOrDefault(o => o.Value == "popularnew")
-                                ?? StoreListOptions.FirstOrDefault();
+            Dispatch(() =>
+            {
+                IsFirstLoad = false;
+            });
         }
-        _suppressSearch = false;
-
-        await RunSearchAsync().ConfigureAwait(true);
     }
 
     /// <summary>
@@ -392,6 +460,11 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                 _facetUsage, OnFilterChanged, RequestCountsFor, single, exclude);
 
             vm.SetOptions(options.Select(o => new FilterOptionItem(o, Localize("Facet_" + o.Kind + "_" + o.Value, o.FallbackName))));
+            if (_categoryUsage.Counters.TryGetValue(key, out var count))
+            {
+                _categoryUsage.LastSelected.TryGetValue(key, out var lastMap);
+                vm.RestoreCategoryUsage(count, lastMap);
+            }
             return vm;
         }
 
@@ -416,6 +489,11 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                         _facetUsage, OnFilterChanged, RequestCountsFor);
 
                     vm.SetOptions(tags.Select(t => new FilterOptionItem(t.ToFacet(), t.Name, t.ProductCount)));
+                    if (_categoryUsage.Counters.TryGetValue(definition.Key, out var count))
+                    {
+                        _categoryUsage.LastSelected.TryGetValue(definition.Key, out var lastMap);
+                        vm.RestoreCategoryUsage(count, lastMap);
+                    }
                     tagGroups.Add(vm);
                 }
                 catch (Exception ex)
@@ -462,7 +540,6 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         if (_adultGroup != null) groups.Add(_adultGroup);
 
         FilterGroups = new ObservableCollection<FilterGroupViewModel>(groups);
-
         ApplyAdultVisibility();
     }
 
@@ -501,10 +578,22 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     {
         try
         {
-            if (App.Current?.TryFindResource("String_" + resourceKey) is string localized &&
-                !string.IsNullOrWhiteSpace(localized))
+            var app = App.Current;
+            if (app != null)
             {
-                return localized;
+                if (app.Dispatcher == null || app.Dispatcher.CheckAccess())
+                {
+                    if (app.TryFindResource("String_" + resourceKey) is string localized &&
+                        !string.IsNullOrWhiteSpace(localized))
+                    {
+                        return localized;
+                    }
+                }
+                else
+                {
+                    var localized = app.Dispatcher.Invoke(() => app.TryFindResource("String_" + resourceKey) as string);
+                    if (!string.IsNullOrWhiteSpace(localized)) return localized;
+                }
             }
         }
         catch
@@ -714,14 +803,22 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
 
         CurrentPage = 1;
         RefreshActiveFilters();
-        _ = SaveUsageAsync();
+        ScheduleSaveUsage();
         _ = RunSearchAsync();
     }
 
     private void RefreshActiveFilters()
     {
+        var dispatcher = App.Current?.Dispatcher;
+        if (dispatcher != null && !dispatcher.CheckAccess())
+        {
+            dispatcher.Invoke(RefreshActiveFilters);
+            return;
+        }
+
         var active = FilterGroups.SelectMany(g => g.ActiveOptions).ToList();
         ActiveFilters = new ObservableCollection<FilterOptionItem>(active);
+        System.Windows.Data.BindingOperations.EnableCollectionSynchronization(ActiveFilters, _activeFiltersLock);
         HasActiveFilters = active.Count > 0 || !string.IsNullOrWhiteSpace(SearchQuery);
 
         _activeTagNames = active
@@ -927,6 +1024,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                     RebuildVisible();
                     SearchState = Results.Count > 0 ? SearchState.ShowingResults : SearchState.Empty;
 
+                    await PreFillFromCatalogAsync(fresh, token).ConfigureAwait(true);
                     _ = ResolveResultTagsAsync(fresh);
                     QueueEnrichment(fresh);
 
@@ -988,7 +1086,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                     Facets = BuildFacets(rung.Tags)
                 };
 
-                var page = await _catalogSearch.SearchAsync(query, token).ConfigureAwait(true);
+                var page = await Task.Run(() => _catalogSearch.SearchAsync(query, token), token).ConfigureAwait(true);
 
                 // A newer query started while this one was on the wire: its results are the ones
                 // on screen, so this page is dropped rather than mixed in with them.
@@ -1043,6 +1141,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                 RebuildVisible();
                 SearchState = Results.Count > 0 ? SearchState.ShowingResults : SearchState.Empty;
 
+                await PreFillFromCatalogAsync(fresh, token).ConfigureAwait(true);
                 _ = ResolveResultTagsAsync(fresh);
                 QueueEnrichment(fresh);
 
@@ -1079,7 +1178,6 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
             {
                 IsSearching = false;
                 IsLoadingMore = false;
-                IsFirstLoad = false;
                 RefreshActiveFilters();
             }
         }
@@ -1149,6 +1247,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                 resolved = page.Items.FirstOrDefault(i => i.AppId == appId);
                 if (resolved != null)
                 {
+                    await PreFillFromCatalogAsync([resolved], token).ConfigureAwait(true);
                     _ = ResolveResultTagsAsync([resolved]);
                     QueueEnrichment([resolved]);
                 }
@@ -1523,6 +1622,13 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     /// </remarks>
     private void RebuildVisible()
     {
+        var dispatcher = App.Current?.Dispatcher;
+        if (dispatcher != null && !dispatcher.CheckAccess())
+        {
+            dispatcher.Invoke(RebuildVisible);
+            return;
+        }
+
         var kept = _fetched.Where(PassesLocalFilters);
 
         // Steam's own order is the order, and it is the one the sort selector asked for. The
@@ -1554,6 +1660,13 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     /// </remarks>
     private void SyncCollection(ObservableCollection<SearchResult> target, List<SearchResult> desired)
     {
+        var dispatcher = App.Current?.Dispatcher;
+        if (dispatcher != null && !dispatcher.CheckAccess())
+        {
+            dispatcher.Invoke(() => SyncCollection(target, desired));
+            return;
+        }
+
         var shared = Math.Min(target.Count, desired.Count);
         var prefixMatches = true;
 
@@ -1581,6 +1694,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         }
 
         Results = new ObservableCollection<SearchResult>(desired);
+        System.Windows.Data.BindingOperations.EnableCollectionSynchronization(Results, _resultsLock);
     }
 
     private bool PassesLocalFilters(SearchResult item)
@@ -1707,6 +1821,98 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         };
     }
 
+    /// <summary>
+    /// Pre-populates search results from the local SQLite catalog (DRM, DLC, tags, price, reviews, release date)
+    /// to avoid slow and rate-limited Steam API calls for items already known.
+    /// </summary>
+    private async Task PreFillFromCatalogAsync(IReadOnlyList<SearchResult> items, CancellationToken ct)
+    {
+        if (_localRepo is null || items.Count == 0) return;
+
+        try
+        {
+            var ids = items.Select(i => i.AppId).Distinct().ToList();
+            var query = new LocalCatalogQuery
+            {
+                RestrictToAppIds = ids,
+                Limit = ids.Count + 10
+            };
+
+            var (catalogItems, _) = await _localRepo.QueryAsync(query, ct).ConfigureAwait(false);
+            if (catalogItems.Count == 0) return;
+
+            var byId = catalogItems.ToDictionary(c => c.AppId);
+            foreach (var item in items)
+            {
+                if (!byId.TryGetValue(item.AppId, out var cat)) continue;
+
+                if ((item.TagIds == null || item.TagIds.Count == 0) && cat.TagIds.Count > 0)
+                    item.TagIds = cat.TagIds;
+
+                if (!item.IsNsfw && cat.IsNsfw)
+                    item.IsNsfw = true;
+
+                if (!item.ReviewPercent.HasValue && cat.ReviewPercent.HasValue)
+                {
+                    item.ReviewPercent = cat.ReviewPercent;
+                    item.ReviewSummary = RatingEngine.GetReviewSummary(cat.ReviewPercent.Value, cat.ReviewCount ?? 100);
+                }
+
+                if (string.IsNullOrWhiteSpace(item.PriceText) && !string.IsNullOrWhiteSpace(cat.PriceText))
+                    item.PriceText = cat.PriceText;
+                if (!item.PriceCents.HasValue && cat.PriceCents.HasValue)
+                    item.PriceCents = cat.PriceCents;
+
+                if (string.IsNullOrWhiteSpace(item.ReleaseDateText) && !string.IsNullOrWhiteSpace(cat.ReleaseDateText))
+                    item.ReleaseDateText = cat.ReleaseDateText;
+                if (!item.ReleaseDateUtc.HasValue && cat.ReleaseDateUtc.HasValue)
+                    item.ReleaseDateUtc = cat.ReleaseDateUtc;
+
+                if (!string.IsNullOrWhiteSpace(cat.DrmName))
+                {
+                    item.HasDrm = true;
+                    item.DrmName = cat.DrmName;
+                }
+                else if (cat.HasDrm)
+                {
+                    item.HasDrm = true;
+                }
+
+                if (!string.IsNullOrWhiteSpace(cat.LauncherName))
+                {
+                    item.HasExternalLauncher = true;
+                    item.LauncherName = cat.LauncherName;
+                }
+
+                if (!string.IsNullOrWhiteSpace(cat.AntiCheatName))
+                {
+                    item.HasAntiCheat = true;
+                    item.AntiCheatName = cat.AntiCheatName;
+                }
+
+                if (!string.IsNullOrWhiteSpace(cat.AccountName))
+                {
+                    item.HasAccount = true;
+                    item.AccountName = cat.AccountName;
+                }
+
+                if (!string.IsNullOrWhiteSpace(cat.EulaName))
+                {
+                    item.HasEula = true;
+                    item.EulaName = cat.EulaName;
+                }
+
+                if (cat.DlcCount > 0 && (item.DlcCount ?? 0) == 0)
+                    item.DlcCount = cat.DlcCount;
+
+                item.IsEnriched = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "PreFillFromCatalogAsync skipped for current page");
+        }
+    }
     /// <summary>
     /// Turns the tag ids Steam ships with each row into display names for the card bubbles.
     /// </summary>
@@ -2210,7 +2416,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
 
         CurrentPage = 1;
         RefreshActiveFilters();
-        _ = SaveUsageAsync();
+        ScheduleSaveUsage();
         await RunSearchAsync().ConfigureAwait(true);
     }
 
@@ -2341,7 +2547,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
 
         CurrentPage = 1;
         RefreshActiveFilters();
-        _ = SaveUsageAsync();
+        ScheduleSaveUsage();
         await RunSearchAsync().ConfigureAwait(true);
     }
 
@@ -2439,10 +2645,17 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
 
         try
         {
-            var stored = await _cache.GetAsync<Dictionary<string, int>>(UsageCacheKey, _cts.Token).ConfigureAwait(true);
-            if (stored is null) return;
+            var stored = await _cache.GetAsync<Dictionary<string, int>>(UsageCacheKey, _cts.Token).ConfigureAwait(false);
+            if (stored is not null)
+            {
+                foreach (var (key, value) in stored) _facetUsage[key] = value;
+            }
 
-            foreach (var (key, value) in stored) _facetUsage[key] = value;
+            var catStored = await _cache.GetAsync<CategoryUsageSnapshot>(CategoryUsageCacheKey, _cts.Token).ConfigureAwait(false);
+            if (catStored is not null)
+            {
+                _categoryUsage = catStored;
+            }
         }
         catch
         {
@@ -2450,19 +2663,44 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         }
     }
 
-    private async Task SaveUsageAsync()
+    private void ScheduleSaveUsage()
     {
         if (_cache is null) return;
 
-        try
+        // Take snapshot synchronously on the UI thread to prevent concurrent modification during background I/O
+        var facetUsageSnapshot = new Dictionary<string, int>(_facetUsage);
+        CategoryUsageSnapshot? categorySnapshot = null;
+
+        if (FilterGroups != null)
         {
-            await _cache.SetAsync(UsageCacheKey, new Dictionary<string, int>(_facetUsage),
-                TimeSpan.FromDays(365), _cts.Token).ConfigureAwait(false);
+            categorySnapshot = new CategoryUsageSnapshot();
+            foreach (var group in FilterGroups)
+            {
+                categorySnapshot.Counters[group.Key] = group.CategorySelectionCounter;
+                categorySnapshot.LastSelected[group.Key] = new Dictionary<string, int>(group.LastSelectedAt);
+            }
+            _categoryUsage = categorySnapshot;
         }
-        catch
+
+        var token = _cts.Token;
+        _ = Task.Run(async () =>
         {
-            // Best effort.
-        }
+            try
+            {
+                await _cache.SetAsync(UsageCacheKey, facetUsageSnapshot,
+                    TimeSpan.FromDays(365), token).ConfigureAwait(false);
+
+                if (categorySnapshot != null)
+                {
+                    await _cache.SetAsync(CategoryUsageCacheKey, categorySnapshot,
+                        TimeSpan.FromDays(365), token).ConfigureAwait(false);
+                }
+            }
+            catch
+            {
+                // Non-critical persistence
+            }
+        }, token);
     }
 
     /// <summary>

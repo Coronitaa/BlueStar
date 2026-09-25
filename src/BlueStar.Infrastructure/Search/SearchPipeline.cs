@@ -49,100 +49,103 @@ public sealed class SearchPipeline : ISearchPipeline
     }
 
     /// <inheritdoc />
-    public async Task<SearchResponse> ExecuteAsync(SearchRequest request, CancellationToken ct = default)
+    public Task<SearchResponse> ExecuteAsync(SearchRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        // Stage 1: Parse Query
-        var parsed = SteamQueryParser.Parse(request.RawQuery);
-
-        // Stage 2: Intent Resolution - AppID or DepotID Mode
-        if (parsed.AppId.HasValue)
+        return Task.Run(async () =>
         {
-            return await ResolveAppIdIntentAsync(parsed.AppId.Value, request, ct).ConfigureAwait(false);
-        }
-        if (parsed.DepotId.HasValue)
-        {
-            return await ResolveDepotIdIntentAsync(parsed.DepotId.Value, request, ct).ConfigureAwait(false);
-        }
+            // Stage 1: Parse Query
+            var parsed = SteamQueryParser.Parse(request.RawQuery);
 
-        // Normalize Sort and Direction
-        var (sortBase, descending) = NormalizeSort(request.SortBy, request.Descending);
-        if (!SteamStoreFacets.AllowsSorting(request.Pool))
-        {
-            sortBase = string.Empty;
-        }
-
-        // Stage 3: Store Browsing (No keyword query entered)
-        // When browsing without an active search term, query the store according to the selected pool and filters.
-        if (string.IsNullOrWhiteSpace(parsed.NormalizedTerm))
-        {
-            return await ExecuteStoreBrowseAsync(request, sortBase, descending, ct).ConfigureAwait(false);
-        }
-
-        // Stage 4: Local Candidate Search via SQLite + FTS5
-        var localQuery = new LocalCatalogQuery
-        {
-            Term = parsed.NormalizedTerm,
-            AppTypes = request.AppTypes,
-            SortBy = sortBase,
-            Descending = descending,
-            HasWindows = request.HasWindows,
-            HasMac = request.HasMac,
-            HasLinux = request.HasLinux,
-            MinRatingPercent = request.MinRatingPercent,
-            MaxRatingPercent = request.MaxRatingPercent,
-            MaxPriceCents = request.MaxPriceCents,
-            NoDrm = request.NoDrm,
-            NoExternalLauncher = request.NoExternalLauncher,
-            NoAntiCheat = request.NoAntiCheat,
-            NoAccount = request.NoAccount,
-            NoEula = request.NoEula,
-            HideAdult = request.HideAdult,
-            DiscountedOnly = request.DiscountedOnly,
-            IncludedTagIds = request.IncludedTagIds?.ToList(),
-            ExcludedTagIds = request.ExcludedTagIds?.ToList(),
-            RestrictToAppIds = request.RestrictToAppIds?.ToList(),
-            Offset = request.Start,
-            Limit = request.Count
-        };
-
-        var (localItems, totalCount) = await _localRepo.QueryAsync(localQuery, ct).ConfigureAwait(false);
-
-        if (totalCount > 0)
-        {
-            // Determine resolution type
-            var resType = SearchResolutionType.FullText;
-            if (!string.IsNullOrWhiteSpace(parsed.NormalizedTerm) && localItems.Count > 0)
+            // Stage 2: Intent Resolution - AppID or DepotID Mode
+            if (parsed.AppId.HasValue)
             {
-                var top = localItems[0];
-                var termCompact = DeterministicNormalizer.ToCompactKey(parsed.NormalizedTerm);
-
-                if (string.Equals(top.NormalizedName, parsed.NormalizedTerm, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(top.CompactName, termCompact, StringComparison.OrdinalIgnoreCase))
-                {
-                    resType = SearchResolutionType.ExactName;
-                }
-                else if (top.NormalizedName.StartsWith(parsed.NormalizedTerm, StringComparison.OrdinalIgnoreCase))
-                {
-                    resType = SearchResolutionType.Prefix;
-                }
+                return await ResolveAppIdIntentAsync(parsed.AppId.Value, request, ct).ConfigureAwait(false);
+            }
+            if (parsed.DepotId.HasValue)
+            {
+                return await ResolveDepotIdIntentAsync(parsed.DepotId.Value, request, ct).ConfigureAwait(false);
             }
 
-            var results = localItems.Select(ToSearchResult).ToList();
-
-            return new SearchResponse
+            // Normalize Sort and Direction
+            var (sortBase, descending) = NormalizeSort(request.SortBy, request.Descending);
+            if (!SteamStoreFacets.AllowsSorting(request.Pool))
             {
-                Items = results,
-                TotalCount = totalCount,
-                Start = request.Start,
-                ResolutionType = resType,
-                IsFromLocalCatalog = true
-            };
-        }
+                sortBase = string.Empty;
+            }
 
-        // Stage 5: Fallback to Steam live store search
-        return await ExecuteSteamFallbackSearchAsync(request, parsed.NormalizedTerm, sortBase, descending, ct).ConfigureAwait(false);
+            // Stage 3: Store Browsing (No keyword query entered)
+            // When browsing without an active search term, query the store according to the selected pool and filters.
+            if (string.IsNullOrWhiteSpace(parsed.NormalizedTerm))
+            {
+                return await ExecuteStoreBrowseAsync(request, sortBase, descending, ct).ConfigureAwait(false);
+            }
+
+            // Stage 4: Local Candidate Search via SQLite + FTS5
+            var localQuery = new LocalCatalogQuery
+            {
+                Term = parsed.NormalizedTerm,
+                AppTypes = request.AppTypes,
+                SortBy = sortBase,
+                Descending = descending,
+                HasWindows = request.HasWindows,
+                HasMac = request.HasMac,
+                HasLinux = request.HasLinux,
+                MinRatingPercent = request.MinRatingPercent,
+                MaxRatingPercent = request.MaxRatingPercent,
+                MaxPriceCents = request.MaxPriceCents,
+                NoDrm = request.NoDrm,
+                NoExternalLauncher = request.NoExternalLauncher,
+                NoAntiCheat = request.NoAntiCheat,
+                NoAccount = request.NoAccount,
+                NoEula = request.NoEula,
+                HideAdult = request.HideAdult,
+                DiscountedOnly = request.DiscountedOnly,
+                IncludedTagIds = request.IncludedTagIds?.ToList(),
+                ExcludedTagIds = request.ExcludedTagIds?.ToList(),
+                RestrictToAppIds = request.RestrictToAppIds?.ToList(),
+                Offset = request.Start,
+                Limit = request.Count
+            };
+
+            var (localItems, totalCount) = await _localRepo.QueryAsync(localQuery, ct).ConfigureAwait(false);
+
+            if (totalCount > 0)
+            {
+                // Determine resolution type
+                var resType = SearchResolutionType.FullText;
+                if (!string.IsNullOrWhiteSpace(parsed.NormalizedTerm) && localItems.Count > 0)
+                {
+                    var top = localItems[0];
+                    var termCompact = DeterministicNormalizer.ToCompactKey(parsed.NormalizedTerm);
+
+                    if (string.Equals(top.NormalizedName, parsed.NormalizedTerm, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(top.CompactName, termCompact, StringComparison.OrdinalIgnoreCase))
+                    {
+                        resType = SearchResolutionType.ExactName;
+                    }
+                    else if (top.NormalizedName.StartsWith(parsed.NormalizedTerm, StringComparison.OrdinalIgnoreCase))
+                    {
+                        resType = SearchResolutionType.Prefix;
+                    }
+                }
+
+                var results = localItems.Select(ToSearchResult).ToList();
+
+                return new SearchResponse
+                {
+                    Items = results,
+                    TotalCount = totalCount,
+                    Start = request.Start,
+                    ResolutionType = resType,
+                    IsFromLocalCatalog = true
+                };
+            }
+
+            // Stage 5: Fallback to Steam live store search
+            return await ExecuteSteamFallbackSearchAsync(request, parsed.NormalizedTerm, sortBase, descending, ct).ConfigureAwait(false);
+        }, ct);
     }
 
     private async Task<SearchResponse> ResolveAppIdIntentAsync(uint appId, SearchRequest request, CancellationToken ct)
@@ -510,6 +513,9 @@ public sealed class SearchPipeline : ISearchPipeline
                 items = ApplyLocalSort(items, sortBase, descending);
             }
 
+            // Pre-fill catalog enrichment data into Steam results (DRM, DLC, tags, price, reviews, date)
+            await MergeFromCatalogAsync(items.ToList(), ct).ConfigureAwait(false);
+
             // Background caching
             if (items.Count > 0)
             {
@@ -594,6 +600,9 @@ public sealed class SearchPipeline : ISearchPipeline
             var validation = _validator.ValidateResponse(steamQuery, page.RawPayload ?? string.Empty, page.Items, page.TotalCount);
             var items = page.Items.Where(i => MatchesRequestFilters(i, request)).ToList();
 
+            // Pre-fill catalog enrichment data into Steam results (DRM, DLC, tags, price, reviews, date)
+            await MergeFromCatalogAsync(items, ct).ConfigureAwait(false);
+
             // Cache discovered games in local SQLite catalog
             if (items.Count > 0)
             {
@@ -675,6 +684,120 @@ public sealed class SearchPipeline : ISearchPipeline
         }
     }
 
+    /// <summary>
+    /// Merges locally-cached enrichment data (DRM, DLC, tags, price, reviews, release date)
+    /// into Steam-sourced <see cref="SearchResult"/> items, avoiding redundant <c>appdetails</c>
+    /// HTTP calls for apps the catalog already knows about.
+    /// </summary>
+    /// <remarks>
+    /// A single <see cref="LocalCatalogQuery"/> restricted to the result AppIds retrieves all
+    /// matching rows in one round-trip. Any field already populated on the Steam result is
+    /// preserved; only missing / unknown data is filled in from the catalog row.
+    /// Items whose <c>is_enriched</c> flag is set in the catalog get <see cref="SearchResult.IsEnriched"/>
+    /// set to <c>true</c>, which tells <c>QueueEnrichment</c> to skip them.
+    /// </remarks>
+    private async Task MergeFromCatalogAsync(
+        IReadOnlyList<SearchResult> results,
+        CancellationToken ct)
+    {
+        if (results.Count == 0) return;
+
+        try
+        {
+            var restrictToIds = results.Select(r => r.AppId).ToList();
+            var query = new LocalCatalogQuery
+            {
+                RestrictToAppIds = restrictToIds,
+                Limit = results.Count + 10
+            };
+
+            var (catalogItems, _) = await _localRepo.QueryAsync(query, ct).ConfigureAwait(false);
+            if (catalogItems.Count == 0) return;
+
+            var byId = new Dictionary<uint, CatalogAppItem>(catalogItems.Count);
+            foreach (var item in catalogItems)
+                byId[item.AppId] = item;
+
+            foreach (var result in results)
+            {
+                if (!byId.TryGetValue(result.AppId, out var cat)) continue;
+
+                // Tags — only apply when Steam search didn't include them
+                if ((result.TagIds == null || result.TagIds.Count == 0) && cat.TagIds.Count > 0)
+                    result.TagIds = cat.TagIds;
+
+                // NSFW flag
+                if (!result.IsNsfw && cat.IsNsfw)
+                    result.IsNsfw = true;
+
+                // Reviews
+                if (!result.ReviewPercent.HasValue && cat.ReviewPercent.HasValue)
+                {
+                    result.ReviewPercent = cat.ReviewPercent;
+                    result.ReviewSummary = cat.ReviewPercent.HasValue
+                        ? RatingEngine.GetReviewSummary(cat.ReviewPercent.Value, cat.ReviewCount ?? 100)
+                        : null;
+                }
+
+                // Price — catalog stores "Free" for f2p; skip for paid (null = unknown regional price)
+                if (string.IsNullOrWhiteSpace(result.PriceText) && !string.IsNullOrWhiteSpace(cat.PriceText))
+                    result.PriceText = cat.PriceText;
+                if (!result.PriceCents.HasValue && cat.PriceCents.HasValue)
+                    result.PriceCents = cat.PriceCents;
+
+                // Release date
+                if (string.IsNullOrWhiteSpace(result.ReleaseDateText) && !string.IsNullOrWhiteSpace(cat.ReleaseDateText))
+                    result.ReleaseDateText = cat.ReleaseDateText;
+                if (!result.ReleaseDateUtc.HasValue && cat.ReleaseDateUtc.HasValue)
+                    result.ReleaseDateUtc = cat.ReleaseDateUtc;
+
+                // DRM / launcher / anti-cheat / account / EULA / DLC — always apply from catalog
+                if (!string.IsNullOrWhiteSpace(cat.DrmName))
+                {
+                    result.HasDrm = true;
+                    result.DrmName = cat.DrmName;
+                }
+                else if (cat.HasDrm)
+                {
+                    result.HasDrm = true;
+                }
+
+                if (!string.IsNullOrWhiteSpace(cat.LauncherName))
+                {
+                    result.HasExternalLauncher = true;
+                    result.LauncherName = cat.LauncherName;
+                }
+
+                if (!string.IsNullOrWhiteSpace(cat.AntiCheatName))
+                {
+                    result.HasAntiCheat = true;
+                    result.AntiCheatName = cat.AntiCheatName;
+                }
+
+                if (!string.IsNullOrWhiteSpace(cat.AccountName))
+                {
+                    result.HasAccount = true;
+                    result.AccountName = cat.AccountName;
+                }
+
+                if (!string.IsNullOrWhiteSpace(cat.EulaName))
+                {
+                    result.HasEula = true;
+                    result.EulaName = cat.EulaName;
+                }
+
+                if (cat.DlcCount > 0 && (result.DlcCount ?? 0) == 0)
+                    result.DlcCount = cat.DlcCount;
+
+                // Mark as fully enriched so the enrichment queue skips this item
+                result.IsEnriched = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug(ex, "MergeFromCatalogAsync failed; Steam-sourced results will proceed without catalog pre-fill");
+        }
+    }
     private static (string SortBase, bool Descending) NormalizeSort(string? sortBy, bool descending)
     {
         var s = (sortBy ?? string.Empty).Trim();

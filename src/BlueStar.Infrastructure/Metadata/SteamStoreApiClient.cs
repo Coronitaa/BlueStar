@@ -751,13 +751,14 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                     }
 
                     // 1.9 Release Date fallback
-                    if (string.IsNullOrWhiteSpace(result.Version) &&
+                    if ((string.IsNullOrWhiteSpace(result.ReleaseDateText) || string.IsNullOrWhiteSpace(result.Version)) &&
                         data.TryGetProperty("release_date", out var rd) &&
                         rd.TryGetProperty("date", out var dateProp))
                     {
                         var dateStr = dateProp.GetString();
                         if (!string.IsNullOrWhiteSpace(dateStr))
                         {
+                            if (string.IsNullOrWhiteSpace(result.ReleaseDateText)) result.ReleaseDateText = dateStr;
                             result.Version = dateStr;
                         }
                     }

@@ -43,7 +43,11 @@
                                 BorderThickness="1"
                                 CornerRadius="9"
                                 Padding="7,3"
+                                RenderTransformOrigin="0.5,0.5"
                                 SnapsToDevicePixels="True">
+                            <Border.RenderTransform>
+                                <ScaleTransform x:Name="ChromeScale" ScaleX="1.0" ScaleY="1.0"/>
+                            </Border.RenderTransform>
                             <StackPanel Orientation="Horizontal">
                                 <Path x:Name="StateIcon"
                                       Data="{StaticResource IconCheck}"
@@ -75,14 +79,48 @@
                                 <Setter TargetName="Chrome" Property="Background" Value="{StaticResource SurfaceInputFocusedBrush}"/>
                                 <Setter TargetName="Label" Property="Foreground" Value="{StaticResource PrimaryTextBrush}"/>
                             </Trigger>
-                            <DataTrigger Binding="{Binding IsPinned}" Value="True">
+                            <!-- Highlighted Tag Trigger (Selected >= 5 times with category decay) -->
+                            <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource CyanBrush}"/>
+                                <Setter TargetName="Chrome" Property="BorderThickness" Value="1.5"/>
                             </DataTrigger>
+                            <!-- Category-specific Pastel Hover (Soft, low-glare) -->
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsMouseOver}" Value="True"/>
+                                    <Condition Binding="{Binding State}" Value="Neutral"/>
+                                </MultiDataTrigger.Conditions>
+                                <Setter TargetName="Chrome" Property="Background" Value="{Binding HoverBackgroundBrush}"/>
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{Binding HoverBorderBrush}"/>
+                                <Setter TargetName="Label" Property="Foreground" Value="{Binding HoverForegroundBrush}"/>
+                            </MultiDataTrigger>
                             <DataTrigger Binding="{Binding State}" Value="Include">
                                 <Setter TargetName="Chrome" Property="Background" Value="{StaticResource SuccessBgBrush}"/>
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource SuccessBorderBrush}"/>
                                 <Setter TargetName="Label" Property="Foreground" Value="#4ADE9F"/>
                                 <Setter TargetName="StateIcon" Property="Visibility" Value="Visible"/>
+                                <DataTrigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="ChromeScale"
+                                                             Storyboard.TargetProperty="ScaleX"
+                                                             From="0.88" To="1.0"
+                                                             Duration="0:0:0.25">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <BackEase Amplitude="0.3" EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="ChromeScale"
+                                                             Storyboard.TargetProperty="ScaleY"
+                                                             From="0.88" To="1.0"
+                                                             Duration="0:0:0.25">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <BackEase Amplitude="0.3" EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </DataTrigger.EnterActions>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding State}" Value="Exclude">
                                 <Setter TargetName="Chrome" Property="Background" Value="{StaticResource DangerBgBrush}"/>
@@ -208,9 +246,9 @@
                     <StackPanel Margin="9,0,9,10"
                                 Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibilityConverter}}">
 
-                        <!-- Search box and random pick, only when the group holds more than it shows -->
+                        <!-- Search box and random pick, shown for all categories with more than 20 tags -->
                         <Grid Margin="0,0,0,7"
-                              Visibility="{Binding IsSearchable, Converter={StaticResource BoolToVisibilityConverter}}">
+                              Visibility="{Binding HasRandomPick, Converter={StaticResource BoolToVisibilityConverter}}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="5"/>
@@ -246,26 +284,73 @@
                                     </Grid>
                                 </Grid>
                             </Border>
-                            <Button Grid.Column="2" Width="28" Cursor="Hand"
-                                    Command="{Binding PickRandomCommand}"
-                                    ToolTip="{DynamicResource String_FilterRandomTooltip}">
+                            <Button Grid.Column="2" Width="28" Height="28" Cursor="Hand"
+                                    Background="Transparent" BorderThickness="0"
+                                    FocusVisualStyle="{x:Null}"
+                                    ToolTip="{DynamicResource String_FilterRandomTooltip}"
+                                    Click="OnDiceButtonClick"
+                                    MouseEnter="OnDiceButtonMouseEnter"
+                                    MouseLeave="OnDiceButtonMouseLeave">
                                 <Button.Template>
                                     <ControlTemplate TargetType="Button">
-                                        <Border x:Name="Chrome"
-                                                Background="{StaticResource SurfaceInputBrush}"
-                                                BorderBrush="{StaticResource SubtleBorderBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="{StaticResource RadiusSm}">
-                                            <Path x:Name="Glyph" Data="{StaticResource IconDice}"
-                                                  Fill="{StaticResource SecondaryTextBrush}"
-                                                  Stretch="Uniform" Width="13" Height="13"
-                                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
+                                        <Grid Background="Transparent">
+                                            <!-- Subtle non-invasive pastel particle glow -->
+                                            <Canvas IsHitTestVisible="False" Width="28" Height="28" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <Ellipse x:Name="DiceRing" Width="18" Height="18" Canvas.Left="5" Canvas.Top="5"
+                                                         Stroke="#60A5B4FC" StrokeThickness="1.5" Opacity="0" RenderTransformOrigin="0.5,0.5">
+                                                    <Ellipse.RenderTransform>
+                                                        <ScaleTransform x:Name="DiceRingScale" ScaleX="0.6" ScaleY="0.6"/>
+                                                    </Ellipse.RenderTransform>
+                                                </Ellipse>
+                                                <Ellipse x:Name="Dot1" Width="3" Height="3" Canvas.Left="4" Canvas.Top="2"
+                                                         Fill="#38BDF8" Opacity="0" RenderTransformOrigin="0.5,0.5">
+                                                    <Ellipse.RenderTransform>
+                                                        <TranslateTransform x:Name="Dot1Trans"/>
+                                                    </Ellipse.RenderTransform>
+                                                </Ellipse>
+                                                <Ellipse x:Name="Dot2" Width="3" Height="3" Canvas.Left="21" Canvas.Top="4"
+                                                         Fill="#F472B6" Opacity="0" RenderTransformOrigin="0.5,0.5">
+                                                    <Ellipse.RenderTransform>
+                                                        <TranslateTransform x:Name="Dot2Trans"/>
+                                                    </Ellipse.RenderTransform>
+                                                </Ellipse>
+                                                <Ellipse x:Name="Dot3" Width="3" Height="3" Canvas.Left="19" Canvas.Top="21"
+                                                         Fill="#34D399" Opacity="0" RenderTransformOrigin="0.5,0.5">
+                                                    <Ellipse.RenderTransform>
+                                                        <TranslateTransform x:Name="Dot3Trans"/>
+                                                    </Ellipse.RenderTransform>
+                                                </Ellipse>
+                                                <Ellipse x:Name="Dot4" Width="3" Height="3" Canvas.Left="4" Canvas.Top="19"
+                                                         Fill="#FBBF24" Opacity="0" RenderTransformOrigin="0.5,0.5">
+                                                    <Ellipse.RenderTransform>
+                                                        <TranslateTransform x:Name="Dot4Trans"/>
+                                                    </Ellipse.RenderTransform>
+                                                </Ellipse>
+                                            </Canvas>
+
+                                            <!-- Dice Container with Transforms (No outer blue border) -->
+                                            <Border x:Name="Chrome"
+                                                    Background="{StaticResource SurfaceInputBrush}"
+                                                    BorderThickness="0"
+                                                    CornerRadius="{StaticResource RadiusSm}"
+                                                    RenderTransformOrigin="0.5,0.5">
+                                                <Border.RenderTransform>
+                                                    <TransformGroup>
+                                                        <TranslateTransform x:Name="DiceJump"/>
+                                                        <RotateTransform x:Name="DiceTilt" Angle="0"/>
+                                                        <RotateTransform x:Name="DiceSpin" Angle="0"/>
+                                                    </TransformGroup>
+                                                </Border.RenderTransform>
+                                                <Path x:Name="Glyph" Data="{StaticResource IconDice}"
+                                                      Fill="{StaticResource SecondaryTextBrush}"
+                                                      Stretch="Uniform" Width="13" Height="13"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                        </Grid>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
-                                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AccentTranslucentBrush}"/>
-                                                <Setter TargetName="Glyph" Property="Fill" Value="{StaticResource AccentBrush}"/>
+                                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource SurfaceCardHoverBrush}"/>
+                                                <Setter TargetName="Glyph" Property="Fill" Value="{StaticResource PrimaryTextBrush}"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
@@ -297,10 +382,21 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <TextBlock Foreground="{StaticResource MutedTextBrush}" FontSize="10.5" Margin="2,3,0,0"
-                                   Visibility="{Binding HiddenCount, Converter={StaticResource NullToVisibilityConverter}}">
-                            <Run Text="+"/><Run Text="{Binding HiddenCount, Mode=OneWay}"/><Run Text=" "/><Run Text="{DynamicResource String_FilterMoreHint}"/>
-                        </TextBlock>
+                        <!-- More tags expander button -->
+                        <Button Style="{StaticResource GhostButton}" Padding="4,2" Margin="2,3,0,0"
+                                HorizontalAlignment="Left" Cursor="Hand"
+                                Command="{Binding ToggleExpandAllCommand}"
+                                Visibility="{Binding HiddenCount, Converter={StaticResource NullToVisibilityConverter}}">
+                            <TextBlock FontSize="10.5" Foreground="{StaticResource AccentBrush}">
+                                <Run Text="+"/><Run Text="{Binding HiddenCount, Mode=OneWay}"/><Run Text=" más (Ver más)"/>
+                            </TextBlock>
+                        </Button>
+                        <Button Style="{StaticResource GhostButton}" Padding="4,2" Margin="2,3,0,0"
+                                HorizontalAlignment="Left" Cursor="Hand"
+                                Command="{Binding ToggleExpandAllCommand}"
+                                Visibility="{Binding IsExpandedAll, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <TextBlock FontSize="10.5" Foreground="{StaticResource AccentBrush}" Text="(Ver menos)"/>
+                        </Button>
                     </StackPanel>
                 </StackPanel>
             </Border>
@@ -374,17 +470,6 @@
 
         <DataTemplate x:Key="CardBadgesTemplate">
             <WrapPanel Orientation="Horizontal">
-                <Border CornerRadius="{StaticResource RadiusXs}" Padding="6,2" Margin="0,0,4,4"
-                        Background="{StaticResource SurfaceInputBrush}"
-                        BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
-                        Visibility="{Binding IsEnriched, Converter={StaticResource InverseBoolToVisibilityConverter}}">
-                    <StackPanel Orientation="Horizontal">
-                        <Path Data="{StaticResource IconInfo}" Fill="{StaticResource MutedTextBrush}"
-                              Stretch="Uniform" Width="9" Height="9" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                        <TextBlock Text="{DynamicResource String_CheckingDetails}" FontSize="10"
-                                   Foreground="{StaticResource MutedTextBrush}"/>
-                    </StackPanel>
-                </Border>
 
                 <Border CornerRadius="{StaticResource RadiusXs}" Padding="6,2" Margin="0,0,4,4"
                         Background="{StaticResource WarningBgBrush}"
@@ -480,12 +565,13 @@
                                    Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
                     </StackPanel>
                 </Button>
-                <Button Grid.Column="2" Style="{StaticResource SecondaryButton}" Padding="11,0" Height="34"
+                <Button Grid.Column="2" Style="{StaticResource SecondaryButton}" Padding="10,0" Height="34"
                         VerticalAlignment="Stretch" VerticalContentAlignment="Center"
                         ToolTip="{DynamicResource String_ViewOnSteamDb}"
                         Command="{Binding DataContext.OpenSteamDbCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                         CommandParameter="{Binding}">
-                    <TextBlock Text="SteamDB" FontSize="11"/>
+                    <Path Data="{StaticResource IconSteamDb}" Fill="{StaticResource SecondaryTextBrush}"
+                          Stretch="Uniform" Width="13" Height="13"/>
                 </Button>
             </Grid>
         </DataTemplate>
@@ -869,21 +955,6 @@
                                     <TextBlock Text="{DynamicResource String_LoadingMore}" FontSize="11" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Border>
-
-                            <Border Margin="12,0,0,0" Padding="10,3"
-                                    Background="{StaticResource SurfaceInputBrush}"
-                                    BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
-                                    CornerRadius="9"
-                                    Visibility="{Binding IsEnrichmentVisible, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{DynamicResource String_CheckingDrmAndDlc}" FontSize="11"
-                                               Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
-                                    <TextBlock FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
-                                               Foreground="{StaticResource CyanBrush}">
-                                        <Run Text="{Binding EnrichedCount, Mode=OneWay}"/><Run Text="/"/><Run Text="{Binding EnrichTotal, Mode=OneWay}"/>
-                                    </TextBlock>
-                                </StackPanel>
-                            </Border>
                         </StackPanel>
 
                         <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center"
@@ -1020,8 +1091,16 @@
         </Grid>
 
         <!-- ═══ STORE PAGE MODAL ═══ -->
-        <Grid Grid.Row="0" Grid.RowSpan="4" Background="#C2040407"
+        <Grid Grid.Row="0" Grid.RowSpan="4"
               Visibility="{Binding IsDetailOpen, Converter={StaticResource BoolToVisibilityConverter}}">
+            <!-- Modal backdrop overlay: click outside card closes the modal -->
+            <Border Background="#C2040407" Cursor="Hand">
+                <Border.InputBindings>
+                    <MouseBinding MouseAction="LeftClick" Command="{Binding CloseDetailCommand}"/>
+                </Border.InputBindings>
+            </Border>
+
+            <!-- Modal dialog card -->
             <Border Background="{StaticResource SurfaceCardBrush}"
                     BorderBrush="{StaticResource StrongBorderBrush}" BorderThickness="1"
                     CornerRadius="{StaticResource RadiusLg}"
@@ -1037,6 +1116,7 @@
                     <!-- Modal header -->
                     <Border Grid.Row="0" Background="{StaticResource TopBarBackgroundBrush}"
                             BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="0,0,0,1"
+                            CornerRadius="11,11,0,0"
                             Padding="14,9">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -1068,6 +1148,7 @@
                     <!-- Modal actions -->
                     <Border Grid.Row="2" Background="{StaticResource TopBarBackgroundBrush}"
                             BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="0,1,0,0"
+                            CornerRadius="0,0,11,11"
                             Padding="14,10">
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                             <Button Style="{StaticResource SecondaryButton}" Padding="12,8" Margin="0,0,8,0"
@@ -1080,9 +1161,11 @@
                                 </StackPanel>
                             </Button>
                             <Button Style="{StaticResource SecondaryButton}" Padding="12,8" Margin="0,0,8,0"
+                                    ToolTip="{DynamicResource String_ViewOnSteamDb}"
                                     Command="{Binding OpenSteamDbCommand}"
                                     CommandParameter="{Binding DetailTarget}">
-                                <TextBlock Text="SteamDB" FontSize="12"/>
+                                <Path Data="{StaticResource IconSteamDb}" Fill="{StaticResource SecondaryTextBrush}"
+                                      Stretch="Uniform" Width="14" Height="14"/>
                             </Button>
                             <Button Style="{StaticResource PrimaryButton}" Padding="14,8"
                                     Command="{Binding AddToLibraryCommand}"
@@ -1105,32 +1188,9 @@
               Grid.RowSpan="4"
               Background="{StaticResource BaseBackgroundBrush}"
               Panel.ZIndex="200"
-              IsHitTestVisible="{Binding IsFirstLoad}">
-            <Grid.Style>
-                <Style TargetType="Grid">
-                    <Setter Property="Opacity" Value="1"/>
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding IsFirstLoad}" Value="False">
-                            <DataTrigger.EnterActions>
-                                <BeginStoryboard>
-                                    <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                                         To="0" Duration="0:0:0.35">
-                                            <DoubleAnimation.EasingFunction>
-                                                <CubicEase EasingMode="EaseOut"/>
-                                            </DoubleAnimation.EasingFunction>
-                                        </DoubleAnimation>
-                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetProperty="Visibility"
-                                                                      BeginTime="0:0:0.36">
-                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{x:Static Visibility.Collapsed}"/>
-                                        </ObjectAnimationUsingKeyFrames>
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </DataTrigger.EnterActions>
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </Grid.Style>
+              Opacity="1"
+              Visibility="Visible"
+              IsHitTestVisible="True">
 
             <Grid.Resources>
                 <!-- Continuous Smooth Spin in place -->
