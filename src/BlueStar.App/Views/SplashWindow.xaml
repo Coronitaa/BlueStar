@@ -38,7 +38,7 @@
             </StackPanel>
 
             <TextBlock Grid.Row="1" x:Name="VersionText"
-                       Text="1.4.0"
+                       Text="1.4.1"
                        FontSize="11" Foreground="#5E5E6C"
                        HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,8,0,0"
                        FontFamily="Consolas, Cascadia Code, monospace"/>

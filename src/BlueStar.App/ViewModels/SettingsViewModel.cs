@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -52,7 +53,7 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     [ObservableProperty]
-    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.4.0";
+    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.4.1";
 
     [ObservableProperty]
     private string _defaultApiUrl = "https://depotbox.org";
@@ -136,6 +137,45 @@ public partial class SettingsViewModel : ObservableObject
     {
         _ = _appSettings.SetEnableDebugSystemAsync(value);
     }
+
+    public ObservableCollection<SortOptionItem> ExploreStoreListOptions { get; } = [];
+    public ObservableCollection<SortOptionItem> ExploreSortOptions { get; } = [];
+    public ObservableCollection<SortOptionItem> ExploreSortDirectionOptions { get; } = [];
+
+    [ObservableProperty]
+    private SortOptionItem? _selectedExploreStoreList;
+
+    partial void OnSelectedExploreStoreListChanged(SortOptionItem? value)
+    {
+        if (value != null && !_suppressExploreOptionUpdates)
+        {
+            _ = _appSettings.SetDefaultExploreStoreListAsync(value.Value);
+        }
+    }
+
+    [ObservableProperty]
+    private SortOptionItem? _selectedExploreSort;
+
+    partial void OnSelectedExploreSortChanged(SortOptionItem? value)
+    {
+        if (value != null && !_suppressExploreOptionUpdates)
+        {
+            _ = _appSettings.SetDefaultExploreSortAsync(value.Value);
+        }
+    }
+
+    [ObservableProperty]
+    private SortOptionItem? _selectedExploreSortDirection;
+
+    partial void OnSelectedExploreSortDirectionChanged(SortOptionItem? value)
+    {
+        if (value != null && !_suppressExploreOptionUpdates)
+        {
+            _ = _appSettings.SetDefaultExploreSortDescendingAsync(value.Value == "desc");
+        }
+    }
+
+    private bool _suppressExploreOptionUpdates;
 
     [ObservableProperty]
     private string? _diagnosticStatusMessage;
@@ -224,8 +264,59 @@ public partial class SettingsViewModel : ObservableObject
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "BlueStar", "instances");
 
+        PopulateDefaultExploreOptions();
+        _localizationService.LanguageChanged += (_, _) =>
+        {
+            App.Current?.Dispatcher?.Invoke(PopulateDefaultExploreOptions);
+        };
+
         _ = LoadSettingsAsync();
         _ = ScanRequirementsAsync();
+    }
+
+    private void PopulateDefaultExploreOptions()
+    {
+        _suppressExploreOptionUpdates = true;
+        try
+        {
+            var currentStoreList = SelectedExploreStoreList?.Value ?? _appSettings.DefaultExploreStoreList;
+            var currentSort = SelectedExploreSort?.Value ?? _appSettings.DefaultExploreSort;
+            var currentDescending = SelectedExploreSortDirection != null
+                ? SelectedExploreSortDirection.Value == "desc"
+                : _appSettings.DefaultExploreSortDescending;
+
+            ExploreStoreListOptions.Clear();
+            ExploreStoreListOptions.Add(new SortOptionItem("popularnew", _localizationService.GetString("String_Facet_StoreList_popularnew", "Popular new releases")));
+            ExploreStoreListOptions.Add(new SortOptionItem(string.Empty, _localizationService.GetString("String_StoreListNone", "Whole catalog")));
+            ExploreStoreListOptions.Add(new SortOptionItem("globaltopsellers", _localizationService.GetString("String_Facet_StoreList_globaltopsellers", "Top sellers")));
+            ExploreStoreListOptions.Add(new SortOptionItem("comingsoon", _localizationService.GetString("String_Facet_StoreList_comingsoon", "Coming soon")));
+
+            ExploreSortOptions.Clear();
+            ExploreSortOptions.Add(new SortOptionItem("Reviews", _localizationService.GetString("String_Sort_Reviews", "User reviews")));
+            ExploreSortOptions.Add(new SortOptionItem("Released", _localizationService.GetString("String_Sort_Released", "Release date")));
+            ExploreSortOptions.Add(new SortOptionItem("Name", _localizationService.GetString("String_Sort_Name", "Name")));
+            ExploreSortOptions.Add(new SortOptionItem("Price", _localizationService.GetString("String_Sort_Price", "Price")));
+            ExploreSortOptions.Add(new SortOptionItem("DeckCompatDate", _localizationService.GetString("String_Sort_DeckCompatDate", "Steam Deck review date")));
+            ExploreSortOptions.Add(new SortOptionItem(string.Empty, _localizationService.GetString("String_SortNone", "No particular order")));
+
+            ExploreSortDirectionOptions.Clear();
+            ExploreSortDirectionOptions.Add(new SortOptionItem("desc", _localizationService.GetString("String_SortDescending", "Descending (Highest first)")));
+            ExploreSortDirectionOptions.Add(new SortOptionItem("asc", _localizationService.GetString("String_SortAscending", "Ascending (Lowest first)")));
+
+            SelectedExploreStoreList = ExploreStoreListOptions.FirstOrDefault(o => o.Value == currentStoreList)
+                                       ?? ExploreStoreListOptions.FirstOrDefault();
+
+            SelectedExploreSort = ExploreSortOptions.FirstOrDefault(o => o.Value == currentSort)
+                                   ?? ExploreSortOptions.FirstOrDefault();
+
+            var targetDirCode = currentDescending ? "desc" : "asc";
+            SelectedExploreSortDirection = ExploreSortDirectionOptions.FirstOrDefault(o => o.Value == targetDirCode)
+                                            ?? ExploreSortDirectionOptions.FirstOrDefault();
+        }
+        finally
+        {
+            _suppressExploreOptionUpdates = false;
+        }
     }
 
     private async Task LoadSettingsAsync()

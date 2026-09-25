@@ -323,7 +323,11 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         // Setting this would otherwise fire a search before the filter panel exists, spending a
         // request on a query InitializeAsync is about to replace.
         _suppressSearch = true;
-        SelectedSort = SortOptions.FirstOrDefault();
+        var defaultSortVal = _settingsService?.DefaultExploreSort ?? "Reviews";
+        var defaultSortDesc = _settingsService?.DefaultExploreSortDescending ?? true;
+
+        SelectedSort = SortOptions.FirstOrDefault(o => string.Equals(o.Value, defaultSortVal, StringComparison.OrdinalIgnoreCase)) ?? SortOptions.FirstOrDefault();
+        IsSortDescending = defaultSortDesc;
         _suppressSearch = false;
 
         if (_settingsService != null)
@@ -401,16 +405,15 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
 
             Dispatch(() =>
             {
-                if (isLocalAuth)
-                {
-                    SelectedStoreList = StoreListOptions.FirstOrDefault(o => o.Value == "")
-                                        ?? StoreListOptions.FirstOrDefault();
-                }
-                else
-                {
-                    SelectedStoreList = StoreListOptions.FirstOrDefault(o => o.Value == "popularnew")
-                                        ?? StoreListOptions.FirstOrDefault();
-                }
+                var prefStoreList = _settingsService?.DefaultExploreStoreList ?? (isLocalAuth ? "" : "popularnew");
+                var prefSort = _settingsService?.DefaultExploreSort ?? "Reviews";
+                var prefSortDesc = _settingsService?.DefaultExploreSortDescending ?? true;
+
+                SelectedStoreList = StoreListOptions.FirstOrDefault(o => string.Equals(o.Value, prefStoreList, StringComparison.OrdinalIgnoreCase))
+                                    ?? StoreListOptions.FirstOrDefault();
+                SelectedSort = SortOptions.FirstOrDefault(o => string.Equals(o.Value, prefSort, StringComparison.OrdinalIgnoreCase))
+                               ?? SortOptions.FirstOrDefault();
+                IsSortDescending = prefSortDesc;
                 _suppressSearch = false;
             });
 

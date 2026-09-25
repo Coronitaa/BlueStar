@@ -461,11 +461,11 @@ public sealed partial class SteamCatalogSearchService : ISteamCatalogSearchServi
     private async Task<(string Html, int TotalCount, string RawPayload)?> GetEnvelopeAsync(
         string url, SteamRequestPriority priority, CancellationToken ct)
     {
-        using var lease = await SteamRequestGate.AcquireAsync(priority, ct).ConfigureAwait(false);
-        if (lease is null) return null;
-
         try
         {
+            using var lease = await SteamRequestGate.AcquireAsync(priority, ct).ConfigureAwait(false);
+            if (lease is null) return null;
+
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(RequestTimeout);
 

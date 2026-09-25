@@ -39,6 +39,11 @@ public sealed class SingleFlight
                     tcs.TrySetResult(result);
                     return result;
                 }
+                catch (OperationCanceledException oce)
+                {
+                    tcs.TrySetCanceled(oce.CancellationToken);
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     tcs.TrySetException(ex);

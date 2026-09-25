@@ -37,492 +37,801 @@
 
     <Grid>
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Margin="32,24" MaxWidth="950" HorizontalAlignment="Stretch">
+            <StackPanel Margin="32,24" MaxWidth="980" HorizontalAlignment="Stretch">
 
                 <TextBlock Text="{DynamicResource String_SettingsTitle}" Style="{StaticResource H1}" Margin="0,0,0,6"/>
                 <TextBlock Text="{DynamicResource String_SettingsSubtitle}"
                            Style="{StaticResource Subtitle}" TextWrapping="Wrap" Margin="0,0,0,24"/>
 
-                <!-- ═══ LANGUAGE & LOCALIZATION SECTION ═══ -->
-                <Expander Style="{StaticResource SettingsExpanderCard}">
-                    <Expander.Header>
-                        <StackPanel>
-                            <TextBlock Text="{DynamicResource String_LanguageSetting}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                            <TextBlock Text="{DynamicResource String_LanguageSettingDesc}"
-                                       Style="{StaticResource Caption}" TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Expander.Header>
-                    <Grid Margin="0,4,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="320"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <ComboBox ItemsSource="{Binding LanguageOptions}"
-                                  SelectedItem="{Binding SelectedLanguageOption}"
-                                  Height="36"
-                                  FontSize="13"
-                                  VerticalContentAlignment="Center"
-                                  Style="{StaticResource DarkComboBox}"/>
-                    </Grid>
-                </Expander>
+                <!-- ══════════════════════════════════════════════════════════════
+                     MODULAR BLOCKS GRID (2-COLUMN BALANCED EXPANDABLE TILES)
+                     ══════════════════════════════════════════════════════════════ -->
+                <Grid Margin="0,0,0,20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="18"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
 
-                <!-- ═══ DEPOTBOX API SECTION ═══ -->
-                <Expander Style="{StaticResource SettingsExpanderCard}">
-                    <Expander.Header>
-                        <StackPanel>
-                            <TextBlock Text="{DynamicResource String_ApiConfigHeader}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                            <TextBlock Text="{DynamicResource String_ApiConnectionDesc}"
-                                       Style="{StaticResource Caption}" TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Expander.Header>
-                    <StackPanel Margin="0,4,0,0">
-                        <!-- Active status info banner -->
-                        <Border Background="{StaticResource SurfaceInputBrush}"
-                                BorderBrush="{StaticResource SubtleBorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="{StaticResource RadiusSm}"
-                                Padding="12,10" Margin="0,0,0,16">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="ℹ" FontSize="13" Foreground="{StaticResource AccentBrush}" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" Text="{Binding AuthStatusMessage}" Style="{StaticResource BodySmall}" TextWrapping="Wrap" VerticalAlignment="Center"/>
-                            </Grid>
-                        </Border>
+                    <!-- ── LEFT COLUMN BLOQUECITOS ── -->
+                    <StackPanel Grid.Column="0">
+                        <!-- ═══ LANGUAGE & LOCALIZATION SECTION ═══ -->
+                                        <Expander Style="{StaticResource SettingsExpanderCard}">
+                                            <Expander.Header>
+                                                <Grid Margin="0,0,12,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0" Background="#161B90FF"
+                                                            BorderBrush="#351B90FF" BorderThickness="1"
+                                                            Width="40" Height="40" CornerRadius="{StaticResource RadiusSm}"
+                                                            VerticalAlignment="Center" Margin="0,0,14,0">
+                                                        <Viewbox Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <Canvas Width="24" Height="24">
+                                                                <Path Fill="#1B90FF" Data="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
+                                                                <Path Fill="#FFFFFF" Data="M12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14A8.2 8.2 0 0 1 4 12c0-.69.1-1.36.26-2h3.38a16.5 16.5 0 0 0 0 4H4.26zm.84 2h2.95c.32 1.25.78 2.45 1.38 3.56A7.99 7.99 0 0 1 5.1 16zm2.95-8H5.1a7.99 7.99 0 0 1 4.33-3.56A15.6 15.6 0 0 0 8.05 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM14.34 14H9.66a14.7 14.7 0 0 1 0-4h4.68a14.7 14.7 0 0 1 0 4zm.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95a8.03 8.03 0 0 1-4.33 3.56zM16.36 14a16.5 16.5 0 0 0 0-4h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2h-3.38z"/>
+                                                            </Canvas>
+                                                        </Viewbox>
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="{DynamicResource String_LanguageSetting}" Style="{StaticResource H2}" Margin="0,0,0,3"/>
+                                                        <TextBlock Text="{DynamicResource String_LanguageSettingDesc}"
+                                                                   Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Expander.Header>
+                                            <Border Background="{StaticResource SurfaceInputBrush}"
+                                                    BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                                                    CornerRadius="{StaticResource RadiusMd}" Padding="14,12" Margin="0,4,0,0">
+                                                <ComboBox ItemsSource="{Binding LanguageOptions}"
+                                                          SelectedItem="{Binding SelectedLanguageOption}"
+                                                          Height="34"
+                                                          HorizontalAlignment="Stretch"
+                                                          FontSize="13"
+                                                          VerticalContentAlignment="Center"
+                                                          Style="{StaticResource DarkComboBox}"/>
+                                            </Border>
+                                        </Expander>
 
-                        <!-- Personal Override API Key -->
-                        <StackPanel Margin="0,4,0,0">
-                            <TextBlock Text="{DynamicResource String_ApiKeyLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
-                            <TextBlock Text="{DynamicResource String_ApiKeyHelp}"
-                                       Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,8"/>
-                            <TextBox Style="{StaticResource DarkTextBox}"
-                                     Text="{Binding ApiKey, UpdateSourceTrigger=PropertyChanged}"
-                                     Margin="0,0,0,14"/>
+                        <!-- ═══ DEPOTBOX API SECTION ═══ -->
+                                        <Expander Style="{StaticResource SettingsExpanderCard}">
+                                            <Expander.Header>
+                                                <Grid Margin="0,0,12,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0" Background="#16F59E0B"
+                                                            BorderBrush="#35F59E0B" BorderThickness="1"
+                                                            Width="40" Height="40" CornerRadius="{StaticResource RadiusSm}"
+                                                            VerticalAlignment="Center" Margin="0,0,14,0">
+                                                        <Viewbox Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <Canvas Width="24" Height="24">
+                                                                <Path Fill="#F59E0B" Data="M8 4a6 6 0 0 0-1.6 11.8A6 6 0 0 0 12.4 9.6 6 6 0 0 0 8 4zm0 8a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"/>
+                                                                <Path Fill="#FFFFFF" Data="M12 9h9v3h-2v3h-3v-3h-4V9z"/>
+                                                            </Canvas>
+                                                        </Viewbox>
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="{DynamicResource String_ApiConfigHeader}" Style="{StaticResource H2}" Margin="0,0,0,3"/>
+                                                        <TextBlock Text="{DynamicResource String_ApiConnectionDesc}"
+                                                                   Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Expander.Header>
+                                            <StackPanel Margin="0,4,0,0">
+                                                <!-- Active status info banner -->
+                                                <Border Background="{StaticResource SurfaceInputBrush}"
+                                                        BorderBrush="{StaticResource SubtleBorderBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="{StaticResource RadiusSm}"
+                                                        Padding="12,10" Margin="0,0,0,16">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="ℹ" FontSize="13" Foreground="{StaticResource AccentBrush}" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                                        <TextBlock Grid.Column="1" Text="{Binding AuthStatusMessage}" Style="{StaticResource BodySmall}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                                    </Grid>
+                                                </Border>
 
-                            <StackPanel Orientation="Horizontal">
-                                <Button Content="{DynamicResource String_SavePersonalKeyBtn}"
-                                        Style="{StaticResource PrimaryButton}"
-                                        Command="{Binding SaveApiKeyCommand}"
-                                        Margin="0,0,10,0"/>
+                                                <!-- Personal Override API Key -->
+                                                <StackPanel Margin="0,4,0,0">
+                                                    <TextBlock Text="{DynamicResource String_ApiKeyLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                                                    <TextBlock Text="{DynamicResource String_ApiKeyHelp}"
+                                                               Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                                    <TextBox Style="{StaticResource DarkTextBox}"
+                                                             Text="{Binding ApiKey, UpdateSourceTrigger=PropertyChanged}"
+                                                             Margin="0,0,0,14"/>
 
-                                <Button Content="{DynamicResource String_TestConnectionBtn}"
-                                        Style="{StaticResource SecondaryButton}"
-                                        Command="{Binding TestConnectionCommand}"
-                                        IsEnabled="{Binding IsTestingConnection, Converter={StaticResource InverseBoolConverter}}"
-                                        Margin="0,0,10,0"/>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Button Content="{DynamicResource String_SavePersonalKeyBtn}"
+                                                                Style="{StaticResource PrimaryButton}"
+                                                                Command="{Binding SaveApiKeyCommand}"
+                                                                Margin="0,0,10,0"/>
 
-                                <Button Content="{DynamicResource String_ClearPersonalOverrideBtn}"
-                                        Style="{StaticResource GhostButton}"
-                                        Command="{Binding ClearApiKeyCommand}"
-                                        Visibility="{Binding HasCustomKey, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                            </StackPanel>
+                                                        <Button Content="{DynamicResource String_TestConnectionBtn}"
+                                                                Style="{StaticResource SecondaryButton}"
+                                                                Command="{Binding TestConnectionCommand}"
+                                                                IsEnabled="{Binding IsTestingConnection, Converter={StaticResource InverseBoolConverter}}"
+                                                                Margin="0,0,10,0"/>
 
-                            <Border Background="{StaticResource SurfaceInputBrush}"
-                                    CornerRadius="{StaticResource RadiusMd}"
-                                    Padding="12,8" Margin="0,14,0,0"
-                                    Visibility="{Binding ConnectionTestResult, Converter={StaticResource NullToVisibilityConverter}}">
-                                <TextBlock Text="{Binding ConnectionTestResult}" Style="{StaticResource Body}" TextWrapping="Wrap"/>
-                            </Border>
-                        </StackPanel>
+                                                        <Button Content="{DynamicResource String_ClearPersonalOverrideBtn}"
+                                                                Style="{StaticResource GhostButton}"
+                                                                Command="{Binding ClearApiKeyCommand}"
+                                                                Visibility="{Binding HasCustomKey, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                    </StackPanel>
+
+                                                    <Border Background="{StaticResource SurfaceInputBrush}"
+                                                            CornerRadius="{StaticResource RadiusMd}"
+                                                            Padding="12,8" Margin="0,14,0,0"
+                                                            Visibility="{Binding ConnectionTestResult, Converter={StaticResource NullToVisibilityConverter}}">
+                                                        <TextBlock Text="{Binding ConnectionTestResult}" Style="{StaticResource Body}" TextWrapping="Wrap"/>
+                                                    </Border>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Expander>
+
+                        <!-- ═══ PATHS & STORAGE SECTION ═══ -->
+                                        <Expander Style="{StaticResource SettingsExpanderCard}">
+                                            <Expander.Header>
+                                                <Grid Margin="0,0,12,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0" Background="#1610B981"
+                                                            BorderBrush="#3510B981" BorderThickness="1"
+                                                            Width="40" Height="40" CornerRadius="{StaticResource RadiusSm}"
+                                                            VerticalAlignment="Center" Margin="0,0,14,0">
+                                                        <Viewbox Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <Canvas Width="24" Height="24">
+                                                                <Path Fill="#10B981" Data="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/>
+                                                                <Path Fill="#FFFFFF" Data="M2 11h20v7a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-7z"/>
+                                                            </Canvas>
+                                                        </Viewbox>
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="{DynamicResource String_StorageDirectoriesTitle}" Style="{StaticResource H2}" Margin="0,0,0,3"/>
+                                                        <TextBlock Text="{DynamicResource String_StorageDirectoriesDesc}"
+                                                                   Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Expander.Header>
+                                            <StackPanel Margin="0,4,0,0">
+                                                <!-- Default Downloads / Installs Directory -->
+                                                <TextBlock Text="{DynamicResource String_DefaultDownloadsDirLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                                                <Grid Margin="0,0,0,14">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="8"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="8"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBox Grid.Column="0"
+                                                             Style="{StaticResource DarkTextBox}"
+                                                             Text="{Binding DefaultDownloadDirectory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+
+                                                    <Button Grid.Column="2"
+                                                            Content="{DynamicResource String_BrowseDirBtn}"
+                                                            Style="{StaticResource SecondaryButton}"
+                                                            Padding="14,6"
+                                                            Command="{Binding BrowseDownloadDirectoryCommand}"/>
+
+                                                    <Button Grid.Column="4"
+                                                            Content="{DynamicResource String_OpenDirBtn}"
+                                                            Style="{StaticResource GhostButton}"
+                                                            Padding="10,6"
+                                                            Command="{Binding OpenDownloadDirectoryCommand}"/>
+                                                </Grid>
+
+                                                <!-- Instances Metadata Root -->
+                                                <TextBlock Text="{DynamicResource String_InstancesMetadataRootLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                                                <TextBox Style="{StaticResource DarkTextBox}" Text="{Binding InstanceRoot}" IsReadOnly="True"/>
+                                            </StackPanel>
+                                        </Expander>
+
+                        <!-- ═══ DOWNLOADS & CLEANUP SECTION ═══ -->
+                                        <Expander Style="{StaticResource SettingsExpanderCard}">
+                                            <Expander.Header>
+                                                <Grid Margin="0,0,12,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0" Background="#1606B6D4"
+                                                            BorderBrush="#3506B6D4" BorderThickness="1"
+                                                            Width="40" Height="40" CornerRadius="{StaticResource RadiusSm}"
+                                                            VerticalAlignment="Center" Margin="0,0,14,0">
+                                                        <Viewbox Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <Canvas Width="24" Height="24">
+                                                                <Path Fill="#06B6D4" Data="M4 14h2v4h12v-4h2v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-5z"/>
+                                                                <Path Fill="#FFFFFF" Data="M12 15l5-5h-3.5V4h-3v6H7l5 5z"/>
+                                                            </Canvas>
+                                                        </Viewbox>
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="{DynamicResource String_DownloadsCleanupTitle}" Style="{StaticResource H2}" Margin="0,0,0,3"/>
+                                                        <TextBlock Text="{DynamicResource String_DownloadsCleanupDesc}"
+                                                                   Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Expander.Header>
+                                            <StackPanel Margin="0,4,0,0">
+                                                <CheckBox Content="{DynamicResource String_AutoDeleteDepotsCheckbox}"
+                                                          IsChecked="{Binding DeleteDepotsAfterInstall, Mode=TwoWay}"
+                                                          Style="{StaticResource DarkCheckBox}"
+                                                          Margin="0,0,0,8"/>
+                                                <TextBlock Text="{DynamicResource String_AutoDeleteDepotsHelp}"
+                                                           Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Expander>
+
+                        <!-- ═══ APPLICATION CACHE & STORAGE SECTION ═══ -->
+                                    <Expander Style="{StaticResource SettingsExpanderCard}">
+                                        <Expander.Header>
+                                                <Grid Margin="0,0,12,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0" Background="#16A855F7"
+                                                            BorderBrush="#35A855F7" BorderThickness="1"
+                                                            Width="40" Height="40" CornerRadius="{StaticResource RadiusSm}"
+                                                            VerticalAlignment="Center" Margin="0,0,14,0">
+                                                        <Viewbox Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <Canvas Width="24" Height="24">
+                                                                <Path Fill="#A855F7" Data="M19.4 4.6a1 1 0 0 0-1.4 0l-8.5 8.5 1.4 1.4 8.5-8.5a1 1 0 0 0 0-1.4zM19 14l.6 1.4L21 16l-1.4.6L19 18l-.6-1.4L17 16l1.4-.6L19 14z"/>
+                                                                <Path Fill="#FFFFFF" Data="M10.2 13.8l-1.4-1.4-4.5 4.5A2 2 0 0 0 4 18.5V20h1.5a2 2 0 0 0 1.6-.7l4.5-4.5z"/>
+                                                            </Canvas>
+                                                        </Viewbox>
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="{DynamicResource String_CacheCleanupTitle}" Style="{StaticResource H2}" Margin="0,0,0,3"/>
+                                                        <TextBlock Text="{DynamicResource String_CacheCleanupDesc}"
+                                                                   Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Expander.Header>
+                                        <StackPanel Margin="0,4,0,0">
+                                            <Border Background="{StaticResource SurfaceInputBrush}"
+                                                    BorderBrush="{StaticResource SubtleBorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="{StaticResource RadiusSm}"
+                                                    Padding="14,12">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{DynamicResource String_ClearCacheModalTitle}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
+                                                        <TextBlock Text="{DynamicResource String_ClearCacheModalDesc}"
+                                                                   Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                                                    </StackPanel>
+                                                    <Button Grid.Column="1"
+                                                            Content="{DynamicResource String_ClearAppCacheBtn}"
+                                                            Style="{StaticResource SecondaryButton}"
+                                                            Padding="14,8"
+                                                            VerticalAlignment="Center"
+                                                            Command="{Binding OpenClearCacheModalCommand}"/>
+                                                </Grid>
+                                            </Border>
+
+                                            <!-- Status Result Banner -->
+                                            <Border Background="{StaticResource SurfaceCardBrush}"
+                                                    BorderBrush="{StaticResource SubtleBorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="{StaticResource RadiusSm}"
+                                                    Padding="10,8" Margin="0,8,0,0"
+                                                    Visibility="{Binding ClearCacheResult, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <TextBlock Text="{Binding ClearCacheResult}" Style="{StaticResource Caption}" Foreground="{StaticResource PrimaryTextBrush}"/>
+                                            </Border>
+                                        </StackPanel>
+                                    </Expander>
                     </StackPanel>
-                </Expander>
 
-                <!-- ═══ PATHS & STORAGE SECTION ═══ -->
-                <Expander Style="{StaticResource SettingsExpanderCard}">
-                    <Expander.Header>
-                        <StackPanel>
-                            <TextBlock Text="{DynamicResource String_StorageDirectoriesTitle}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                            <TextBlock Text="{DynamicResource String_StorageDirectoriesDesc}"
-                                       Style="{StaticResource Caption}" TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Expander.Header>
-                    <StackPanel Margin="0,4,0,0">
-                        <!-- Default Downloads / Installs Directory -->
-                        <TextBlock Text="{DynamicResource String_DefaultDownloadsDirLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
-                        <Grid Margin="0,0,0,14">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="8"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="8"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
+                    <!-- ── RIGHT COLUMN BLOQUECITOS ── -->
+                    <StackPanel Grid.Column="2">
+                        <!-- ═══ CATALOG & CONTENT FILTERS SECTION ═══ -->
+                                        <Expander Style="{StaticResource SettingsExpanderCard}">
+                                            <Expander.Header>
+                                                <Grid Margin="0,0,12,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0" Background="#16F97316"
+                                                            BorderBrush="#35F97316" BorderThickness="1"
+                                                            Width="40" Height="40" CornerRadius="{StaticResource RadiusSm}"
+                                                            VerticalAlignment="Center" Margin="0,0,14,0">
+                                                        <Viewbox Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <Canvas Width="24" Height="24">
+                                                                <Path Fill="#F97316" Data="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42z"/>
+                                                                <Path Fill="#FFFFFF" Data="M6.5 5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm5.5 5.5l5 5-1.4 1.4-5-5 1.4-1.4z"/>
+                                                            </Canvas>
+                                                        </Viewbox>
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="{DynamicResource String_CatalogContentFiltersTitle}" Style="{StaticResource H2}" Margin="0,0,0,3"/>
+                                                        <TextBlock Text="{DynamicResource String_CatalogContentFiltersDesc}"
+                                                                   Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Expander.Header>
+                                            <StackPanel Margin="0,4,0,0">
+                                                <!-- NSFW Filter Toggle -->
+                                                <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,10" Margin="0,0,0,10">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                                                            <TextBlock Text="{DynamicResource String_ShowNsfwContentLabel}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
+                                                            <TextBlock Text="{DynamicResource String_ShowNsfwContentDesc}"
+                                                                       Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                                                        </StackPanel>
+                                                        <CheckBox Grid.Column="1"
+                                                                  IsChecked="{Binding ShowNsfwContent, Mode=TwoWay}"
+                                                                  Style="{StaticResource DarkCheckBox}"
+                                                                  VerticalAlignment="Center"/>
+                                                    </Grid>
+                                                </Border>
 
-                            <TextBox Grid.Column="0"
-                                     Style="{StaticResource DarkTextBox}"
-                                     Text="{Binding DefaultDownloadDirectory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-
-                            <Button Grid.Column="2"
-                                    Content="{DynamicResource String_BrowseDirBtn}"
-                                    Style="{StaticResource SecondaryButton}"
-                                    Padding="14,6"
-                                    Command="{Binding BrowseDownloadDirectoryCommand}"/>
-
-                            <Button Grid.Column="4"
-                                    Content="{DynamicResource String_OpenDirBtn}"
-                                    Style="{StaticResource GhostButton}"
-                                    Padding="10,6"
-                                    Command="{Binding OpenDownloadDirectoryCommand}"/>
-                        </Grid>
-
-                        <!-- Instances Metadata Root -->
-                        <TextBlock Text="{DynamicResource String_InstancesMetadataRootLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
-                        <TextBox Style="{StaticResource DarkTextBox}" Text="{Binding InstanceRoot}" IsReadOnly="True"/>
-                    </StackPanel>
-                </Expander>
-
-                <!-- ═══ DOWNLOADS & CLEANUP SECTION ═══ -->
-                <Expander Style="{StaticResource SettingsExpanderCard}">
-                    <Expander.Header>
-                        <StackPanel>
-                            <TextBlock Text="{DynamicResource String_DownloadsCleanupTitle}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                            <TextBlock Text="{DynamicResource String_DownloadsCleanupDesc}"
-                                       Style="{StaticResource Caption}" TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Expander.Header>
-                    <StackPanel Margin="0,4,0,0">
-                        <CheckBox Content="{DynamicResource String_AutoDeleteDepotsCheckbox}"
-                                  IsChecked="{Binding DeleteDepotsAfterInstall, Mode=TwoWay}"
-                                  Style="{StaticResource DarkCheckBox}"
-                                  Margin="0,0,0,8"/>
-                        <TextBlock Text="{DynamicResource String_AutoDeleteDepotsHelp}"
-                                   Style="{StaticResource Muted}" TextWrapping="Wrap"/>
-                    </StackPanel>
-                </Expander>
-
-                <!-- ═══ CATALOG & CONTENT FILTERS SECTION ═══ -->
-                <Expander Style="{StaticResource SettingsExpanderCard}">
-                    <Expander.Header>
-                        <StackPanel>
-                            <TextBlock Text="{DynamicResource String_CatalogContentFiltersTitle}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                            <TextBlock Text="{DynamicResource String_CatalogContentFiltersDesc}"
-                                       Style="{StaticResource Caption}" TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Expander.Header>
-                    <StackPanel Margin="0,4,0,0">
-                        <!-- NSFW Filter Toggle -->
-                        <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,10" Margin="0,0,0,10">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
-                                    <TextBlock Text="{DynamicResource String_ShowNsfwContentLabel}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
-                                    <TextBlock Text="{DynamicResource String_ShowNsfwContentDesc}"
-                                               Style="{StaticResource Muted}" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <CheckBox Grid.Column="1"
-                                          IsChecked="{Binding ShowNsfwContent, Mode=TwoWay}"
-                                          Style="{StaticResource DarkCheckBox}"
-                                          VerticalAlignment="Center"/>
-                            </Grid>
-                        </Border>
-
-                        <!-- DRM Filter Toggle -->
-                        <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,10">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
-                                    <TextBlock Text="{DynamicResource String_ShowDrmContentLabel}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
-                                    <TextBlock Text="{DynamicResource String_ShowDrmContentDesc}"
-                                               Style="{StaticResource Muted}" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <CheckBox Grid.Column="1"
-                                          IsChecked="{Binding ShowDrmContent, Mode=TwoWay}"
-                                          Style="{StaticResource DarkCheckBox}"
-                                          VerticalAlignment="Center"/>
-                            </Grid>
-                        </Border>
-                    </StackPanel>
-                </Expander>
-
-            <!-- ═══ SYSTEM REQUIREMENTS & RUNTIMES SECTION ═══ -->
-            <Expander Style="{StaticResource SettingsExpanderCard}">
-                <Expander.Header>
-                    <StackPanel>
-                        <TextBlock Text="{DynamicResource String_SysReqRuntimesTitle}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                        <TextBlock Text="{DynamicResource String_SysReqRuntimesDesc}"
-                                   Style="{StaticResource Caption}" TextWrapping="Wrap"/>
-                    </StackPanel>
-                </Expander.Header>
-                <StackPanel Margin="0,4,0,0">
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                        <Button Content="{DynamicResource String_ReScanBtn}"
-                                Style="{StaticResource SecondaryButton}"
-                                Padding="12,6" FontSize="11" Margin="0,0,8,0"
-                                Command="{Binding ScanRequirementsCommand}"
-                                IsEnabled="{Binding IsInstallingRequirements, Converter={StaticResource InverseBoolConverter}}"/>
-                        <Button Content="{DynamicResource String_InstallAllMissingBtn}"
-                                Style="{StaticResource PrimaryButton}"
-                                Padding="14,6" FontSize="11"
-                                Visibility="{Binding HasMissingRequirements, Converter={StaticResource BoolToVisibilityConverter}}"
-                                Command="{Binding InstallAllRequirementsCommand}"
-                                IsEnabled="{Binding IsInstallingRequirements, Converter={StaticResource InverseBoolConverter}}"/>
-                    </StackPanel>
-
-                    <!-- Auto check toggle -->
-                    <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,10" Margin="0,0,0,14">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
-                                <TextBlock Text="{DynamicResource String_CheckReqsOnStartupLabel}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
-                                <TextBlock Text="{DynamicResource String_CheckReqsOnStartupDesc}"
-                                           Style="{StaticResource Muted}" TextWrapping="Wrap"/>
-                            </StackPanel>
-                            <CheckBox Grid.Column="1"
-                                      IsChecked="{Binding CheckSystemRequirementsOnStartup, Mode=TwoWay}"
-                                      Style="{StaticResource DarkCheckBox}"
-                                      VerticalAlignment="Center"/>
-                        </Grid>
-                    </Border>
-
-                    <!-- Progress bar when installing -->
-                    <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,8" Margin="0,0,0,12"
-                            Visibility="{Binding IsInstallingRequirements, Converter={StaticResource BoolToVisibilityConverter}}">
-                        <StackPanel>
-                            <ProgressBar Height="4" IsIndeterminate="True"
-                                         Foreground="{StaticResource AccentBrush}"
-                                         Background="{StaticResource SurfaceCardBrush}"
-                                         BorderThickness="0" Margin="0,0,0,6"/>
-                            <TextBlock Text="{Binding InstallRequirementsStatusText}" Style="{StaticResource Caption}" Foreground="{StaticResource AccentBrush}"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Prerequisites List -->
-                    <ItemsControl ItemsSource="{Binding SystemPrerequisites}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Background="{StaticResource SurfaceInputBrush}"
-                                        BorderBrush="{StaticResource SubtleBorderBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="{StaticResource RadiusSm}"
-                                        Padding="12,10"
-                                        Margin="0,0,0,8">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="14"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <StackPanel Grid.Column="0">
-                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
-                                                <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="12" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,8,0"/>
-                                                <Border CornerRadius="{StaticResource RadiusSm}"
-                                                        Padding="6,1"
-                                                        Background="{Binding Status, Converter={StaticResource PrerequisiteStatusToBgBrushConverter}}">
-                                                    <TextBlock Text="{Binding Status, Converter={StaticResource PrerequisiteStatusToTextConverter}}"
-                                                               FontSize="10" FontWeight="SemiBold"
-                                                               Foreground="{Binding Status, Converter={StaticResource PrerequisiteStatusToBrushConverter}}"/>
+                                                <!-- DRM Filter Toggle -->
+                                                <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,10">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                                                            <TextBlock Text="{DynamicResource String_ShowDrmContentLabel}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
+                                                            <TextBlock Text="{DynamicResource String_ShowDrmContentDesc}"
+                                                                       Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                                                        </StackPanel>
+                                                        <CheckBox Grid.Column="1"
+                                                                  IsChecked="{Binding ShowDrmContent, Mode=TwoWay}"
+                                                                  Style="{StaticResource DarkCheckBox}"
+                                                                  VerticalAlignment="Center"/>
+                                                    </Grid>
                                                 </Border>
                                             </StackPanel>
-                                            <TextBlock Text="{Binding Description}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"/>
+                                        </Expander>
+
+                        <!-- ═══ DEFAULT EXPLORE LISTING SECTION ═══ -->
+                                        <Expander Style="{StaticResource SettingsExpanderCard}">
+                                            <Expander.Header>
+                                                <Grid Margin="0,0,12,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0" Background="#161B90FF"
+                                                            BorderBrush="#351B90FF" BorderThickness="1"
+                                                            Width="40" Height="40" CornerRadius="{StaticResource RadiusSm}"
+                                                            VerticalAlignment="Center" Margin="0,0,14,0">
+                                                        <Viewbox Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <Canvas Width="24" Height="24">
+                                                                <Path Fill="#1B90FF" Data="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
+                                                                <Path Fill="#FFFFFF" Data="M12 6.5l1.6 3.9 3.9 1.6-3.9 1.6-1.6 3.9-1.6-3.9-3.9-1.6 3.9-1.6 1.6-3.9z"/>
+                                                            </Canvas>
+                                                        </Viewbox>
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="{DynamicResource String_DefaultExploreListingTitle}" Style="{StaticResource H2}" Margin="0,0,0,3"/>
+                                                        <TextBlock Text="{DynamicResource String_DefaultExploreListingDesc}"
+                                                                   Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Expander.Header>
+                                            <StackPanel Margin="0,4,0,0">
+                                                <!-- Bloquecito 1: Default Store Section -->
+                                                <Border Background="{StaticResource SurfaceInputBrush}"
+                                                        BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                                                        CornerRadius="{StaticResource RadiusMd}" Padding="14,12" Margin="0,0,0,10">
+                                                    <Grid>
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                        </Grid.RowDefinitions>
+                                                        <Grid Grid.Row="0" Margin="0,0,0,8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Border Grid.Column="0" Width="30" Height="30" CornerRadius="6"
+                                                                    Background="#161B90FF"
+                                                                    BorderBrush="#351B90FF" BorderThickness="1"
+                                                                    VerticalAlignment="Center" Margin="0,0,10,0">
+                                                                <Viewbox Width="15" Height="15" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                                    <Canvas Width="24" Height="24">
+                                                                        <Path Fill="#1B90FF" Data="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
+                                                                        <Path Fill="#FFFFFF" Data="M12 6.5l1.6 3.9 3.9 1.6-3.9 1.6-1.6 3.9-1.6-3.9-3.9-1.6 3.9-1.6 1.6-3.9z"/>
+                                                                    </Canvas>
+                                                                </Viewbox>
+                                                            </Border>
+                                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                                <TextBlock Text="{DynamicResource String_DefaultStoreListLabel}" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource PrimaryTextBrush}"/>
+                                                                <TextBlock Text="{DynamicResource String_DefaultStoreListDesc}" Style="{StaticResource Muted}" TextWrapping="Wrap" FontSize="11"/>
+                                                            </StackPanel>
+                                                        </Grid>
+                                                        <ComboBox Grid.Row="1"
+                                                                  ItemsSource="{Binding ExploreStoreListOptions}"
+                                                                  SelectedItem="{Binding SelectedExploreStoreList, Mode=TwoWay}"
+                                                                  DisplayMemberPath="DisplayName"
+                                                                  Height="34" HorizontalAlignment="Stretch"
+                                                                  FontSize="12" VerticalContentAlignment="Center"
+                                                                  Style="{StaticResource DarkComboBox}"/>
+                                                    </Grid>
+                                                </Border>
+
+                                                <!-- Bloquecito 2: Default Sorting Criterion -->
+                                                <Border Background="{StaticResource SurfaceInputBrush}"
+                                                        BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                                                        CornerRadius="{StaticResource RadiusMd}" Padding="14,12" Margin="0,0,0,10">
+                                                    <Grid>
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                        </Grid.RowDefinitions>
+                                                        <Grid Grid.Row="0" Margin="0,0,0,8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Border Grid.Column="0" Width="30" Height="30" CornerRadius="6"
+                                                                    Background="#16A855F7"
+                                                                    BorderBrush="#35A855F7" BorderThickness="1"
+                                                                    VerticalAlignment="Center" Margin="0,0,10,0">
+                                                                <Viewbox Width="15" Height="15" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                                    <Canvas Width="24" Height="24">
+                                                                        <Path Fill="#A855F7" Data="M4 14h3v6H4zm5-4h3v10H9z"/>
+                                                                        <Path Fill="#FFFFFF" Data="M14 6h3v14h-3zm3.5-3l1.5 2 2.5.5-2 1.5.5 2.5-2.5-1.5-2.5 1.5.5-2.5-2-1.5 2.5-.5z"/>
+                                                                    </Canvas>
+                                                                </Viewbox>
+                                                            </Border>
+                                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                                <TextBlock Text="{DynamicResource String_DefaultSortLabel}" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource PrimaryTextBrush}"/>
+                                                                <TextBlock Text="{DynamicResource String_DefaultSortDesc}" Style="{StaticResource Muted}" TextWrapping="Wrap" FontSize="11"/>
+                                                            </StackPanel>
+                                                        </Grid>
+                                                        <ComboBox Grid.Row="1"
+                                                                  ItemsSource="{Binding ExploreSortOptions}"
+                                                                  SelectedItem="{Binding SelectedExploreSort, Mode=TwoWay}"
+                                                                  DisplayMemberPath="DisplayName"
+                                                                  Height="34" HorizontalAlignment="Stretch"
+                                                                  FontSize="12" VerticalContentAlignment="Center"
+                                                                  Style="{StaticResource DarkComboBox}"/>
+                                                    </Grid>
+                                                </Border>
+
+                                                <!-- Bloquecito 3: Default Sort Direction -->
+                                                <Border Background="{StaticResource SurfaceInputBrush}"
+                                                        BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                                                        CornerRadius="{StaticResource RadiusMd}" Padding="14,12">
+                                                    <Grid>
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                        </Grid.RowDefinitions>
+                                                        <Grid Grid.Row="0" Margin="0,0,0,8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Border Grid.Column="0" Width="30" Height="30" CornerRadius="6"
+                                                                    Background="#161B90FF"
+                                                                    BorderBrush="#351B90FF" BorderThickness="1"
+                                                                    VerticalAlignment="Center" Margin="0,0,10,0">
+                                                                <Viewbox Width="15" Height="15" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                                    <Canvas Width="24" Height="24">
+                                                                        <Path Fill="#1B90FF" Data="M3 6h10v2H3zm0 5h7v2H3zm0 5h4v2H3z"/>
+                                                                        <Path Fill="#FFFFFF" Data="M18 19l4-4h-3V6h-2v9h-3l4 4z"/>
+                                                                    </Canvas>
+                                                                </Viewbox>
+                                                            </Border>
+                                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                                <TextBlock Text="{DynamicResource String_DefaultSortDirectionLabel}" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource PrimaryTextBrush}"/>
+                                                                <TextBlock Text="{DynamicResource String_DefaultSortDirectionDesc}" Style="{StaticResource Muted}" TextWrapping="Wrap" FontSize="11"/>
+                                                            </StackPanel>
+                                                        </Grid>
+                                                        <ComboBox Grid.Row="1"
+                                                                  ItemsSource="{Binding ExploreSortDirectionOptions}"
+                                                                  SelectedItem="{Binding SelectedExploreSortDirection, Mode=TwoWay}"
+                                                                  DisplayMemberPath="DisplayName"
+                                                                  Height="34" HorizontalAlignment="Stretch"
+                                                                  FontSize="12" VerticalContentAlignment="Center"
+                                                                  Style="{StaticResource DarkComboBox}"/>
+                                                    </Grid>
+                                                </Border>
+                                            </StackPanel>
+                                        </Expander>
+
+                        <!-- ═══ SYSTEM REQUIREMENTS & RUNTIMES SECTION ═══ -->
+                                    <Expander Style="{StaticResource SettingsExpanderCard}">
+                                        <Expander.Header>
+                                                <Grid Margin="0,0,12,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0" Background="#160D9488"
+                                                            BorderBrush="#350D9488" BorderThickness="1"
+                                                            Width="40" Height="40" CornerRadius="{StaticResource RadiusSm}"
+                                                            VerticalAlignment="Center" Margin="0,0,14,0">
+                                                        <Viewbox Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <Canvas Width="24" Height="24">
+                                                                <Path Fill="#0D9488" Data="M21 3H3a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h7v2H8v2h8v-2h-2v-2h7a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm0 13H3V5h18v11z"/>
+                                                                <Path Fill="#FFFFFF" Data="M5 7h14v7H5V7zm3 4l2 2 4-4-1.2-1.2L10 10.6l-1-1L8 11z"/>
+                                                            </Canvas>
+                                                        </Viewbox>
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="{DynamicResource String_SysReqRuntimesTitle}" Style="{StaticResource H2}" Margin="0,0,0,3"/>
+                                                        <TextBlock Text="{DynamicResource String_SysReqRuntimesDesc}"
+                                                                   Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Expander.Header>
+                                        <StackPanel Margin="0,4,0,0">
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                                <Button Content="{DynamicResource String_ReScanBtn}"
+                                                        Style="{StaticResource SecondaryButton}"
+                                                        Padding="12,6" FontSize="11" Margin="0,0,8,0"
+                                                        Command="{Binding ScanRequirementsCommand}"
+                                                        IsEnabled="{Binding IsInstallingRequirements, Converter={StaticResource InverseBoolConverter}}"/>
+                                                <Button Content="{DynamicResource String_InstallAllMissingBtn}"
+                                                        Style="{StaticResource PrimaryButton}"
+                                                        Padding="14,6" FontSize="11"
+                                                        Visibility="{Binding HasMissingRequirements, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                        Command="{Binding InstallAllRequirementsCommand}"
+                                                        IsEnabled="{Binding IsInstallingRequirements, Converter={StaticResource InverseBoolConverter}}"/>
+                                            </StackPanel>
+
+                                            <!-- Auto check toggle -->
+                                            <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,10" Margin="0,0,0,14">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{DynamicResource String_CheckReqsOnStartupLabel}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
+                                                        <TextBlock Text="{DynamicResource String_CheckReqsOnStartupDesc}"
+                                                                   Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                                                    </StackPanel>
+                                                    <CheckBox Grid.Column="1"
+                                                              IsChecked="{Binding CheckSystemRequirementsOnStartup, Mode=TwoWay}"
+                                                              Style="{StaticResource DarkCheckBox}"
+                                                              VerticalAlignment="Center"/>
+                                                </Grid>
+                                            </Border>
+
+                                            <!-- Progress bar when installing -->
+                                            <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,8" Margin="0,0,0,12"
+                                                    Visibility="{Binding IsInstallingRequirements, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <StackPanel>
+                                                    <ProgressBar Height="4" IsIndeterminate="True"
+                                                                 Foreground="{StaticResource AccentBrush}"
+                                                                 Background="{StaticResource SurfaceCardBrush}"
+                                                                 BorderThickness="0" Margin="0,0,0,6"/>
+                                                    <TextBlock Text="{Binding InstallRequirementsStatusText}" Style="{StaticResource Caption}" Foreground="{StaticResource AccentBrush}"/>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <!-- Prerequisites List -->
+                                            <ItemsControl ItemsSource="{Binding SystemPrerequisites}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Background="{StaticResource SurfaceInputBrush}"
+                                                                BorderBrush="{StaticResource SubtleBorderBrush}"
+                                                                BorderThickness="1"
+                                                                CornerRadius="{StaticResource RadiusSm}"
+                                                                Padding="12,10"
+                                                                Margin="0,0,0,8">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="14"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <StackPanel Grid.Column="0">
+                                                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
+                                                                        <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="12" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,8,0"/>
+                                                                        <Border CornerRadius="{StaticResource RadiusSm}"
+                                                                                Padding="6,1"
+                                                                                Background="{Binding Status, Converter={StaticResource PrerequisiteStatusToBgBrushConverter}}">
+                                                                            <TextBlock Text="{Binding Status, Converter={StaticResource PrerequisiteStatusToTextConverter}}"
+                                                                                       FontSize="10" FontWeight="SemiBold"
+                                                                                       Foreground="{Binding Status, Converter={StaticResource PrerequisiteStatusToBrushConverter}}"/>
+                                                                        </Border>
+                                                                    </StackPanel>
+                                                                    <TextBlock Text="{Binding Description}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"/>
+                                                                </StackPanel>
+
+                                                                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                                                    <Button Content="{DynamicResource String_Install}"
+                                                                            Style="{StaticResource SecondaryButton}"
+                                                                            Padding="12,5" FontSize="11"
+                                                                            Command="{Binding DataContext.InstallPrerequisiteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                            CommandParameter="{Binding}"
+                                                                            IsEnabled="{Binding DataContext.IsInstallingRequirements, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource InverseBoolConverter}}"/>
+                                                                </StackPanel>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
                                         </StackPanel>
+                                    </Expander>
 
-                                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                            <Button Content="{DynamicResource String_Install}"
-                                                    Style="{StaticResource SecondaryButton}"
-                                                    Padding="12,5" FontSize="11"
-                                                    Command="{Binding DataContext.InstallPrerequisiteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                    CommandParameter="{Binding}"
-                                                    IsEnabled="{Binding DataContext.IsInstallingRequirements, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource InverseBoolConverter}}"/>
+                        <!-- ═══ ADVANCED & EXPERIMENTAL FEATURES SECTION ═══ -->
+                                    <Expander Style="{StaticResource SettingsExpanderCard}">
+                                        <Expander.Header>
+                                                <Grid Margin="0,0,12,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0" Background="#16F59E0B"
+                                                            BorderBrush="#35F59E0B" BorderThickness="1"
+                                                            Width="40" Height="40" CornerRadius="{StaticResource RadiusSm}"
+                                                            VerticalAlignment="Center" Margin="0,0,14,0">
+                                                        <Viewbox Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <Canvas Width="24" Height="24">
+                                                                <Path Fill="#F59E0B" Data="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+                                                                <Path Fill="#FFFFFF" Data="M13 7l-4 5h3l-2 5 6-6h-3l2-4z"/>
+                                                            </Canvas>
+                                                        </Viewbox>
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="{DynamicResource String_AdvancedExperimentalTitle}" Style="{StaticResource H2}" Margin="0,0,0,3"/>
+                                                        <TextBlock Text="{DynamicResource String_AdvancedExperimentalDesc}"
+                                                                   Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Expander.Header>
+                                        <StackPanel Margin="0,4,0,0">
+                                            <!-- Experimental Modding Tab Toggle -->
+                                            <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,10" Margin="0,0,0,10">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{DynamicResource String_ExperimentalModdingLabel}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
+                                                        <TextBlock Text="{DynamicResource String_ExperimentalModdingDesc}"
+                                                                   Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                                                    </StackPanel>
+                                                    <CheckBox Grid.Column="1"
+                                                              IsChecked="{Binding EnableExperimentalMods, Mode=TwoWay}"
+                                                              Style="{StaticResource DarkCheckBox}"
+                                                              VerticalAlignment="Center"/>
+                                                </Grid>
+                                            </Border>
+
+                                            <!-- Debug & Diagnostics System -->
+                                            <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="14,12" Margin="0,0,0,10">
+                                                <StackPanel>
+                                                    <Grid Margin="0,0,0,10">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                                                            <TextBlock Text="{DynamicResource String_DebugSystemLabel}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
+                                                            <TextBlock Text="{DynamicResource String_DebugSystemDesc}"
+                                                                       Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                                                        </StackPanel>
+                                                        <CheckBox Grid.Column="1"
+                                                                  IsChecked="{Binding EnableDebugSystem, Mode=TwoWay}"
+                                                                  Style="{StaticResource DarkCheckBox}"
+                                                                  VerticalAlignment="Center"/>
+                                                    </Grid>
+
+                                                    <!-- Debug Quick Actions Toolbar -->
+                                                    <WrapPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                                        <Button Style="{StaticResource PrimaryButton}"
+                                                                Command="{Binding OpenDebugConsoleCommand}"
+                                                                Margin="0,0,8,6">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text=">_ " FontFamily="Consolas" FontWeight="Bold" Margin="0,0,4,0"/>
+                                                                <TextBlock Text="{DynamicResource String_OpenDebugConsoleBtn}"/>
+                                                            </StackPanel>
+                                                        </Button>
+
+                                                        <Button Style="{StaticResource SecondaryButton}"
+                                                                Command="{Binding GenerateDiagnosticReportCommand}"
+                                                                IsEnabled="{Binding IsGeneratingReport, Converter={StaticResource InverseBoolConverter}}"
+                                                                Margin="0,0,8,6">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="⚡ " Margin="0,0,4,0"/>
+                                                                <TextBlock Text="{DynamicResource String_GenerateDiagnosticReportBtn}"/>
+                                                            </StackPanel>
+                                                        </Button>
+
+                                                        <Button Style="{StaticResource GhostButton}"
+                                                                Command="{Binding OpenLogFolderCommand}"
+                                                                Margin="0,0,8,6">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="📁 " Margin="0,0,4,0"/>
+                                                                <TextBlock Text="{DynamicResource String_OpenLogFolderBtn}"/>
+                                                            </StackPanel>
+                                                        </Button>
+                                                    </WrapPanel>
+
+                                                    <!-- Diagnostic Result / Status Banner -->
+                                                    <Border Background="{StaticResource SurfaceCardBrush}"
+                                                            BorderBrush="{StaticResource SubtleBorderBrush}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="{StaticResource RadiusSm}"
+                                                            Padding="10,8" Margin="0,6,0,0"
+                                                            Visibility="{Binding DiagnosticStatusMessage, Converter={StaticResource NullToVisibilityConverter}}">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0"
+                                                                       Text="{Binding DiagnosticStatusMessage}"
+                                                                       Style="{StaticResource Caption}"
+                                                                       Foreground="{StaticResource PrimaryTextBrush}"
+                                                                       VerticalAlignment="Center"
+                                                                       TextWrapping="Wrap"/>
+                                                            <Button Grid.Column="1"
+                                                                    Content="{DynamicResource String_CopyPathBtn}"
+                                                                    Style="{StaticResource GhostButton}"
+                                                                    Command="{Binding CopyDiagnosticPathCommand}"
+                                                                    Padding="8,4" FontSize="11" Margin="8,0,0,0"
+                                                                    Visibility="{Binding LastDiagnosticFilePath, Converter={StaticResource NullToVisibilityConverter}}"/>
+                                                        </Grid>
+                                                    </Border>
+                                                </StackPanel>
+                                            </Border>
                                         </StackPanel>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Expander>
-
-            <!-- ═══ ADVANCED & EXPERIMENTAL FEATURES SECTION ═══ -->
-            <Expander Style="{StaticResource SettingsExpanderCard}">
-                <Expander.Header>
-                    <StackPanel>
-                        <TextBlock Text="{DynamicResource String_AdvancedExperimentalTitle}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                        <TextBlock Text="{DynamicResource String_AdvancedExperimentalDesc}"
-                                   Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                                    </Expander>
                     </StackPanel>
-                </Expander.Header>
-                <StackPanel Margin="0,4,0,0">
-                    <!-- Experimental Modding Tab Toggle -->
-                    <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,10" Margin="0,0,0,10">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
-                                <TextBlock Text="{DynamicResource String_ExperimentalModdingLabel}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
-                                <TextBlock Text="{DynamicResource String_ExperimentalModdingDesc}"
-                                           Style="{StaticResource Muted}" TextWrapping="Wrap"/>
-                            </StackPanel>
-                            <CheckBox Grid.Column="1"
-                                      IsChecked="{Binding EnableExperimentalMods, Mode=TwoWay}"
-                                      Style="{StaticResource DarkCheckBox}"
-                                      VerticalAlignment="Center"/>
-                        </Grid>
-                    </Border>
-
-                    <!-- Debug & Diagnostics System -->
-                    <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="14,12" Margin="0,0,0,10">
-                        <StackPanel>
-                            <Grid Margin="0,0,0,10">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
-                                    <TextBlock Text="{DynamicResource String_DebugSystemLabel}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
-                                    <TextBlock Text="{DynamicResource String_DebugSystemDesc}"
-                                               Style="{StaticResource Muted}" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <CheckBox Grid.Column="1"
-                                          IsChecked="{Binding EnableDebugSystem, Mode=TwoWay}"
-                                          Style="{StaticResource DarkCheckBox}"
-                                          VerticalAlignment="Center"/>
-                            </Grid>
-
-                            <!-- Debug Quick Actions Toolbar -->
-                            <WrapPanel Orientation="Horizontal" Margin="0,2,0,0">
-                                <Button Style="{StaticResource PrimaryButton}"
-                                        Command="{Binding OpenDebugConsoleCommand}"
-                                        Margin="0,0,8,6">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text=">_ " FontFamily="Consolas" FontWeight="Bold" Margin="0,0,4,0"/>
-                                        <TextBlock Text="{DynamicResource String_OpenDebugConsoleBtn}"/>
-                                    </StackPanel>
-                                </Button>
-
-                                <Button Style="{StaticResource SecondaryButton}"
-                                        Command="{Binding GenerateDiagnosticReportCommand}"
-                                        IsEnabled="{Binding IsGeneratingReport, Converter={StaticResource InverseBoolConverter}}"
-                                        Margin="0,0,8,6">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="⚡ " Margin="0,0,4,0"/>
-                                        <TextBlock Text="{DynamicResource String_GenerateDiagnosticReportBtn}"/>
-                                    </StackPanel>
-                                </Button>
-
-                                <Button Style="{StaticResource GhostButton}"
-                                        Command="{Binding OpenLogFolderCommand}"
-                                        Margin="0,0,8,6">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="📁 " Margin="0,0,4,0"/>
-                                        <TextBlock Text="{DynamicResource String_OpenLogFolderBtn}"/>
-                                    </StackPanel>
-                                </Button>
-                            </WrapPanel>
-
-                            <!-- Diagnostic Result / Status Banner -->
-                            <Border Background="{StaticResource SurfaceCardBrush}"
-                                    BorderBrush="{StaticResource SubtleBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="{StaticResource RadiusSm}"
-                                    Padding="10,8" Margin="0,6,0,0"
-                                    Visibility="{Binding DiagnosticStatusMessage, Converter={StaticResource NullToVisibilityConverter}}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0"
-                                               Text="{Binding DiagnosticStatusMessage}"
-                                               Style="{StaticResource Caption}"
-                                               Foreground="{StaticResource PrimaryTextBrush}"
-                                               VerticalAlignment="Center"
-                                               TextWrapping="Wrap"/>
-                                    <Button Grid.Column="1"
-                                            Content="{DynamicResource String_CopyPathBtn}"
-                                            Style="{StaticResource GhostButton}"
-                                            Command="{Binding CopyDiagnosticPathCommand}"
-                                            Padding="8,4" FontSize="11" Margin="8,0,0,0"
-                                            Visibility="{Binding LastDiagnosticFilePath, Converter={StaticResource NullToVisibilityConverter}}"/>
-                                </Grid>
-                            </Border>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </Expander>
-
-            <!-- ═══ APPLICATION CACHE & STORAGE SECTION ═══ -->
-            <Expander Style="{StaticResource SettingsExpanderCard}">
-                <Expander.Header>
-                    <StackPanel>
-                        <TextBlock Text="{DynamicResource String_CacheCleanupTitle}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                        <TextBlock Text="{DynamicResource String_CacheCleanupDesc}"
-                                   Style="{StaticResource Caption}" TextWrapping="Wrap"/>
-                    </StackPanel>
-                </Expander.Header>
-                <StackPanel Margin="0,4,0,0">
-                    <Border Background="{StaticResource SurfaceInputBrush}"
-                            BorderBrush="{StaticResource SubtleBorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="{StaticResource RadiusSm}"
-                            Padding="14,12">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
-                                <TextBlock Text="{DynamicResource String_ClearCacheModalTitle}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
-                                <TextBlock Text="{DynamicResource String_ClearCacheModalDesc}"
-                                           Style="{StaticResource Muted}" TextWrapping="Wrap"/>
-                            </StackPanel>
-                            <Button Grid.Column="1"
-                                    Content="{DynamicResource String_ClearAppCacheBtn}"
-                                    Style="{StaticResource SecondaryButton}"
-                                    Padding="14,8"
-                                    VerticalAlignment="Center"
-                                    Command="{Binding OpenClearCacheModalCommand}"/>
-                        </Grid>
-                    </Border>
-
-                    <!-- Status Result Banner -->
-                    <Border Background="{StaticResource SurfaceCardBrush}"
-                            BorderBrush="{StaticResource SubtleBorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="{StaticResource RadiusSm}"
-                            Padding="10,8" Margin="0,8,0,0"
-                            Visibility="{Binding ClearCacheResult, Converter={StaticResource NullToVisibilityConverter}}">
-                        <TextBlock Text="{Binding ClearCacheResult}" Style="{StaticResource Caption}" Foreground="{StaticResource PrimaryTextBrush}"/>
-                    </Border>
-                </StackPanel>
-            </Expander>
-
-            <!-- ═══ ABOUT & ECOSYSTEM CREDITS SECTION ═══ -->
-            <Expander Style="{StaticResource SettingsExpanderCard}">
-                <Expander.Header>
-                    <!-- BlueStar Identity Banner -->
-                    <Grid Margin="0,0,12,0">
+                </Grid>
+            <!-- ═══ ABOUT & ECOSYSTEM CREDITS SECTION (Permanently Expanded) ═══ -->
+            <Border Background="{StaticResource SurfaceCardBrush}"
+                    BorderBrush="{StaticResource SubtleBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="24,20"
+                    Margin="0,0,0,20">
+                <StackPanel>
+                    <!-- BlueStar Identity Banner with Larger Centered Blue Star -->
+                    <Grid Margin="0,0,0,20">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
+                        <!-- Larger, perfectly centered blue star badge -->
                         <Border Grid.Column="0" Background="{StaticResource AccentTranslucentBrush}"
-                                Width="44" Height="44"
-                                CornerRadius="22"
+                                Width="68" Height="68"
+                                CornerRadius="34"
                                 BorderBrush="{StaticResource AccentBrush}"
-                                BorderThickness="1.5"
-                                Margin="0,0,16,0">
-                            <TextBlock Text="★" FontSize="22" Foreground="{StaticResource AccentBrush}"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                BorderThickness="2"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Margin="0,0,20,0">
+                            <TextBlock Text="★" FontSize="36" Foreground="{StaticResource AccentBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Margin="0,-2,0,0"/>
                         </Border>
 
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
-                                <TextBlock Text="{DynamicResource String_AboutTitle}" Style="{StaticResource H2}" Margin="0,0,10,0"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                <TextBlock Text="{DynamicResource String_AboutTitle}" Style="{StaticResource H2}" Margin="0,0,12,0" VerticalAlignment="Center"/>
                                 <Border Background="{StaticResource AccentTranslucentBrush}"
                                         BorderBrush="{StaticResource AccentBrush}"
                                         BorderThickness="1"
@@ -537,9 +846,6 @@
                                        Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
                         </StackPanel>
                     </Grid>
-                </Expander.Header>
-
-                <StackPanel>
                     <!-- Quick Repository Action Buttons -->
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,18">
                         <Button Content="★ GitHub"
@@ -859,7 +1165,7 @@
                         </Grid>
                     </Border>
                 </StackPanel>
-            </Expander>
+            </Border>
 
         </StackPanel>
     </ScrollViewer>

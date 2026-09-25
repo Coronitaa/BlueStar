@@ -184,7 +184,7 @@ public sealed class DebugLogService : IDebugLogService
         sb.AppendLine();
 
         sb.AppendLine("### 1. APPLICATION & SYSTEM SPECIFICATIONS");
-        var appVersion = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "1.4.0";
+        var appVersion = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "1.4.1";
         sb.AppendLine($"- BlueStar Version: {appVersion}");
         sb.AppendLine($"- Operating System: {RuntimeInformation.OSDescription} ({Environment.OSVersion})");
         sb.AppendLine($"- OS Architecture: {RuntimeInformation.OSArchitecture}");

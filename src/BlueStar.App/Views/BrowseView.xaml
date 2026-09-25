@@ -854,13 +854,20 @@
             </StackPanel>
         </Grid>
 
-        <!-- ═══ ACTIVE FILTER CHIPS ═══ -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="24,12,24,0"
-                    Visibility="{Binding HasActiveFilters, Converter={StaticResource BoolToVisibilityConverter}}">
+        <!-- ACTIVE FILTER CHIPS -->
+        <DockPanel Grid.Row="2" Margin="24,12,24,0"
+                   Visibility="{Binding HasActiveFilters, Converter={StaticResource BoolToVisibilityConverter}}">
             <TextBlock Text="{DynamicResource String_ActiveFilters}" Style="{StaticResource CaptionBold}"
-                       Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                       Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Top" Margin="0,5,8,0"
+                       DockPanel.Dock="Left"/>
 
-            <ItemsControl ItemsSource="{Binding ActiveFilters}" VerticalAlignment="Center">
+            <Button Content="{DynamicResource String_ClearAllFilters}" Style="{StaticResource GhostButton}"
+                    Foreground="{StaticResource MutedTextBrush}" Padding="6,2"
+                    VerticalAlignment="Top" Margin="8,3,0,0"
+                    DockPanel.Dock="Right"
+                    Command="{Binding ClearAllFiltersCommand}"/>
+
+            <ItemsControl ItemsSource="{Binding ActiveFilters}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <WrapPanel Orientation="Horizontal"/>
@@ -895,12 +902,7 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
-
-            <Button Content="{DynamicResource String_ClearAllFilters}" Style="{StaticResource GhostButton}"
-                    Foreground="{StaticResource MutedTextBrush}" Padding="6,2"
-                    VerticalAlignment="Center"
-                    Command="{Binding ClearAllFiltersCommand}"/>
-        </StackPanel>
+        </DockPanel>
 
         <!-- ═══ RESULTS AND FILTER PANEL ═══ -->
         <Grid Grid.Row="3" Margin="24,12,24,0">

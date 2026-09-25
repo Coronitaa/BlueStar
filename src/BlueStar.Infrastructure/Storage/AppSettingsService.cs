@@ -150,6 +150,36 @@ public sealed class AppSettingsService
         await SaveAsync().ConfigureAwait(false);
     }
 
+    /// <summary>Default sort criterion for Explore catalog (default "Reviews").</summary>
+    public string DefaultExploreSort => string.IsNullOrWhiteSpace(_current.DefaultExploreSort) ? "Reviews" : _current.DefaultExploreSort;
+
+    /// <summary>Default sort direction (descending or ascending) for Explore catalog (default true).</summary>
+    public bool DefaultExploreSortDescending => _current.DefaultExploreSortDescending;
+
+    /// <summary>Default store section / curated list for Explore catalog (default "popularnew").</summary>
+    public string DefaultExploreStoreList => _current.DefaultExploreStoreList ?? "popularnew";
+
+    /// <summary>Persists the default Explore sort criterion.</summary>
+    public async Task SetDefaultExploreSortAsync(string sort)
+    {
+        _current = _current with { DefaultExploreSort = sort };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Persists the default Explore sort direction.</summary>
+    public async Task SetDefaultExploreSortDescendingAsync(bool descending)
+    {
+        _current = _current with { DefaultExploreSortDescending = descending };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Persists the default Explore store section / list.</summary>
+    public async Task SetDefaultExploreStoreListAsync(string storeList)
+    {
+        _current = _current with { DefaultExploreStoreList = storeList };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
     /// <summary>Whether experimental mod management and the Mods tab are enabled (default false).</summary>
     public bool EnableExperimentalMods => _current.EnableExperimentalMods;
 
@@ -278,6 +308,10 @@ public sealed class AppSettingsService
         public bool EnableAdvancedBuildOptions { get; init; } = false;
         public bool EnableDebugSystem { get; init; } = false;
         public string? CatalogManifestUrl { get; init; }
+
+        public string? DefaultExploreSort { get; init; } = "Reviews";
+        public bool DefaultExploreSortDescending { get; init; } = true;
+        public string? DefaultExploreStoreList { get; init; } = "popularnew";
 
         public string? DefaultApiUrl { get; init; } = "https://depotbox.org";
         public string? DefaultApiKey { get; init; } = "YOUR-API-KEY";

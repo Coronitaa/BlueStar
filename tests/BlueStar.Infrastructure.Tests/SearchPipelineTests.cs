@@ -153,6 +153,32 @@ public class SearchPipelineTests : IDisposable
         Assert.Equal(1, _fakeSteam.SearchCallCount);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_WhenCanceledDuringSteamFallback_ReturnsEmptyGracefully()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var request = new SearchRequest { RawQuery = "unknown non existent game" };
+        var response = await _pipeline.ExecuteAsync(request, cts.Token);
+
+        Assert.Equal(0, response.TotalCount);
+        Assert.Empty(response.Items);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenCanceledDuringStoreBrowse_ReturnsEmptyGracefully()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var request = new SearchRequest { RawQuery = "", Pool = "popularnew" };
+        var response = await _pipeline.ExecuteAsync(request, cts.Token);
+
+        Assert.Equal(0, response.TotalCount);
+        Assert.Empty(response.Items);
+    }
+
     private sealed class FakeSteamCatalogSearchService : ISteamCatalogSearchService
     {
         public int SearchCallCount { get; private set; }
@@ -160,6 +186,7 @@ public class SearchPipelineTests : IDisposable
 
         public Task<SteamSearchPage> SearchAsync(SteamSearchQuery query, CancellationToken ct = default)
         {
+            ct.ThrowIfCancellationRequested();
             SearchCallCount++;
             var matched = StubResults.AsEnumerable();
             if (query.RestrictToAppIds != null && query.RestrictToAppIds.Count > 0)

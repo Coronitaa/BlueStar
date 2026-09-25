@@ -53,9 +53,16 @@ public sealed class SearchPipeline : ISearchPipeline
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        if (ct.IsCancellationRequested)
+        {
+            return Task.FromResult(SearchResponse.Empty);
+        }
+
         return Task.Run(async () =>
         {
-            // Stage 1: Parse Query
+            try
+            {
+                // Stage 1: Parse Query
             var parsed = SteamQueryParser.Parse(request.RawQuery);
 
             // Stage 2: Intent Resolution - AppID or DepotID Mode
@@ -145,7 +152,12 @@ public sealed class SearchPipeline : ISearchPipeline
 
             // Stage 5: Fallback to Steam live store search
             return await ExecuteSteamFallbackSearchAsync(request, parsed.NormalizedTerm, sortBase, descending, ct).ConfigureAwait(false);
-        }, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                return SearchResponse.Empty;
+            }
+        }, CancellationToken.None);
     }
 
     private async Task<SearchResponse> ResolveAppIdIntentAsync(uint appId, SearchRequest request, CancellationToken ct)
@@ -545,6 +557,10 @@ public sealed class SearchPipeline : ISearchPipeline
                 };
             }
         }
+        catch (OperationCanceledException)
+        {
+            return SearchResponse.Empty;
+        }
         catch (Exception ex)
         {
             _logger?.LogWarning(ex, "Steam store browse request failed; attempting fallback to local catalog");
@@ -677,6 +693,10 @@ public sealed class SearchPipeline : ISearchPipeline
                 AnomalyDetected = validation.Anomaly != SteamAnomalyType.None ? validation.Description : null
             };
         }
+        catch (OperationCanceledException)
+        {
+            return SearchResponse.Empty;
+        }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Steam fallback search failed for term: {Term}", term);
@@ -722,7 +742,7 @@ public sealed class SearchPipeline : ISearchPipeline
             {
                 if (!byId.TryGetValue(result.AppId, out var cat)) continue;
 
-                // Tags — only apply when Steam search didn't include them
+                // Tags â€” only apply when Steam search didn't include them
                 if ((result.TagIds == null || result.TagIds.Count == 0) && cat.TagIds.Count > 0)
                     result.TagIds = cat.TagIds;
 
@@ -739,7 +759,7 @@ public sealed class SearchPipeline : ISearchPipeline
                         : null;
                 }
 
-                // Price — catalog stores "Free" for f2p; skip for paid (null = unknown regional price)
+                // Price â€” catalog stores "Free" for f2p; skip for paid (null = unknown regional price)
                 if (string.IsNullOrWhiteSpace(result.PriceText) && !string.IsNullOrWhiteSpace(cat.PriceText))
                     result.PriceText = cat.PriceText;
                 if (!result.PriceCents.HasValue && cat.PriceCents.HasValue)
@@ -751,7 +771,7 @@ public sealed class SearchPipeline : ISearchPipeline
                 if (!result.ReleaseDateUtc.HasValue && cat.ReleaseDateUtc.HasValue)
                     result.ReleaseDateUtc = cat.ReleaseDateUtc;
 
-                // DRM / launcher / anti-cheat / account / EULA / DLC — always apply from catalog
+                // DRM / launcher / anti-cheat / account / EULA / DLC â€” always apply from catalog
                 if (!string.IsNullOrWhiteSpace(cat.DrmName))
                 {
                     result.HasDrm = true;
