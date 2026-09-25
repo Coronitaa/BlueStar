@@ -1252,5 +1252,69 @@
             </StackPanel>
         </Border>
     </Grid>
+
+    <!-- ═══ LANGUAGE RESTART RECOMMENDATION MODAL ═══ -->
+    <Grid Visibility="{Binding IsRestartLanguageModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
+          Background="{StaticResource ModalOverlayBrush}"
+          Panel.ZIndex="1001">
+        <Border Background="{StaticResource SurfaceCardElevatedBrush}"
+                BorderBrush="{StaticResource SubtleBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource RadiusLg}"
+                Padding="28" Width="460"
+                HorizontalAlignment="Center" VerticalAlignment="Center">
+            <StackPanel>
+                <!-- Modal Header with Language Icon -->
+                <Grid Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Width="36" Height="36" CornerRadius="18"
+                            Background="{StaticResource AccentTranslucentBrush}"
+                            BorderBrush="{StaticResource AccentBrush}" BorderThickness="1"
+                            Margin="0,0,12,0" VerticalAlignment="Center">
+                        <Path Data="{StaticResource IconLanguage}" Fill="{StaticResource AccentBrush}"
+                              Stretch="Uniform" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="{DynamicResource String_RestartLanguageModalTitle}" Style="{StaticResource H2}"/>
+                    </StackPanel>
+
+                    <Button Grid.Column="2" Content="✕" Style="{StaticResource GhostButton}" Width="24" Height="24" Padding="0"
+                            Command="{Binding CloseRestartLanguageModalCommand}"/>
+                </Grid>
+
+                <!-- Modal Description -->
+                <TextBlock Text="{DynamicResource String_RestartLanguageModalDesc}"
+                           Style="{StaticResource BodyMedium}"
+                           Foreground="{StaticResource SecondaryTextBrush}"
+                           TextWrapping="Wrap"
+                           Margin="0,0,0,24"/>
+
+                <!-- Modal Actions -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button Grid.Column="0" Content="{DynamicResource String_RestartLater}"
+                            Style="{StaticResource SecondaryButton}"
+                            Padding="16,10"
+                            Command="{Binding CloseRestartLanguageModalCommand}"/>
+
+                    <Button Grid.Column="2" Content="{DynamicResource String_RestartNow}"
+                            Style="{StaticResource PrimaryButton}"
+                            Padding="16,10"
+                            Command="{Binding RestartAppCommand}"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+    </Grid>
 </Grid>
 </UserControl>

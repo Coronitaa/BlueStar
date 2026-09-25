@@ -13,6 +13,11 @@ namespace BlueStar.Core.Interfaces;
 public interface ICommunityStatsService
 {
     /// <summary>
+    /// Preloads and caches BlueStar trending and most added feeds once for the entire application session.
+    /// </summary>
+    Task PreloadBlueStarFeedsAsync(CancellationToken ct = default);
+
+    /// <summary>
     /// Gets trending games added as instances across the BlueStar community in the last 7 days.
     /// </summary>
     Task<IReadOnlyList<SearchResult>> GetTrendingBlueStarAsync(CancellationToken ct = default);

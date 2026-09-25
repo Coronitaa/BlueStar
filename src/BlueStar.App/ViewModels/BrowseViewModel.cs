@@ -473,6 +473,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
 
         // The tag groups come from the live catalog, so they are built before being placed.
         var tagGroups = new List<FilterGroupViewModel>();
+        var isSpanish = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "es";
 
         if (_tagCatalog != null)
         {
@@ -491,7 +492,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                         definition.OpenByDefault,
                         _facetUsage, OnFilterChanged, RequestCountsFor);
 
-                    vm.SetOptions(tags.Select(t => new FilterOptionItem(t.ToFacet(), t.Name, t.ProductCount)));
+                    vm.SetOptions(tags.Select(t => new FilterOptionItem(t.ToFacet(), SteamTagTranslations.Translate(t.Name, isSpanish), t.ProductCount)));
                     if (_categoryUsage.Counters.TryGetValue(definition.Key, out var count))
                     {
                         _categoryUsage.LastSelected.TryGetValue(definition.Key, out var lastMap);
@@ -826,8 +827,9 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
 
         _activeTagNames = active
             .Where(o => o.Option.Kind == SteamFacetKind.Tag && o.State == FacetState.Include)
-            .Select(o => o.DisplayName)
-            .ToHashSet(StringComparer.CurrentCultureIgnoreCase);
+            .SelectMany(o => new[] { o.DisplayName, o.Option.FallbackName ?? string.Empty, o.Option.Value })
+            .Where(s => !string.IsNullOrEmpty(s))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         MarkActiveTags(_fetched);
     }
@@ -841,7 +843,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         {
             foreach (var tag in item.StoreTags)
             {
-                tag.IsActive = _activeTagNames.Contains(tag.Name);
+                tag.IsActive = _activeTagNames.Contains(tag.Name) || _activeTagNames.Contains(tag.DisplayName);
             }
         }
     }
@@ -2403,7 +2405,8 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                     var targetGroup = FilterGroups.FirstOrDefault(g => g.Key == "genre") ?? FilterGroups.FirstOrDefault();
                     if (targetGroup != null)
                     {
-                        var opt = new FilterOptionItem(found.ToFacet(), found.Name, found.ProductCount);
+                        var isSpanish = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "es";
+                        var opt = new FilterOptionItem(found.ToFacet(), SteamTagTranslations.Translate(found.Name, isSpanish), found.ProductCount);
                         targetGroup.AddCustomOption(opt);
                         applied = true;
                     }
@@ -2524,7 +2527,8 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                     if (found != null && !SteamTagFilterHelper.IsConnectivityOrTechnicalTag(found.Name))
                     {
                         var targetGroup = FilterGroups.FirstOrDefault(g => g.Key == "gameplay") ?? FilterGroups.First();
-                        var opt = new FilterOptionItem(found.ToFacet(), found.Name, found.ProductCount);
+                        var isSpanish = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "es";
+                        var opt = new FilterOptionItem(found.ToFacet(), SteamTagTranslations.Translate(found.Name, isSpanish), found.ProductCount);
                         targetGroup.AddCustomOption(opt);
                         applied.Add(found.Name);
                     }
@@ -2582,6 +2586,28 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
             catch (Exception ex)
             {
                 _logger.LogDebug(ex, "Could not resolve tag names for AppId {AppId}", target.AppId);
+            }
+        }
+
+        // Check local SQLite catalog repository which has pre-indexed tag IDs for 100k+ games
+        if (target.AppId != 0 && _localRepo != null && _tagCatalog != null)
+        {
+            try
+            {
+                var localApp = await _localRepo.GetByAppIdAsync((uint)target.AppId, token).ConfigureAwait(true);
+                if (localApp != null && localApp.TagIds.Count > 0)
+                {
+                    var names = await _tagCatalog.ResolveNamesAsync(localApp.TagIds, token).ConfigureAwait(true);
+                    if (names.Count > 0) return names;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return [];
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Could not resolve local tag IDs for AppId {AppId}", target.AppId);
             }
         }
 

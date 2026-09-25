@@ -562,7 +562,7 @@
     <sys:String x:Key="String_CacheClearedSuccess">Caché de la aplicación limpiada con éxito.</sys:String>
 
     <!-- ═══ ABOUT VIEW ═══ -->
-    <sys:String x:Key="String_AboutTitle">Lanzador BlueStar</sys:String>
+    <sys:String x:Key="String_AboutTitle">BlueStar</sys:String>
     <sys:String x:Key="String_AboutSubtitle">Gestor universal de juegos de Steam, descargador de depots y lanzador multi-motor.</sys:String>
     <sys:String x:Key="String_AboutBuiltOnOss">BlueStar está construido sobre software de código abierto y proyectos comunitarios de primer nivel. Todos los créditos y repositorios se listan a continuación.</sys:String>
     <sys:String x:Key="String_BlueStarOnGitHub">★ BlueStar en GitHub</sys:String>
@@ -799,6 +799,8 @@
     <sys:String x:Key="String_FilterRandomTooltip">Elegir una al azar</sys:String>
     <sys:String x:Key="String_FilterBubbleTooltip">Clic: incluir · otra vez: excluir · otra vez: quitar</sys:String>
     <sys:String x:Key="String_FilterMoreHint">más — busca arriba</sys:String>
+    <sys:String x:Key="String_FilterMoreTagsSuffix">más (Ver más)</sys:String>
+    <sys:String x:Key="String_FilterLessTags">(Ver menos)</sys:String>
     <sys:String x:Key="String_ResultsSuffix">resultados</sys:String>
     <sys:String x:Key="String_CheckingDrmAndDlc">Comprobando DRM y DLC</sys:String>
     <sys:String x:Key="String_CheckingDetails">comprobando…</sys:String>
@@ -955,4 +957,23 @@
     <sys:String x:Key="String_Sort_DeckCompatDate">Revisión de Steam Deck</sys:String>
     <sys:String x:Key="String_ExploreLoadingFilters">Cargando filtros y catálogo…</sys:String>
     <sys:String x:Key="String_ExploreLoadingDiscover">Descubriendo juegos…</sys:String>
+
+    <!-- Language Restart Modal -->
+    <sys:String x:Key="String_RestartLanguageModalTitle">Reiniciar BlueStar</sys:String>
+    <sys:String x:Key="String_RestartLanguageModalDesc">Para aplicar todos los cambios de idioma por completo y asegurar que cada componente se muestre en el idioma seleccionado, se recomienda reiniciar la aplicación.</sys:String>
+    <sys:String x:Key="String_RestartNow">Reiniciar ahora</sys:String>
+    <sys:String x:Key="String_RestartLater">Más tarde</sys:String>
+
+    <!-- Home Greetings -->
+    <sys:String x:Key="String_GreetingMorning">Buenos días</sys:String>
+    <sys:String x:Key="String_GreetingAfternoon">Buenas tardes</sys:String>
+    <sys:String x:Key="String_GreetingEvening">Buenas noches</sys:String>
+
+    <!-- Top Title Bar Tabs -->
+    <sys:String x:Key="String_TitleDashboard">Panel principal</sys:String>
+    <sys:String x:Key="String_TitleExplore">Explorar catálogo</sys:String>
+    <sys:String x:Key="String_TitleLibrary">Biblioteca de instancias</sys:String>
+    <sys:String x:Key="String_TitleDownloads">Cola de descargas</sys:String>
+    <sys:String x:Key="String_TitleSettings">Ajustes de la aplicación</sys:String>
+    <sys:String x:Key="String_TitleAbout">Acerca de y créditos</sys:String>
 </ResourceDictionary>

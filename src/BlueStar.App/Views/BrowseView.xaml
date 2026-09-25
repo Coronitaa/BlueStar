@@ -150,7 +150,7 @@
                                 BorderThickness="1"
                                 CornerRadius="9"
                                 Padding="7,2">
-                            <TextBlock x:Name="Label" Text="{Binding Name}" FontSize="10.5"
+                            <TextBlock x:Name="Label" Text="{Binding DisplayName}" FontSize="10.5"
                                        Foreground="{StaticResource SecondaryTextBrush}"
                                        TextTrimming="CharacterEllipsis" MaxWidth="150"/>
                         </Border>
@@ -388,14 +388,14 @@
                                 Command="{Binding ToggleExpandAllCommand}"
                                 Visibility="{Binding HiddenCount, Converter={StaticResource NullToVisibilityConverter}}">
                             <TextBlock FontSize="10.5" Foreground="{StaticResource AccentBrush}">
-                                <Run Text="+"/><Run Text="{Binding HiddenCount, Mode=OneWay}"/><Run Text=" más (Ver más)"/>
+                                <Run Text="+"/><Run Text="{Binding HiddenCount, Mode=OneWay}"/><Run Text=" "/><Run Text="{DynamicResource String_FilterMoreTagsSuffix}"/>
                             </TextBlock>
                         </Button>
                         <Button Style="{StaticResource GhostButton}" Padding="4,2" Margin="2,3,0,0"
                                 HorizontalAlignment="Left" Cursor="Hand"
                                 Command="{Binding ToggleExpandAllCommand}"
                                 Visibility="{Binding IsExpandedAll, Converter={StaticResource BoolToVisibilityConverter}}">
-                            <TextBlock FontSize="10.5" Foreground="{StaticResource AccentBrush}" Text="(Ver menos)"/>
+                            <TextBlock FontSize="10.5" Foreground="{StaticResource AccentBrush}" Text="{DynamicResource String_FilterLessTags}"/>
                         </Button>
                     </StackPanel>
                 </StackPanel>
@@ -688,7 +688,6 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
@@ -854,58 +853,8 @@
             </StackPanel>
         </Grid>
 
-        <!-- ACTIVE FILTER CHIPS -->
-        <DockPanel Grid.Row="2" Margin="24,12,24,0"
-                   Visibility="{Binding HasActiveFilters, Converter={StaticResource BoolToVisibilityConverter}}">
-            <TextBlock Text="{DynamicResource String_ActiveFilters}" Style="{StaticResource CaptionBold}"
-                       Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Top" Margin="0,5,8,0"
-                       DockPanel.Dock="Left"/>
-
-            <Button Content="{DynamicResource String_ClearAllFilters}" Style="{StaticResource GhostButton}"
-                    Foreground="{StaticResource MutedTextBrush}" Padding="6,2"
-                    VerticalAlignment="Top" Margin="8,3,0,0"
-                    DockPanel.Dock="Right"
-                    Command="{Binding ClearAllFiltersCommand}"/>
-
-            <ItemsControl ItemsSource="{Binding ActiveFilters}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <WrapPanel Orientation="Horizontal"/>
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Border x:Name="Chip" CornerRadius="9" Padding="9,3" Margin="0,0,5,4"
-                                Background="{StaticResource SuccessBgBrush}"
-                                BorderBrush="{StaticResource SuccessBorderBrush}" BorderThickness="1">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock x:Name="ChipText" Text="{Binding DisplayName}" FontSize="11.5"
-                                           FontWeight="SemiBold" Foreground="#4ADE9F" VerticalAlignment="Center"
-                                           MaxWidth="180" TextTrimming="CharacterEllipsis"/>
-                                <Button Style="{StaticResource GhostButton}" Padding="4,0" Margin="5,0,0,0"
-                                        Command="{Binding DataContext.RemoveFilterCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                        CommandParameter="{Binding}">
-                                    <Path x:Name="ChipClose" Data="{StaticResource IconClose}" Fill="#4ADE9F"
-                                          Stretch="Uniform" Width="8" Height="8"/>
-                                </Button>
-                            </StackPanel>
-                        </Border>
-                        <DataTemplate.Triggers>
-                            <DataTrigger Binding="{Binding State}" Value="Exclude">
-                                <Setter TargetName="Chip" Property="Background" Value="{StaticResource DangerBgBrush}"/>
-                                <Setter TargetName="Chip" Property="BorderBrush" Value="{StaticResource DangerBorderBrush}"/>
-                                <Setter TargetName="ChipText" Property="Foreground" Value="#F87171"/>
-                                <Setter TargetName="ChipText" Property="TextDecorations" Value="Strikethrough"/>
-                                <Setter TargetName="ChipClose" Property="Fill" Value="#F87171"/>
-                            </DataTrigger>
-                        </DataTemplate.Triggers>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </DockPanel>
-
         <!-- ═══ RESULTS AND FILTER PANEL ═══ -->
-        <Grid Grid.Row="3" Margin="24,12,24,0">
+        <Grid Grid.Row="2" Margin="24,12,24,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" MinWidth="320"/>
                 <ColumnDefinition Width="14"/>
@@ -913,7 +862,63 @@
             </Grid.ColumnDefinitions>
 
             <!-- ── Results column ── -->
-            <ScrollViewer Grid.Column="0" x:Name="ResultsScroller"
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- ACTIVE FILTER CHIPS -->
+                <DockPanel Grid.Row="0" Margin="0,0,0,10"
+                           Visibility="{Binding HasActiveFilters, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <TextBlock Text="{DynamicResource String_ActiveFilters}" Style="{StaticResource CaptionBold}"
+                               Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Top" Margin="0,5,8,0"
+                               DockPanel.Dock="Left"/>
+
+                    <Button Content="{DynamicResource String_ClearAllFilters}" Style="{StaticResource GhostButton}"
+                            Foreground="{StaticResource MutedTextBrush}" Padding="6,2"
+                            VerticalAlignment="Top" Margin="8,3,0,0"
+                            DockPanel.Dock="Right"
+                            Command="{Binding ClearAllFiltersCommand}"/>
+
+                    <ItemsControl ItemsSource="{Binding ActiveFilters}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border x:Name="Chip" CornerRadius="9" Padding="9,3" Margin="0,0,5,4"
+                                        Background="{StaticResource SuccessBgBrush}"
+                                        BorderBrush="{StaticResource SuccessBorderBrush}" BorderThickness="1">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock x:Name="ChipText" Text="{Binding DisplayName}" FontSize="11.5"
+                                                   FontWeight="SemiBold" Foreground="#4ADE9F" VerticalAlignment="Center"
+                                                   MaxWidth="180" TextTrimming="CharacterEllipsis"/>
+                                        <Button Style="{StaticResource GhostButton}" Padding="4,0" Margin="5,0,0,0"
+                                                Command="{Binding DataContext.RemoveFilterCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}">
+                                            <Path x:Name="ChipClose" Data="{StaticResource IconClose}" Fill="#4ADE9F"
+                                                  Stretch="Uniform" Width="8" Height="8"/>
+                                        </Button>
+                                    </StackPanel>
+                                </Border>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding State}" Value="Exclude">
+                                        <Setter TargetName="Chip" Property="Background" Value="{StaticResource DangerBgBrush}"/>
+                                        <Setter TargetName="Chip" Property="BorderBrush" Value="{StaticResource DangerBorderBrush}"/>
+                                        <Setter TargetName="ChipText" Property="Foreground" Value="#F87171"/>
+                                        <Setter TargetName="ChipText" Property="TextDecorations" Value="Strikethrough"/>
+                                        <Setter TargetName="ChipClose" Property="Fill" Value="#F87171"/>
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </DockPanel>
+
+                <ScrollViewer Grid.Row="1" x:Name="ResultsScroller"
                           VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Margin="0,0,4,16">
 
@@ -1083,6 +1088,7 @@
                     </Border>
                 </StackPanel>
             </ScrollViewer>
+            </Grid>
 
             <!-- ── Filter panel ── -->
             <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -1093,7 +1099,7 @@
         </Grid>
 
         <!-- ═══ STORE PAGE MODAL ═══ -->
-        <Grid Grid.Row="0" Grid.RowSpan="4"
+        <Grid Grid.Row="0" Grid.RowSpan="3"
               Visibility="{Binding IsDetailOpen, Converter={StaticResource BoolToVisibilityConverter}}">
             <!-- Modal backdrop overlay: click outside card closes the modal -->
             <Border Background="#C2040407" Cursor="Hand">
@@ -1187,7 +1193,7 @@
         <!-- ═══ EXPLORE FIRST LOAD OVERLAY SCREEN ═══ -->
         <Grid x:Name="ExploreLoadingOverlay"
               Grid.Row="0"
-              Grid.RowSpan="4"
+              Grid.RowSpan="3"
               Background="{StaticResource BaseBackgroundBrush}"
               Panel.ZIndex="200"
               Opacity="1"

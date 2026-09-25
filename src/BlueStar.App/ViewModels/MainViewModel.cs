@@ -27,6 +27,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly IGameLauncher? _gameLauncher;
     private readonly IDepotBoxApiClient? _apiClient;
     private readonly IBackgroundTaskService _backgroundTaskService;
+    private readonly ICommunityStatsService? _statsService;
     private readonly SynchronizationContext _uiContext;
     private readonly CancellationTokenSource _cts = new();
     private bool _isDisposed;
@@ -60,6 +61,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private bool _isTasksFlyoutOpen;
+
+    [ObservableProperty]
+    private string? _currentInstanceTitle;
 
     public System.Collections.ObjectModel.ReadOnlyObservableCollection<NotificationItem> Notifications => _notificationService.Notifications;
 
@@ -189,7 +193,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         IDepotBoxApiClient? apiClient = null,
         IMetadataProvider? metadataProvider = null,
         IPrerequisiteService? prerequisiteService = null,
-        BlueStar.Infrastructure.Storage.AppSettingsService? appSettings = null)
+        BlueStar.Infrastructure.Storage.AppSettingsService? appSettings = null,
+        ICommunityStatsService? statsService = null)
     {
         _downloadQueueManager = downloadQueueManager;
         _steamStatusService = steamStatusService;
@@ -202,6 +207,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _metadataProvider = metadataProvider;
         _prerequisiteService = prerequisiteService;
         _appSettings = appSettings;
+        _statsService = statsService;
         _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
         if (_appSettings != null)
@@ -242,11 +248,23 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         try
         {
+            Task? preloadStatsTask = null;
+            if (_statsService != null)
+            {
+                preloadStatsTask = _statsService.PreloadBlueStarFeedsAsync(_cts.Token);
+            }
+
             StartupStatusText = "Loading local instances and manifests...";
             await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
 
             StartupStatusText = "Analyzing system requirements...";
             await ScanSystemRequirementsAsync(autoPromptModal: true).ConfigureAwait(true);
+
+            if (preloadStatsTask != null)
+            {
+                StartupStatusText = "Loading BlueStar community games...";
+                await preloadStatsTask.ConfigureAwait(true);
+            }
 
             StartupStatusText = "Ready!";
 
@@ -684,6 +702,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (entry.Page == "InstanceDetail" && entry.Parameter is GameInstance inst)
         {
             SelectedNavigation = "Library";
+            CurrentInstanceTitle = inst.Name;
             var view = new InstanceDetailView();
             var vm = App.Services.GetRequiredService<InstanceDetailViewModel>();
             vm.OnNavigateBack = () => Navigate("Library");
@@ -697,6 +716,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
         else if (entry.Page == "ExploreCategory" && !string.IsNullOrWhiteSpace(entry.CategoryId))
         {
+            CurrentInstanceTitle = null;
             SelectedNavigation = "Explore";
             var (view, vm) = GetExploreView();
             CurrentView = view;
@@ -704,6 +724,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
         else
         {
+            CurrentInstanceTitle = null;
             Navigate(entry.Page);
         }
 
@@ -729,6 +750,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public void Navigate(string page)
     {
+        CurrentInstanceTitle = null;
         PushNavigation(page);
         SelectedNavigation = page;
 
@@ -792,6 +814,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     public void OpenInstanceDetail(GameInstance instance, bool autoCheckUpdates)
     {
+        if (instance == null) return;
+        CurrentInstanceTitle = instance.Name;
         PushNavigation("InstanceDetail", instance);
         var view = new InstanceDetailView();
         var vm = App.Services.GetRequiredService<InstanceDetailViewModel>();
@@ -834,6 +858,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     public void NavigateToExploreCategory(string categoryId)
     {
+        CurrentInstanceTitle = null;
         PushNavigation("ExploreCategory", null, categoryId);
         SelectedNavigation = "Explore";
         var (view, vm) = GetExploreView();

@@ -524,13 +524,32 @@ public partial class FilterGroupViewModel : ObservableObject
 
         if (!string.IsNullOrEmpty(query))
         {
-            visible = _all
-                .Where(o => o.DisplayName.Contains(query, StringComparison.CurrentCultureIgnoreCase))
-                .Take(IsExpandedAll ? _all.Count : VisibleCount)
+            var matches = _all
+                .Where(o => o.DisplayName.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
+                            (!string.IsNullOrEmpty(o.Option.FallbackName) && o.Option.FallbackName.Contains(query, StringComparison.CurrentCultureIgnoreCase)))
                 .ToList();
-            HiddenCount = 0;
+
+            if (IsExpandedAll || matches.Count <= VisibleCount + 1)
+            {
+                visible = matches;
+                HiddenCount = 0;
+            }
+            else
+            {
+                visible = matches.Take(VisibleCount).ToList();
+                var hidden = matches.Count - visible.Count;
+                if (hidden <= 1)
+                {
+                    visible = matches;
+                    HiddenCount = 0;
+                }
+                else
+                {
+                    HiddenCount = hidden;
+                }
+            }
         }
-        else if (IsExpandedAll || _all.Count <= VisibleCount)
+        else if (IsExpandedAll || _all.Count <= VisibleCount + 1)
         {
             visible = [.. _all];
             HiddenCount = 0;
@@ -549,7 +568,16 @@ public partial class FilterGroupViewModel : ObservableObject
 
             var chosen = forced.Concat(filler).ToHashSet();
             visible = _all.Where(chosen.Contains).ToList();
-            HiddenCount = _all.Count - visible.Count;
+            var hidden = _all.Count - visible.Count;
+            if (hidden <= 1)
+            {
+                visible = [.. _all];
+                HiddenCount = 0;
+            }
+            else
+            {
+                HiddenCount = hidden;
+            }
         }
 
         if (Items.Count == visible.Count && Items.SequenceEqual(visible))

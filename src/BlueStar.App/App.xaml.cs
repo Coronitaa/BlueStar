@@ -155,13 +155,14 @@ public partial class App : Application
         services.AddSingleton<IUpdateService, BlueStar.Infrastructure.Update.GitHubUpdateService>();
         const string BrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
-        services.AddHttpClient<ICommunityStatsService, BlueStar.Infrastructure.Services.CommunityStatsService>(client =>
+        services.AddHttpClient<BlueStar.Infrastructure.Services.CommunityStatsService>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(10);
             client.DefaultRequestHeaders.UserAgent.ParseAdd(BrowserUserAgent);
             client.DefaultRequestHeaders.Accept.ParseAdd("application/json, text/html, */*");
             client.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en-US,en;q=0.9,es;q=0.8");
         });
+        services.AddSingleton<ICommunityStatsService>(sp => sp.GetRequiredService<BlueStar.Infrastructure.Services.CommunityStatsService>());
 
         // HTTP clients
         services.AddHttpClient<IDepotBoxApiClient, DepotBoxApiClient>(client =>

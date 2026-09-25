@@ -799,6 +799,8 @@
     <sys:String x:Key="String_FilterRandomTooltip">Pick one at random</sys:String>
     <sys:String x:Key="String_FilterBubbleTooltip">Click to include, again to exclude, again to clear</sys:String>
     <sys:String x:Key="String_FilterMoreHint">more — search above</sys:String>
+    <sys:String x:Key="String_FilterMoreTagsSuffix">more (Show more)</sys:String>
+    <sys:String x:Key="String_FilterLessTags">(Show less)</sys:String>
     <sys:String x:Key="String_ResultsSuffix">results</sys:String>
     <sys:String x:Key="String_CheckingDrmAndDlc">Checking DRM and DLC</sys:String>
     <sys:String x:Key="String_CheckingDetails">checking…</sys:String>
@@ -955,4 +957,23 @@
     <sys:String x:Key="String_Sort_DeckCompatDate">Steam Deck review date</sys:String>
     <sys:String x:Key="String_ExploreLoadingFilters">Loading filters and catalog…</sys:String>
     <sys:String x:Key="String_ExploreLoadingDiscover">Discovering games…</sys:String>
+
+    <!-- Language Restart Modal -->
+    <sys:String x:Key="String_RestartLanguageModalTitle">Restart BlueStar</sys:String>
+    <sys:String x:Key="String_RestartLanguageModalDesc">To apply all language changes completely and ensure every component displays in the selected language, a restart is recommended.</sys:String>
+    <sys:String x:Key="String_RestartNow">Restart Now</sys:String>
+    <sys:String x:Key="String_RestartLater">Later</sys:String>
+
+    <!-- Home Greetings -->
+    <sys:String x:Key="String_GreetingMorning">Good morning</sys:String>
+    <sys:String x:Key="String_GreetingAfternoon">Good afternoon</sys:String>
+    <sys:String x:Key="String_GreetingEvening">Good evening</sys:String>
+
+    <!-- Top Title Bar Tabs -->
+    <sys:String x:Key="String_TitleDashboard">Dashboard</sys:String>
+    <sys:String x:Key="String_TitleExplore">Explore Catalog</sys:String>
+    <sys:String x:Key="String_TitleLibrary">Instance Library</sys:String>
+    <sys:String x:Key="String_TitleDownloads">Download Queue</sys:String>
+    <sys:String x:Key="String_TitleSettings">Application Settings</sys:String>
+    <sys:String x:Key="String_TitleAbout">About &amp; Open-Source Credits</sys:String>
 </ResourceDictionary>

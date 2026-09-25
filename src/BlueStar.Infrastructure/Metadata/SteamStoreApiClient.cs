@@ -1425,49 +1425,78 @@ public sealed class SteamStoreApiClient : IMetadataProvider
 
             var html = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
 
+            var tags = new List<string>();
             var marker = "InitAppTagModal(";
             var start = html.IndexOf(marker, StringComparison.Ordinal);
-            if (start < 0) return [];
-
-            var arrayStart = html.IndexOf('[', start);
-            if (arrayStart < 0) return [];
-
-            // Walk to the matching bracket so a "]" inside a tag name cannot truncate the array.
-            int depth = 0;
-            int arrayEnd = -1;
-            bool inString = false, escaped = false;
-            for (int i = arrayStart; i < html.Length; i++)
+            if (start >= 0)
             {
-                var c = html[i];
-                if (escaped) { escaped = false; continue; }
-                if (c == '\\' && inString) { escaped = true; continue; }
-                if (c == '"') { inString = !inString; continue; }
-                if (inString) continue;
-                if (c == '[') depth++;
-                else if (c == ']')
+                var arrayStart = html.IndexOf('[', start);
+                if (arrayStart >= 0)
                 {
-                    depth--;
-                    if (depth == 0) { arrayEnd = i; break; }
+                    // Walk to the matching bracket so a "]" inside a tag name cannot truncate the array.
+                    int depth = 0;
+                    int arrayEnd = -1;
+                    bool inString = false, escaped = false;
+                    for (int i = arrayStart; i < html.Length; i++)
+                    {
+                        var c = html[i];
+                        if (escaped) { escaped = false; continue; }
+                        if (c == '\\' && inString) { escaped = true; continue; }
+                        if (c == '"') { inString = !inString; continue; }
+                        if (inString) continue;
+                        if (c == '[') depth++;
+                        else if (c == ']')
+                        {
+                            depth--;
+                            if (depth == 0) { arrayEnd = i; break; }
+                        }
+                    }
+
+                    if (arrayEnd >= 0)
+                    {
+                        try
+                        {
+                            var json = html[arrayStart..(arrayEnd + 1)];
+                            using var doc = JsonDocument.Parse(json);
+                            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+                            {
+                                foreach (var tag in doc.RootElement.EnumerateArray())
+                                {
+                                    if (tag.ValueKind != JsonValueKind.Object) continue;
+                                    if (!tag.TryGetProperty("name", out var nameProp)) continue;
+
+                                    var name = nameProp.GetString();
+                                    if (string.IsNullOrWhiteSpace(name)) continue;
+
+                                    name = System.Net.WebUtility.HtmlDecode(name).Trim();
+                                    if (!tags.Contains(name, StringComparer.OrdinalIgnoreCase)) tags.Add(name);
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogDebug(ex, "Failed to parse InitAppTagModal json for AppId={AppId}", appId);
+                        }
+                    }
                 }
             }
 
-            if (arrayEnd < 0) return [];
-
-            var json = html[arrayStart..(arrayEnd + 1)];
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.ValueKind != JsonValueKind.Array) return [];
-
-            var tags = new List<string>();
-            foreach (var tag in doc.RootElement.EnumerateArray())
+            // Fallback: parse HTML tag links (class="app_tag") if modal script wasn't found or was empty
+            if (tags.Count == 0)
             {
-                if (tag.ValueKind != JsonValueKind.Object) continue;
-                if (!tag.TryGetProperty("name", out var nameProp)) continue;
+                var tagMatches = System.Text.RegularExpressions.Regex.Matches(
+                    html,
+                    @"class=""app_tag""[^>]*>\s*([^<]+?)\s*</a>",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
-                var name = nameProp.GetString();
-                if (string.IsNullOrWhiteSpace(name)) continue;
-
-                name = System.Net.WebUtility.HtmlDecode(name).Trim();
-                if (!tags.Contains(name, StringComparer.OrdinalIgnoreCase)) tags.Add(name);
+                foreach (System.Text.RegularExpressions.Match match in tagMatches)
+                {
+                    var name = System.Net.WebUtility.HtmlDecode(match.Groups[1].Value).Trim();
+                    if (!string.IsNullOrWhiteSpace(name) && name != "+" && !tags.Contains(name, StringComparer.OrdinalIgnoreCase))
+                    {
+                        tags.Add(name);
+                    }
+                }
             }
 
             if (_cache != null && tags.Count > 0)

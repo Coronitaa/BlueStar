@@ -286,6 +286,7 @@ public partial class HomeViewModel : ObservableObject, IDisposable
                 App.Current?.Dispatcher?.Invoke(() =>
                 {
                     if (_isDisposed) return;
+                    SetTimeBasedGreeting();
                     _ = LoadCategoryFeedsAsync();
                 });
             };
@@ -444,14 +445,27 @@ public partial class HomeViewModel : ObservableObject, IDisposable
     }
 
 
+    private static string Localize(string resourceKey, string fallback)
+    {
+        try
+        {
+            if (App.Current?.TryFindResource("String_" + resourceKey) is string localized && !string.IsNullOrWhiteSpace(localized))
+            {
+                return localized;
+            }
+        }
+        catch { }
+        return fallback;
+    }
+
     private void SetTimeBasedGreeting()
     {
         var hour = DateTime.Now.Hour;
         GreetingText = hour switch
         {
-            >= 5 and < 12 => "Good morning",
-            >= 12 and < 18 => "Good afternoon",
-            _ => "Good evening"
+            >= 5 and < 12 => Localize("GreetingMorning", "Good morning"),
+            >= 12 and < 18 => Localize("GreetingAfternoon", "Good afternoon"),
+            _ => Localize("GreetingEvening", "Good evening")
         };
     }
 

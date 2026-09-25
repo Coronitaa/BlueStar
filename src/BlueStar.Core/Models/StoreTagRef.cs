@@ -20,6 +20,12 @@ public sealed class StoreTagRef : INotifyPropertyChanged
     /// <summary>Display name, in the store language.</summary>
     public string Name { get; }
 
+    /// <summary>Visual display name, translated to Spanish if current UI language is Spanish.</summary>
+    public string DisplayName =>
+        System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("es", StringComparison.OrdinalIgnoreCase)
+            ? SteamTagTranslations.Translate(Name, true)
+            : Name;
+
     /// <summary>Whether this tag is part of the current query.</summary>
     public bool IsActive
     {

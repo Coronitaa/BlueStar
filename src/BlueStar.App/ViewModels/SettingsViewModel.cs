@@ -42,6 +42,9 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private string _selectedLanguageOption = "English";
 
+    [ObservableProperty]
+    private bool _isRestartLanguageModalOpen;
+
     partial void OnSelectedLanguageOptionChanged(string value)
     {
         if (string.IsNullOrWhiteSpace(value)) return;
@@ -49,7 +52,37 @@ public partial class SettingsViewModel : ObservableObject
         if (_localizationService.CurrentLanguage != targetCode)
         {
             _localizationService.SetLanguage(targetCode);
+            IsRestartLanguageModalOpen = true;
         }
+    }
+
+    [RelayCommand]
+    public void CloseRestartLanguageModal()
+    {
+        IsRestartLanguageModalOpen = false;
+    }
+
+    [RelayCommand]
+    public void RestartApp()
+    {
+        try
+        {
+            var appPath = Environment.ProcessPath;
+            if (!string.IsNullOrEmpty(appPath))
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = appPath,
+                    UseShellExecute = true
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to restart application automatically");
+        }
+
+        System.Windows.Application.Current?.Shutdown();
     }
 
     [ObservableProperty]

@@ -49,18 +49,24 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0">
                     <TextBlock Text="BlueStar" FontSize="13" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,8,0"/>
                     <TextBlock Text="•" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,8,0"/>
-                    <TextBlock Text="Dashboard" Style="{StaticResource Caption}"
-                               Visibility="{Binding SelectedNavigation, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Home}"/>
-                    <TextBlock Text="Explore Catalog" Style="{StaticResource Caption}"
-                               Visibility="{Binding SelectedNavigation, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Explore}"/>
-                    <TextBlock Text="Instance Library" Style="{StaticResource Caption}"
-                               Visibility="{Binding SelectedNavigation, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Library}"/>
-                    <TextBlock Text="Download Queue" Style="{StaticResource Caption}"
-                               Visibility="{Binding SelectedNavigation, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Downloads}"/>
-                    <TextBlock Text="Application Settings" Style="{StaticResource Caption}"
-                               Visibility="{Binding SelectedNavigation, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Settings}"/>
-                    <TextBlock Text="About &amp; Open-Source Credits" Style="{StaticResource Caption}"
-                               Visibility="{Binding SelectedNavigation, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=About}"/>
+                    <TextBlock Text="{Binding CurrentInstanceTitle}" Style="{StaticResource Caption}"
+                               MaxWidth="450" TextTrimming="CharacterEllipsis" ToolTip="{Binding CurrentInstanceTitle}"
+                               Visibility="{Binding CurrentInstanceTitle, Converter={StaticResource NullToVisibilityConverter}}"/>
+                    <StackPanel Orientation="Horizontal"
+                                Visibility="{Binding CurrentInstanceTitle, Converter={StaticResource InverseNullToVisibilityConverter}}">
+                        <TextBlock Text="{DynamicResource String_TitleDashboard}" Style="{StaticResource Caption}"
+                                   Visibility="{Binding SelectedNavigation, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Home}"/>
+                        <TextBlock Text="{DynamicResource String_TitleExplore}" Style="{StaticResource Caption}"
+                                   Visibility="{Binding SelectedNavigation, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Explore}"/>
+                        <TextBlock Text="{DynamicResource String_TitleLibrary}" Style="{StaticResource Caption}"
+                                   Visibility="{Binding SelectedNavigation, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Library}"/>
+                        <TextBlock Text="{DynamicResource String_TitleDownloads}" Style="{StaticResource Caption}"
+                                   Visibility="{Binding SelectedNavigation, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Downloads}"/>
+                        <TextBlock Text="{DynamicResource String_TitleSettings}" Style="{StaticResource Caption}"
+                                   Visibility="{Binding SelectedNavigation, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Settings}"/>
+                        <TextBlock Text="{DynamicResource String_TitleAbout}" Style="{StaticResource Caption}"
+                                   Visibility="{Binding SelectedNavigation, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=About}"/>
+                    </StackPanel>
                 </StackPanel>
 
                 <!-- Steam Status Pill & Window Control Buttons -->

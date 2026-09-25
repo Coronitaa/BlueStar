@@ -158,8 +158,69 @@ public class CommunityStatsService : ICommunityStatsService
         new SearchResult { AppId = 413150, Name = "Stardew Valley", AppType = "Game", HasWindows = true, HasLinux = true, HasMac = true, HeaderImageUrl = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/413150/header.jpg" }
     };
 
+    private IReadOnlyList<SearchResult>? _sessionTrending;
+    private IReadOnlyList<SearchResult>? _sessionMostPlayed;
+    private readonly SemaphoreSlim _sessionFeedsLock = new(1, 1);
+
+    /// <inheritdoc />
+    public async Task PreloadBlueStarFeedsAsync(CancellationToken ct = default)
+    {
+        if (_sessionTrending != null && _sessionMostPlayed != null) return;
+
+        await _sessionFeedsLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var trendingTask = _sessionTrending != null ? Task.FromResult(_sessionTrending) : FetchTrendingInternalAsync(ct);
+            var mostPlayedTask = _sessionMostPlayed != null ? Task.FromResult(_sessionMostPlayed) : FetchMostPlayedInternalAsync(ct);
+
+            await Task.WhenAll(trendingTask, mostPlayedTask).ConfigureAwait(false);
+
+            _sessionTrending = await trendingTask.ConfigureAwait(false);
+            _sessionMostPlayed = await mostPlayedTask.ConfigureAwait(false);
+        }
+        finally
+        {
+            _sessionFeedsLock.Release();
+        }
+    }
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<SearchResult>> GetTrendingBlueStarAsync(CancellationToken ct = default)
+    {
+        if (_sessionTrending != null) return _sessionTrending;
+
+        await _sessionFeedsLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (_sessionTrending != null) return _sessionTrending;
+            _sessionTrending = await FetchTrendingInternalAsync(ct).ConfigureAwait(false);
+            return _sessionTrending;
+        }
+        finally
+        {
+            _sessionFeedsLock.Release();
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<SearchResult>> GetMostPlayedBlueStarAsync(CancellationToken ct = default)
+    {
+        if (_sessionMostPlayed != null) return _sessionMostPlayed;
+
+        await _sessionFeedsLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (_sessionMostPlayed != null) return _sessionMostPlayed;
+            _sessionMostPlayed = await FetchMostPlayedInternalAsync(ct).ConfigureAwait(false);
+            return _sessionMostPlayed;
+        }
+        finally
+        {
+            _sessionFeedsLock.Release();
+        }
+    }
+
+    private async Task<IReadOnlyList<SearchResult>> FetchTrendingInternalAsync(CancellationToken ct)
     {
         const string cacheKey = "bluestar_trending_7d_v7";
         try
@@ -203,8 +264,7 @@ public class CommunityStatsService : ICommunityStatsService
         return DefaultCommunityTrendingFallback;
     }
 
-    /// <inheritdoc />
-    public async Task<IReadOnlyList<SearchResult>> GetMostPlayedBlueStarAsync(CancellationToken ct = default)
+    private async Task<IReadOnlyList<SearchResult>> FetchMostPlayedInternalAsync(CancellationToken ct)
     {
         const string cacheKey = "bluestar_most_played_alltime_v7";
         try
