@@ -5,12 +5,10 @@
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20(x64)-brightgreen.svg)]()
 [![.NET 8.0](https://img.shields.io/badge/.NET-8.0%20WPF-purple.svg)]()
-[![Release: v1.2.3](https://img.shields.io/badge/Release-v1.2.3-orange.svg)](https://github.com/Coronitaa/BlueStar/releases)
+[![Release: v1.4.1](https://img.shields.io/badge/Release-v1.4.1-orange.svg)](https://github.com/Coronitaa/BlueStar/releases/latest)
 [![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)](https://github.com/Coronitaa/BlueStar/actions)
-[![Platform: Windows x64](https://img.shields.io/badge/Platform-Windows%20x64-blue.svg)](https://github.com/Coronitaa/BlueStar)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-BlueStar is an all-in-one desktop game management and launcher ecosystem designed for modern PC gaming. It seamlessly integrates Steam depot downloads, manifest staging, automated engine detection, multi-engine emulation, DLC unlocking, prerequisite management, and mod injection into a clean, modern, and dark-themed interface.
+BlueStar is an all-in-one desktop game management and launcher ecosystem for modern PC gaming. It brings together Steam depot downloads, manifest staging, engine detection, online and LAN multiplayer emulation, DLC unlocking, prerequisite management, and mod injection into a clean, modern dark-themed interface.
 
 <img width="1441" height="882" alt="image" src="https://github.com/user-attachments/assets/676715de-f206-4924-b81e-8e119f5a60e6" />
 <img width="1441" height="880" alt="image" src="https://github.com/user-attachments/assets/6ecb0fd0-bd65-40e5-a1ad-ed125e60003e" />
@@ -18,166 +16,123 @@ BlueStar is an all-in-one desktop game management and launcher ecosystem designe
 <img width="1430" height="874" alt="image" src="https://github.com/user-attachments/assets/d5c2f015-0f7b-4e4d-b61d-8d6e0ee57b64" />
 <img width="1434" height="949" alt="image" src="https://github.com/user-attachments/assets/a41cbe5c-3dbb-42aa-b335-33b3481d693c" />
 
-
-
 ---
 
 ## ⚡ Quick Download
 
-| Package | Asset Name | Description |
-| :--- | :--- | :--- |
-| **Windows Setup (Recommended)** | `BlueStar-v1.2.3-Setup-win-x64.exe` | Standard Windows installer with start menu shortcuts, desktop icons, and uninstaller. |
-| **Portable Edition** | `BlueStar-v1.2.3-Portable-win-x64.zip` | Standalone zero-install archive. Extract anywhere and launch `BlueStar.exe`. |
+<div align="center">
+
+[![Download BlueStar](https://img.shields.io/badge/Download-BlueStar%20Latest%20Release-2ea44f?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Coronitaa/BlueStar/releases/latest)
+
+</div>
+
+| Package | Asset Name | Download | Description |
+| :--- | :--- | :---: | :--- |
+| **Windows Setup (Recommended)** | `BlueStar-v1.4.1-Setup-win-x64.exe` | [![Download Setup](https://img.shields.io/badge/Download-Installer-0078D4?style=flat-square&logo=windows&logoColor=white)](https://github.com/Coronitaa/BlueStar/releases/download/v1.4.1/BlueStar-v1.4.1-Setup-win-x64.exe) | Standard Windows installer with start menu shortcuts, uninstaller, and update support. |
+| **Portable Edition** | `BlueStar-v1.4.1-Portable-win-x64.zip` | [![Download Portable](https://img.shields.io/badge/Download-ZIP-gray?style=flat-square&logo=archive&logoColor=white)](https://github.com/Coronitaa/BlueStar/releases/download/v1.4.1/BlueStar-v1.4.1-Portable-win-x64.zip) | Zero-install standalone archive. Extract anywhere and launch `BlueStar.exe`. |
 
 > [!NOTE]
-> All release binaries are self-contained for 64-bit Windows systems (no prior .NET 8 runtime installation required).
+> All release packages are self-contained for 64-bit Windows systems (Windows 10 / 11). No separate .NET runtime installation required.
 
 ---
 
-## Key Features
+## 🚀 Key Features
 
-### Instance Lifecycle and Origin Tracking
-- Manage independent game installations from multiple sources: **DepotBox downloads**, **Steam library imports**, and **custom local folders**.
-- Dedicated launch pipeline with automatic protocol fallbacks (`steam://rungameid/{appId}`) for Steam-origin games.
-- Non-destructive manifest updates on DepotBox that preserve save files, mods, and emulator configurations.
-
-### Custom Target Build Creator & Manifest Staging (New in v1.2)
-- Create custom game builds by configuring custom manifest IDs and target depots directly in the UI.
-- 1-click depot ZIP package importer with drag-and-drop support to quickly stage manifests.
-- Inline manifest editor with real-time verification and direct community manifest resolver links.
-- Simplified view mode for regular players with optional Advanced Builds toggle for power users.
-
-### High-Performance Caching & Network Deduplication (New in v1.2)
-- Multi-tier (L1 Memory + L2 Disk) caching architecture with atomic transactional writes.
-- Single-flight deduplication on concurrent requests for Steam metadata, update dates, and DepotBox catalogs.
-- Instantaneous background updates detection with safe `UpdateCheckStatus` state preservation.
-
-### Dynamic Tagging and Filtering Engine
-- Real-time tag generation based on platform, game engine, installation origin, update status, and active emulator.
-- Quick-filter chips to instantly organize games by engine (Unity, Unreal Engine, Godot, Source, Custom), source, and status.
-
-### Multi-Engine Multiplayer and Emulation Hub
-- **ReFix Online (Steam Spacewar)**: Full Steamworks Spacewar (AppID 480) multiplayer proxy support with Steam friends list, invites, and online lobbies.
-- **Re:Goldberg LAN**: Standalone, offline, and LAN multiplayer emulation requiring zero internet connection or Steam client.
-- **Community Ratings**: Global compatibility ratings and voting system per game title with dynamic recommendation thresholds.
-
-### Automated DLC Entitlement
-- Automatic discovery of game DLCs via Steam metadata.
-- Integrated **SmokeAPI** and **CreamInstaller** pipelines with one-click installation and restoration.
-
-### Explore and Modern Catalog Feeds
-- 9-slot horizontal scrolling category carousels with progressive loading for trending, top-played, top-rated, and newly updated titles.
-- Ranked trending suggestion chips with solid-to-subtle visual hierarchy for fast searching.
-
-### 1-Click Windows Game Prerequisites
-- Automatically scans the host OS and game directory for missing runtimes:
-  - Visual C++ 2015–2022 Redistributable (x86 & x64)
-  - DirectX End-User Runtimes (Legacy D3DX9 / XAudio2)
-  - .NET Desktop Runtime 8.0 (x64)
-  - Unreal Engine Prerequisites
-- Supports silent batch installation and interactive setup wizards.
-
-### Modding and BepInEx Framework
-- Native engine detection for Unity (Mono / IL2CPP), Unreal Engine, Godot, and Native executables.
-- One-click BepInEx installation with auto-configured `doorstop_config.ini` and folder structures.
-- Conditional mod management based on verified engine compatibility.
+- **Universal Game Instance Manager**: Manage standalone installations from DepotBox, Steam libraries, or local folders. Supports automatic executable detection and native Steam protocol fallback (`steam://rungameid/{appId}`).
+- **Offline-First Catalog & Instant Search**: Ultra-fast catalog browsing powered by a local compressed SQLite snapshot (`catalog.sqlite.zst`), real-time faceted filters, DRM and launcher detection, and color-coded Steam reviews.
+- **Steam Depot Downloader & Manifest Staging**: Integrated with `DepotDownloaderMod` for high-throughput chunk streaming, drag-and-drop depot ZIP import, manifest verification, and custom build staging.
+- **Multi-Engine Emulation & Multiplayer**:
+  - **ReFix Online**: Play online multiplayer via Steamworks Spacewar (AppID 480) with friends list, invites, and lobbies.
+  - **Re:Goldberg LAN**: Fully offline and LAN multiplayer with zero Steam dependency.
+  - **Community Ratings**: Compatibility feedback and player ratings per title.
+- **1-Click DLC Unlocking**: One-click entitlement through integrated SmokeAPI and CreamInstaller pipelines.
+- **Windows Prerequisites Manager**: Scans and silently installs missing runtimes (Visual C++ 2015–2022, DirectX, .NET 8.0 Desktop, Unreal Engine prerequisites).
+- **Engine Detection & Modding**: Detects Unity (Mono/IL2CPP), Unreal Engine, and Godot, with automated BepInEx injection.
+- **Modern Modular UI**: Modern dark theme with modular settings cards, live debug console, and tag localization.
 
 ---
 
-## System Requirements
+## 🛠️ System Requirements
 
-- **Operating System**: Windows 10 (Build 19041+) or Windows 11 (64-bit)
-- **Architecture**: x64 (64-bit)
-- **Framework**: .NET 8.0 Desktop Runtime (pre-bundled in self-contained releases)
-- **Optional**: Active Steam Client (required only for Steam Spacewar online multiplayer mode)
+- **OS**: Windows 10 (64-bit, Build 19041+) or Windows 11
+- **Architecture**: x64
+- **Runtime**: Pre-bundled (.NET 8.0 Desktop Runtime self-contained)
+- **Optional**: Steam Client (only required for Steam Spacewar online multiplayer)
 
 ---
 
-## Solution Architecture
+## 📦 Project Architecture
 
 ```
 BlueStar/
 ├── src/
-│   ├── BlueStar.Core/             # Domain models, contracts, and interfaces
-│   │   ├── Models/                # GameInstance, InstanceOrigin, GameTag, CatalogCategory, etc.
-│   │   └── Interfaces/            # IInstanceManager, ITagsService, IEmulatorLifecycleService, etc.
-│   ├── BlueStar.Infrastructure/   # Implementation of business logic & storage
-│   │   ├── DepotBox/              # DepotBox REST client, Lua parser, archive reader
-│   │   ├── Downloader/            # DepotDownloader wrapper & Steam manifest helper
-│   │   ├── Emulators/             # ReFix suite, Goldberg, EmulatorRatingService, ReFixUpdateService
-│   │   ├── Engine/                # Unity, Unreal, Godot, Isaac, and Supergiant engine detector
-│   │   ├── Launcher/              # GameLauncherService with Steam protocol fallback
-│   │   ├── Services/              # BackgroundTaskService, TagsService, DepotBoxAuthService
-│   │   └── Storage/               # AppSettingsService & DPAPI SecureStorage
-│   └── BlueStar.App/              # WPF Modern Dark UI application
-│       ├── Views/                 # Home, Browse, Library, InstanceDetail, Settings, About
-│       ├── ViewModels/            # MVVM CommunityToolkit ViewModels
-│       ├── Controls/              # GameCategoryCarousel, CircularProgressButton
-│       └── Themes/                # DarkTheme XAML styles, brushes, typography, icons
+│   ├── BlueStar.Core/             # Models, contracts, interfaces & abstractions
+│   ├── BlueStar.Infrastructure/   # Engine detection, emulators, caching, storage & APIs
+│   ├── BlueStar.DepotDownloader/  # Embedded depot download & manifest engine (fork)
+│   ├── BlueStar.CatalogBuilder/   # Snapshot generator & metadata compiler
+│   └── BlueStar.App/              # Modern WPF dark-themed desktop application
 ├── tests/
-│   ├── BlueStar.Core.Tests/       # Domain logic and serialization tests
-│   └── BlueStar.Infrastructure.Tests/ # Integration tests for services, engines, and parsers
-└── tools/
-    └── cloudflare-worker/         # Cloudflare Worker for community ratings & catalog feeds
+│   ├── BlueStar.Core.Tests/       # Domain logic tests
+│   └── BlueStar.Infrastructure.Tests/ # Integration tests for services & parsers
+├── tools/
+│   └── ReFix_deploy/              # Local deployment bundles for emulators and hooks
+└── workers/
+    └── emulator-ratings/          # Cloudflare Worker for community ratings
 ```
 
 ---
 
-## Configuration and Settings
+## 🔗 Resources & Credits
 
-BlueStar is designed to work right out of the box:
-- **Default Backend API**: Pre-configured with the default DepotBox backend service.
-- **Personal API Key Override**: Power users can optionally enter their personal API key in `Settings -> API Configuration` to override the default backend.
-- **Storage Directory**: Instances and manifests are safely managed in `%AppData%\BlueStar\instances`.
+### Author's Repositories (BlueStar Ecosystem)
+- **[ReFix](https://github.com/Coronitaa/ReFix)** by [Coronitaa](https://github.com/Coronitaa) — Multi-engine multiplayer deployment and emulation suite (Steam Spacewar AppID 480 proxy, hooks, and LAN emulation).
+- **[DepotDownloaderMod](https://github.com/Coronitaa/DepotDownloaderMod)** by [Coronitaa](https://github.com/Coronitaa) — Specialized fork of DepotDownloader integrated into BlueStar for depot downloads, manifest resolution, and custom key staging.
+- **[BlueStar-Catalog](https://github.com/Coronitaa/BlueStar-Catalog)** by [Coronitaa](https://github.com/Coronitaa) — Automated distribution pipeline and repository for compressed catalog database snapshots (`catalog.sqlite.zst`).
+
+### Internal Tools & Modules
+- **`tools/ReFix_deploy`**: Bundled emulator binaries, BepInEx injector scripts, and deployment helpers.
+- **`build-release.ps1`**: Automated build, runtime bundling, and release packaging workflow.
+- **`workers/emulator-ratings`**: Serverless backend for community compatibility votes.
+
+### External Open-Source Projects & Services
+- **[SteamKit2](https://github.com/SteamRE/SteamKit)** by [SteamRE](https://github.com/SteamRE) — .NET client library for Steam network protocol communication.
+- **[DepotDownloader](https://github.com/SteamRE/DepotDownloader)** by [SteamRE](https://github.com/SteamRE) — Upstream Steam depot downloading utility.
+- **[SmokeAPI](https://github.com/acidicoala/SmokeAPI)** by [acidicoala](https://github.com/acidicoala) — Universal Steamworks DLC entitlement emulator.
+- **[CreamInstaller](https://github.com/pointfeev/CreamInstaller)** by [pointfeev](https://github.com/pointfeev) — Automated DLC unlocker and proxy installer.
+- **[Goldberg Emulator](https://gitlab.com/Mr_Goldberg/goldberg_emulator)** by Mr_Goldberg & **[Fork](https://github.com/Detanup01/gbe_fork)** by Detanup01 — Steam LAN and offline emulator.
+- **[BepInEx](https://github.com/BepInEx/BepInEx)** by BepInEx Team — Plugin framework and runtime patcher for Unity and .NET games.
+- **[ManifestHub2](https://github.com/SSMGAlt/ManifestHub2)** by SSMGAlt — Community Steam manifest repository and AES decryption keys.
+- **[DepotBox](https://depotbox.org)** — Depots index and game availability metadata service.
+- **Core .NET Libraries**: [CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet), [Polly](https://github.com/App-vNext/Polly), [Serilog](https://github.com/serilog/serilog), [QRCoder](https://github.com/codebude/QRCoder).
 
 ---
 
-## Building from Source
+## 🔨 Building from Source
 
 ### Prerequisites
 - [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 - [Inno Setup 6](https://jrsoftware.org/isinfo.php) (optional, for compiling the installer)
 
-### Build and Run
-
 ```bash
-# 1. Clone the repository
+# 1. Clone repository
 git clone https://github.com/Coronitaa/BlueStar.git
 cd BlueStar
 
-# 2. Run all tests
+# 2. Run tests
 dotnet test
 
-# 3. Launch the development build
+# 3. Launch application
 dotnet run --project src/BlueStar.App
 ```
 
-### Packaging Release Binaries
-
+To create release packages:
 ```powershell
-# Run the automated release builder script
 .\build-release.ps1
 ```
 
 ---
 
-## Credits and Attributions
-
-BlueStar proudly relies on and thanks the following open-source projects:
-
-- **ReFix Suite** by [Coronitaa](https://github.com/Coronitaa/ReFix) — Multi-engine multiplayer fix & deployment suite
-- **DepotDownloader** by [SteamRE](https://github.com/SteamRE/DepotDownloader) & [DepotDownloaderMod fork](https://github.com/Coronitaa/DepotDownloaderMod) — Steam depot downloading tool with enhanced manifest resolver and modular library integration
-- **SmokeAPI** by [acidicoala](https://github.com/acidicoala/SmokeAPI) — Universal Steamworks DLC entitlement emulator
-- **CreamInstaller** by [pointfeev](https://github.com/pointfeev/CreamInstaller) — Automatic DLC unlocker installer
-- **BepInEx** by [BepInEx Team](https://github.com/BepInEx/BepInEx) — Unity and .NET game plugin framework
-- **Goldberg Emulator** by [Mr_Goldberg](https://gitlab.com/Mr_Goldberg/goldberg_emulator) & [Detanup01](https://github.com/Detanup01/gbe_fork) — Steam LAN emulator
-- **SteamKit2** by [SteamRE](https://github.com/SteamRE/SteamKit) — .NET library for Steam network communication
-- **DepotBox** — Depots and manifest index service
-- **ManifestHub2** by [SSMGAlt](https://github.com/SSMGAlt/ManifestHub2) — Community Steam manifest repository and AES decryption key source
-
----
-
-## License
+## 📄 License
 
 This project is licensed under the [GNU General Public License v3.0](LICENSE).  
-Copyright (C) 2026 **Corøna** & BlueStar Developers.
+Copyright (C) 2026 **Corøna** & BlueStar Contributors.
