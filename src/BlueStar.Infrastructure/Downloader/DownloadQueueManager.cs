@@ -78,7 +78,7 @@ public partial class DownloadJobItem : ObservableObject
     public bool CanResume     => JobStatus == DownloadJobStatus.Paused;
     public bool CanRetry      => JobStatus is DownloadJobStatus.Failed or DownloadJobStatus.Canceled;
     public bool CanCancel     => JobStatus is DownloadJobStatus.Downloading or DownloadJobStatus.Queued or DownloadJobStatus.Paused;
-    public bool CanRemove     => true;
+    public bool CanRemove     => JobStatus is DownloadJobStatus.Completed or DownloadJobStatus.Failed or DownloadJobStatus.Canceled;
 
     partial void OnJobStatusChanged(DownloadJobStatus value)
     {
@@ -805,6 +805,7 @@ public class DownloadQueueManager
             RunOnUi(() =>
             {
                 job.NotifyMetricsChanged();
+                Queue.Remove(job);
                 NotifyQueueChanged();
             });
 
@@ -835,6 +836,15 @@ public class DownloadQueueManager
 
                     bool anyDepotNotDownloaded = updatedDepots.Any(d => !d.IsDownloaded);
 
+                    var updatedManifestMap = new Dictionary<uint, ulong>(existing.InstalledManifestMap);
+                    foreach (var d in instance.Depots)
+                    {
+                        if (d.ManifestId > 0)
+                        {
+                            updatedManifestMap[d.DepotId] = d.ManifestId;
+                        }
+                    }
+
                     var installedManifestDate = BlueStar.Infrastructure.Services.GameUpdateDetectionHelper.GetInstalledManifestDate(existing);
                     var versionDate = installedManifestDate ?? existing.InstalledVersionDate ?? DateTimeOffset.UtcNow;
 
@@ -843,6 +853,9 @@ public class DownloadQueueManager
                         Status = InstanceStatus.Ready,
                         Depots = updatedDepots.AsReadOnly(),
                         Dlcs = updatedDlcs.AsReadOnly(),
+                        InstalledManifestMap = updatedManifestMap,
+                        HasUpdateAvailable = anyDepotNotDownloaded && existing.HasUpdateAvailable,
+                        UpdateDescription = anyDepotNotDownloaded ? existing.UpdateDescription : null,
                         UpdatedAt = DateTimeOffset.UtcNow,
                         InstalledVersionDate = versionDate,
                         SourceArchivePath = (anyDepotNotDownloaded && !string.IsNullOrWhiteSpace(existing.SourceArchivePath))

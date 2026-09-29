@@ -47,7 +47,7 @@ public sealed class DebugLogService : IDebugLogService
     private int _errorsCount;
 
     private static readonly Regex SensitiveDataRegex = new(
-        @"(api[-_]?key|token|authorization|bearer|password|secret|auth)[\s:=]+[""']?([a-zA-Z0-9_\-\.]{6,})[""']?",
+        @"(?i)(api[-_]?key|token|access[-_]?token|authorization|bearer|password|secret|depot[-_]?key|steam[-_]?api[-_]?key|auth)[\s:=]+[""']?([a-zA-Z0-9_\-\.\~+/=]{6,})[""']?|(?<=[?&](?:key|token|access_token|secret|api_key|apikey|depot_key|auth)=)[a-zA-Z0-9_\-\.\~+/=]{6,}|Bearer\s+[a-zA-Z0-9_\-\.\~+/=]{6,}|eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <inheritdoc />
@@ -108,6 +108,12 @@ public sealed class DebugLogService : IDebugLogService
     {
         ArgumentNullException.ThrowIfNull(item);
 
+        var sanitizedItem = item with
+        {
+            Message = SanitizeSensitiveData(item.Message),
+            Exception = !string.IsNullOrEmpty(item.Exception) ? SanitizeSensitiveData(item.Exception) : null
+        };
+
         lock (_lock)
         {
             if (_logs.Count >= _capacity)
@@ -124,17 +130,17 @@ public sealed class DebugLogService : IDebugLogService
                 }
             }
 
-            _logs.AddLast(item);
+            _logs.AddLast(sanitizedItem);
 
-            if (item.Severity == LogSeverity.Warning)
+            if (sanitizedItem.Severity == LogSeverity.Warning)
                 Interlocked.Increment(ref _warningsCount);
-            else if (item.Severity is LogSeverity.Error or LogSeverity.Fatal)
+            else if (sanitizedItem.Severity is LogSeverity.Error or LogSeverity.Fatal)
                 Interlocked.Increment(ref _errorsCount);
         }
 
         try
         {
-            LogEmitted?.Invoke(item);
+            LogEmitted?.Invoke(sanitizedItem);
         }
         catch
         {
@@ -184,7 +190,7 @@ public sealed class DebugLogService : IDebugLogService
         sb.AppendLine();
 
         sb.AppendLine("### 1. APPLICATION & SYSTEM SPECIFICATIONS");
-        var appVersion = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "1.4.1";
+        var appVersion = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "1.4.2";
         sb.AppendLine($"- BlueStar Version: {appVersion}");
         sb.AppendLine($"- Operating System: {RuntimeInformation.OSDescription} ({Environment.OSVersion})");
         sb.AppendLine($"- OS Architecture: {RuntimeInformation.OSArchitecture}");
@@ -403,7 +409,14 @@ public sealed class DebugLogService : IDebugLogService
     public static string SanitizeSensitiveData(string text)
     {
         if (string.IsNullOrEmpty(text)) return string.Empty;
-        return SensitiveDataRegex.Replace(text, "$1=[REDACTED]");
+        return SensitiveDataRegex.Replace(text, match =>
+        {
+            var val = match.Value;
+            if (val.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) return "Bearer [REDACTED]";
+            if (val.StartsWith("eyJ", StringComparison.Ordinal)) return "[REDACTED_JWT]";
+            if (match.Groups[1].Success) return $"{match.Groups[1].Value}=[REDACTED]";
+            return "[REDACTED]";
+        });
     }
 
     private static string SanitizeString(string text)

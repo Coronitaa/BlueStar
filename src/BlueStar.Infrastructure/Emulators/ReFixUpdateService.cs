@@ -22,7 +22,7 @@ namespace BlueStar.Infrastructure.Emulators;
 public sealed class ReFixUpdateService : IReFixUpdateService
 {
     private const string GitHubApiUrl = "https://api.github.com/repos/Coronitaa/ReFix/releases/latest";
-    private const string DefaultVersion = "1.1";
+    private const string DefaultVersion = "1.3";
 
     private readonly HttpClient _httpClient;
     private readonly IInstanceManager? _instanceManager;
@@ -81,17 +81,37 @@ public sealed class ReFixUpdateService : IReFixUpdateService
         {
             _logger.LogInformation("Checking for ReFix updates from GitHub ({Url})...", GitHubApiUrl);
 
-            using var request = new HttpRequestMessage(HttpMethod.Get, GitHubApiUrl);
-            request.Headers.UserAgent.ParseAdd("BlueStar-Launcher/1.2.3");
-
-            using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
+            GitHubReleaseDto? release = null;
+            try
             {
-                _logger.LogWarning("GitHub ReFix releases API returned {StatusCode}", response.StatusCode);
-                return null;
+                using var request = new HttpRequestMessage(HttpMethod.Get, GitHubApiUrl);
+                request.Headers.UserAgent.ParseAdd("BlueStar-Launcher/1.2.3");
+                using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
+                if (response.IsSuccessStatusCode)
+                {
+                    release = await response.Content.ReadFromJsonAsync<GitHubReleaseDto>(cancellationToken: ct).ConfigureAwait(false);
+                }
+            }
+            catch { }
+
+            // Fallback to full releases list if /latest endpoint returned null or non-success
+            if (release == null || string.IsNullOrWhiteSpace(release.TagName))
+            {
+                try
+                {
+                    const string fallbackUrl = "https://api.github.com/repos/Coronitaa/ReFix/releases";
+                    using var request = new HttpRequestMessage(HttpMethod.Get, fallbackUrl);
+                    request.Headers.UserAgent.ParseAdd("BlueStar-Launcher/1.2.3");
+                    using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var releases = await response.Content.ReadFromJsonAsync<List<GitHubReleaseDto>>(cancellationToken: ct).ConfigureAwait(false);
+                        release = releases?.FirstOrDefault(r => !r.Draft && !string.IsNullOrWhiteSpace(r.TagName));
+                    }
+                }
+                catch { }
             }
 
-            var release = await response.Content.ReadFromJsonAsync<GitHubReleaseDto>(cancellationToken: ct).ConfigureAwait(false);
             if (release == null || string.IsNullOrWhiteSpace(release.TagName))
                 return null;
 
@@ -449,6 +469,16 @@ public sealed class ReFixUpdateService : IReFixUpdateService
             return false;
         }
 
+        if (installedVersion == "1.0" || installedVersion == "v1.0")
+        {
+            if (_instanceManager != null)
+            {
+                var updated = instance with { InstalledEmulatorVersion = currentVersion };
+                _ = _instanceManager.UpdateAsync(updated, CancellationToken.None);
+            }
+            return false;
+        }
+
         return IsNewerVersion(currentVersion, installedVersion);
     }
 
@@ -461,13 +491,16 @@ public sealed class ReFixUpdateService : IReFixUpdateService
         if (string.IsNullOrWhiteSpace(candidate)) return false;
         if (string.IsNullOrWhiteSpace(baseline)) return true;
 
-        var vCand = NormalizeVersion(candidate);
-        var vBase = NormalizeVersion(baseline);
+        if (string.Equals(candidate.Trim(), baseline.Trim(), StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var vCand = NormalizeVersion(candidate, baseline);
+        var vBase = NormalizeVersion(baseline, candidate);
 
         return vCand > vBase;
     }
 
-    private static Version NormalizeVersion(string ver)
+    private static Version NormalizeVersion(string ver, string? referenceVer = null)
     {
         if (string.IsNullOrWhiteSpace(ver)) return new Version(0, 0, 0, 0);
 
@@ -475,7 +508,25 @@ public sealed class ReFixUpdateService : IReFixUpdateService
         var parts = ver.Split(new[] { '.', '-', '+', '_' }, StringSplitOptions.RemoveEmptyEntries);
 
         int major = parts.Length > 0 && int.TryParse(parts[0], out var maj) ? maj : 0;
-        int minor = parts.Length > 1 && int.TryParse(parts[1], out var min) ? min : 0;
+        int minor = 0;
+
+        if (parts.Length > 1)
+        {
+            var p1 = parts[1];
+            if (int.TryParse(p1, out var min))
+            {
+                if (p1.Length == 1 && !string.IsNullOrWhiteSpace(referenceVer))
+                {
+                    var refParts = referenceVer.Trim().TrimStart('v', 'V').Split(new[] { '.', '-', '+', '_' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (refParts.Length > 1 && refParts[1].Length == 2 && int.TryParse(refParts[1], out _))
+                    {
+                        min *= 10;
+                    }
+                }
+                minor = min;
+            }
+        }
+
         int build = parts.Length > 2 && int.TryParse(parts[2], out var bld) ? bld : 0;
         int rev = parts.Length > 3 && int.TryParse(parts[3], out var r) ? r : 0;
 
@@ -537,6 +588,12 @@ public sealed class ReFixUpdateService : IReFixUpdateService
 
         [JsonPropertyName("published_at")]
         public DateTimeOffset? PublishedAt { get; set; }
+
+        [JsonPropertyName("draft")]
+        public bool Draft { get; set; }
+
+        [JsonPropertyName("prerelease")]
+        public bool Prerelease { get; set; }
 
         [JsonPropertyName("zipball_url")]
         public string? ZipballUrl { get; set; }

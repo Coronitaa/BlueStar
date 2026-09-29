@@ -1,5 +1,5 @@
 ====================================================================
-               ReFix Deployment Suite v1.23 (Standalone)
+               ReFix Deployment Suite v2.0-pre (EOS Online v3)
 ====================================================================
 
 INCLUDED TOOLS:
@@ -28,8 +28,45 @@ INCLUDED TOOLS:
 3. Uninstall_ReFix.bat
 ----------------------
 - Universal uninstaller and game restorer.
-- Restores original backup DLLs (.orig, _valve.dll, _o.dll, .steamstub.exe) and removes all proxies, emulators, and caches with zero leftover trace.
+- Restores original backup DLLs (.orig, _valve.dll, _o.dll, .steamstub.exe)
+  and removes all proxies, emulators, and caches with zero leftover trace.
 
-4. Quick Start:
-----------------------
-- Simply launch AutoDeploy.bat or DLC_Unlocker.bat, select your game directory, and follow the interactive prompts!
+====================================================================
+               NEW IN v2.0-pre (EOS Online v3)
+====================================================================
+
+ONLINE MULTIPLAYER (WAN)
+  * Real Steam lobbies over Spacewar (AppID 480) for WAN relay
+  * SteamNetworkingMessages relay handles NAT traversal
+  * Interoperable by AppID, not by ReFix-specific keys
+
+CLOUD SAVE
+  * Local save files mirrored to EOS cloud storage slot
+  * Fixes "CloudSave: Error" in Unreal Engine titles
+
+FRIENDS LIST
+  * Steam friends appear with correct names in game UI
+  * ExternalAccountInfo display name populated from Steam persona
+
+INVITATIONS
+  * Send Steam invites + configurable chat message from in-game
+  * ISteamFriends vtable hooks on correct slots (33/49)
+  * PUID-to-SteamID resolution for friends not already in a lobby
+
+WORKSHOP MOD FILTERING
+  * Hooks correct ISteamUGC version (v016-v020 vtable support)
+  * Filters subscribed items by RequireFilePattern per game
+  * IncludeItems / ExcludeItems override lists
+
+DEBUG
+  * LogFriendsApi option for ISteamFriends call tracing
+  * Instance tag for local two-player testing on same PC
+
+====================================================================
+
+Quick Start:
+  Simply launch AutoDeploy.bat, select your game directory,
+  and follow the interactive prompts!
+
+NOTE: This is a PRE-RELEASE. Some features (joining from invitation,
+overlay invite dialog) are not yet fully verified.

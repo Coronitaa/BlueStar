@@ -30,6 +30,22 @@ public partial class SettingsViewModel : ObservableObject
     private readonly IDebugLogService _debugLogService;
     private readonly IInstanceManager? _instanceManager;
     private readonly ICacheService? _cacheService;
+    private readonly IUpdateService? _updateService;
+
+    [ObservableProperty]
+    private bool _isCheckingForUpdates;
+
+    [ObservableProperty]
+    private bool _hasUpdateAvailable;
+
+    [ObservableProperty]
+    private string? _availableUpdateVersion;
+
+    [ObservableProperty]
+    private UpdateInfo? _availableUpdateInfo;
+
+    [ObservableProperty]
+    private string _updateButtonText = "Check for updates";
 
     public Action<string>? OnNavigateRequested { get; set; }
 
@@ -86,7 +102,7 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     [ObservableProperty]
-    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.4.1";
+    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.4.2";
 
     [ObservableProperty]
     private string _defaultApiUrl = "https://depotbox.org";
@@ -266,7 +282,8 @@ public partial class SettingsViewModel : ObservableObject
         IPrerequisiteService? prerequisiteService = null,
         IDebugLogService? debugLogService = null,
         IInstanceManager? instanceManager = null,
-        ICacheService? cacheService = null)
+        ICacheService? cacheService = null,
+        IUpdateService? updateService = null)
     {
         _authService = authService ?? throw new ArgumentNullException(nameof(authService));
         _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
@@ -279,8 +296,10 @@ public partial class SettingsViewModel : ObservableObject
         _debugLogService = debugLogService ?? new BlueStar.Infrastructure.Services.DebugLogService(_appSettings);
         _instanceManager = instanceManager;
         _cacheService = cacheService;
+        _updateService = updateService;
 
         _selectedLanguageOption = _localizationService.CurrentLanguage == "es" ? "Español (Latinoamérica)" : "English";
+        _updateButtonText = _localizationService.CurrentLanguage == "es" ? "Buscar actualizaciones" : "Check for updates";
 
         DeleteDepotsAfterInstall = _appSettings.DeleteDepotsAfterInstall;
         ShowNsfwContent = _appSettings.ShowNsfwContent;
@@ -897,6 +916,68 @@ public partial class SettingsViewModel : ObservableObject
         {
             IsClearingCache = false;
             IsClearCacheModalOpen = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task CheckOrInstallUpdateAsync()
+    {
+        if (_updateService == null) return;
+
+        if (HasUpdateAvailable && AvailableUpdateInfo != null)
+        {
+            try
+            {
+                UpdateButtonText = _localizationService.CurrentLanguage == "es" ? "Instalando..." : "Installing...";
+                IsCheckingForUpdates = true;
+                _notificationService.ShowInfo(
+                    _localizationService.CurrentLanguage == "es" ? "Descargando Actualización" : "Downloading Update",
+                    _localizationService.CurrentLanguage == "es" ? $"Descargando BlueStar v{AvailableUpdateInfo.Version}..." : $"Downloading BlueStar v{AvailableUpdateInfo.Version}...");
+                var filePath = await _updateService.DownloadUpdateAsync(AvailableUpdateInfo, null, CancellationToken.None).ConfigureAwait(true);
+                await _updateService.ApplyUpdateAsync(filePath, CancellationToken.None).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                IsCheckingForUpdates = false;
+                UpdateButtonText = _localizationService.CurrentLanguage == "es" ? "Instalar actualización" : "Install update";
+                _notificationService.ShowError("Update Failed", ex.Message);
+            }
+            return;
+        }
+
+        try
+        {
+            IsCheckingForUpdates = true;
+            UpdateButtonText = _localizationService.CurrentLanguage == "es" ? "Buscando..." : "Checking...";
+            var update = await _updateService.CheckForUpdatesAsync(CancellationToken.None).ConfigureAwait(true);
+            if (update != null)
+            {
+                HasUpdateAvailable = true;
+                AvailableUpdateInfo = update;
+                AvailableUpdateVersion = update.Version;
+                UpdateButtonText = _localizationService.CurrentLanguage == "es" ? $"Instalar v{update.Version}" : $"Install v{update.Version}";
+                _notificationService.ShowInfo(
+                    _localizationService.CurrentLanguage == "es" ? "Actualización Encontrada" : "Update Found",
+                    _localizationService.CurrentLanguage == "es" ? $"BlueStar v{update.Version} está disponible para instalar." : $"BlueStar v{update.Version} is available to install.");
+            }
+            else
+            {
+                HasUpdateAvailable = false;
+                UpdateButtonText = _localizationService.CurrentLanguage == "es" ? "Buscar actualizaciones" : "Check for updates";
+                _notificationService.ShowInfo(
+                    _localizationService.CurrentLanguage == "es" ? "Sin Actualizaciones" : "No Updates Found",
+                    _localizationService.CurrentLanguage == "es" ? "Estás ejecutando la versión más reciente de BlueStar." : "You are running the latest version of BlueStar.");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking for BlueStar updates");
+            _notificationService.ShowError("Update Check Failed", ex.Message);
+            UpdateButtonText = _localizationService.CurrentLanguage == "es" ? "Buscar actualizaciones" : "Check for updates";
+        }
+        finally
+        {
+            IsCheckingForUpdates = false;
         }
     }
 }

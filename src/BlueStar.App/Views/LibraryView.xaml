@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="BlueStar.App.Views.LibraryView"
+<UserControl x:Class="BlueStar.App.Views.LibraryView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:sys="clr-namespace:System;assembly=mscorlib"
@@ -807,8 +807,8 @@
                                           Stretch="Uniform" Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                    <TextBlock Text="Import Installed Steam Games" Style="{StaticResource BodyMedium}" FontWeight="Bold"/>
-                                    <TextBlock Text="Scan your local Steam libraries and import games in one click"
+                                    <TextBlock Text="{DynamicResource String_AddModalSteamTitle}" Style="{StaticResource BodyMedium}" FontWeight="Bold"/>
+                                    <TextBlock Text="{DynamicResource String_AddModalSteamDesc}"
                                                Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,2,0,0"/>
                                 </StackPanel>
                                 <TextBlock Grid.Column="3" Text="➔" FontWeight="Bold" FontSize="14" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
@@ -834,8 +834,8 @@
                                           Stretch="Uniform" Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                    <TextBlock Text="Import Depot ZIP Archive" Style="{StaticResource BodyMedium}" FontWeight="Bold"/>
-                                    <TextBlock Text="Drag and drop or select a DepotBox ZIP with game manifests and DLCs"
+                                    <TextBlock Text="{DynamicResource String_AddModalZipTitle}" Style="{StaticResource BodyMedium}" FontWeight="Bold"/>
+                                    <TextBlock Text="{DynamicResource String_AddModalZipDesc}"
                                                Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,2,0,0"/>
                                 </StackPanel>
                                 <TextBlock Grid.Column="3" Text="➔" FontWeight="Bold" FontSize="14" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
@@ -861,8 +861,8 @@
                                           Stretch="Uniform" Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                    <TextBlock Text="Add Existing Game Folder" Style="{StaticResource BodyMedium}" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Select local directory to auto-detect game executable and engine"
+                                    <TextBlock Text="{DynamicResource String_AddModalFolderTitle}" Style="{StaticResource BodyMedium}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{DynamicResource String_AddModalFolderDesc}"
                                                Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,2,0,0"/>
                                 </StackPanel>
                                 <TextBlock Grid.Column="3" Text="➔" FontSize="14" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
@@ -901,8 +901,8 @@
                                           Stretch="Uniform" Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                    <TextBlock Text="Search or explore games on our platform" Style="{StaticResource BodyMedium}" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
-                                    <TextBlock Text="Discover releases, DepotBox trends, and add games to your library in one click"
+                                    <TextBlock Text="{DynamicResource String_AddModalExploreTitle}" Style="{StaticResource BodyMedium}" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
+                                    <TextBlock Text="{DynamicResource String_AddModalExploreDesc}"
                                                Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,2,0,0"/>
                                 </StackPanel>
                                 <TextBlock Grid.Column="3" Text="➔" FontSize="14" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
@@ -1097,7 +1097,7 @@
                                     <Path Data="{StaticResource IconDownload}" Fill="{StaticResource AccentBrush}"
                                           Stretch="Uniform" Width="22" Height="22" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
-                                <TextBlock Text="Drag and drop your DepotBox ZIP archive here"
+                                <TextBlock Text="{DynamicResource String_AddModalDragZipTitle}"
                                            Style="{StaticResource H3}" FontWeight="Bold"
                                            HorizontalAlignment="Center" Margin="0,0,0,4"/>
                                 <TextBlock Text="Supports .zip archives containing game depots and DLC manifests"

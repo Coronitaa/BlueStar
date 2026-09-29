@@ -91,7 +91,7 @@
     <sys:String x:Key="String_ImportSteamTitle">Steam</sys:String>
     <sys:String x:Key="String_ImportSteamDesc">Importar juego instalado de Steam</sys:String>
     <sys:String x:Key="String_ImportZipTitle">Archivo ZIP</sys:String>
-    <sys:String x:Key="String_ImportZipDesc">Importar archivo ZIP de DepotBox</sys:String>
+    <sys:String x:Key="String_ImportZipDesc">Importar paquete ZIP de depósitos</sys:String>
     <sys:String x:Key="String_ImportFolderTitle">Carpeta Local</sys:String>
     <sys:String x:Key="String_ImportFolderDesc">Importar carpeta de juego existente</sys:String>
     <sys:String x:Key="String_MyInstances">Mis Juegos</sys:String>
@@ -103,11 +103,11 @@
     <sys:String x:Key="String_UpdateAvailable">Actualizar</sys:String>
     <sys:String x:Key="String_GameUpdateAvailable">Actualización disponible</sys:String>
     <sys:String x:Key="String_ExploreDiscoverGames">Explorar y Descubrir Juegos</sys:String>
-    <sys:String x:Key="String_ExploreDiscoverGamesDesc">Busca juegos y manifiestos en DepotBox para instalar y jugar al instante.</sys:String>
+    <sys:String x:Key="String_ExploreDiscoverGamesDesc">Busca juegos y manifiestos comunitarios para instalar y jugar al instante.</sys:String>
     <sys:String x:Key="String_FullCatalogView">Ver Catálogo Completo ➔</sys:String>
     <sys:String x:Key="String_SearchGamesPlaceholder">Buscar por nombre de juego o AppID de Steam...</sys:String>
     <sys:String x:Key="String_TrendingSuggestions">Tendencias:</sys:String>
-    <sys:String x:Key="String_SearchingDepotBoxManifests">Buscando en el catálogo de DepotBox y obteniendo manifiestos...</sys:String>
+    <sys:String x:Key="String_SearchingDepotBoxManifests">Buscando en el catálogo comunitario y obteniendo manifiestos...</sys:String>
     <sys:String x:Key="String_DiscoveredCount">Se encontraron {0} resultados para</sys:String>
     <sys:String x:Key="String_NoDiscoveredGames">No se encontraron juegos que coincidan con tu búsqueda</sys:String>
     <sys:String x:Key="String_NoDiscoveredGamesDesc">Intenta comprobar la ortografía o buscar con un término diferente.</sys:String>
@@ -120,6 +120,16 @@
     <sys:String x:Key="String_ViewMore">Ver Más ➔</sys:String>
     <sys:String x:Key="String_LoadMoreGames">Cargar más juegos</sys:String>
 
+    <sys:String x:Key="String_AddModalSteamTitle">Importar Juegos de Steam Instalados</sys:String>
+    <sys:String x:Key="String_AddModalSteamDesc">Escanea tus unidades de Steam e importa juegos directamente en un clic</sys:String>
+    <sys:String x:Key="String_AddModalZipTitle">Importar Archivo ZIP de Depósitos</sys:String>
+    <sys:String x:Key="String_AddModalZipDesc">Importa un paquete ZIP con manifiestos del juego, archivos y claves de cifrado</sys:String>
+    <sys:String x:Key="String_AddModalFolderTitle">Añadir Carpeta de Juego Existente</sys:String>
+    <sys:String x:Key="String_AddModalFolderDesc">Selecciona una carpeta local existente con los archivos del juego en tu disco</sys:String>
+    <sys:String x:Key="String_AddModalExploreTitle">Buscar y Descargar Juegos Online</sys:String>
+    <sys:String x:Key="String_AddModalExploreDesc">Explora el catálogo comunitario, busca juegos en Steam y descárgalos en tu biblioteca</sys:String>
+    <sys:String x:Key="String_AddModalDragZipTitle">Arrastra y suelta tu paquete ZIP de depósitos aquí</sys:String>
+
     <!-- ═══ MODAL: STEAM IMPORT ═══ -->
     <sys:String x:Key="String_ModalImportSteamTitle">Importar desde la Biblioteca de Steam</sys:String>
     <sys:String x:Key="String_ModalImportSteamSubtitle">Selecciona un juego instalado de tu biblioteca de Steam para gestionarlo en BlueStar.</sys:String>
@@ -129,10 +139,10 @@
     <sys:String x:Key="String_ConfirmImport">Confirmar Importación</sys:String>
 
     <!-- ═══ MODAL: DEPOT ZIP IMPORT ═══ -->
-    <sys:String x:Key="String_ModalImportZipTitle">Importar Archivo ZIP de DepotBox</sys:String>
+    <sys:String x:Key="String_ModalImportZipTitle">Importar Archivo ZIP de Depósitos</sys:String>
     <sys:String x:Key="String_ModalImportZipSubtitle">Inspecciona los juegos y manifiestos detectados antes de agregarlos a BlueStar.</sys:String>
     <sys:String x:Key="String_DragDropZip">Arrastra y suelta el archivo .ZIP aquí</sys:String>
-    <sys:String x:Key="String_DragDropZipDesc">Compatible con archivos ZIP oficiales de DepotBox con manifiestos y archivos de juego</sys:String>
+    <sys:String x:Key="String_DragDropZipDesc">Compatible con archivos ZIP con manifiestos y archivos de juego</sys:String>
     <sys:String x:Key="String_BrowseZipFile">Seleccionar Archivo ZIP...</sys:String>
     <sys:String x:Key="String_ArchiveLoadedSuccess">Archivo cargado correctamente</sys:String>
     <sys:String x:Key="String_ChangeZip">Cambiar ZIP...</sys:String>
@@ -260,12 +270,15 @@
     <sys:String x:Key="String_NoDescriptionProvided">No hay descripción disponible para este juego.</sys:String>
     <sys:String x:Key="String_Developer">Desarrollador:</sys:String>
     <sys:String x:Key="String_Publisher">Distribuidor:</sys:String>
-    <sys:String x:Key="String_InstalledVersion">Versión Instalada:</sys:String>
+    <sys:String x:Key="String_InstalledVersion">Versión Detectada:</sys:String>
     <sys:String x:Key="String_LatestOnSteam">Última en Steam:</sys:String>
     <sys:String x:Key="String_ReleaseDate">Fecha de Lanzamiento:</sys:String>
-    <sys:String x:Key="String_AssociateDepotBoxTitle">Vincular con DepotBox</sys:String>
-    <sys:String x:Key="String_AssociateDepotBoxDesc">Este juego se importó de una carpeta. Vincúlalo con DepotBox para habilitar actualizaciones automáticas, gestión de depots y DLCs.</sys:String>
-    <sys:String x:Key="String_FindDepotsBtn">Buscar depots para este juego</sys:String>
+    <sys:String x:Key="String_AssociateDepotBoxTitle">Vincular con Depósitos Comunitarios</sys:String>
+    <sys:String x:Key="String_AssociateDepotBoxDesc">Este juego se importó de una carpeta. Vincúlalo con depósitos comunitarios para habilitar actualizaciones automáticas, gestión de depósitos y DLCs.</sys:String>
+    <sys:String x:Key="String_FindDepotsBtn">Buscar depósitos para este juego</sys:String>
+    <sys:String x:Key="String_RecheckVersionTitle">Recomprobar Versión</sys:String>
+    <sys:String x:Key="String_RecheckVersionDesc">Recalcula los manifiestos de depósitos instalados y comprueba si hay actualizaciones pendientes o corrige fallos previos.</sys:String>
+    <sys:String x:Key="String_RecheckVersionBtn">Recomprobar Versión</sys:String>
     <sys:String x:Key="String_NewVersionDetectedTitle">Nueva Versión Detectada</sys:String>
     <sys:String x:Key="String_NewVersionDetectedDesc">Se detectó una nueva versión. Compara los manifests de los depósitos entre proveedores disponibles y descarga solo lo que cambió.</sys:String>
     <sys:String x:Key="String_CheckDepotBoxUpdatesBtn">Buscar Actualizaciones</sys:String>
@@ -442,16 +455,16 @@
     <sys:String x:Key="String_ImportFromManifestFilesBtn">Importar desde archivos .manifest...</sys:String>
     <sys:String x:Key="String_SaveSwitchBuildBtn">Guardar y Cambiar Versión</sys:String>
     <sys:String x:Key="String_DepotUpdatesModalTitle">Actualizaciones de Depots</sys:String>
-    <sys:String x:Key="String_DepotUpdatesModalDesc">Se detectaron nuevos manifiestos en DepotBox para este juego.</sys:String>
+    <sys:String x:Key="String_DepotUpdatesModalDesc">Se detectaron nuevos manifiestos para este juego.</sys:String>
     <sys:String x:Key="String_DepotUpdateCurrentLabel">Instalado</sys:String>
     <sys:String x:Key="String_DepotUpdateNewLabel">Disponible</sys:String>
     <sys:String x:Key="String_SelectDepotsToUpdateLabel">Selecciona los depots que deseas actualizar:</sys:String>
     <sys:String x:Key="String_GameRunningWarning">El juego está en ejecución actualmente. Por favor ciérralo antes de instalar la actualización.</sys:String>
     <sys:String x:Key="String_GameRunningUpdateWarn">El juego está en ejecución actualmente. Por favor ciérralo antes de instalar la actualización.</sys:String>
     <sys:String x:Key="String_DownloadInstallBtn">Descargar e Instalar</sys:String>
-    <sys:String x:Key="String_AssociateWithDepotBoxModalTitle">Vincular con Paquete de DepotBox</sys:String>
-    <sys:String x:Key="String_AssociateDepotBoxModalDesc">Vincula este juego importado con DepotBox para habilitar actualizaciones automáticas, seguimiento de manifiestos e instalación de DLCs.</sys:String>
-    <sys:String x:Key="String_AssociateWithDepotBoxModalDesc">Vincula este juego importado con DepotBox para habilitar actualizaciones automáticas, seguimiento de manifiestos e instalación de DLCs.</sys:String>
+    <sys:String x:Key="String_AssociateWithDepotBoxModalTitle">Vincular con Depósitos Comunitarios</sys:String>
+    <sys:String x:Key="String_AssociateDepotBoxModalDesc">Vincula este juego importado con depósitos comunitarios para habilitar actualizaciones automáticas, seguimiento de manifiestos e instalación de DLCs.</sys:String>
+    <sys:String x:Key="String_AssociateWithDepotBoxModalDesc">Vincula este juego importado con depósitos comunitarios para habilitar actualizaciones automáticas, seguimiento de manifiestos e instalación de DLCs.</sys:String>
     <sys:String x:Key="String_SearchButton">Buscar</sys:String>
     <sys:String x:Key="String_BestMatchLabel">Mejor coincidencia:</sys:String>
     <sys:String x:Key="String_BestMatchPrefix">Mejor coincidencia: </sys:String>
@@ -492,7 +505,7 @@
     <sys:String x:Key="String_LanguageSettingDesc">Idioma de la interfaz.</sys:String>
     <sys:String x:Key="String_Language_En">English</sys:String>
     <sys:String x:Key="String_Language_Es">Español (Latinoamérica)</sys:String>
-    <sys:String x:Key="String_ApiConfigHeader">Configuración de la API de DepotBox</sys:String>
+    <sys:String x:Key="String_ApiConfigHeader">Configuración de la API Comunitarios</sys:String>
     <sys:String x:Key="String_ApiConnectionDesc">Conexión para metadatos y manifiestos de Steam.</sys:String>
     <sys:String x:Key="String_ApiKeyLabel">Clave API Personal (Opcional):</sys:String>
     <sys:String x:Key="String_ApiKeyHelp">Opcional. Déjala vacía para usar la clave predeterminada.</sys:String>

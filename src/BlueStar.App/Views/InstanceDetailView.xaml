@@ -2771,47 +2771,28 @@
                         </Grid>
                     </Border>
 
-                    <!-- ═══ PER-INSTANCE DLC UNLOCKER METHOD ═══ -->
+                    <!-- ═══ RECHECK VERSION / REVERT UPDATE FAILURE ═══ -->
                     <Border Style="{StaticResource Card}" Margin="0,20,0,0">
-                        <StackPanel>
-                            <TextBlock Text="{DynamicResource String_DlcMethodSettingTitle}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                            <TextBlock Text="{DynamicResource String_DlcMethodSettingDesc}"
-                                       Style="{StaticResource BodySmall}" TextWrapping="Wrap" Margin="0,0,0,14"/>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <RadioButton Grid.Column="0"
-                                             GroupName="TabSettingsDlcMethodGroup"
-                                             IsChecked="{Binding IsCreamApiSelected}"
-                                             Style="{StaticResource VersionModeCard}"
-                                             Margin="0,0,8,0">
-                                    <StackPanel>
-                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                            <TextBlock Text="CreamAPI" FontWeight="Bold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}"/>
-                                            <Border Background="{StaticResource AccentTranslucentBrush}" CornerRadius="{StaticResource RadiusXs}" Padding="6,1" Margin="8,0,0,0">
-                                                <TextBlock Text="Default" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
-                                            </Border>
-                                        </StackPanel>
-                                        <TextBlock Text="{DynamicResource String_InstallModalCreamApiDesc}"
-                                                   FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                </RadioButton>
-                                <RadioButton Grid.Column="1"
-                                             GroupName="TabSettingsDlcMethodGroup"
-                                             IsChecked="{Binding IsSmokeApiSelected}"
-                                             Style="{StaticResource VersionModeCard}"
-                                             Margin="8,0,0,0">
-                                    <StackPanel>
-                                        <TextBlock Text="SmokeAPI" FontWeight="Bold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,4"/>
-                                        <TextBlock Text="{DynamicResource String_InstallModalSmokeApiDesc}"
-                                                   FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                </RadioButton>
-                            </Grid>
-                        </StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                <TextBlock Text="{DynamicResource String_RecheckVersionTitle}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{DynamicResource String_RecheckVersionDesc}"
+                                           Style="{StaticResource BodySmall}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                            </StackPanel>
+                            <Button Grid.Column="1"
+                                    Content="{DynamicResource String_RecheckVersionBtn}"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Padding="16,8"
+                                    VerticalAlignment="Center"
+                                    Command="{Binding RecheckVersionCommand}"/>
+                        </Grid>
                     </Border>
+
+
 
                     <!-- Danger Zone & Storage Management -->
                     <Border Style="{StaticResource Card}" Margin="0,20,0,0" BorderBrush="{StaticResource DangerBorderBrush}" BorderThickness="1">

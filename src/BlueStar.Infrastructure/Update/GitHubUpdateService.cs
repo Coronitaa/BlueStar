@@ -118,26 +118,41 @@ public class GitHubUpdateService : IUpdateService
                 _logger.LogInformation("Checking for updates from GitHub Releases...");
                 _metrics?.OnProviderRequest("GitHub", GitHubReleasesUrl);
 
-                var request = new HttpRequestMessage(HttpMethod.Get, GitHubReleasesUrl);
-                request.Headers.UserAgent.ParseAdd("BlueStar-Updater/1.2.3");
-
-                var response = await _httpClient.SendAsync(request, innerCt).ConfigureAwait(false);
-                if (!response.IsSuccessStatusCode)
+                GitHubRelease? release = null;
+                try
                 {
-                    _logger.LogWarning("GitHub Releases API returned status {StatusCode}", response.StatusCode);
-                    if (_cacheService != null)
+                    var request = new HttpRequestMessage(HttpMethod.Get, GitHubReleasesUrl);
+                    request.Headers.UserAgent.ParseAdd("BlueStar-Updater/1.2.3");
+                    var response = await _httpClient.SendAsync(request, innerCt).ConfigureAwait(false);
+                    if (response.IsSuccessStatusCode)
                     {
-                        try { await _cacheService.SetAsync(cacheKey, new CachedUpdateCheck(null, false), TimeSpan.FromHours(1), innerCt).ConfigureAwait(false); } catch { }
+                        release = await response.Content.ReadFromJsonAsync<GitHubRelease>(cancellationToken: innerCt).ConfigureAwait(false);
                     }
-                    return null;
+                }
+                catch { }
+
+                if (release is null || string.IsNullOrWhiteSpace(release.TagName))
+                {
+                    try
+                    {
+                        const string fallbackUrl = "https://api.github.com/repos/Coronitaa/BlueStar/releases";
+                        var request = new HttpRequestMessage(HttpMethod.Get, fallbackUrl);
+                        request.Headers.UserAgent.ParseAdd("BlueStar-Updater/1.2.3");
+                        var response = await _httpClient.SendAsync(request, innerCt).ConfigureAwait(false);
+                        if (response.IsSuccessStatusCode)
+                        {
+                            var releases = await response.Content.ReadFromJsonAsync<List<GitHubRelease>>(cancellationToken: innerCt).ConfigureAwait(false);
+                            release = releases?.FirstOrDefault(r => !string.IsNullOrWhiteSpace(r.TagName));
+                        }
+                    }
+                    catch { }
                 }
 
-                var release = await response.Content.ReadFromJsonAsync<GitHubRelease>(cancellationToken: innerCt).ConfigureAwait(false);
                 if (release is null || string.IsNullOrWhiteSpace(release.TagName))
                 {
                     if (_cacheService != null)
                     {
-                        try { await _cacheService.SetAsync(cacheKey, new CachedUpdateCheck(null, false), TimeSpan.FromHours(1), innerCt).ConfigureAwait(false); } catch { }
+                        try { await _cacheService.SetAsync(cacheKey, new CachedUpdateCheck(null, false), TimeSpan.FromMinutes(2), innerCt).ConfigureAwait(false); } catch { }
                     }
                     return null;
                 }

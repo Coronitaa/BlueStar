@@ -56,10 +56,10 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
     private string _selectedStatusFilter = "All";
 
     [ObservableProperty]
-    private string _selectedSort = "Alphabetical";
+    private string _selectedSort = "Recent";
 
     [ObservableProperty]
-    private bool _isSortAscending = true;
+    private bool _isSortAscending = false;
 
     [ObservableProperty]
     private string _selectedGroupFilter = "All";

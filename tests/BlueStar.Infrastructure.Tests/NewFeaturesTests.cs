@@ -194,7 +194,7 @@ public class NewFeaturesTests
                 Name = "Test Game",
                 InstallPath = tempDir,
                 EmulatorEnabled = true,
-                InstalledEmulatorVersion = "1.0" // Older than 1.1
+                InstalledEmulatorVersion = "0.9" // Older version
             };
 
             var instance2 = new GameInstance

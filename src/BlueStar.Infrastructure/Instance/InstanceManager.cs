@@ -276,9 +276,9 @@ public sealed class InstanceManager : IInstanceManager
             InstallPath = instanceGamePath,
             ExecutablePath = primaryExe,
             Status = InstanceStatus.Ready,
-            Engine = engine,
             EmulatorEnabled = true,
             EmulatorId = "refix",
+            InstalledEmulatorVersion = BlueStar.Infrastructure.Emulators.ReFixEmulator.GetCurrentVersion(),
             CreatedAt = now,
             UpdatedAt = now
         };

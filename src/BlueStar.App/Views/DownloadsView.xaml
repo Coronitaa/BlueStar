@@ -272,6 +272,8 @@
                                             <ColumnDefinition Width="12"/>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="12"/>
+                                            <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
 
                                         <TextBlock Grid.Column="0" Text="{Binding StatusEmoji}" FontSize="16" VerticalAlignment="Center"/>
@@ -284,6 +286,40 @@
 
                                         <TextBlock Grid.Column="3" Text="{Binding FormattedTime}" Style="{StaticResource Caption}"
                                                    VerticalAlignment="Center" Foreground="{StaticResource MutedTextBrush}"/>
+
+                                        <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <!-- Play button (for instance) -->
+                                            <Button Style="{StaticResource PrimaryButton}" Padding="8,4" Margin="0,0,6,0" FontSize="11" Height="28"
+                                                    ToolTip="{DynamicResource String_Play}"
+                                                    Visibility="{Binding Instance, Converter={StaticResource NullToVisibilityConverter}}"
+                                                    Command="{Binding DataContext.PlayHistoryEntryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Path Data="{StaticResource IconPlay}" Fill="White" Width="10" Height="10" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                    <TextBlock Text="{DynamicResource String_Play}" FontSize="11" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Button>
+
+                                            <!-- Retry button (for instance) -->
+                                            <Button Style="{StaticResource SecondaryButton}" Padding="8,4" Margin="0,0,6,0" FontSize="11" Height="28"
+                                                    ToolTip="{DynamicResource String_RetryAction}"
+                                                    Visibility="{Binding Instance, Converter={StaticResource NullToVisibilityConverter}}"
+                                                    Command="{Binding DataContext.RetryHistoryEntryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Path Data="{StaticResource IconRefresh}" Fill="{StaticResource PrimaryTextBrush}" Width="10" Height="10" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                    <TextBlock Text="{DynamicResource String_RetryAction}" FontSize="11" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Button>
+
+                                            <!-- Remove from history button -->
+                                            <Button Style="{StaticResource SecondaryButton}" Padding="6" Width="28" Height="28"
+                                                    ToolTip="{DynamicResource String_RemoveAction}"
+                                                    Command="{Binding DataContext.RemoveHistoryEntryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}">
+                                                <Path Data="{StaticResource IconTrash}" Fill="{StaticResource MutedTextBrush}" Width="11" Height="11" Stretch="Uniform"/>
+                                            </Button>
+                                        </StackPanel>
                                     </Grid>
                                 </Border>
                             </DataTemplate>

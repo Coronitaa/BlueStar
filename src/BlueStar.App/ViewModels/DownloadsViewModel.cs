@@ -115,4 +115,31 @@ public partial class DownloadsViewModel : ObservableObject
     [RelayCommand]
     private void ClearHistory() =>
         _queueManager.ClearAll();
+
+    [RelayCommand]
+    private void RemoveHistoryEntry(DownloadLogEntry? entry)
+    {
+        if (entry != null)
+        {
+            HistoryLog.Remove(entry);
+        }
+    }
+
+    [RelayCommand]
+    private void RetryHistoryEntry(DownloadLogEntry? entry)
+    {
+        if (entry?.Instance != null)
+        {
+            _ = _queueManager.StartDownloadAsync(entry.Instance);
+        }
+    }
+
+    [RelayCommand]
+    private void PlayHistoryEntry(DownloadLogEntry? entry)
+    {
+        if (entry?.Instance != null)
+        {
+            OnOpenInstanceRequested?.Invoke(entry.Instance);
+        }
+    }
 }

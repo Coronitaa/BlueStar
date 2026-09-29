@@ -248,29 +248,20 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         try
         {
-            Task? preloadStatsTask = null;
-            if (_statsService != null)
-            {
-                preloadStatsTask = _statsService.PreloadBlueStarFeedsAsync(_cts.Token);
-            }
-
             StartupStatusText = "Loading local instances and manifests...";
             await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
 
             StartupStatusText = "Analyzing system requirements...";
             await ScanSystemRequirementsAsync(autoPromptModal: true).ConfigureAwait(true);
 
-            if (preloadStatsTask != null)
-            {
-                StartupStatusText = "Loading BlueStar community games...";
-                await preloadStatsTask.ConfigureAwait(true);
-            }
-
             StartupStatusText = "Ready!";
 
             // Trigger smooth exit transition
             IsLoading = false;
             await RefreshRecentShortcutsAsync().ConfigureAwait(false);
+
+            // Queue community games preloading in bottom-right taskbar
+            QueueCommunityGamesLoadingBackgroundTask();
 
             // Queue background game updates check in bottom-right task bar
             QueueGameUpdatesCheckBackgroundTask();
@@ -281,6 +272,21 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
 
         await CheckAppUpdatesOnStartupAsync().ConfigureAwait(true);
+    }
+
+    private void QueueCommunityGamesLoadingBackgroundTask()
+    {
+        if (_statsService == null) return;
+
+        _backgroundTaskService.QueueTask(
+            "Loading Community Games",
+            "Community Feeds",
+            async (progress, ct) =>
+            {
+                progress.Report(new BlueStar.Core.Models.BackgroundTaskProgress(10, "Fetching community feeds...", "Downloading"));
+                await _statsService.PreloadBlueStarFeedsAsync(ct).ConfigureAwait(false);
+                progress.Report(new BlueStar.Core.Models.BackgroundTaskProgress(100, "Community games loaded.", "Complete"));
+            });
     }
 
     private async Task CheckAppUpdatesOnStartupAsync()

@@ -136,19 +136,16 @@ public class DownloadQueueManagerTests
         await queueManager.StartDownloadAsync(instance);
         downloadCallCount.Should().Be(1);
 
-        var job = queueManager.Queue.First(q => q.Instance.Id == instanceId);
-        job.JobStatus.Should().Be(DownloadJobStatus.Completed);
-        job.Percentage.Should().Be(100);
+        var log = queueManager.HistoryLog.First(h => h.Instance?.Id == instanceId);
+        log.Status.Should().Be(DownloadJobStatus.Completed);
 
         // Reinstallation run
         var reinstallTask = queueManager.StartDownloadAsync(instance);
-        job.JobStatus.Should().BeOneOf(DownloadJobStatus.Queued, DownloadJobStatus.Downloading, DownloadJobStatus.Completed);
-
         await reinstallTask;
 
         // Assert
         downloadCallCount.Should().Be(2);
-        job.JobStatus.Should().Be(DownloadJobStatus.Completed);
+        queueManager.HistoryLog.Last(h => h.Instance?.Id == instanceId).Status.Should().Be(DownloadJobStatus.Completed);
     }
 }
 

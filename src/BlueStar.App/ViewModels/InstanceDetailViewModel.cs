@@ -2179,7 +2179,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }
         string? installedEmulatorVersion = isSpecificFix
             ? (SelectedModalSpecificGameFix?.Name ?? "Online Fix")
-            : (enableEmulator ? "1.0" : null);
+            : (enableEmulator ? (_refixUpdateService?.GetCurrentInstalledVersion() ?? ReFixEmulator.GetCurrentVersion()) : null);
 
         var updatedInstance = Instance with
         {
@@ -2438,13 +2438,13 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         {
             optionId = onlineLayer?.FixId ?? Instance.InstalledEmulatorVersion ?? "gamefix_online";
             displayName = onlineLayer?.DisplayName ?? "Online Multiplayer Fix";
-            emulatorVersion = onlineLayer?.Version ?? Instance.InstalledEmulatorVersion ?? "1.0";
+            emulatorVersion = onlineLayer?.Version ?? Instance.InstalledEmulatorVersion ?? (_refixUpdateService?.GetCurrentInstalledVersion() ?? ReFixEmulator.GetCurrentVersion());
         }
         else
         {
             optionId = Instance.EmulatorId ?? (InstalledEmulatorMode?.Contains("Goldberg", StringComparison.OrdinalIgnoreCase) == true ? "refix_goldberg" : "refix_valve");
             displayName = InstalledEmulatorMode ?? (optionId == "refix_goldberg" ? "Re:Goldberg LAN" : "ReFix Online (Steam)");
-            emulatorVersion = Instance.InstalledEmulatorVersion ?? "1.0";
+            emulatorVersion = Instance.InstalledEmulatorVersion ?? (_refixUpdateService?.GetCurrentInstalledVersion() ?? ReFixEmulator.GetCurrentVersion());
         }
 
         if (!_emulatorRatingService.HasUserVoted(Instance, optionId, emulatorVersion))
@@ -3588,12 +3588,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         var updatedInstance = preparedInstance with
         {
             Depots = updatedDepots.AsReadOnly(),
-            InstalledManifestMap = updatedManifestMap,
             BuildHistory = buildHistory,
-            IsBuildPinned = false,
-            HasUpdateAvailable = false,
-            UpdateDescription = null,
-            InstalledVersionDate = LatestVersionDate ?? DateTimeOffset.UtcNow
+            IsBuildPinned = false
         };
 
         if (_installationPlanner != null)
@@ -3672,6 +3668,64 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }, null);
 
         progress.Report(new BackgroundTaskProgress(100, $"Updated {selected.Count} depot(s) configuration.", "Complete"));
+    }
+
+    /// <summary>
+    /// Rechecks installed depot manifests, clears corrupted update states, and re-triggers update scan.
+    /// </summary>
+    [RelayCommand]
+    public async Task RecheckVersionAsync()
+    {
+        if (Instance == null) return;
+
+        StatusMessage = "🔍 Rechecking instance manifests and update state...";
+
+        var instanceManifestDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "BlueStar", "instances", Instance.Id.ToString(), "manifests");
+
+        var localManifestMap = new Dictionary<uint, ulong>();
+        if (Directory.Exists(instanceManifestDir))
+        {
+            var files = Directory.GetFiles(instanceManifestDir, "*.manifest");
+            foreach (var f in files)
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(Path.GetFileName(f), @"^(\d+)_(\d+)\.manifest$");
+                if (match.Success && uint.TryParse(match.Groups[1].Value, out var dId) && ulong.TryParse(match.Groups[2].Value, out var mId))
+                {
+                    localManifestMap[dId] = mId;
+                }
+            }
+        }
+
+        var updatedManifestMap = new Dictionary<uint, ulong>();
+        foreach (var d in Instance.Depots)
+        {
+            if (d.IsDownloaded && d.ManifestId > 0)
+            {
+                updatedManifestMap[d.DepotId] = d.ManifestId;
+            }
+            else if (localManifestMap.TryGetValue(d.DepotId, out var mId) && d.IsDownloaded)
+            {
+                updatedManifestMap[d.DepotId] = mId;
+            }
+        }
+
+        var updatedInstance = Instance with
+        {
+            InstalledManifestMap = updatedManifestMap.Count > 0 ? updatedManifestMap : Instance.InstalledManifestMap
+        };
+
+        if (_instanceManager != null)
+        {
+            await _instanceManager.UpdateAsync(updatedInstance, CancellationToken.None).ConfigureAwait(false);
+        }
+
+        Instance = updatedInstance;
+
+        await CheckSteamVersionDateAsync().ConfigureAwait(true);
+
+        _notificationService?.ShowSuccess("Version Rechecked", "Instance version and update status have been rechecked.");
     }
 
 
@@ -5624,7 +5678,13 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             if (_refixUpdateService != null && onlineLayer == null && Instance.EmulatorId != "gamefix_online" && (Instance.EmulatorId == null || Instance.EmulatorId.StartsWith("refix", StringComparison.OrdinalIgnoreCase)))
             {
                 CurrentGlobalReFixVersion = _refixUpdateService.GetCurrentInstalledVersion();
-                InstanceReFixVersion = Instance.InstalledEmulatorVersion ?? "1.0";
+                if (Instance.InstalledEmulatorVersion == "1.0" || Instance.InstalledEmulatorVersion == "v1.0")
+                {
+                    var updatedInst = Instance with { InstalledEmulatorVersion = CurrentGlobalReFixVersion };
+                    if (_instanceManager != null) _ = _instanceManager.UpdateAsync(updatedInst, CancellationToken.None);
+                    Instance = updatedInst;
+                }
+                InstanceReFixVersion = Instance.InstalledEmulatorVersion ?? CurrentGlobalReFixVersion;
                 IsReFixUpdateAvailableForInstance = _refixUpdateService.IsInstanceReFixOutdated(Instance);
             }
             else
@@ -6350,7 +6410,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     {
         if (Instance == null) return;
         var onlineLayer = Instance.InstalledFixLayers?.FirstOrDefault(l => l.IsOnline);
-        var emuVer = onlineLayer?.Version ?? Instance.InstalledEmulatorVersion ?? "1.0";
+        var emuVer = onlineLayer?.Version ?? Instance.InstalledEmulatorVersion ?? (_refixUpdateService?.GetCurrentInstalledVersion() ?? ReFixEmulator.GetCurrentVersion());
 
         await _emulatorRatingService.SubmitVoteAsync(Instance.AppId, FeedbackOptionId, true, CancellationToken.None).ConfigureAwait(true);
         await _emulatorRatingService.RecordUserVoteFlagAsync(Instance, FeedbackOptionId, emuVer, CancellationToken.None).ConfigureAwait(true);
@@ -6364,7 +6424,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     {
         if (Instance == null) return;
         var onlineLayer = Instance.InstalledFixLayers?.FirstOrDefault(l => l.IsOnline);
-        var emuVer = onlineLayer?.Version ?? Instance.InstalledEmulatorVersion ?? "1.0";
+        var emuVer = onlineLayer?.Version ?? Instance.InstalledEmulatorVersion ?? (_refixUpdateService?.GetCurrentInstalledVersion() ?? ReFixEmulator.GetCurrentVersion());
 
         await _emulatorRatingService.SubmitVoteAsync(Instance.AppId, FeedbackOptionId, false, CancellationToken.None).ConfigureAwait(true);
         await _emulatorRatingService.RecordUserVoteFlagAsync(Instance, FeedbackOptionId, emuVer, CancellationToken.None).ConfigureAwait(true);
@@ -6395,7 +6455,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         if (Instance != null && !string.IsNullOrWhiteSpace(FeedbackOptionId))
         {
             var onlineLayer = Instance.InstalledFixLayers?.FirstOrDefault(l => l.IsOnline);
-            var emuVer = onlineLayer?.Version ?? Instance.InstalledEmulatorVersion ?? "1.0";
+            var emuVer = onlineLayer?.Version ?? Instance.InstalledEmulatorVersion ?? (_refixUpdateService?.GetCurrentInstalledVersion() ?? ReFixEmulator.GetCurrentVersion());
             _ = _emulatorRatingService.RecordUserVoteFlagAsync(Instance, FeedbackOptionId, emuVer, CancellationToken.None);
         }
     }

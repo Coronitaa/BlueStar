@@ -91,7 +91,7 @@
     <sys:String x:Key="String_ImportSteamTitle">Steam</sys:String>
     <sys:String x:Key="String_ImportSteamDesc">Import installed Steam game</sys:String>
     <sys:String x:Key="String_ImportZipTitle">Depot ZIP</sys:String>
-    <sys:String x:Key="String_ImportZipDesc">Import DepotBox archive</sys:String>
+    <sys:String x:Key="String_ImportZipDesc">Import depot ZIP package</sys:String>
     <sys:String x:Key="String_ImportFolderTitle">Folder</sys:String>
     <sys:String x:Key="String_ImportFolderDesc">Import existing game folder</sys:String>
     <sys:String x:Key="String_MyInstances">My Instances</sys:String>
@@ -103,11 +103,11 @@
     <sys:String x:Key="String_UpdateAvailable">Update</sys:String>
     <sys:String x:Key="String_GameUpdateAvailable">Game update available</sys:String>
     <sys:String x:Key="String_ExploreDiscoverGames">Explore &amp; Discover Games</sys:String>
-    <sys:String x:Key="String_ExploreDiscoverGamesDesc">Search games and manifests across DepotBox to create and install new instances instantly.</sys:String>
+    <sys:String x:Key="String_ExploreDiscoverGamesDesc">Search games and manifests across community depots to create and install new instances instantly.</sys:String>
     <sys:String x:Key="String_FullCatalogView">Full Catalog View ➔</sys:String>
     <sys:String x:Key="String_SearchGamesPlaceholder">Search games, apps, depots by name or AppID...</sys:String>
     <sys:String x:Key="String_TrendingSuggestions">Trending Searches:</sys:String>
-    <sys:String x:Key="String_SearchingDepotBoxManifests">Searching DepotBox catalog &amp; retrieving manifests...</sys:String>
+    <sys:String x:Key="String_SearchingDepotBoxManifests">Searching community catalog &amp; retrieving manifests...</sys:String>
     <sys:String x:Key="String_DiscoveredCount">Found {0} results for</sys:String>
     <sys:String x:Key="String_NoDiscoveredGames">No games found matching your search</sys:String>
     <sys:String x:Key="String_NoDiscoveredGamesDesc">Try adjusting spelling or searching with a different title or keyword.</sys:String>
@@ -120,6 +120,16 @@
     <sys:String x:Key="String_ViewMore">View More ➔</sys:String>
     <sys:String x:Key="String_LoadMoreGames">Load more games</sys:String>
 
+    <sys:String x:Key="String_AddModalSteamTitle">Import Installed Steam Games</sys:String>
+    <sys:String x:Key="String_AddModalSteamDesc">Scan your local Steam library drives and import games directly in one click</sys:String>
+    <sys:String x:Key="String_AddModalZipTitle">Import Depot ZIP Archive</sys:String>
+    <sys:String x:Key="String_AddModalZipDesc">Import a ZIP package containing game manifests, files, and encryption keys</sys:String>
+    <sys:String x:Key="String_AddModalFolderTitle">Add Existing Game Folder</sys:String>
+    <sys:String x:Key="String_AddModalFolderDesc">Select an existing local folder containing game binaries on your drive</sys:String>
+    <sys:String x:Key="String_AddModalExploreTitle">Search &amp; Download Games Online</sys:String>
+    <sys:String x:Key="String_AddModalExploreDesc">Browse community catalog, search games on Steam, and download directly to your library</sys:String>
+    <sys:String x:Key="String_AddModalDragZipTitle">Drag and drop your depot ZIP package here</sys:String>
+
     <!-- ═══ MODAL: STEAM IMPORT ═══ -->
     <sys:String x:Key="String_ModalImportSteamTitle">Import from Steam Library</sys:String>
     <sys:String x:Key="String_ModalImportSteamSubtitle">Select an installed game from your Steam library to manage in BlueStar.</sys:String>
@@ -129,10 +139,10 @@
     <sys:String x:Key="String_ConfirmImport">Confirm Import</sys:String>
 
     <!-- ═══ MODAL: DEPOT ZIP IMPORT ═══ -->
-    <sys:String x:Key="String_ModalImportZipTitle">Import DepotBox ZIP Archive</sys:String>
+    <sys:String x:Key="String_ModalImportZipTitle">Import Depot ZIP Archive</sys:String>
     <sys:String x:Key="String_ModalImportZipSubtitle">Inspect detected games and manifests before adding to BlueStar.</sys:String>
-    <sys:String x:Key="String_DragDropZip">Drag &amp; drop DepotBox .ZIP here</sys:String>
-    <sys:String x:Key="String_DragDropZipDesc">Supports official DepotBox ZIP archives containing game files and manifests</sys:String>
+    <sys:String x:Key="String_DragDropZip">Drag &amp; drop depot .ZIP here</sys:String>
+    <sys:String x:Key="String_DragDropZipDesc">Supports ZIP archives containing game files and manifests</sys:String>
     <sys:String x:Key="String_BrowseZipFile">Browse ZIP File...</sys:String>
     <sys:String x:Key="String_ArchiveLoadedSuccess">Archive loaded successfully</sys:String>
     <sys:String x:Key="String_ChangeZip">Change ZIP...</sys:String>
@@ -260,12 +270,15 @@
     <sys:String x:Key="String_NoDescriptionProvided">No description provided for this game instance.</sys:String>
     <sys:String x:Key="String_Developer">Developer:</sys:String>
     <sys:String x:Key="String_Publisher">Publisher:</sys:String>
-    <sys:String x:Key="String_InstalledVersion">Installed Version:</sys:String>
+    <sys:String x:Key="String_InstalledVersion">Detected Version:</sys:String>
     <sys:String x:Key="String_LatestOnSteam">Latest on Steam:</sys:String>
     <sys:String x:Key="String_ReleaseDate">Release Date:</sys:String>
-    <sys:String x:Key="String_AssociateDepotBoxTitle">Associate with DepotBox</sys:String>
-    <sys:String x:Key="String_AssociateDepotBoxDesc">This game was imported from a folder. Associate it with DepotBox to enable automatic updates, depot management, and DLC installation.</sys:String>
+    <sys:String x:Key="String_AssociateDepotBoxTitle">Associate with Community Depots</sys:String>
+    <sys:String x:Key="String_AssociateDepotBoxDesc">This game was imported from a folder. Associate it with community depots to enable automatic updates, depot management, and DLC installation.</sys:String>
     <sys:String x:Key="String_FindDepotsBtn">Find depots for this game</sys:String>
+    <sys:String x:Key="String_RecheckVersionTitle">Recheck Version</sys:String>
+    <sys:String x:Key="String_RecheckVersionDesc">Recalculates installed depot manifests and checks for pending updates or fixes failed update states.</sys:String>
+    <sys:String x:Key="String_RecheckVersionBtn">Recheck Version</sys:String>
     <sys:String x:Key="String_NewVersionDetectedTitle">New Version Detected</sys:String>
     <sys:String x:Key="String_NewVersionDetectedDesc">A new build was detected. Compare depot manifests across available providers and download only what changed.</sys:String>
     <sys:String x:Key="String_CheckDepotBoxUpdatesBtn">Check for Updates</sys:String>
@@ -442,16 +455,16 @@
     <sys:String x:Key="String_ImportFromManifestFilesBtn">Import from .manifest files...</sys:String>
     <sys:String x:Key="String_SaveSwitchBuildBtn">Save &amp; Switch Build</sys:String>
     <sys:String x:Key="String_DepotUpdatesModalTitle">Depot Updates</sys:String>
-    <sys:String x:Key="String_DepotUpdatesModalDesc">New manifests were detected on DepotBox for this instance.</sys:String>
+    <sys:String x:Key="String_DepotUpdatesModalDesc">New manifests were detected for this instance.</sys:String>
     <sys:String x:Key="String_DepotUpdateCurrentLabel">Installed</sys:String>
     <sys:String x:Key="String_DepotUpdateNewLabel">Available</sys:String>
     <sys:String x:Key="String_SelectDepotsToUpdateLabel">Select the depots you want to update:</sys:String>
     <sys:String x:Key="String_GameRunningWarning">The game is currently running. Please close it before installing the update.</sys:String>
     <sys:String x:Key="String_GameRunningUpdateWarn">The game is currently running. Please close it before installing the update.</sys:String>
     <sys:String x:Key="String_DownloadInstallBtn">Download &amp; Install</sys:String>
-    <sys:String x:Key="String_AssociateWithDepotBoxModalTitle">Link with DepotBox Package</sys:String>
-    <sys:String x:Key="String_AssociateDepotBoxModalDesc">Link this imported game to DepotBox to enable automatic depot updates, manifest tracking, and DLC installation.</sys:String>
-    <sys:String x:Key="String_AssociateWithDepotBoxModalDesc">Link this imported game to DepotBox to enable automatic depot updates, manifest tracking, and DLC installation.</sys:String>
+    <sys:String x:Key="String_AssociateWithDepotBoxModalTitle">Link with Community Depots</sys:String>
+    <sys:String x:Key="String_AssociateDepotBoxModalDesc">Link this imported game to community depots to enable automatic depot updates, manifest tracking, and DLC installation.</sys:String>
+    <sys:String x:Key="String_AssociateWithDepotBoxModalDesc">Link this imported game to community depots to enable automatic depot updates, manifest tracking, and DLC installation.</sys:String>
     <sys:String x:Key="String_SearchButton">Search</sys:String>
     <sys:String x:Key="String_BestMatchLabel">Best Match:</sys:String>
     <sys:String x:Key="String_BestMatchPrefix">Best Match: </sys:String>
@@ -492,7 +505,7 @@
     <sys:String x:Key="String_LanguageSettingDesc">Interface display language.</sys:String>
     <sys:String x:Key="String_Language_En">English</sys:String>
     <sys:String x:Key="String_Language_Es">Español (Latinoamérica)</sys:String>
-    <sys:String x:Key="String_ApiConfigHeader">DepotBox API Configuration</sys:String>
+    <sys:String x:Key="String_ApiConfigHeader">Community API Configuration</sys:String>
     <sys:String x:Key="String_ApiConnectionDesc">Connection for Steam metadata and manifests.</sys:String>
     <sys:String x:Key="String_ApiKeyLabel">Personal API Key (Optional Override):</sys:String>
     <sys:String x:Key="String_ApiKeyHelp">Optional. Leave blank to use default configuration.</sys:String>

@@ -86,7 +86,7 @@ public sealed class ReFixEmulator : IEmulator
     public static string GetCurrentVersion()
     {
         var deployPath = GetReFixDeployPath();
-        if (deployPath == null) return "1.1";
+        if (deployPath == null) return "1.3";
 
         var versionFile = Path.Combine(deployPath, "refix_version.json");
         if (File.Exists(versionFile))

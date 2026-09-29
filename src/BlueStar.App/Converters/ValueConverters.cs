@@ -520,9 +520,9 @@ public sealed class InstanceEmulatorUpdateVisibilityConverter : IValueConverter
         var current = BlueStar.Infrastructure.Emulators.ReFixEmulator.GetCurrentVersion();
         var installed = instance.InstalledEmulatorVersion;
         if (string.IsNullOrWhiteSpace(installed))
-            return instance.EmulatorEnabled ? Visibility.Visible : Visibility.Collapsed;
+            return Visibility.Collapsed;
 
-        return IsNewer(current, installed) ? Visibility.Visible : Visibility.Collapsed;
+        return BlueStar.Infrastructure.Emulators.ReFixUpdateService.IsNewerVersion(current, installed) ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private static bool IsNewer(string current, string installed)
