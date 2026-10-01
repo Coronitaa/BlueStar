@@ -6747,6 +6747,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         var fullLog = string.Join(Environment.NewLine, ConsoleLogs);
         Clipboard.SetText(fullLog);
         StatusMessage = "📋 Logs copied to clipboard.";
+        _notificationService?.ShowSuccess("Logs Copied", "Console logs copied to clipboard.");
     }
 
     private static string FormatFileSize(long bytes) => bytes switch

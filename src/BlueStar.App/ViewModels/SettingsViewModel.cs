@@ -35,6 +35,13 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool _isCheckingForUpdates;
 
+    partial void OnIsCheckingForUpdatesChanged(bool value)
+    {
+        CheckOrInstallUpdateCommand.NotifyCanExecuteChanged();
+    }
+
+    public bool CanCheckOrInstallUpdate => !IsCheckingForUpdates;
+
     [ObservableProperty]
     private bool _hasUpdateAvailable;
 
@@ -124,6 +131,13 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isTestingConnection;
+
+    partial void OnIsTestingConnectionChanged(bool value)
+    {
+        TestConnectionCommand.NotifyCanExecuteChanged();
+    }
+
+    public bool CanTestConnection => !IsTestingConnection;
 
     [ObservableProperty]
     private string _instanceRoot = string.Empty;
@@ -235,6 +249,13 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool _isGeneratingReport;
 
+    partial void OnIsGeneratingReportChanged(bool value)
+    {
+        GenerateDiagnosticReportCommand.NotifyCanExecuteChanged();
+    }
+
+    public bool CanGenerateDiagnosticReport => !IsGeneratingReport;
+
     // ── System Prerequisites in Settings ──
     private readonly IPrerequisiteService? _prerequisiteService;
 
@@ -244,8 +265,23 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool _isScanningRequirements;
 
+    partial void OnIsScanningRequirementsChanged(bool value)
+    {
+        ScanRequirementsCommand.NotifyCanExecuteChanged();
+        InstallAllRequirementsCommand.NotifyCanExecuteChanged();
+    }
+
     [ObservableProperty]
     private bool _isInstallingRequirements;
+
+    partial void OnIsInstallingRequirementsChanged(bool value)
+    {
+        ScanRequirementsCommand.NotifyCanExecuteChanged();
+        InstallAllRequirementsCommand.NotifyCanExecuteChanged();
+    }
+
+    public bool CanScanRequirements => !IsScanningRequirements && !IsInstallingRequirements;
+    public bool CanInstallAllRequirements => !IsInstallingRequirements && !IsScanningRequirements && SystemPrerequisites.Count > 0;
 
     [ObservableProperty]
     private string _installRequirementsStatusText = string.Empty;
@@ -264,6 +300,13 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isClearingCache;
+
+    partial void OnIsClearingCacheChanged(bool value)
+    {
+        ConfirmClearCacheCommand.NotifyCanExecuteChanged();
+    }
+
+    public bool CanConfirmClearCache => !IsClearingCache;
 
     [ObservableProperty]
     private string? _clearCacheResult;
@@ -466,7 +509,7 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>
     /// Tests the DepotBox API connection with the effective active key.
     /// </summary>
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanTestConnection))]
     private async Task TestConnectionAsync()
     {
         IsTestingConnection = true;
@@ -565,7 +608,7 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>
     /// Scans the system requirements.
     /// </summary>
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanScanRequirements))]
     public async Task ScanRequirementsAsync()
     {
         if (_prerequisiteService == null) return;
@@ -625,7 +668,7 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>
     /// Installs all missing prerequisites from Settings.
     /// </summary>
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanInstallAllRequirements))]
     public async Task InstallAllRequirementsAsync()
     {
         if (_prerequisiteService == null || IsInstallingRequirements || SystemPrerequisites.Count == 0) return;
@@ -720,7 +763,7 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>
     /// Generates a structured diagnostic log report for GitHub issues and troubleshooting.
     /// </summary>
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanGenerateDiagnosticReport))]
     private async Task GenerateDiagnosticReportAsync()
     {
         if (IsGeneratingReport) return;
@@ -816,7 +859,7 @@ public partial class SettingsViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanConfirmClearCache))]
     public async Task ConfirmClearCacheAsync()
     {
         IsClearingCache = true;
@@ -919,7 +962,7 @@ public partial class SettingsViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanCheckOrInstallUpdate))]
     public async Task CheckOrInstallUpdateAsync()
     {
         if (_updateService == null) return;

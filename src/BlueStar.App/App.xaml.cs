@@ -332,6 +332,7 @@ public partial class App : Application
                 action();
             }
         };
+        BlueStar.Infrastructure.Services.NotificationService.ExitAnimationDelay = TimeSpan.FromMilliseconds(200);
 
         base.OnStartup(e);
 

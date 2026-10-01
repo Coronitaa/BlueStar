@@ -81,6 +81,7 @@
     <SolidColorBrush x:Key="WarningBgBrush" Color="#18F59E0B"/>
     <SolidColorBrush x:Key="DangerBrush" Color="#EF4444"/>
     <SolidColorBrush x:Key="DangerHoverBrush" Color="#DC2626"/>
+    <SolidColorBrush x:Key="DangerPressedBrush" Color="#B91C1C"/>
     <SolidColorBrush x:Key="DangerBgBrush" Color="#18EF4444"/>
     <SolidColorBrush x:Key="InfoBrush" Color="#3B82F6"/>
     <SolidColorBrush x:Key="InfoBgBrush" Color="#183B82F6"/>

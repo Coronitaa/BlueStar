@@ -21,6 +21,12 @@ public sealed class NotificationService : INotificationService
 
     public static Action<Action>? UiDispatcher { get; set; }
 
+    /// <summary>
+    /// Gets or sets the delay allowed for the UI exit transition before an item is purged from the collection.
+    /// Default is TimeSpan.Zero (synchronous removal) for fast headless tests and immediate responses.
+    /// </summary>
+    public static TimeSpan ExitAnimationDelay { get; set; } = TimeSpan.Zero;
+
     public ReadOnlyObservableCollection<NotificationItem> Notifications => _readOnlyNotifications;
 
     public NotificationService(ILogger<NotificationService> logger)
@@ -91,11 +97,16 @@ public sealed class NotificationService : INotificationService
 
     public void Dismiss(Guid id)
     {
-        PostToUi(() =>
+        PostToUi(async () =>
         {
             var item = _notifications.FirstOrDefault(n => n.Id == id);
-            if (item != null)
+            if (item != null && !item.IsDismissing)
             {
+                if (ExitAnimationDelay > TimeSpan.Zero)
+                {
+                    item.IsDismissing = true;
+                    await Task.Delay(ExitAnimationDelay).ConfigureAwait(true);
+                }
                 _notifications.Remove(item);
             }
         });
@@ -103,7 +114,18 @@ public sealed class NotificationService : INotificationService
 
     public void ClearAll()
     {
-        PostToUi(() => _notifications.Clear());
+        PostToUi(async () =>
+        {
+            if (ExitAnimationDelay > TimeSpan.Zero && _notifications.Count > 0)
+            {
+                foreach (var item in _notifications)
+                {
+                    item.IsDismissing = true;
+                }
+                await Task.Delay(ExitAnimationDelay).ConfigureAwait(true);
+            }
+            _notifications.Clear();
+        });
     }
 
     private void PostToUi(Action action)

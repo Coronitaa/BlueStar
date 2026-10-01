@@ -110,15 +110,18 @@
 
                     <!-- Window Control Buttons (Minimize, Maximize, Close) -->
                     <Button x:Name="MinimizeButton" Click="MinimizeButton_Click"
-                            Style="{StaticResource TitleBarButton}">
+                            Style="{StaticResource TitleBarButton}"
+                            ToolTip="{DynamicResource String_Minimize}">
                         <TextBlock Text="─" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </Button>
                     <Button x:Name="MaximizeButton" Click="MaximizeButton_Click"
-                            Style="{StaticResource TitleBarButton}">
+                            Style="{StaticResource TitleBarButton}"
+                            ToolTip="{DynamicResource String_Maximize}">
                         <TextBlock Text="☐" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </Button>
                     <Button x:Name="CloseButton" Click="CloseButton_Click"
-                            Style="{StaticResource TitleBarCloseButton}">
+                            Style="{StaticResource TitleBarCloseButton}"
+                            ToolTip="{DynamicResource String_Close}">
                         <TextBlock Text="✕" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </Button>
                 </StackPanel>
@@ -629,14 +632,38 @@
                       IsHitTestVisible="True">
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                    <Border Background="{StaticResource SurfaceCardBrush}"
+                    <Border x:Name="toastBorder"
+                            Background="{StaticResource SurfaceCardBrush}"
                             BorderBrush="{Binding Type, Converter={StaticResource NotificationTypeToBrushConverter}}"
                             BorderThickness="1"
                             CornerRadius="{StaticResource RadiusMd}"
                             Padding="14,10"
                             Margin="0,0,0,10"
                             MinWidth="300"
-                            MaxWidth="400">
+                            MaxWidth="400"
+                            RenderTransformOrigin="0.5,0.5">
+                        <Border.Effect>
+                            <DropShadowEffect Color="#000000" BlurRadius="20" ShadowDepth="4" Opacity="0.55"/>
+                        </Border.Effect>
+                        <Border.RenderTransform>
+                            <TranslateTransform X="0" Y="0"/>
+                        </Border.RenderTransform>
+                        <Border.Triggers>
+                            <EventTrigger RoutedEvent="Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                         From="0" To="1"
+                                                         Duration="{StaticResource DurationFast}"
+                                                         EasingFunction="{StaticResource EaseOutCubic}"/>
+                                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
+                                                         From="40" To="0"
+                                                         Duration="{StaticResource DurationNormal}"
+                                                         EasingFunction="{StaticResource EaseOutCubic}"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Border.Triggers>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
@@ -695,6 +722,24 @@
                             </Button>
                         </Grid>
                     </Border>
+                    <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding IsDismissing}" Value="True">
+                            <DataTrigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="toastBorder"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0" Duration="0:0:0.18"
+                                                         EasingFunction="{StaticResource EaseOutCubic}"/>
+                                        <DoubleAnimation Storyboard.TargetName="toastBorder"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
+                                                         To="50" Duration="0:0:0.18"
+                                                         EasingFunction="{StaticResource EaseOutCubic}"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </DataTrigger.EnterActions>
+                        </DataTrigger>
+                    </DataTemplate.Triggers>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>

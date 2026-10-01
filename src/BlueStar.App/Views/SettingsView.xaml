@@ -562,14 +562,12 @@
                                                 <Button Content="{DynamicResource String_ReScanBtn}"
                                                         Style="{StaticResource SecondaryButton}"
                                                         Padding="12,6" FontSize="11" Margin="0,0,8,0"
-                                                        Command="{Binding ScanRequirementsCommand}"
-                                                        IsEnabled="{Binding IsInstallingRequirements, Converter={StaticResource InverseBoolConverter}}"/>
+                                                        Command="{Binding ScanRequirementsCommand}"/>
                                                 <Button Content="{DynamicResource String_InstallAllMissingBtn}"
                                                         Style="{StaticResource PrimaryButton}"
                                                         Padding="14,6" FontSize="11"
                                                         Visibility="{Binding HasMissingRequirements, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                        Command="{Binding InstallAllRequirementsCommand}"
-                                                        IsEnabled="{Binding IsInstallingRequirements, Converter={StaticResource InverseBoolConverter}}"/>
+                                                        Command="{Binding InstallAllRequirementsCommand}"/>
                                             </StackPanel>
 
                                             <!-- Auto check toggle -->

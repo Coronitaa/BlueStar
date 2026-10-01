@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 
 namespace BlueStar.Core.Models;
 
@@ -17,8 +18,28 @@ public enum NotificationType
 /// <summary>
 /// Represents a non-intrusive popup/toast notification in the UI.
 /// </summary>
-public sealed class NotificationItem
+public sealed class NotificationItem : INotifyPropertyChanged
 {
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private bool _isDismissing;
+
+    /// <summary>
+    /// Gets or sets whether this notification is currently executing its exit animation.
+    /// </summary>
+    public bool IsDismissing
+    {
+        get => _isDismissing;
+        set
+        {
+            if (_isDismissing != value)
+            {
+                _isDismissing = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsDismissing)));
+            }
+        }
+    }
+
     /// <summary>
     /// Unique identifier for this notification instance.
     /// </summary>
