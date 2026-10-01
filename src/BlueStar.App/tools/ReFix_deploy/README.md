@@ -1,72 +1,103 @@
-﻿# ReFix v1.2.0 — Universal OnlineFix Alternative, Steam Emulator & LAN Multiplayer Fix
+# ReFix v1.3.2 — Universal Multiplayer Fix, Steam & EOS Emulator, and DLC Unlocker
 
-[![Release](https://img.shields.io/badge/version-v1.2.0-blue.svg)](https://github.com/Coronitaa/ReFix/releases/tag/v1.2)
+[![Release](https://img.shields.io/badge/version-v1.3.2-blue.svg)](https://github.com/Coronitaa/ReFix/releases/tag/v1.3.2)
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64%20%7C%20x86-lightgrey.svg)](https://github.com/Coronitaa/ReFix)
 [![Engines](https://img.shields.io/badge/engines-Unity%20%7C%20Unreal%20%7C%20Godot%20%7C%20Native-green.svg)](https://github.com/Coronitaa/ReFix)
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
-[![Keywords](https://img.shields.io/badge/keywords-onlinefix%20%7C%20steam--crack%20%7C%20goldberg-orange.svg)](https://github.com/Coronitaa/ReFix)
+[![Signed: Corøna](https://img.shields.io/badge/signed-BlueStar%20Developers-blueviolet.svg)](https://github.com/Coronitaa/ReFix)
 
-**ReFix** is a high-performance, modular C++ DLL proxy, runtime Steamworks emulator, universal DLC unlocker, and multiplayer fix suite for PC games. Built as an open-source alternative to **OnlineFix (online-fix.me)**, **Goldberg Emulator**, **CODEX**, and **SmartSteamEmu**, ReFix enables seamless online co-op / multiplayer via Steam (Spacewar 480) or 100% offline local area network (LAN) play without requiring the Steam client.
+Hey everyone! Welcome to **ReFix** — your open-source, all-in-one C++ proxy suite designed to get multiplayer, online co-op, and DLCs working on PC games without the headaches. 
+
+Whether you want to play online with friends over Steam (using Spacewar AppID 480 masking) or host a LAN party completely offline without even touching the Steam client, ReFix has you covered. It's built as a clean, transparent, and bloat-free alternative to closed-source solutions like OnlineFix (online-fix.me), Goldberg Emulator, and legacy scene emus.
 
 ---
 
-## 🔍 Steam Emulators & Multiplayer Fixes Comparison Matrix
+## 🔍 How ReFix Compares
 
-| Feature | ReFix v1.2.0 | OnlineFix (online-fix.me) | Goldberg Emulator (gbe_fork) | CODEX Steam Emu | SmartSteamEmu (SSE) |
+| Feature | ReFix v1.3.2 | OnlineFix (online-fix.me) | Goldberg Emulator (gbe_fork) | CODEX Steam Emu | SmartSteamEmu (SSE) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Open Source (Full C++ Source)** | ✅ **Yes (MIT)** | ❌ Closed / Obfuscated | ✅ Yes (GPL/MIT) | ❌ Closed Source | ❌ Closed / Discontinued |
+| **Open Source (Full C++ Source)** | ✅ **Yes (CC BY-NC-SA)** | ❌ Closed / Obfuscated | ✅ Yes (GPL/MIT) | ❌ Closed Source | ❌ Closed / Abandoned |
 | **Steam Online Matchmaking (Spacewar 480)** | ✅ **Yes** | ✅ Yes | ❌ No (LAN only) | ❌ No (Offline only) | ❌ No (LAN only) |
 | **100% Offline LAN Play (No Steam Required)** | ✅ **Yes (gbe_fork)** | ❌ No | ✅ Yes | ⚠️ Offline solo | ✅ Yes (Legacy LAN) |
 | **Universal DLC Auto-Unlocker** | ✅ **Yes (SmokeAPI/CreamAPI)** | ⚠️ Manual / Partial | ⚠️ Config file only | ⚠️ INI list only | ⚠️ INI list only |
 | **Interactive GUI Executable Picker** | ✅ **Yes (`select_exe.ps1`)** | ❌ No | ❌ No | ❌ No | ❌ No |
 | **Smart Multi-Engine Detection (Unity/Unreal/Godot/Native)** | ✅ **Yes (Automated)** | ❌ No | ❌ No | ❌ No | ❌ No |
-| **Epic Online Services (EOS / Redbone) Proxy** | ✅ **Yes (Built-in)** | ⚠️ Custom patches | ❌ No | ❌ No | ❌ No |
-| **Automatic Windows Defender Firewall Config** | ✅ **Yes** | ❌ No | ❌ No | ❌ No | ❌ No |
-| **Steam Non-Steam Shortcut Injector** | ✅ **Yes (`shortcuts.vdf`)** | ❌ No | ❌ No | ❌ No | ❌ No |
+| **Modular Epic Online Services (EOS / RedboneEOS)** | ✅ **Yes (Modular v3)** | ⚠️ Custom patches | ❌ No | ❌ No | ❌ No |
+| **Automatic Windows Defender Firewall Rules** | ✅ **Yes** | ❌ No | ❌ No | ❌ No | ❌ No |
+| **Steam Non-Steam Shortcut Auto-Injector** | ✅ **Yes (`shortcuts.vdf`)** | ❌ No | ❌ No | ❌ No | ❌ No |
 | **Clean Zero-Trace Uninstaller & Game Restorer** | ✅ **Yes (1-Click)** | ❌ No | ❌ No | ❌ No | ❌ No |
+| **Digitally Signed Binaries** | ✅ **Yes (BlueStar Developers)** | ❌ No | ❌ No | ❌ No | ❌ No |
 
 ---
 
-## 🌟 Key Features & Architecture
+## 🔥 What's New in v1.3.2 (The Good Stuff)
 
-### 1. Dual Connectivity Modes
-* **Mode 1 — ReFix Online via Steam (Spacewar 480):**
-  * Hooks into official Steam client via AppID 480 masking.
-  * Enables online matchmaking, Steam lobbies, P2P networking, and Steam Overlay (Shift+Tab) through official Steam infrastructure.
-  * Injects real game AppID into lobby metadata for worldwide lobby filtering and cross-player matchmaking.
-* **Mode 2 — Re:Goldberg LAN without Steam (Offline / gbe_fork):**
-  * 100% autonomous local emulation powered by the modern [gbe_fork](https://github.com/Detanup01/gbe_fork) / [Goldberg Emulator](https://gitlab.com/Mr_Goldberg/goldberg_emulator) backend.
-  * Zero Steam installation or client dependency required.
-  * Local subnet UDP broadcast discovery (default port `47584`), custom broadcast IP lists, persistent machine-unique SteamID64 identities, and portable save directory (`saves/`).
+* **Rock-Solid Networking Core:**  
+  We went back to our clean, battle-tested network foundation and scrapped invasive network hooks that were causing WAN regressions and silent packet drops. UDP traffic, direct P2P connections, and Steam Datagram Relay (SDR) route naturally and reliably.
 
-### 2. Universal DLC Unlocker (BLUESTAR Engine)
-* Powered by lightweight [SmokeAPI](https://github.com/acidicoala/SmokeAPI) & [CreamAPI](https://github.com/acidicoala/CreamAPI) hooks.
-* **Three Unlock Modes:**
-  * **Unlock ALL:** Universal auto-unlock with Steam Store catalog caching.
-  * **Unlock NONE:** Locks all DLCs for base-game parity testing.
-  * **Custom Selection:** Interactive Steam Store API querying with real-time DLC titles, comma-separated index selection, ranges (e.g. `1-5`), or direct AppID inputs.
-* Automatic generation of `cream_api.ini` and `SmokeAPI.config.json`.
-* Non-destructive: Creates and manages original backups (`steam_api64_o.dll` / `steam_api_o.dll`).
+* **Fixed Steam Matchmaking & Server Browsers:**  
+  * Fixed an elusive low-level ABI mismatch on `ISteamMatchmaking::GetLobbyByIndex`, preventing server browser crashes when iterating lobby results.
+  * Server browsers now populate reliably across Unity (IL2CPP / Mono) and Unreal games (tested thoroughly on stubborn titles like *Shift At Midnight*).
+  * Decoupled distance filter overrides so games that manage their own search queries (Close, Default, Worldwide) don't get choked or timed out by the proxy.
+  * Seamless AppID consistency: games query real metadata without losing Spacewar 480 lobby routing.
 
-### 3. Smart Multi-Engine Detection & Executable Selection
-* Automatically inspects target directories for engine signatures:
-  * **Unity:** `*_Data/Managed/`, `UnityPlayer.dll`, [BepInEx](https://github.com/BepInEx/BepInEx) loader integration.
-  * **Unreal Engine 4/5:** `Binaries/Win64/`, `EOSSDK-Win64-Shipping.dll`, `RedboneEOS.dll`.
-  * **Godot 3/4:** `*.pck` project packages, GodotSteam / SteamMultiplayerPeer.
-  * **Native C/C++:** Custom engines (e.g. *Don't Starve Together*, Source engine titles).
-* **Smart Binary Scoring:** Automatically filters out dedicated servers, crash handlers, nullrenderers, and helper tools (`*dedicated*`, `*nullrenderer*`, `*server*`), prioritizing main client 64-bit binaries.
-* **Interactive Executable Picker:** Allows confirming the detected executable, choosing via native Windows File Explorer GUI dialog (`select_exe.ps1`), or entering custom paths.
+* **Modular Epic Online Services (EOS v3 & RedboneEOS):**  
+  Got an Unreal Engine game or title utilizing Epic Online Services? ReFix includes modular `EOSSDK-Win64-Shipping.dll` and `RedboneEOS.dll` proxies that handle device auth, session handshakes, and ticket validation. If your game doesn't use EOS, those modules stay out of the way completely.
 
-### 4. Automatic Network & Firewall Configuration
-* Embedded PowerShell and UAC helpers automatically configure Windows Defender Firewall rules for TCP/UDP game traffic and UDP LAN discovery ports.
-* Generates a portable `Configure_LAN_Firewall.bat` helper in game root for plug-and-play USB / flash drive portability.
+* **Steam Overlay & Friend Invitations:**  
+  Full support for Shift+Tab Steam Overlay. In-game invitations automatically inject connection parameters (`+connect_lobby`), letting your friends click "Join Game" directly from their Steam friends list to hop straight into your session.
 
-### 5. Steam Non-Steam Game Shortcut Auto-Installer
-* Seamlessly injects the patched game into Steam's binary `shortcuts.vdf` for all local Steam user profiles.
-* Reloads Steam automatically to enable Steam Overlay, Steam Input controller mapping, and Remote Play.
+* **Digitally Signed Binaries:**  
+  Every release binary (`steam_api64.dll`, `winmm.dll`, `EOSSDK-Win64-Shipping.dll`, `RedboneEOS.dll`) is digitally signed with our official **Corøna (BlueStar Developers)** Authenticode certificate. This keeps Windows Defender and other security software from freaking out over false positives.
 
-### 6. Universal Uninstaller & Restorer
-* One-click rollback (`Uninstall_ReFix.bat`) that restores original backup DLLs (`.orig`, `_valve.dll`, `_o.dll`), restores SteamStub protected exes, and cleans up proxies, emulators, and temp caches without leaving residue.
+---
+
+## 🎮 How It Works
+
+### Mode 1 — ReFix Online via Steam (Spacewar 480)
+* Hooks straight into your running Steam client by masking your game under Valve's Spacewar (AppID 480).
+* Lets you use real Steam infrastructure: global server lists, P2P NAT punch-through, Steam Relay, in-game invites, and the Shift+Tab overlay.
+* Automatically injects the game's real AppID into lobby metadata so you only match with other players running the same game.
+
+### Mode 2 — Re:Goldberg LAN without Steam (100% Offline)
+* Powered by the modern [gbe_fork](https://github.com/Detanup01/gbe_fork) / Goldberg backend.
+* Run your game without Steam installed or running at all!
+* Automatically broadcasts on your local subnet UDP port (`47584`) for instant discovery on home LANs or virtual networks (like Radmin VPN, Hamachi, or ZeroTier).
+* Saves your game data locally in a clean, portable `saves/` folder.
+
+### Universal DLC Unlocker (BLUESTAR Engine)
+* Built right on top of [SmokeAPI](https://github.com/acidicoala/SmokeAPI) and [CreamAPI](https://github.com/acidicoala/CreamAPI).
+* Three easy options:
+  * **Unlock All:** Instantly activates every piece of DLC known to the Steam Store catalog.
+  * **Unlock None:** Keeps the base game clean for vanilla testing.
+  * **Pick & Choose:** Interactive scraper that pulls DLC names live from the Steam API so you can select exactly what you want.
+
+---
+
+## 🚀 Quick Start Guide
+
+### For Gamers (Automatic 1-Click Setup)
+
+1. Grab the latest **`ReFix_Release_v1.3.2.zip`** from [GitHub Releases](https://github.com/Coronitaa/ReFix/releases/tag/v1.3.2).
+2. Extract the zip to any folder you like.
+3. Run **`AutoDeploy.bat`**:
+   - Use the file browser pop-up to select your game directory.
+   - Confirm your game's `.exe`.
+   - Pick your mode:
+     - `[1] ReFix Online via Steam`: Play online with friends over Steam.
+     - `[2] Re:Goldberg LAN without Steam`: Play offline on LAN with zero Steam required.
+   - Choose your DLC preference (`[1] All`, `[2] None`, `[3] Custom`).
+4. Launch your game and have fun!
+
+### For DLC Unlocking Only
+
+1. Run **`DLC_Unlocker.bat`**.
+2. Select your game folder.
+3. Choose whether to unlock all DLCs, choose specific ones, or reset back to vanilla.
+
+### Want to Uninstall or Restore Everything?
+
+No stress! Just run **`Uninstall_ReFix.bat`**, select your game folder, and it will safely restore all original DLLs (`.orig`, `_valve.dll`, `_o.dll`), remove all proxies and configs, and leave your game completely untouched.
 
 ---
 
@@ -74,126 +105,84 @@
 
 ```
 ReFix/
-├── AutoDeploy.bat                      # Main Universal AutoDeploy batch tool (v1.2.0)
-├── DLC_Unlocker.bat                    # Universal DLC Unlocker tool (v1.2.0)
-├── Uninstall_ReFix.bat                 # Zero-trace uninstaller & game restorer
-├── build.bat                           # MSVC build script for C++ proxies
-├── deploy.bat                          # Automated packaging & deployment script
-├── ReFix.ini                           # Unified configuration template
-├── README.md                           # Comprehensive documentation & SEO guide
-├── bin/                                # Deployment binaries & helper modules
-│   ├── steam_api64.dll                 # ReFix Steam proxy DLL (x64)
-│   ├── winmm.dll                       # ReFix winmm startup proxy loader
-│   ├── EOSSDK-Win64-Shipping.dll       # EOS authentication proxy
-│   ├── RedboneEOS.dll                  # Redpoint EOS bridge proxy
+├── AutoDeploy.bat                      # 1-Click universal auto-deploy setup tool
+├── DLC_Unlocker.bat                    # Universal DLC Unlocker (SmokeAPI / CreamAPI)
+├── Uninstall_ReFix.bat                 # Zero-trace uninstaller & clean game restorer
+├── build.bat                           # 1-Click MSVC build script for all C++ proxies
+├── deploy.bat                          # Packaging script for releases
+├── ReFix.ini                           # Central configuration template
+├── README.md                           # Documentation & quick start guide
+├── bin/                                # Deployment binaries and helper scripts
+│   ├── steam_api64.dll                 # ReFix Steamworks proxy (Signed)
+│   ├── winmm.dll                       # Startup loader & overlay hook (Signed)
+│   ├── EOSSDK-Win64-Shipping.dll       # Epic Online Services auth proxy (Signed)
+│   ├── RedboneEOS.dll                  # Redpoint EOS bridge proxy (Signed)
 │   ├── ReFixSync.dll                   # Synchronization helper
-│   ├── detect_game.ps1                 # Engine & executable analyzer
-│   ├── deploy_helper.ps1               # Deployment engine & config synchronizer
-│   ├── select_dlcs.ps1                 # Steam Store API DLC catalog scraper
+│   ├── detect_game.ps1                 # Smart engine and binary detector
+│   ├── deploy_helper.ps1               # Deployment and configuration synchronizer
+│   ├── select_dlcs.ps1                 # Steam Store DLC scraper
 │   ├── dlc_unlocker.ps1                # SmokeAPI/CreamAPI deployment manager
 │   ├── select_folder.ps1               # GUI folder selection dialog
-│   ├── select_exe.ps1                  # GUI executable selection dialog
-│   ├── apply_firewall.ps1              # Windows Firewall rule automator
+│   ├── select_exe.ps1                  # GUI executable picker dialog
+│   ├── apply_firewall.ps1              # Windows Defender Firewall helper
 │   ├── add_steam_shortcut.ps1          # Steam shortcuts.vdf binary injector
-│   ├── Install_ReFix_Steam_Shortcut.bat # Steam shortcut batch helper
-│   ├── goldberg/                       # Goldberg emulator binaries & tools
+│   ├── goldberg/                       # Standalone Goldberg LAN emulator files
 │   ├── bepinex/                        # BepInEx runtime loader
-│   └── tools/                          # SmokeAPI & Steamless unpacking utilities
-└── src/                                # C++ Proxy source code
+│   └── tools/                          # Steamless unpacking utilities
+└── src/                                # Complete C++ source code
     ├── winmm_proxy.cpp                 # winmm.dll loader & hooking entry point
-    ├── steam_proxy.cpp                 # steam_api64.dll export proxy & wrapper
-    ├── eos_proxy.cpp                   # EOSSDK authentication & session emulator
-    ├── unreal_detect.cpp               # Unreal Engine subsystem hooks
+    ├── steam_proxy.cpp                 # steam_api64.dll proxy & Steamworks wrapper
+    ├── eos_proxy.cpp                   # Epic Online Services session & auth emulator
+    ├── unreal_detect.cpp               # Unreal Engine subsystem detection
     ├── unreal_steam_emu.cpp            # Unreal Engine Steam adapter
-    ├── upnp_firewall.cpp               # UPnP & firewall automation routines
+    ├── upnp_firewall.cpp               # Firewall automation routines
     ├── server_browser_gui.cpp          # In-game ImGui server browser
     ├── include/                        # Steamworks SDK headers
-    └── minhook/                        # MinHook hooking library
+    └── minhook/                        # MinHook library
 ```
-
----
-
-## 🚀 Quick Start Guide
-
-### For Players (Deployment Package)
-
-1. Download the latest **`ReFix_Release_v1.2.zip`** from [Releases](https://github.com/Coronitaa/ReFix/releases/tag/v1.2).
-2. Extract the archive to any folder (or directly to a USB flash drive).
-3. Run **`AutoDeploy.bat`**:
-   - Choose your target game directory using the GUI dialog or enter the path.
-   - Confirm or choose the executable (`.exe`).
-   - Select your connectivity mode:
-     - `[1] ReFix Online via Steam`: Online multiplayer with friends via Steam.
-     - `[2] Re:Goldberg LAN without Steam`: Local LAN multiplayer without Steam running.
-   - Choose your DLC preference (`[1] All`, `[2] None`, `[3] Custom`).
-   - Launch your game and play!
-
-### For DLC Unlocking Only
-
-1. Run **`DLC_Unlocker.bat`**.
-2. Select your game folder.
-3. Choose `[1] Unlock ALL DLCs`, `[2] Choose specific DLCs`, or `[3] Unlock NO DLCs`.
-4. The tool automatically configures SmokeAPI/CreamAPI and creates non-destructive backups.
-
-### Restoring to Original Clean State
-
-1. Run **`Uninstall_ReFix.bat`**.
-2. Select your game folder.
-3. All original files (`.orig`, `_valve.dll`, `_o.dll`, `.steamstub.exe`) are restored and all proxies/emulators are removed.
 
 ---
 
 ## ⚙️ Configuration Reference (`ReFix.ini`)
 
+You can tweak game-specific behavior anytime by opening `ReFix.ini` in your game's directory:
+
 ```ini
 [Game]
-GameName=GenericGame            ; Descriptive game title
+GameName=GenericGame            ; Game title for logging and window titles
 EngineType=Auto                 ; Auto | Unity | Unreal | Godot | Native
 
 [Online]
-Mode=goldberg                   ; valve (Steam Online 480) | goldberg (LAN Offline)
+Mode=valve                      ; valve (Steam Online 480) | goldberg (LAN Offline)
 
 [Steam]
-MaskAppId=480                   ; Steam AppID used for masking (Spacewar 480)
-RealAppId=550                   ; Real Steam AppID for DLCs and metadata
+MaskAppId=480                   ; Steam AppID used for masking (Default: Spacewar 480)
+RealAppId=                      ; Real Steam AppID for DLCs and metadata (e.g. 550)
 Language=english                ; Game language
-BypassLicenseCheck=true         ; Allow running without Steam license ownership
+BypassLicenseCheck=true         ; Allow running without Steam store ownership
 DLCs=all                        ; all | none | comma-separated AppIDs
 
 [Matchmaking]
-EnableLobbyFilter=false         ; Filter lobbies by custom key
+EnableLobbyFilter=false         ; Filter lobbies by custom metadata key
 LobbyFilterKey=game_filter      ; Metadata key for game filtering
-LobbyFilterValue=               ; Filter value (auto uses RealAppId if empty)
+LobbyFilterValue=               ; Custom filter value (defaults to RealAppId)
 LobbyDistanceFilter=Worldwide   ; Close | Default | Far | Worldwide
-MaxLobbyResults=50              ; Max lobbies returned
-
-[ServerBrowser]
-OverrideServerListAppId=false
-ServerListAppId=480
-Language=english
+MaxLobbyResults=50              ; Max lobbies to return in server browser
 
 [Overlay]
-EnableOverlay=true              ; Enable Steam Overlay hook
-OverlayAppId=480
+EnableOverlay=true              ; Enable Steam Shift+Tab overlay hook
+OverlayAppId=480                ; AppID for overlay initialization
 
 [EOS]
 DeviceIdAuth=true               ; Emulate Epic Online Services DeviceID login
 
 [User]
-Name=Player                     ; Custom player name (or empty for auto-generated)
-SteamId=                        ; Custom SteamID64 (or empty for auto-generated)
+Name=Player                     ; Custom player name (or leave empty for auto)
+SteamId=                        ; Custom SteamID64 (or leave empty for auto)
 
 [Network]
 ListenPort=47584                ; UDP port for LAN discovery
-CustomBroadcasts=               ; Additional broadcast IPs (comma-separated)
-PublicIP=                       ; Custom public IP for WAN relay
-LocalIP=
-
-[P2P]
-EnableWAN=true                  ; Enable WAN NAT traversal
-P2PPort=7777                    ; UDP P2P listening port
-AllowRelay=true                 ; Allow relay servers if direct P2P fails
-ForcePublicIPInLobby=true
+CustomBroadcasts=               ; Extra broadcast IPs for VPNs (comma-separated)
 ```
 
 ---
@@ -202,46 +191,31 @@ ForcePublicIPInLobby=true
 
 ### Prerequisites
 * **Windows 10 / 11 (64-bit)**
-* **Visual Studio 2022** (Community, Professional, Enterprise, or Build Tools) with the **Desktop development with C++** workload enabled (includes MSVC v143 toolset + MASM `ml64.exe`).
+* **Visual Studio 2022** (Community, Professional, or Enterprise) with the **Desktop development with C++** workload installed (includes MSVC v143 and MASM `ml64.exe`).
 
-### 1-Click Build
-Open **Developer Command Prompt for VS 2022** (x64) or standard Windows Command Prompt / PowerShell and execute:
+### 1-Click Compilation
+Open a **Developer Command Prompt for VS 2022** (x64) and simply run:
 ```cmd
-cd ReFix
 build.bat
 ```
-`build.bat` automatically:
-1. Locates the MSVC environment using `vswhere.exe` or standard Visual Studio installation directories.
-2. Assembles x64 forwarding assembly tables (`winmm_fwd.asm`, `eos_fwd.asm`, `steam_fwd.asm`) via `ml64.exe`.
-3. Compiles `winmm.dll`, `EOSSDK-Win64-Shipping.dll`, `RedboneEOS.dll`, and `steam_api64.dll` with high optimizations (`/O2 /EHsc /LD`).
-4. Outputs the compiled proxies to `build/` and automatically synchronizes them to `bin/`.
-
-### Packaging the Standalone Release
-To package a clean deployment distribution:
-```cmd
-deploy.bat
-```
+`build.bat` takes care of the whole pipeline:
+1. Detects your MSVC environment automatically via `vswhere.exe`.
+2. Assembles the forwarding tables (`winmm_fwd.asm`, `eos_fwd.asm`, `steam_fwd.asm`) using `ml64.exe`.
+3. Builds `winmm.dll`, `EOSSDK-Win64-Shipping.dll`, `RedboneEOS.dll`, and `steam_api64.dll` with full optimization (`/O2 /EHsc /LD`).
+4. Outputs the finished binaries to `build/` and copies them directly into `bin/`.
 
 ---
 
-## 📄 References, Credits & Related Projects
+## 💖 Credits & Big Thanks
 
-ReFix stands on the shoulders of giants. We express our deepest gratitude to the creators and maintainers of the following open-source projects and emulation tools:
+ReFix wouldn't be possible without the incredible work done by the open-source and modding communities:
 
-* **[Goldberg Emulator (Original)](https://gitlab.com/Mr_Goldberg/goldberg_emulator)** by Mr_Goldberg — The foundation for open-source Steamworks emulation.
-* **[gbe_fork (Goldberg Emulator Community Fork)](https://github.com/Detanup01/gbe_fork)** by Detanup01 & contributors — Modern Goldberg fork providing enhanced lobby broadcast, interface generation, and extended API support.
-* **[SmokeAPI](https://github.com/acidicoala/SmokeAPI)** by acidicoala — Fast and modern universal Steam DLC unlocker backend.
-* **[CreamAPI](https://github.com/acidicoala/CreamAPI)** by acidicoala — Legendary Steam DLC unlocker architecture and INI configuration standard.
-* **[Mono.Cecil](https://github.com/jbevain/cecil)** by Jb Evain — Assembly inspection and IL patching library.
-* **[MinHook](https://github.com/TsudaKageyu/minhook)** by Tsuda Kageyu — The Minimalistic x86/x64 API Hooking Library for Windows.
-* **[Dear ImGui](https://github.com/ocornut/imgui)** by Omar Cornut — Bloat-free graphical user interface library for C++.
-* **[Steamless](https://github.com/atom0s/Steamless)** by atom0s — DRM unpacker for SteamStub variants.
-
----
-
-## 🏷️ Search Keywords & Tags (SEO)
-
-`online-fix` `onlinefix` `online-fix-me` `steam-emulator` `steam-emu` `steam-crack` `goldberg-emulator` `goldberg-lan` `codex-steam-emulator` `smartsteamemu` `creamapi` `smokeapi` `dlc-unlocker` `steam-multiplayer-fix` `pirated-games-multiplayer` `spacewar-crack` `spacewar-480` `lan-multiplayer-fix` `coop-game-crack` `steam-api64-proxy` `unreal-engine-multiplayer-fix` `unity-multiplayer-fix` `godotsteam-fix` `steam-overlay-fix` `steam-keygen-bypass` `free-steam-multiplayer` `onlinefix-alternative` `game-crack-multiplayer`
+* **[Mr_Goldberg](https://gitlab.com/Mr_Goldberg/goldberg_emulator)** — The legend who pioneered open-source Steamworks emulation.
+* **[Detanup01 & gbe_fork contributors](https://github.com/Detanup01/gbe_fork)** — Outstanding modern enhancements to Goldberg LAN emulation.
+* **[acidicoala](https://github.com/acidicoala)** — Creator of SmokeAPI and CreamAPI, the gold standards of DLC unlocking.
+* **[TsudaKageyu](https://github.com/TsudaKageyu/minhook)** — The clean, minimalistic MinHook library.
+* **[ocornut](https://github.com/ocornut/imgui)** — Dear ImGui for immediate-mode GUI magic.
+* **[atom0s](https://github.com/atom0s/Steamless)** — The invaluable Steamless DRM unpacker.
 
 ---
 
@@ -249,8 +223,8 @@ ReFix stands on the shoulders of giants. We express our deepest gratitude to the
 
 Distributed under the **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)** License.
 
-- **Modify & Collaborate**: You are free to adapt, remix, transform, build upon, and share the code.
-- **Non-Commercial**: You may **not** use the material or software for commercial purposes or sell it.
-- **ShareAlike**: Contributions and derivatives must be distributed under the same license terms.
+* **Share & Adapt**: You're free to copy, modify, and build upon this project.
+* **Non-Commercial**: Strictly for non-commercial and educational use. Keep it free!
+* **ShareAlike**: If you distribute modified versions, keep them under this same open license.
 
-See `LICENSE` for more information.
+See `LICENSE` for the full legal text.

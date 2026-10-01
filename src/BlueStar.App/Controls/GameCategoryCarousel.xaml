@@ -125,8 +125,8 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border Style="{StaticResource Card}" Width="320" Margin="0,0,16,6"
-                                        Padding="0" ClipToBounds="True" Cursor="Hand">
+                                <Border Style="{StaticResource InteractiveCard}" Width="320" Margin="0,0,16,6"
+                                        Padding="0" ClipToBounds="True">
                                     <Border.InputBindings>
                                         <MouseBinding MouseAction="LeftClick"
                                                       Command="{Binding OpenDetailCommand, ElementName=RootCarouselControl}"
@@ -351,8 +351,8 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Style="{StaticResource Card}" Width="360" Margin="0,0,16,16"
-                                    Padding="0" ClipToBounds="True" Cursor="Hand">
+                            <Border Style="{StaticResource InteractiveCard}" Width="360" Margin="0,0,16,16"
+                                    Padding="0" ClipToBounds="True">
                                 <Border.InputBindings>
                                     <MouseBinding MouseAction="LeftClick"
                                                   Command="{Binding OpenDetailCommand, ElementName=RootCarouselControl}"

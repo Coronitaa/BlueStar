@@ -12,30 +12,7 @@
              Foreground="{StaticResource PrimaryTextBrush}"
              FontFamily="{StaticResource MainFontFamily}">
 
-    <UserControl.RenderTransform>
-        <TranslateTransform Y="0"/>
-    </UserControl.RenderTransform>
 
-    <UserControl.Triggers>
-        <EventTrigger RoutedEvent="FrameworkElement.Loaded">
-            <BeginStoryboard>
-                <Storyboard>
-                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                     From="0.0" To="1.0" Duration="0:0:0.22">
-                        <DoubleAnimation.EasingFunction>
-                            <CubicEase EasingMode="EaseOut"/>
-                        </DoubleAnimation.EasingFunction>
-                    </DoubleAnimation>
-                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
-                                     From="12" To="0" Duration="0:0:0.22">
-                        <DoubleAnimation.EasingFunction>
-                            <CubicEase EasingMode="EaseOut"/>
-                        </DoubleAnimation.EasingFunction>
-                    </DoubleAnimation>
-                </Storyboard>
-            </BeginStoryboard>
-        </EventTrigger>
-    </UserControl.Triggers>
 
     <Grid>
         <!-- ═══ MAIN LIBRARY SURFACE ═══ -->
@@ -692,13 +669,10 @@
         </ScrollViewer>
 
         <!-- ═══ UNIFIED EXPANDABLE ADD INSTANCE MODAL OVERLAY ═══ -->
-        <Grid Visibility="{Binding IsAddInstanceModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Background="{StaticResource ModalOverlayBrush}"
-              Panel.ZIndex="1000"
-              SnapsToDevicePixels="True"
-              UseLayoutRounding="True"
-              TextOptions.TextFormattingMode="Display"
-              TextOptions.TextRenderingMode="ClearType">
+        <controls:ModalOverlay IsOpen="{Binding IsAddInstanceModalOpen}"
+                               CloseCommand="{Binding CloseAddInstanceModalCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="1000">
             <Border Background="{StaticResource SurfaceCardElevatedBrush}"
                     BorderBrush="{StaticResource StrongBorderBrush}"
                     BorderThickness="1"
@@ -1488,16 +1462,13 @@
                     </StackPanel>
                 </StackPanel>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
 
         <!-- ═══ STEAM STORE SEARCH SUB-MODAL OVERLAY ═══ -->
-        <Grid Visibility="{Binding IsSteamSearchModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Background="#B0000000"
-              SnapsToDevicePixels="True"
-              UseLayoutRounding="True"
-              TextOptions.TextFormattingMode="Display"
-              TextOptions.TextRenderingMode="ClearType"
-              Panel.ZIndex="1005">
+        <controls:ModalOverlay IsOpen="{Binding IsSteamSearchModalOpen}"
+                               CloseCommand="{Binding CloseSteamSearchModalCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="1005">
             <Border Background="{StaticResource SurfaceCardElevatedBrush}"
                     BorderBrush="{StaticResource StrongBorderBrush}"
                     BorderThickness="1"
@@ -1585,16 +1556,13 @@
                             Command="{Binding CloseSteamSearchModalCommand}"/>
                 </Grid>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
 
         <!-- ═══ CREATE GROUP MODAL OVERLAY ═══ -->
-        <Grid Visibility="{Binding IsCreateGroupOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Background="{StaticResource ModalOverlayBrush}"
-              Panel.ZIndex="1000"
-              SnapsToDevicePixels="True"
-              UseLayoutRounding="True"
-              TextOptions.TextFormattingMode="Display"
-              TextOptions.TextRenderingMode="ClearType">
+        <controls:ModalOverlay IsOpen="{Binding IsCreateGroupOpen}"
+                               CloseCommand="{Binding CloseCreateGroupCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="1000">
             <Border Background="{StaticResource SurfaceCardElevatedBrush}"
                     BorderBrush="{StaticResource StrongBorderBrush}"
                     BorderThickness="1"
@@ -1695,12 +1663,13 @@
                     </Grid>
                 </StackPanel>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
 
         <!-- ═══ STEAM REQUIRED FOR ONLINE FEATURES MODAL OVERLAY ═══ -->
-        <Grid Visibility="{Binding IsSteamRequiredModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Background="{StaticResource ModalOverlayBrush}"
-              Panel.ZIndex="1000">
+        <controls:ModalOverlay IsOpen="{Binding IsSteamRequiredModalOpen}"
+                               CloseCommand="{Binding CloseSteamRequiredModalCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="1000">
             <Border Width="480"
                     Background="{StaticResource SurfaceCardElevatedBrush}"
                     BorderBrush="{StaticResource StrongBorderBrush}"
@@ -1743,6 +1712,6 @@
                     </StackPanel>
                 </StackPanel>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
     </Grid>
 </UserControl>

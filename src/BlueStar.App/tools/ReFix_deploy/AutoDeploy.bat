@@ -59,7 +59,7 @@ if "!TARGET_DIR!"=="" (
     goto ERROR_EXIT
 )
 
-:: Strip trailing backslash, slash, spaces and quotes if present
+:: Strip trailing backslash, forward slash, spaces and quotes if present
 set "TARGET_DIR=!TARGET_DIR:"=!"
 :TRIM_TARGET_DIR
 if "!TARGET_DIR:~-1!"==" " set "TARGET_DIR=!TARGET_DIR:~0,-1!" & goto TRIM_TARGET_DIR
@@ -85,16 +85,14 @@ set "GAME_EXE_PATH="
 set "DEFAULT_GAME_NAME="
 set "DETECTED_APPID="
 set "CANDIDATE_EXES="
-set "IS_X86=False"
 
 if exist "!BIN_DIR!\detect_game.ps1" (
     for /f "usebackq tokens=1,* delims==" %%A in (`powershell -NoProfile -ExecutionPolicy Bypass -File "!BIN_DIR!\detect_game.ps1" -TargetDir "!TARGET_DIR!" ^<nul`) do (
-        if /i "%%A"=="ENGINE_TYPE"    set "ENGINE_TYPE=%%B"
-        if /i "%%A"=="EXE_DIR"        set "EXE_DIR=%%B"
-        if /i "%%A"=="GAME_EXE_PATH"  set "GAME_EXE_PATH=%%B"
-        if /i "%%A"=="GAME_NAME"      set "DEFAULT_GAME_NAME=%%B"
+        if /i "%%A"=="ENGINE_TYPE" set "ENGINE_TYPE=%%B"
+        if /i "%%A"=="EXE_DIR" set "EXE_DIR=%%B"
+        if /i "%%A"=="GAME_EXE_PATH" set "GAME_EXE_PATH=%%B"
+        if /i "%%A"=="GAME_NAME" set "DEFAULT_GAME_NAME=%%B"
         if /i "%%A"=="DETECTED_APPID" set "DETECTED_APPID=%%B"
-        if /i "%%A"=="IS_X86"         set "IS_X86=%%B"
         if /i "%%A"=="CANDIDATE_EXES" set "CANDIDATE_EXES=%%B"
     )
 )
@@ -107,11 +105,6 @@ echo [DETECTION] Detected Engine Type: !ENGINE_TYPE!
 echo [DETECTION] Executable Location: "!EXE_DIR!"
 if not "!GAME_EXE_PATH!"=="" echo [DETECTION] Game Executable: "!GAME_EXE_PATH!"
 if not "!DETECTED_APPID!"=="" echo [DETECTION] Detected Steam AppID: !DETECTED_APPID!
-if /i "!IS_X86!"=="True" (
-    echo [DETECTION] Architecture: x86 [32-bit] - ReFix proxy32 will be deployed
-) else (
-    echo [DETECTION] Architecture: x64 [64-bit]
-)
 echo:
 
 :: Executable Location and Selection Prompt
@@ -178,7 +171,6 @@ if exist "!EXE_DIR!\ReFix.ini" (
         )
         if /i "%%A"=="Name" set "EXISTING_USERNAME=%%B"
         if /i "%%A"=="SteamId" set "EXISTING_STEAMID=%%B"
-        if /i "%%A"=="DiscoveryPort" set "EXISTING_LAN_PORT=%%B"
         if /i "%%A"=="ListenPort" set "EXISTING_LAN_PORT=%%B"
     )
 )
@@ -335,9 +327,8 @@ echo ====================================================================
 echo Starting ReFix Deployment... (Mode: !ONLINE_MODE_NAME!)
 echo ====================================================================
 
-:: Step 1: Copy winmm.dll proxy only if in Valve mode and 64-bit
+:: Step 1: Copy winmm.dll proxy only if in Valve mode
 if "!ONLINE_MODE_NAME!"=="goldberg" goto SKIP_WINMM_DEPLOY
-if /i "!IS_X86!"=="True" goto SKIP_WINMM_DEPLOY
 if not exist "!BIN_DIR!\winmm.dll" goto SKIP_WINMM_DEPLOY
 
 echo [1/6] Deploying winmm.dll proxy...
@@ -358,18 +349,67 @@ if exist "!BIN_DIR!\deploy_helper.ps1" (
     goto ERROR_EXIT
 )
 
-:: Step 4 & 5: Ensure steam_appid.txt exists if not created by deploy_helper.ps1
+:: Step 4 & 5: For Valve mode only, write additional legacy ReFix.ini and steam_appid.txt
 if "!ONLINE_MODE_NAME!"=="goldberg" goto SKIP_VALVE_MANUAL_INI
 
-if not exist "!EXE_DIR!\steam_appid.txt" (
-    echo [4/6] Generating steam_appid.txt...
-    echo !MASK_APPID!> "!EXE_DIR!\steam_appid.txt"
-    echo [OK] Created steam_appid.txt (AppID: !MASK_APPID!)
-) else (
-    echo [4/6] Verified steam_appid.txt is present.
-)
+echo [4/6] Generating steam_appid.txt...
+echo !MASK_APPID!> "!EXE_DIR!\steam_appid.txt"
+echo [OK] Created steam_appid.txt (AppID: !MASK_APPID!)
 
-echo [5/6] Configuration synchronized via UNAE specifications.
+echo [5/6] Writing ReFix.ini configuration...
+set "GAME_FILTER_VALUE="
+if not "!REAL_APPID!"=="" set "GAME_FILTER_VALUE=!REAL_APPID!"
+
+(
+echo [Game]
+echo GameName=!GAME_NAME!
+echo EngineType=!ENGINE_TYPE!
+echo.
+echo [Matchmaking]
+echo EnableLobbyFilter=false
+echo LobbyFilterKey=game_filter
+echo LobbyFilterValue=!GAME_FILTER_VALUE!
+echo LobbyDistanceFilter=Worldwide
+echo MaxLobbyResults=50
+echo.
+echo [ServerBrowser]
+echo OverrideServerListAppId=false
+echo ServerListAppId=480
+echo Language=english
+echo.
+echo [Steam]
+echo MaskAppId=!MASK_APPID!
+echo RealAppId=!REAL_APPID!
+echo Language=english
+echo BypassLicenseCheck=!BYPASS_LICENSE!
+echo DLCs=!DLCS!
+echo.
+echo [Overlay]
+echo EnableOverlay=true
+echo OverlayAppId=!MASK_APPID!
+echo.
+echo [EOS]
+echo DeviceIdAuth=true
+echo.
+echo [User]
+echo Name=!CUSTOM_USERNAME!
+echo SteamId=
+echo.
+echo [Online]
+echo Mode=!ONLINE_MODE_NAME!
+echo.
+echo [Network]
+echo GameFilter=!GAME_FILTER_VALUE!
+echo PublicIP=!CUSTOM_PUBLIC_IP!
+echo LocalIP=
+echo.
+echo [P2P]
+echo EnableWAN=true
+echo P2PPort=7777
+echo AllowRelay=true
+echo ForcePublicIPInLobby=true
+) > "!EXE_DIR!\ReFix.ini"
+echo [OK] Configured ReFix.ini in "!EXE_DIR!"
 
 :SKIP_VALVE_MANUAL_INI
 

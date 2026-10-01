@@ -104,20 +104,14 @@
                                         <Storyboard>
                                             <DoubleAnimation Storyboard.TargetName="ChromeScale"
                                                              Storyboard.TargetProperty="ScaleX"
-                                                             From="0.88" To="1.0"
-                                                             Duration="0:0:0.25">
-                                                <DoubleAnimation.EasingFunction>
-                                                    <BackEase Amplitude="0.3" EasingMode="EaseOut"/>
-                                                </DoubleAnimation.EasingFunction>
-                                            </DoubleAnimation>
+                                                             From="0.90" To="1.0"
+                                                             Duration="{StaticResource DurationNormal}"
+                                                             EasingFunction="{StaticResource EaseOutBack}"/>
                                             <DoubleAnimation Storyboard.TargetName="ChromeScale"
                                                              Storyboard.TargetProperty="ScaleY"
-                                                             From="0.88" To="1.0"
-                                                             Duration="0:0:0.25">
-                                                <DoubleAnimation.EasingFunction>
-                                                    <BackEase Amplitude="0.3" EasingMode="EaseOut"/>
-                                                </DoubleAnimation.EasingFunction>
-                                            </DoubleAnimation>
+                                                             From="0.90" To="1.0"
+                                                             Duration="{StaticResource DurationNormal}"
+                                                             EasingFunction="{StaticResource EaseOutBack}"/>
                                         </Storyboard>
                                     </BeginStoryboard>
                                 </DataTrigger.EnterActions>
@@ -130,6 +124,22 @@
                                 <Setter TargetName="StateIcon" Property="Visibility" Value="Visible"/>
                                 <Setter TargetName="StateIcon" Property="Data" Value="{StaticResource IconBan}"/>
                                 <Setter TargetName="StateIcon" Property="Fill" Value="#F87171"/>
+                                <DataTrigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="ChromeScale"
+                                                             Storyboard.TargetProperty="ScaleX"
+                                                             From="0.90" To="1.0"
+                                                             Duration="{StaticResource DurationNormal}"
+                                                             EasingFunction="{StaticResource EaseOutBack}"/>
+                                            <DoubleAnimation Storyboard.TargetName="ChromeScale"
+                                                             Storyboard.TargetProperty="ScaleY"
+                                                             From="0.90" To="1.0"
+                                                             Duration="{StaticResource DurationNormal}"
+                                                             EasingFunction="{StaticResource EaseOutBack}"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </DataTrigger.EnterActions>
                             </DataTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -231,11 +241,26 @@
                                         <Setter TargetName="Row" Property="Background" Value="{StaticResource SurfaceCardHoverBrush}"/>
                                     </Trigger>
                                     <Trigger Property="IsChecked" Value="True">
-                                        <Setter TargetName="Chevron" Property="RenderTransform">
-                                            <Setter.Value>
-                                                <RotateTransform Angle="90"/>
-                                            </Setter.Value>
-                                        </Setter>
+                                        <Trigger.EnterActions>
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <DoubleAnimation Storyboard.TargetName="Chevron"
+                                                                     Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                                     To="90" Duration="{StaticResource DurationFast}"
+                                                                     EasingFunction="{StaticResource EaseOutCubic}"/>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </Trigger.EnterActions>
+                                        <Trigger.ExitActions>
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <DoubleAnimation Storyboard.TargetName="Chevron"
+                                                                     Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                                     To="0" Duration="{StaticResource DurationFast}"
+                                                                     EasingFunction="{StaticResource EaseOutCubic}"/>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </Trigger.ExitActions>
                                     </Trigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
@@ -576,9 +601,63 @@
             </Grid>
         </DataTemplate>
 
+        <!-- ═══ SKELETON CARD — GRID ═══ -->
+        <DataTemplate x:Key="SkeletonCardTemplate">
+            <Border Style="{StaticResource SkeletonCard}" Width="288" Height="330" Margin="0,0,12,12">
+                <StackPanel>
+                    <Border Style="{StaticResource SkeletonBlock}" Height="134"
+                            Margin="-16,-16,-16,14" CornerRadius="8,8,0,0"/>
+                    <Border Style="{StaticResource SkeletonBlock}" Height="17" Width="186"
+                            HorizontalAlignment="Left" Margin="0,0,0,8"/>
+                    <Border Style="{StaticResource SkeletonBlock}" Height="11" Width="112"
+                            HorizontalAlignment="Left" Margin="0,0,0,14"/>
+                    <WrapPanel Margin="0,0,0,16">
+                        <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="64" Margin="0,0,6,6" CornerRadius="9"/>
+                        <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="52" Margin="0,0,6,6" CornerRadius="9"/>
+                        <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="76" Margin="0,0,6,6" CornerRadius="9"/>
+                    </WrapPanel>
+                    <Grid VerticalAlignment="Bottom">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="74"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Style="{StaticResource SkeletonBlock}" Height="34" CornerRadius="6"/>
+                        <Border Grid.Column="2" Style="{StaticResource SkeletonBlock}" Height="34" CornerRadius="6"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <!-- ═══ SKELETON ROW — LIST ═══ -->
+        <DataTemplate x:Key="SkeletonRowTemplate">
+            <Border Style="{StaticResource SkeletonCard}" Padding="0" Margin="0,0,12,10" Height="98">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="210"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="190"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource SkeletonBlock}" CornerRadius="8,0,0,8"/>
+                    <StackPanel Grid.Column="1" Margin="14,10,14,10" VerticalAlignment="Center">
+                        <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="220" HorizontalAlignment="Left" Margin="0,0,0,6"/>
+                        <Border Style="{StaticResource SkeletonBlock}" Height="12" Width="130" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+                        <WrapPanel>
+                            <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="55" Margin="0,0,6,0" CornerRadius="9"/>
+                            <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="65" Margin="0,0,6,0" CornerRadius="9"/>
+                            <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="50" CornerRadius="9"/>
+                        </WrapPanel>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Margin="0,0,14,0" VerticalAlignment="Center" HorizontalAlignment="Right">
+                        <Border Style="{StaticResource SkeletonBlock}" Height="34" Width="100" CornerRadius="6"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
         <!-- ═══ RESULT CARD — GRID ═══ -->
         <DataTemplate x:Key="ResultCardTemplate">
-            <Border Style="{StaticResource Card}" Padding="0" Width="288" MinHeight="330"
+            <Border Style="{StaticResource InteractiveCard}" Padding="0" Width="288" MinHeight="330"
                     Margin="0,0,12,12" Cursor="Hand">
                 <Border.InputBindings>
                     <MouseBinding MouseAction="LeftClick"
@@ -619,7 +698,7 @@
 
         <!-- ═══ RESULT ROW — LIST ═══ -->
         <DataTemplate x:Key="ResultRowTemplate">
-            <Border Style="{StaticResource Card}" Padding="0" Margin="0,0,12,10" Cursor="Hand">
+            <Border Style="{StaticResource InteractiveCard}" Padding="0" Margin="0,0,12,10" Cursor="Hand">
                 <Border.InputBindings>
                     <MouseBinding MouseAction="LeftClick"
                                   Command="{Binding DataContext.OpenDetailCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -736,11 +815,21 @@
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0"
-                    Background="{StaticResource SurfaceInputBrush}"
-                    BorderBrush="{StaticResource SubtleBorderBrush}"
                     BorderThickness="1"
                     CornerRadius="{StaticResource RadiusMd}"
                     Padding="12,0">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Background" Value="{StaticResource SurfaceInputBrush}"/>
+                        <Setter Property="BorderBrush" Value="{StaticResource SubtleBorderBrush}"/>
+                        <Style.Triggers>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter Property="BorderBrush" Value="{StaticResource ActiveBorderBrush}"/>
+                                <Setter Property="Background" Value="{StaticResource SurfaceInputFocusedBrush}"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -976,7 +1065,31 @@
                     <Border Background="{StaticResource DangerBgBrush}" BorderBrush="{StaticResource DangerBrush}"
                             BorderThickness="1" CornerRadius="{StaticResource RadiusMd}"
                             Padding="14,10" Margin="0,0,0,12"
+                            RenderTransformOrigin="0.5,0.5"
                             Visibility="{Binding SearchState, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Error}">
+                        <Border.RenderTransform>
+                            <TranslateTransform Y="0"/>
+                        </Border.RenderTransform>
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SearchState}" Value="Error">
+                                        <DataTrigger.EnterActions>
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                     From="0.0" To="1.0" Duration="{StaticResource DurationFast}"
+                                                                     EasingFunction="{StaticResource EaseOutCubic}"/>
+                                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                                                     From="-4" To="0" Duration="{StaticResource DurationFast}"
+                                                                     EasingFunction="{StaticResource EaseOutCubic}"/>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </DataTrigger.EnterActions>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
                         <TextBlock Text="{Binding ErrorMessage}" Foreground="{StaticResource DangerBrush}"
                                    Style="{StaticResource BodyMedium}" TextWrapping="Wrap"/>
                     </Border>
@@ -986,49 +1099,36 @@
                         <!-- Loading: skeletons shown only during LoadingInitial -->
                         <ItemsControl Visibility="{Binding SearchState, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=LoadingInitial}"
                                       ItemsSource="{StaticResource SkeletonSlots}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Style="{StaticResource SkeletonCard}" Width="288" Height="330"
-                                            Margin="0,0,12,12">
-                                        <StackPanel>
-                                            <Border Style="{StaticResource SkeletonBlock}" Height="134"
-                                                    Margin="-16,-16,-16,14" CornerRadius="8,8,0,0"/>
-                                            <Border Style="{StaticResource SkeletonBlock}" Height="17" Width="186"
-                                                    HorizontalAlignment="Left" Margin="0,0,0,8"/>
-                                            <Border Style="{StaticResource SkeletonBlock}" Height="11" Width="112"
-                                                    HorizontalAlignment="Left" Margin="0,0,0,14"/>
-                                            <WrapPanel Margin="0,0,0,16">
-                                                <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="64"
-                                                        Margin="0,0,6,6" CornerRadius="9"/>
-                                                <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="52"
-                                                        Margin="0,0,6,6" CornerRadius="9"/>
-                                                <Border Style="{StaticResource SkeletonBlock}" Height="18" Width="76"
-                                                        Margin="0,0,6,6" CornerRadius="9"/>
-                                            </WrapPanel>
-                                            <Grid VerticalAlignment="Bottom">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="8"/>
-                                                    <ColumnDefinition Width="74"/>
-                                                </Grid.ColumnDefinitions>
-                                                <Border Grid.Column="0" Style="{StaticResource SkeletonBlock}"
-                                                        Height="34" CornerRadius="6"/>
-                                                <Border Grid.Column="2" Style="{StaticResource SkeletonBlock}"
-                                                        Height="34" CornerRadius="6"/>
-                                            </Grid>
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
+                            <ItemsControl.Style>
+                                <Style TargetType="ItemsControl">
+                                    <Setter Property="ItemTemplate" Value="{StaticResource SkeletonCardTemplate}"/>
+                                    <Setter Property="ItemsPanel">
+                                        <Setter.Value>
+                                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsGridView}" Value="False">
+                                            <Setter Property="ItemTemplate" Value="{StaticResource SkeletonRowTemplate}"/>
+                                            <Setter Property="ItemsPanel">
+                                                <Setter.Value>
+                                                    <ItemsPanelTemplate><VirtualizingStackPanel Orientation="Vertical"/></ItemsPanelTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ItemsControl.Style>
                         </ItemsControl>
 
                         <!-- Cards. The view toggle swaps both the panel and the item template. -->
                         <ItemsControl ItemsSource="{Binding Results}"
                                       VirtualizingPanel.IsVirtualizing="True"
-                                      VirtualizingPanel.VirtualizationMode="Recycling">
+                                      VirtualizingPanel.VirtualizationMode="Recycling"
+                                      RenderTransformOrigin="0.5,0.5">
+                            <ItemsControl.RenderTransform>
+                                <TranslateTransform Y="0"/>
+                            </ItemsControl.RenderTransform>
                             <ItemsControl.Style>
                                 <Style TargetType="ItemsControl">
                                     <Setter Property="ItemTemplate" Value="{StaticResource ResultCardTemplate}"/>
@@ -1039,6 +1139,7 @@
                                             </ItemsPanelTemplate>
                                         </Setter.Value>
                                     </Setter>
+                                    <Setter Property="Opacity" Value="1.0"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsGridView}" Value="False">
                                             <Setter Property="ItemTemplate" Value="{StaticResource ResultRowTemplate}"/>
@@ -1050,6 +1151,42 @@
                                                 </Setter.Value>
                                             </Setter>
                                         </DataTrigger>
+                                        <!-- Dim subtly on Refreshing to preserve existing results without jarring blanks -->
+                                        <DataTrigger Binding="{Binding SearchState}" Value="Refreshing">
+                                            <DataTrigger.EnterActions>
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                         To="0.75" Duration="{StaticResource DurationFast}"
+                                                                         EasingFunction="{StaticResource EaseOutCubic}"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </DataTrigger.EnterActions>
+                                            <DataTrigger.ExitActions>
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                         To="1.0" Duration="{StaticResource DurationFast}"
+                                                                         EasingFunction="{StaticResource EaseOutCubic}"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </DataTrigger.ExitActions>
+                                        </DataTrigger>
+                                        <!-- Reveal smoothly with subtle vertical settle on ShowingResults -->
+                                        <DataTrigger Binding="{Binding SearchState}" Value="ShowingResults">
+                                            <DataTrigger.EnterActions>
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                         From="0.3" To="1.0" Duration="{StaticResource DurationNormal}"
+                                                                         EasingFunction="{StaticResource EaseOutCubic}"/>
+                                                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                                                         From="6" To="0" Duration="{StaticResource DurationNormal}"
+                                                                         EasingFunction="{StaticResource EaseOutCubic}"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </DataTrigger.EnterActions>
+                                        </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </ItemsControl.Style>
@@ -1059,7 +1196,31 @@
                         <Border Background="{StaticResource SurfaceCardBrush}"
                                 BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
                                 CornerRadius="{StaticResource RadiusLg}" Padding="44,34" Margin="0,4,0,0"
+                                RenderTransformOrigin="0.5,0.5"
                                 Visibility="{Binding SearchState, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Empty}">
+                            <Border.RenderTransform>
+                                <TranslateTransform Y="0"/>
+                            </Border.RenderTransform>
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SearchState}" Value="Empty">
+                                            <DataTrigger.EnterActions>
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                         From="0.0" To="1.0" Duration="{StaticResource DurationNormal}"
+                                                                         EasingFunction="{StaticResource EaseOutCubic}"/>
+                                                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                                                         From="8" To="0" Duration="{StaticResource DurationNormal}"
+                                                                         EasingFunction="{StaticResource EaseOutCubic}"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </DataTrigger.EnterActions>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
                             <StackPanel HorizontalAlignment="Center">
                                 <Path Data="{StaticResource IconSearch}" Fill="{StaticResource MutedTextBrush}"
                                       Stretch="Uniform" Width="38" Height="38" Margin="0,0,0,14" HorizontalAlignment="Center"/>
@@ -1099,14 +1260,13 @@
         </Grid>
 
         <!-- ═══ STORE PAGE MODAL ═══ -->
-        <Grid Grid.Row="0" Grid.RowSpan="3"
-              Visibility="{Binding IsDetailOpen, Converter={StaticResource BoolToVisibilityConverter}}">
-            <!-- Modal backdrop overlay: click outside card closes the modal -->
-            <Border Background="#C2040407" Cursor="Hand">
-                <Border.InputBindings>
-                    <MouseBinding MouseAction="LeftClick" Command="{Binding CloseDetailCommand}"/>
-                </Border.InputBindings>
-            </Border>
+        <ctrl:ModalOverlay Grid.Row="0" Grid.RowSpan="3"
+                           IsOpen="{Binding IsDetailOpen}"
+                           CloseCommand="{Binding CloseDetailCommand}"
+                           CloseOnBackdropClick="True"
+                           CloseOnEscape="True"
+                           BackdropBrush="#C2040407"
+                           Panel.ZIndex="150">
 
             <!-- Modal dialog card -->
             <Border Background="{StaticResource SurfaceCardBrush}"
@@ -1188,7 +1348,7 @@
                     </Border>
                 </Grid>
             </Border>
-        </Grid>
+        </ctrl:ModalOverlay>
 
         <!-- ═══ EXPLORE FIRST LOAD OVERLAY SCREEN ═══ -->
         <Grid x:Name="ExploreLoadingOverlay"

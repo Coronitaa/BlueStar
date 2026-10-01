@@ -12,30 +12,7 @@
              Foreground="{StaticResource PrimaryTextBrush}"
              FontFamily="{StaticResource MainFontFamily}">
 
-    <UserControl.RenderTransform>
-        <TranslateTransform Y="0"/>
-    </UserControl.RenderTransform>
 
-    <UserControl.Triggers>
-        <EventTrigger RoutedEvent="FrameworkElement.Loaded">
-            <BeginStoryboard>
-                <Storyboard>
-                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                     From="0.0" To="1.0" Duration="0:0:0.22">
-                        <DoubleAnimation.EasingFunction>
-                            <CubicEase EasingMode="EaseOut"/>
-                        </DoubleAnimation.EasingFunction>
-                    </DoubleAnimation>
-                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
-                                     From="12" To="0" Duration="0:0:0.22">
-                        <DoubleAnimation.EasingFunction>
-                            <CubicEase EasingMode="EaseOut"/>
-                        </DoubleAnimation.EasingFunction>
-                    </DoubleAnimation>
-                </Storyboard>
-            </BeginStoryboard>
-        </EventTrigger>
-    </UserControl.Triggers>
 
     <Grid>
         <Grid>
@@ -2944,9 +2921,10 @@
         </Grid>
 
         <!-- ═══ SHORTCUT MODAL DIALOG OVERLAY ═══ -->
-        <Grid Visibility="{Binding IsShortcutModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Background="{StaticResource ModalOverlayBrush}"
-              Panel.ZIndex="1000">
+        <controls:ModalOverlay IsOpen="{Binding IsShortcutModalOpen}"
+                               CloseCommand="{Binding CloseShortcutModalCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="1000">
             <Border Background="{StaticResource SurfaceCardElevatedBrush}"
                     BorderBrush="{StaticResource AccentBrush}"
                     BorderThickness="1"
@@ -2999,12 +2977,13 @@
                     </Grid>
                 </StackPanel>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
 
         <!-- ═══ STEAM WORKSHOP DOWNLOAD MODAL OVERLAY ═══ -->
-        <Grid Visibility="{Binding IsWorkshopModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Background="{StaticResource ModalOverlayBrush}"
-              Panel.ZIndex="1000">
+        <controls:ModalOverlay IsOpen="{Binding IsWorkshopModalOpen}"
+                               CloseCommand="{Binding CloseWorkshopModalCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="1000">
             <Border Background="{StaticResource SurfaceCardElevatedBrush}"
                     BorderBrush="{StaticResource AccentBrush}"
                     BorderThickness="1"
@@ -3121,12 +3100,13 @@
                     </Grid>
                 </StackPanel>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
 
         <!-- ═══ POST-GAME EMULATOR FEEDBACK MODAL OVERLAY ═══ -->
-        <Grid Visibility="{Binding IsFeedbackModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Background="{StaticResource ModalOverlayBrush}"
-              Panel.ZIndex="1000">
+        <controls:ModalOverlay IsOpen="{Binding IsFeedbackModalOpen}"
+                               CloseCommand="{Binding CloseFeedbackModalCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="1000">
             <Border Background="{StaticResource SurfaceCardElevatedBrush}"
                     BorderBrush="{StaticResource AccentBrush}"
                     BorderThickness="1"
@@ -3220,13 +3200,13 @@
                     </StackPanel>
                 </StackPanel>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
 
         <!-- ═══ MODAL: INSTANCE DELETION CONFIRMATION ═══ -->
-        <Grid Visibility="{Binding IsDeleteModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Background="{StaticResource ModalOverlayBrush}"
-              HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-              Panel.ZIndex="1000">
+        <controls:ModalOverlay IsOpen="{Binding IsDeleteModalOpen}"
+                               CloseCommand="{Binding CloseDeleteModalCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="1000">
             <Border Background="{StaticResource SurfaceCardBrush}"
                     BorderBrush="{StaticResource SubtleBorderBrush}"
                     BorderThickness="1"
@@ -3301,15 +3281,15 @@
                             IsEnabled="{Binding IsDeletingInstance, Converter={StaticResource InverseBoolConverter}}"/>
                 </StackPanel>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
 
         <!-- ══════════════════════════════════════════════════════════════
              UNINSTALL GAME FILES MODAL (Keeps instance in BlueStar)
              ══════════════════════════════════════════════════════════════ -->
-        <Grid Visibility="{Binding IsUninstallModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Background="{StaticResource ModalOverlayBrush}"
-              HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-              Panel.ZIndex="1000">
+        <controls:ModalOverlay IsOpen="{Binding IsUninstallModalOpen}"
+                               CloseCommand="{Binding CloseUninstallModalCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="1000">
             <Border Background="{StaticResource SurfaceCardBrush}"
                     BorderBrush="{StaticResource SubtleBorderBrush}"
                     BorderThickness="1"
@@ -3359,15 +3339,15 @@
                     </Grid>
                 </StackPanel>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
 
         <!-- ══════════════════════════════════════════════════════════════
              CUSTOM BUILD & MANIFEST CONFIGURATION MODAL
              ══════════════════════════════════════════════════════════════ -->
-        <Grid Visibility="{Binding IsCustomBuildModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Background="{StaticResource ModalOverlayBrush}"
-              HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-              Panel.ZIndex="1000">
+        <controls:ModalOverlay IsOpen="{Binding IsCustomBuildModalOpen}"
+                               CloseCommand="{Binding CloseAddCustomBuildModalCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="1000">
             <Border Background="{StaticResource SurfaceCardBrush}"
                     BorderBrush="{StaticResource SubtleBorderBrush}"
                     BorderThickness="1"
@@ -3479,14 +3459,15 @@
                     </Grid>
                 </Grid>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
 
         <!-- ══════════════════════════════════════════════════════════════
              UPDATE DEPOTS MODAL
              ══════════════════════════════════════════════════════════════ -->
-        <Grid Background="#B0000000"
-              Visibility="{Binding IsUpdateModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Panel.ZIndex="1000">
+        <controls:ModalOverlay IsOpen="{Binding IsUpdateModalOpen}"
+                               CloseCommand="{Binding CloseUpdateModalCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="1000">
             <Border Style="{StaticResource Card}"
                     Width="700"
                     MaxHeight="680"
@@ -3615,12 +3596,13 @@
                     </StackPanel>
                 </StackPanel>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
 
         <!-- ═══ DEPOTBOX ASSOCIATION MODAL OVERLAY ═══ -->
-        <Grid Visibility="{Binding IsAssociationModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Background="{StaticResource ModalOverlayBrush}"
-              Panel.ZIndex="1000">
+        <controls:ModalOverlay IsOpen="{Binding IsAssociationModalOpen}"
+                               CloseCommand="{Binding CloseAssociationModalCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="1000">
             <Border Width="560"
                     Background="{StaticResource SurfaceCardElevatedBrush}"
                     BorderBrush="{StaticResource StrongBorderBrush}"
@@ -3718,12 +3700,13 @@
                     </StackPanel>
                 </StackPanel>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
 
         <!-- ═══ DLC WARNING MODAL OVERLAY ═══ -->
-        <Grid Visibility="{Binding IsDlcWarningModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Background="{StaticResource ModalOverlayBrush}"
-              Panel.ZIndex="1000">
+        <controls:ModalOverlay IsOpen="{Binding IsDlcWarningModalOpen}"
+                               CloseCommand="{Binding CancelUnlockDlcsCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="1000">
             <Border Width="500"
                     Background="{StaticResource SurfaceCardElevatedBrush}"
                     BorderBrush="{StaticResource StrongBorderBrush}"
@@ -3747,12 +3730,13 @@
                     </StackPanel>
                 </StackPanel>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
 
         <!-- ═══ STEAM REQUIRED FOR ONLINE FEATURES MODAL OVERLAY ═══ -->
-        <Grid Visibility="{Binding IsSteamRequiredModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Background="{StaticResource ModalOverlayBrush}"
-              Panel.ZIndex="1000">
+        <controls:ModalOverlay IsOpen="{Binding IsSteamRequiredModalOpen}"
+                               CloseCommand="{Binding CloseSteamRequiredModalCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="1000">
             <Border Width="480"
                     Background="{StaticResource SurfaceCardElevatedBrush}"
                     BorderBrush="{StaticResource StrongBorderBrush}"
@@ -3795,12 +3779,13 @@
                     </StackPanel>
                 </StackPanel>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
 
         <!-- ═══ ONLINE FIX WARNING & ANTIVIRUS EXCLUSION MODAL OVERLAY ═══ -->
-        <Grid Visibility="{Binding IsOnlineFixWarningModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Background="{StaticResource ModalOverlayBrush}"
-              Panel.ZIndex="1001">
+        <controls:ModalOverlay IsOpen="{Binding IsOnlineFixWarningModalOpen}"
+                               CloseCommand="{Binding CloseOnlineFixWarningModalCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="1001">
             <Border Width="520" Background="{StaticResource SurfaceCardElevatedBrush}"
                     BorderBrush="{StaticResource WarningBrush}" BorderThickness="1.5"
                     CornerRadius="{StaticResource RadiusLg}" Padding="28,24"
@@ -3867,12 +3852,13 @@
                     </Grid>
                 </StackPanel>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
 
         <!-- ═══ ONE-CLICK INSTALL MODAL OVERLAY ═══ -->
-        <Grid Visibility="{Binding IsInstallModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Background="{StaticResource ModalOverlayBrush}"
-              Panel.ZIndex="1100">
+        <controls:ModalOverlay IsOpen="{Binding IsInstallModalOpen}"
+                               CloseCommand="{Binding CloseInstallModalCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="1100">
             <Border Background="{StaticResource SurfaceCardElevatedBrush}"
                     BorderBrush="{StaticResource AccentBrush}"
                     BorderThickness="1"
@@ -4566,12 +4552,13 @@
                     </Border>
                 </Grid>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
 
         <!-- ═══ FORCE DLC UNLOCKER CONFIRMATION ═══ -->
-        <Grid Visibility="{Binding IsForceDlcUnlockerConfirmOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Background="{StaticResource ModalOverlayBrush}"
-              Panel.ZIndex="1200">
+        <controls:ModalOverlay IsOpen="{Binding IsForceDlcUnlockerConfirmOpen}"
+                               CloseCommand="{Binding CancelForceDlcUnlockerCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="1200">
             <Border Background="{StaticResource SurfaceCardElevatedBrush}"
                     BorderBrush="{StaticResource WarningBrush}"
                     BorderThickness="1"
@@ -4597,6 +4584,6 @@
                     </StackPanel>
                 </StackPanel>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
     </Grid>
 </UserControl>

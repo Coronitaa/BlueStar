@@ -4,6 +4,7 @@
         xmlns:vm="clr-namespace:BlueStar.App.ViewModels"
         xmlns:local="clr-namespace:BlueStar.App.Views"
         xmlns:conv="clr-namespace:BlueStar.App.Converters"
+        xmlns:ctrl="clr-namespace:BlueStar.App.Controls"
         Title="BlueStar"
         Icon="pack://application:,,,/BlueStar;component/Assets/bluestar.ico"
         Width="1280" Height="840"
@@ -348,7 +349,29 @@
             <Border Grid.Column="1" Background="{StaticResource SubtleBorderBrush}"/>
 
             <!-- ── DYNAMIC MAIN CONTENT VIEW ── -->
-            <ContentControl Grid.Column="2" Content="{Binding CurrentView}" Margin="0"/>
+            <ContentControl Grid.Column="2"
+                            Content="{Binding CurrentView, NotifyOnTargetUpdated=True}"
+                            Margin="0">
+                <ContentControl.RenderTransform>
+                    <TranslateTransform Y="0"/>
+                </ContentControl.RenderTransform>
+                <ContentControl.Triggers>
+                    <EventTrigger RoutedEvent="Binding.TargetUpdated">
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                 From="0.2" To="1.0"
+                                                 Duration="{StaticResource DurationNormal}"
+                                                 EasingFunction="{StaticResource EaseOutCubic}"/>
+                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                                 From="8" To="0"
+                                                 Duration="{StaticResource DurationNormal}"
+                                                 EasingFunction="{StaticResource EaseOutCubic}"/>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </EventTrigger>
+                </ContentControl.Triggers>
+            </ContentControl>
         </Grid>
 
         <!-- ═══ BOTTOM STATUS BAR (With Left Downloads Button) ═══ -->
@@ -785,13 +808,12 @@
         </Grid>
 
         <!-- ═══ SYSTEM REQUIREMENTS MODAL OVERLAY ═══ -->
-        <Grid Background="{StaticResource ModalOverlayBrush}"
-              Grid.Row="0"
-              Grid.RowSpan="3"
-              Visibility="{Binding IsSystemRequirementsModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Panel.ZIndex="1005"
-              SnapsToDevicePixels="True"
-              UseLayoutRounding="True">
+        <ctrl:ModalOverlay Grid.Row="0"
+                           Grid.RowSpan="3"
+                           IsOpen="{Binding IsSystemRequirementsModalOpen}"
+                           CloseCommand="{Binding CloseSystemRequirementsModalCommand}"
+                           CloseOnEscape="True"
+                           Panel.ZIndex="1005">
 
             <Border Background="#161822"
                     BorderBrush="#2E3748"
@@ -1014,6 +1036,6 @@
                     </Grid>
                 </Grid>
             </Border>
-        </Grid>
+        </ctrl:ModalOverlay>
     </Grid>
 </Window>

@@ -1,0 +1,34 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         BLUESTAR DESIGN SYSTEM — MOTION & ANIMATION TOKENS
+         Centralized, lightweight motion resources for fluid and consistent UI
+         ══════════════════════════════════════════════════════════════════════ -->
+
+    <!-- ── 1. Standard Durations ── -->
+    <!-- Instant (used when animations are disabled / reduced motion) -->
+    <Duration x:Key="DurationInstant">0:0:0.0</Duration>
+    <!-- Micro (100ms: button presses, subtle hover, ripple/highlight) -->
+    <Duration x:Key="DurationMicro">0:0:0.10</Duration>
+    <!-- Fast (150ms: tab transitions, chip toggles, icon rotations) -->
+    <Duration x:Key="DurationFast">0:0:0.15</Duration>
+    <!-- Normal (220ms: page content reveal, view transitions, cards) -->
+    <Duration x:Key="DurationNormal">0:0:0.22</Duration>
+    <!-- Medium (300ms: modal open/close, toasts, drawers) -->
+    <Duration x:Key="DurationMedium">0:0:0.30</Duration>
+    <!-- Shimmer (1200ms: skeleton loading pulse cycle) -->
+    <Duration x:Key="DurationShimmer">0:0:1.20</Duration>
+
+    <!-- ── 2. Standard Easing Functions ── -->
+    <!-- Standard decelerating ease for elements entering the screen -->
+    <CubicEase x:Key="EaseOutCubic" EasingMode="EaseOut"/>
+    <!-- Smooth acceleration/deceleration for elements already on screen -->
+    <CubicEase x:Key="EaseInOutCubic" EasingMode="EaseInOut"/>
+    <!-- Gentle sine ease for ambient breathing and skeleton pulses -->
+    <SineEase x:Key="EaseOutSine" EasingMode="EaseOut"/>
+    <SineEase x:Key="EaseInOutSine" EasingMode="EaseInOut"/>
+    <!-- Subtle bounce for playful microinteractions (chips, toggles) -->
+    <BackEase x:Key="EaseOutBack" Amplitude="0.2" EasingMode="EaseOut"/>
+
+</ResourceDictionary>

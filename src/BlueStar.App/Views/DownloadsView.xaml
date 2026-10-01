@@ -11,30 +11,7 @@
              Foreground="{StaticResource PrimaryTextBrush}"
              FontFamily="{StaticResource MainFontFamily}">
 
-    <UserControl.RenderTransform>
-        <TranslateTransform Y="0"/>
-    </UserControl.RenderTransform>
 
-    <UserControl.Triggers>
-        <EventTrigger RoutedEvent="FrameworkElement.Loaded">
-            <BeginStoryboard>
-                <Storyboard>
-                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                     From="0.0" To="1.0" Duration="0:0:0.22">
-                        <DoubleAnimation.EasingFunction>
-                            <CubicEase EasingMode="EaseOut"/>
-                        </DoubleAnimation.EasingFunction>
-                    </DoubleAnimation>
-                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
-                                     From="12" To="0" Duration="0:0:0.22">
-                        <DoubleAnimation.EasingFunction>
-                            <CubicEase EasingMode="EaseOut"/>
-                        </DoubleAnimation.EasingFunction>
-                    </DoubleAnimation>
-                </Storyboard>
-            </BeginStoryboard>
-        </EventTrigger>
-    </UserControl.Triggers>
 
     <Grid>
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -332,9 +309,10 @@
     </ScrollViewer>
 
     <!-- ═══ CONFIRM REMOVE DOWNLOAD MODAL OVERLAY ═══ -->
-    <Grid Visibility="{Binding IsRemoveModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-          Background="{StaticResource ModalOverlayBrush}"
-          Panel.ZIndex="1000">
+    <controls:ModalOverlay IsOpen="{Binding IsRemoveModalOpen}"
+                           CloseCommand="{Binding CancelRemoveModalCommand}"
+                           CloseOnEscape="True"
+                           Panel.ZIndex="1000">
         <Border Background="{StaticResource SurfaceCardElevatedBrush}"
                 BorderBrush="{StaticResource SubtleBorderBrush}"
                 BorderThickness="1"
@@ -380,6 +358,6 @@
                 </Grid>
             </StackPanel>
         </Border>
-    </Grid>
+    </controls:ModalOverlay>
 </Grid>
 </UserControl>

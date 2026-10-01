@@ -13,30 +13,7 @@
              Foreground="{StaticResource PrimaryTextBrush}"
              FontFamily="{StaticResource MainFontFamily}">
 
-    <UserControl.RenderTransform>
-        <TranslateTransform Y="0"/>
-    </UserControl.RenderTransform>
 
-    <UserControl.Triggers>
-        <EventTrigger RoutedEvent="FrameworkElement.Loaded">
-            <BeginStoryboard>
-                <Storyboard>
-                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                     From="0.0" To="1.0" Duration="0:0:0.22">
-                        <DoubleAnimation.EasingFunction>
-                            <CubicEase EasingMode="EaseOut"/>
-                        </DoubleAnimation.EasingFunction>
-                    </DoubleAnimation>
-                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
-                                     From="12" To="0" Duration="0:0:0.22">
-                        <DoubleAnimation.EasingFunction>
-                            <CubicEase EasingMode="EaseOut"/>
-                        </DoubleAnimation.EasingFunction>
-                    </DoubleAnimation>
-                </Storyboard>
-            </BeginStoryboard>
-        </EventTrigger>
-    </UserControl.Triggers>
 
     <Grid>
         <!-- ═══ MAIN DASHBOARD SCROLLABLE CONTENT ═══ -->
@@ -867,8 +844,8 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Style="{StaticResource Card}" Width="360" Margin="0,0,16,16"
-                                                    Padding="0" ClipToBounds="True" Cursor="Hand">
+                                            <Border Style="{StaticResource InteractiveCard}" Width="360" Margin="0,0,16,16"
+                                                    Padding="0" ClipToBounds="True">
                                                 <Border.InputBindings>
                                                     <MouseBinding MouseAction="LeftClick"
                                                                   Command="{Binding DataContext.OpenGameDetailCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
@@ -1054,13 +1031,10 @@
         <!-- ═══════════════════════════════════════════════════════════════
              MODAL 1: STEAM GAMES IMPORT OVERLAY
              ═══════════════════════════════════════════════════════════════ -->
-        <Grid Background="{StaticResource ModalOverlayBrush}"
-              Visibility="{Binding IsSteamImportModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Panel.ZIndex="100"
-              SnapsToDevicePixels="True"
-              UseLayoutRounding="True"
-              TextOptions.TextFormattingMode="Display"
-              TextOptions.TextRenderingMode="ClearType">
+        <controls:ModalOverlay IsOpen="{Binding IsSteamImportModalOpen}"
+                               CloseCommand="{Binding CloseSteamImportModalCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="100">
             
             <Border Background="#161822"
                     BorderBrush="#2E3748"
@@ -1235,18 +1209,15 @@
                     </StackPanel>
                 </Grid>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
 
         <!-- ═══════════════════════════════════════════════════════════════
              MODAL 2: DEPOT ZIP IMPORT OVERLAY (LARGE DROP BOX & MANIFESTS)
              ═══════════════════════════════════════════════════════════════ -->
-        <Grid Background="{StaticResource ModalOverlayBrush}"
-              Visibility="{Binding IsZipImportModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Panel.ZIndex="100"
-              SnapsToDevicePixels="True"
-              UseLayoutRounding="True"
-              TextOptions.TextFormattingMode="Display"
-              TextOptions.TextRenderingMode="ClearType">
+        <controls:ModalOverlay IsOpen="{Binding IsZipImportModalOpen}"
+                               CloseCommand="{Binding CloseZipImportModalCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="100">
             
             <Border Background="#161822"
                     BorderBrush="#2E3748"
@@ -1543,18 +1514,15 @@
                     </Grid>
                 </Grid>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
 
         <!-- ═══════════════════════════════════════════════════════════════
              MODAL 3: EXISTING FOLDER IMPORT OVERLAY (APPID LOOKUP & EDIT)
              ═══════════════════════════════════════════════════════════════ -->
-        <Grid Background="{StaticResource ModalOverlayBrush}"
-              Visibility="{Binding IsFolderImportModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Panel.ZIndex="100"
-              SnapsToDevicePixels="True"
-              UseLayoutRounding="True"
-              TextOptions.TextFormattingMode="Display"
-              TextOptions.TextRenderingMode="ClearType">
+        <controls:ModalOverlay IsOpen="{Binding IsFolderImportModalOpen}"
+                               CloseCommand="{Binding CloseFolderImportModalCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="100">
             
             <Border Background="#161822"
                     BorderBrush="#2E3748"
@@ -1782,18 +1750,15 @@
                     </Grid>
                 </Grid>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
 
         <!-- ═══════════════════════════════════════════════════════════════
              STEAM STORE SEARCH SUB-MODAL OVERLAY (FOR FOLDER IMPORT)
              ═══════════════════════════════════════════════════════════════ -->
-        <Grid Visibility="{Binding IsSteamSearchModalOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Background="#B0000000"
-              SnapsToDevicePixels="True"
-              UseLayoutRounding="True"
-              TextOptions.TextFormattingMode="Display"
-              TextOptions.TextRenderingMode="ClearType"
-              Panel.ZIndex="150">
+        <controls:ModalOverlay IsOpen="{Binding IsSteamSearchModalOpen}"
+                               CloseCommand="{Binding CloseSteamSearchModalCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="150">
             <Border Background="{StaticResource SurfaceCardElevatedBrush}"
                     BorderBrush="{StaticResource StrongBorderBrush}"
                     BorderThickness="1"
@@ -1884,20 +1849,18 @@
                             Command="{Binding CloseSteamSearchModalCommand}"/>
                 </Grid>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
 
         <!-- ═══════════════════════════════════════════════════════════════
              STORE PAGE MODAL — the same panel Explore opens, so a card here
              and a card there behave identically.
              ═══════════════════════════════════════════════════════════════ -->
-        <Grid Panel.ZIndex="1400"
-              Visibility="{Binding IsDetailOpen, Converter={StaticResource BoolToVisibilityConverter}}">
-            <!-- Modal backdrop overlay: click outside card closes the modal -->
-            <Border Background="#C2040407" Cursor="Hand">
-                <Border.InputBindings>
-                    <MouseBinding MouseAction="LeftClick" Command="{Binding CloseGameDetailCommand}"/>
-                </Border.InputBindings>
-            </Border>
+        <controls:ModalOverlay IsOpen="{Binding IsDetailOpen}"
+                               CloseCommand="{Binding CloseGameDetailCommand}"
+                               CloseOnBackdropClick="True"
+                               CloseOnEscape="True"
+                               BackdropBrush="#C2040407"
+                               Panel.ZIndex="1400">
 
             <Border Background="{StaticResource SurfaceCardBrush}"
                     BorderBrush="{StaticResource StrongBorderBrush}" BorderThickness="1"
@@ -1978,6 +1941,6 @@
                     </Border>
                 </Grid>
             </Border>
-        </Grid>
+        </controls:ModalOverlay>
     </Grid>
 </UserControl>
