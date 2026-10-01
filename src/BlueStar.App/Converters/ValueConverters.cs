@@ -944,3 +944,31 @@ public sealed class ReviewScoreToBrushConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
+/// <summary>
+/// Compares two or more values for equality and returns true if all non-null values match.
+/// Useful for comparing an item's ID against a SelectedId in DataTemplates.
+/// </summary>
+public sealed class EqualsToBoolConverter : IMultiValueConverter
+{
+    public static readonly EqualsToBoolConverter Instance = new();
+
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (values == null || values.Length < 2) return false;
+        var first = values[0];
+        if (first == null || first == DependencyProperty.UnsetValue) return false;
+
+        for (int i = 1; i < values.Length; i++)
+        {
+            var next = values[i];
+            if (next == null || next == DependencyProperty.UnsetValue) return false;
+            if (!Equals(first, next)) return false;
+        }
+
+        return true;
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+

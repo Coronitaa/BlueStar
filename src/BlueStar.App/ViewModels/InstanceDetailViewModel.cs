@@ -998,6 +998,77 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _disableUpdateChecks;
 
+    [ObservableProperty]
+    private bool _disableEmulatorUpdates;
+
+    partial void OnDisableEmulatorUpdatesChanged(bool value)
+    {
+        if (Instance == null || Instance.DisableEmulatorUpdates == value) return;
+        Instance = Instance with { DisableEmulatorUpdates = value };
+        _ = _instanceManager.UpdateAsync(Instance, CancellationToken.None);
+    }
+
+    [ObservableProperty]
+    private bool _forceAllDlcs;
+    [ObservableProperty]
+    private bool _isForceAllDlcsAlertOpen;
+
+    [ObservableProperty]
+    private bool _doNotShowForceAllDlcsAlert;
+
+    private bool _pendingForceAllDlcsValue;
+    private bool _suppressForceAllDlcsPrompt;
+
+    [RelayCommand]
+    public void ToggleForceAllDlcs(bool newValue)
+    {
+        if (_suppressForceAllDlcsPrompt || _appSettings.DoNotShowForceDlcWarning)
+        {
+            ForceAllDlcs = newValue;
+            return;
+        }
+
+        if (!newValue)
+        {
+            ForceAllDlcs = false;
+            return;
+        }
+
+        _pendingForceAllDlcsValue = true;
+        IsForceAllDlcsAlertOpen = true;
+    }
+
+    [RelayCommand]
+    public async Task ConfirmForceAllDlcsAsync()
+    {
+        IsForceAllDlcsAlertOpen = false;
+        
+        if (DoNotShowForceAllDlcsAlert)
+        {
+            await _appSettings.SetDoNotShowForceDlcWarningAsync(true);
+        }
+
+        _suppressForceAllDlcsPrompt = true;
+        ForceAllDlcs = _pendingForceAllDlcsValue;
+        _suppressForceAllDlcsPrompt = false;
+    }
+
+    [RelayCommand]
+    public void CancelForceAllDlcs()
+    {
+        IsForceAllDlcsAlertOpen = false;
+        // Revert UI if needed by firing property changed on ForceAllDlcs
+        OnPropertyChanged(nameof(ForceAllDlcs));
+    }
+
+
+    partial void OnForceAllDlcsChanged(bool value)
+    {
+        if (Instance == null || Instance.ForceAllDlcs == value) return;
+        Instance = Instance with { ForceAllDlcs = value };
+        _ = _instanceManager.UpdateAsync(Instance, CancellationToken.None);
+    }
+
     partial void OnDisableUpdateChecksChanged(bool value)
     {
         if (Instance == null || Instance.DisableUpdateChecks == value) return;
@@ -1030,10 +1101,20 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     public bool IsInstanceDownloading => ActiveJob?.IsActive ?? false;
     public bool HasActiveJob => ActiveJob is not null && !ActiveJob.IsCompleted;
     public bool ShowDownloadButton => ActiveJob is null || ActiveJob.IsCompleted;
-    public bool IsInstalled => Instance?.Status == InstanceStatus.Ready ||
-                               Instance?.Status == InstanceStatus.Running ||
-                               (ActiveJob is not null && ActiveJob.IsCompleted);
-
+    public bool IsInstalled 
+    {
+        get
+        {
+            if (Instance == null) return false;
+            bool statusOk = Instance.Status == InstanceStatus.Ready || 
+                            Instance.Status == InstanceStatus.Running || 
+                            (ActiveJob is not null && ActiveJob.IsCompleted);
+            if (!statusOk) return false;
+            if (Instance.IsSteamGame) return true;
+            if (string.IsNullOrWhiteSpace(Instance.InstallPath) || !System.IO.Directory.Exists(Instance.InstallPath)) return false;
+            try { return System.IO.Directory.EnumerateFileSystemEntries(Instance.InstallPath).Any(); } catch { return false; }
+        }
+    }
     public bool CanDeployEmulator => IsInstalled && !IsDeployingEmulator;
 
     public double InstanceDownloadPercentage => ActiveJob?.Percentage ?? 0;
@@ -1297,7 +1378,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     }
 
     [ObservableProperty]
-    private string _installModalSelectedEmulator = "refix_valve";
+    private string _installModalSelectedEmulator = "none";
 
     public bool IsInstallModalEmulatorNone
     {
@@ -1457,6 +1538,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private bool _installModalCreateStartMenuShortcut = true;
+
+    [ObservableProperty]
+    private bool _installModalCreateSteamShortcut = false;
 
     [ObservableProperty]
     private bool _installModalInstallPrerequisites = true;
@@ -1908,6 +1992,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
         InstallModalCreateDesktopShortcut = true;
         InstallModalCreateStartMenuShortcut = true;
+        InstallModalCreateSteamShortcut = false;
 
         UpdateInstallModalDiskSpace();
 
@@ -2194,6 +2279,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 : Instance.DlcUnlockerMethod,
             PendingCreateDesktopShortcut = InstallModalCreateDesktopShortcut,
             PendingCreateStartMenuShortcut = InstallModalCreateStartMenuShortcut,
+            PendingCreateSteamShortcut = InstallModalCreateSteamShortcut,
             AwaitingPostUpdateRedeploy = true,
             PendingRedeployDlcUnlocker = !string.IsNullOrWhiteSpace(InstallModalDlcMethod),
             PendingRedeployEmulatorId = isSpecificFix ? null : emulatorId,
@@ -2634,6 +2720,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             CustomLaunchArgs = Instance.LaunchArguments ?? string.Empty;
             IsUnityEngine = Instance.Engine?.Type == EngineType.Unity;
             DisableUpdateChecks = Instance.DisableUpdateChecks;
+            DisableEmulatorUpdates = Instance.DisableEmulatorUpdates;
+            ForceAllDlcs = Instance.ForceAllDlcs;
 
             IReadOnlyDictionary<uint, string> knownKeys = new Dictionary<uint, string>();
             if (_depotKeyRepository != null && Instance.Depots.Count > 0)
@@ -6387,6 +6475,12 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
 
     [RelayCommand]
+    public void ToggleEmulatorUpdates()
+    {
+        DisableEmulatorUpdates = !DisableEmulatorUpdates;
+    }
+
+    [RelayCommand]
     public async Task ToggleEmulatorAsync()
     {
         if (Instance == null) return;
@@ -6589,7 +6683,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             Name = customName,
             ExecutablePath = ConfiguredExecutablePath,
             LaunchArguments = CustomLaunchArgs,
-            DisableUpdateChecks = DisableUpdateChecks
+            DisableUpdateChecks = DisableUpdateChecks,
+            DisableEmulatorUpdates = DisableEmulatorUpdates,
+            ForceAllDlcs = ForceAllDlcs
         };
 
         await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
@@ -8883,6 +8979,202 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         if (ActiveJob != null)
         {
             ActiveJob.PropertyChanged -= OnActiveJobPropertyChanged;
+        }
+    }
+
+    // ── EXPORT INSTANCE LOGIC ──
+
+    [ObservableProperty] private bool _isExportModalOpen;
+    [ObservableProperty] private string _exportPackageName = string.Empty;
+    [ObservableProperty] private string _exportPackagePath = string.Empty;
+    [ObservableProperty] private string _exportHeaderBannerPath = string.Empty;
+    [ObservableProperty] private string _exportLogoBannerPath = string.Empty;
+    [ObservableProperty] private bool _exportHasIniSettings;
+
+    public ObservableCollection<BlueStar.App.Models.IniVariable> ExportIniVariables { get; } = new();
+    private string _currentExportIniPath = string.Empty;
+
+    [RelayCommand]
+    public void OpenExportModal()
+    {
+        ExportPackageName = $"{Instance?.Name} - Export";
+        ExportPackagePath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+        ExportHeaderBannerPath = string.Empty;
+        ExportLogoBannerPath = string.Empty;
+        ExportIniVariables.Clear();
+        ExportHasIniSettings = false;
+        _currentExportIniPath = string.Empty;
+
+        // Check for refix.ini or OnlineFix.ini
+        if (Instance != null && !string.IsNullOrWhiteSpace(Instance.InstallPath) && System.IO.Directory.Exists(Instance.InstallPath))
+        {
+            var refixPath = System.IO.Path.Combine(Instance.InstallPath, "refix.ini");
+            var onlineFixPath = System.IO.Path.Combine(Instance.InstallPath, "OnlineFix.ini");
+            
+            if (System.IO.File.Exists(refixPath))
+                _currentExportIniPath = refixPath;
+            else if (System.IO.File.Exists(onlineFixPath))
+                _currentExportIniPath = onlineFixPath;
+
+            if (!string.IsNullOrEmpty(_currentExportIniPath))
+            {
+                var lines = System.IO.File.ReadAllLines(_currentExportIniPath);
+                foreach (var line in lines)
+                {
+                    if (string.IsNullOrWhiteSpace(line) || line.TrimStart().StartsWith(";") || line.TrimStart().StartsWith("#") || line.TrimStart().StartsWith("[")) continue;
+                    
+                    var parts = line.Split(new[] { '=' }, 2);
+                    if (parts.Length == 2)
+                    {
+                        ExportIniVariables.Add(new BlueStar.App.Models.IniVariable { Key = parts[0].Trim(), Value = parts[1].Trim() });
+                    }
+                }
+                ExportHasIniSettings = ExportIniVariables.Count > 0;
+            }
+        }
+
+        IsExportModalOpen = true;
+    }
+
+    [RelayCommand]
+    public void CloseExportModal()
+    {
+        IsExportModalOpen = false;
+    }
+
+    [RelayCommand]
+    public void BrowseExportPath()
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = "Selecciona la carpeta donde guardar el ZIP",
+            Multiselect = false
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            ExportPackagePath = dialog.FolderName;
+        }
+    }
+
+    [RelayCommand]
+    public void BrowseExportHeader()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "Image Files|*.png;*.jpg;*.jpeg",
+            Title = "Selecciona un banner (Header)"
+        };
+        if (dialog.ShowDialog() == true)
+        {
+            ExportHeaderBannerPath = dialog.FileName;
+        }
+    }
+
+    [RelayCommand]
+    public void BrowseExportLogo()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "Image Files|*.png;*.jpg;*.jpeg",
+            Title = "Selecciona un logo"
+        };
+        if (dialog.ShowDialog() == true)
+        {
+            ExportLogoBannerPath = dialog.FileName;
+        }
+    }
+
+    [RelayCommand]
+    public async Task ExportInstanceConfirmAsync()
+    {
+        if (string.IsNullOrWhiteSpace(ExportPackagePath) || string.IsNullOrWhiteSpace(ExportPackageName)) return;
+
+        IsProcessing = true;
+        StatusMessage = "Empaquetando instancia...";
+        IsExportModalOpen = false;
+
+        try
+        {
+            await Task.Run(() =>
+            {
+                var targetZip = System.IO.Path.Combine(ExportPackagePath, $"{BlueStar.Core.Helpers.PathHelper.SanitizeFolderName(ExportPackageName)}.zip");
+                
+                // We will create a temp directory to prepare the files
+                var tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"BlueStarExport_{Guid.NewGuid()}");
+                System.IO.Directory.CreateDirectory(tempDir);
+
+                try
+                {
+                    // Copy game files
+                    void CopyDir(string sourceDir, string destinationDir)
+                    {
+                        var dir = new System.IO.DirectoryInfo(sourceDir);
+                        if (!dir.Exists) throw new System.IO.DirectoryNotFoundException();
+
+                        System.IO.Directory.CreateDirectory(destinationDir);
+
+                        foreach (var file in dir.GetFiles())
+                        {
+                            file.CopyTo(System.IO.Path.Combine(destinationDir, file.Name));
+                        }
+
+                        foreach (var subDir in dir.GetDirectories())
+                        {
+                            CopyDir(subDir.FullName, System.IO.Path.Combine(destinationDir, subDir.Name));
+                        }
+                    }
+                    CopyDir(Instance.InstallPath, tempDir);
+
+                    // Update INI if needed
+                    if (ExportHasIniSettings && !string.IsNullOrEmpty(_currentExportIniPath))
+                    {
+                        var targetIni = System.IO.Path.Combine(tempDir, System.IO.Path.GetFileName(_currentExportIniPath));
+                        if (System.IO.File.Exists(targetIni))
+                        {
+                            var lines = System.IO.File.ReadAllLines(targetIni).ToList();
+                            foreach (var variable in ExportIniVariables)
+                            {
+                                for (int i = 0; i < lines.Count; i++)
+                                {
+                                    if (lines[i].TrimStart().StartsWith(variable.Key + "=") || lines[i].TrimStart().StartsWith(variable.Key + " ="))
+                                    {
+                                        lines[i] = $"{variable.Key}={variable.Value}";
+                                        break;
+                                    }
+                                }
+                            }
+                            System.IO.File.WriteAllLines(targetIni, lines);
+                        }
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(ExportHeaderBannerPath) && System.IO.File.Exists(ExportHeaderBannerPath))
+                    {
+                        System.IO.File.Copy(ExportHeaderBannerPath, System.IO.Path.Combine(tempDir, "header.jpg"), true);
+                    }
+                    if (!string.IsNullOrWhiteSpace(ExportLogoBannerPath) && System.IO.File.Exists(ExportLogoBannerPath))
+                    {
+                        System.IO.File.Copy(ExportLogoBannerPath, System.IO.Path.Combine(tempDir, "logo.png"), true);
+                    }
+
+                    if (System.IO.File.Exists(targetZip)) System.IO.File.Delete(targetZip);
+                    System.IO.Compression.ZipFile.CreateFromDirectory(tempDir, targetZip, System.IO.Compression.CompressionLevel.Fastest, false);
+                }
+                finally
+                {
+                    if (System.IO.Directory.Exists(tempDir)) System.IO.Directory.Delete(tempDir, true);
+                }
+            });
+            StatusMessage = "Exportado correctamente.";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting instance");
+            StatusMessage = "Error al exportar.";
+        }
+        finally
+        {
+            IsProcessing = false;
         }
     }
 }

@@ -41,7 +41,12 @@ public partial class App : Application
     /// <summary>
     /// Gets the application service provider.
     /// </summary>
-    public static IServiceProvider Services { get; private set; } = null!;
+    public static IServiceProvider Services { get; internal set; } = null!;
+
+    /// <summary>
+    /// Sets the application service provider for unit testing.
+    /// </summary>
+    public static void SetTestServices(IServiceProvider services) => Services = services;
 
     /// <inheritdoc />
     protected override void OnStartup(StartupEventArgs e)

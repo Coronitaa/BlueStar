@@ -184,7 +184,6 @@ public sealed class GameLauncherService : IGameLauncher
             process.BeginErrorReadLine();
 
             _runningProcesses[instance.Id] = process;
-            RunningStateChanged?.Invoke(this, (instance.Id, true));
 
             // Update instance status to Running and save last played time
             if (_instanceManager != null)
@@ -201,6 +200,8 @@ public sealed class GameLauncherService : IGameLauncher
                 }
                 catch { }
             }
+
+            RunningStateChanged?.Invoke(this, (instance.Id, true));
 
             return new GameLaunchResult(true, "Game launched successfully.", process.Id);
         }

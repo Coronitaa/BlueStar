@@ -445,6 +445,7 @@ public sealed class ReFixUpdateService : IReFixUpdateService
     public bool IsInstanceReFixOutdated(GameInstance instance)
     {
         if (instance == null || string.IsNullOrWhiteSpace(instance.InstallPath)) return false;
+        if (instance.DisableEmulatorUpdates) return false;
 
         // If the instance has a game-specific online fix or another non-ReFix emulator, it is NOT ReFix
         if (instance.EmulatorId == "gamefix_online" || instance.InstalledFixLayers?.Any(l => l.IsOnline) == true)

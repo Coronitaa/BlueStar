@@ -39,6 +39,6 @@
     <conv:LogSeverityToBrushConverter x:Key="LogSeverityToBrushConverter"/>
     <conv:LogSeverityToBgBrushConverter x:Key="LogSeverityToBgBrushConverter"/>
     <conv:ReviewScoreToBrushConverter x:Key="ReviewScoreToBrushConverter"/>
-
+    <conv:EqualsToBoolConverter x:Key="EqualsToBoolConverter"/>
 
 </ResourceDictionary>

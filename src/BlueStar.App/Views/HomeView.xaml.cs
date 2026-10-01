@@ -58,7 +58,10 @@ public partial class HomeView : UserControl
         try
         {
             await EnsureWebViewAsync().ConfigureAwait(true);
-            StorePageView.Source = new Uri(url);
+            if (StorePageView.CoreWebView2 != null)
+                StorePageView.CoreWebView2.Navigate(url);
+            else
+                StorePageView.Source = new Uri(url);
         }
         catch (Exception)
         {
@@ -165,36 +168,6 @@ public partial class HomeView : UserControl
         {
             var target = RecentInstancesScrollViewer.HorizontalOffset + 330;
             SmoothScrollTo(RecentInstancesScrollViewer, target);
-        }
-    }
-
-    private async void OnZipDrop(object sender, DragEventArgs e)
-    {
-        if (e.Data.GetDataPresent(DataFormats.FileDrop))
-        {
-            var files = (string[])e.Data.GetData(DataFormats.FileDrop);
-            if (files != null && files.Length > 0 && files[0].EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-            {
-                if (DataContext is ViewModels.HomeViewModel vm)
-                {
-                    await vm.LoadZipFileAsync(files[0]);
-                }
-            }
-        }
-    }
-
-    private async void OnFolderDrop(object sender, DragEventArgs e)
-    {
-        if (e.Data.GetDataPresent(DataFormats.FileDrop))
-        {
-            var files = (string[])e.Data.GetData(DataFormats.FileDrop);
-            if (files != null && files.Length > 0 && System.IO.Directory.Exists(files[0]))
-            {
-                if (DataContext is ViewModels.HomeViewModel vm)
-                {
-                    await vm.LoadFolderAsync(files[0]);
-                }
-            }
         }
     }
 }

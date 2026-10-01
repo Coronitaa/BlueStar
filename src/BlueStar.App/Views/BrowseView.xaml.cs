@@ -141,7 +141,10 @@ public partial class BrowseView : UserControl
         try
         {
             await EnsureWebViewAsync().ConfigureAwait(true);
-            StorePageView.Source = new Uri(url);
+            if (StorePageView.CoreWebView2 != null)
+                StorePageView.CoreWebView2.Navigate(url);
+            else
+                StorePageView.Source = new Uri(url);
         }
         catch (Exception)
         {

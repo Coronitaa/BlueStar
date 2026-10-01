@@ -185,6 +185,12 @@
                                                 ToolTip="{Binding Name}"
                                                 Command="{Binding DataContext.OpenRecentShortcutCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding}">
+                                            <Button.Tag>
+                                                <MultiBinding Converter="{StaticResource EqualsToBoolConverter}">
+                                                    <Binding Path="Id"/>
+                                                    <Binding Path="DataContext.SelectedRecentInstanceId" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                </MultiBinding>
+                                            </Button.Tag>
                                             <Border Width="40" Height="36" CornerRadius="8" Background="#161822" ClipToBounds="True">
                                                 <Grid>
                                                     <!-- Centered Fallback Initial Letter (behind image) -->
@@ -211,18 +217,21 @@
 
                             <!-- 5. "+" Add Instance Button with Right Flyout Popup -->
                             <Grid Margin="0,2">
-                                <Button Width="40" Height="40"
-                                        Style="{StaticResource GhostButton}"
-                                        Command="{Binding ToggleSidebarImportMenuCommand}"
-                                        ToolTip="{DynamicResource String_ImportGame}"
-                                        Padding="0"
-                                        HorizontalAlignment="Center">
+                                <ToggleButton x:Name="SidebarImportToggle"
+                                              Width="40" Height="40"
+                                              Style="{StaticResource GhostToggleButton}"
+                                              IsChecked="{Binding IsSidebarImportMenuOpen, Mode=TwoWay}"
+                                              ctrl:PopupToggleHelper.Popup="{Binding ElementName=SidebarImportPopup}"
+                                              ToolTip="{DynamicResource String_ImportGame}"
+                                              Padding="0"
+                                              HorizontalAlignment="Center">
                                     <Border Background="{StaticResource SurfaceCardBrush}"
                                             BorderBrush="{StaticResource SubtleBorderBrush}"
                                             BorderThickness="1"
                                             CornerRadius="20"
                                             Width="40" Height="40">
-                                        <Path Data="{StaticResource IconPlus}"
+                                        <Path x:Name="SidebarPlusIcon"
+                                              Data="{StaticResource IconPlus}"
                                               Fill="{StaticResource PrimaryTextBrush}"
                                               Stretch="Uniform" Width="14" Height="14"
                                               RenderTransformOrigin="0.5,0.5"
@@ -233,7 +242,7 @@
                                             <Path.Style>
                                                 <Style TargetType="Path">
                                                     <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding DataContext.IsSidebarImportMenuOpen, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                                        <DataTrigger Binding="{Binding IsChecked, ElementName=SidebarImportToggle}" Value="True">
                                                             <DataTrigger.EnterActions>
                                                                 <BeginStoryboard>
                                                                     <Storyboard>
@@ -256,9 +265,11 @@
                                             </Path.Style>
                                         </Path>
                                     </Border>
-                                </Button>
+                                </ToggleButton>
                                 <!-- Right-Opening Popup Flyout -->
-                                <Popup IsOpen="{Binding IsSidebarImportMenuOpen}"
+                                <Popup x:Name="SidebarImportPopup"
+                                       IsOpen="{Binding IsSidebarImportMenuOpen, Mode=TwoWay}"
+                                       PlacementTarget="{Binding ElementName=SidebarImportToggle}"
                                        StaysOpen="False"
                                        Placement="Right"
                                        HorizontalOffset="12"
@@ -469,16 +480,10 @@
         </Border>
 
         <!-- ═══ BACKGROUND TASKS DROPDOWN FLYOUT (Anchored Bottom-Right above tasks button) ═══ -->
-        <Grid Grid.Row="0" Grid.RowSpan="3"
-              Visibility="{Binding IsTasksFlyoutOpen, Converter={StaticResource BoolToVisibilityConverter}}"
-              Panel.ZIndex="1001">
-            <!-- Transparent backdrop click-outside to close -->
-            <Border Background="Transparent">
-                <Border.InputBindings>
-                    <MouseBinding Gesture="LeftClick" Command="{Binding CloseTasksFlyoutCommand}"/>
-                </Border.InputBindings>
-            </Border>
-
+        <ctrl:FlyoutOverlay Grid.Row="0" Grid.RowSpan="3"
+                            IsOpen="{Binding IsTasksFlyoutOpen, Mode=TwoWay}"
+                            CloseCommand="{Binding CloseTasksFlyoutCommand}"
+                            Panel.ZIndex="1001">
             <!-- Dropdown Card anchored to bottom-right above the status bar -->
             <Border Width="430" MaxHeight="460"
                     Background="{StaticResource SurfaceCardElevatedBrush}"
@@ -600,7 +605,7 @@
                     </ScrollViewer>
                 </Grid>
             </Border>
-        </Grid>
+        </ctrl:FlyoutOverlay>
 
         <!-- ═══ TOAST NOTIFICATIONS POPUP CONTAINER (Bottom-Right Corner) ═══ -->
         <ItemsControl Grid.Row="0" Grid.RowSpan="3"
@@ -612,23 +617,19 @@
                       IsHitTestVisible="True">
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                    <Border x:Name="toastBorder"
-                            Background="{StaticResource SurfaceCardBrush}"
-                            BorderBrush="{Binding Type, Converter={StaticResource NotificationTypeToBrushConverter}}"
-                            BorderThickness="1"
-                            CornerRadius="{StaticResource RadiusMd}"
-                            Padding="14,10"
-                            Margin="0,0,0,10"
-                            MinWidth="300"
-                            MaxWidth="400"
-                            RenderTransformOrigin="0.5,0.5">
-                        <Border.Effect>
-                            <DropShadowEffect Color="#000000" BlurRadius="20" ShadowDepth="4" Opacity="0.55"/>
-                        </Border.Effect>
-                        <Border.RenderTransform>
-                            <TranslateTransform X="0" Y="0"/>
-                        </Border.RenderTransform>
-                        <Border.Triggers>
+                    <Grid x:Name="toastContainer"
+                          Margin="0,0,0,10"
+                          MinWidth="300"
+                          MaxWidth="400"
+                          SnapsToDevicePixels="True"
+                          UseLayoutRounding="True"
+                          TextOptions.TextFormattingMode="Display"
+                          TextOptions.TextRenderingMode="ClearType"
+                          RenderTransformOrigin="0.5,0.5">
+                        <Grid.RenderTransform>
+                            <TranslateTransform Y="0" X="0"/>
+                        </Grid.RenderTransform>
+                        <Grid.Triggers>
                             <EventTrigger RoutedEvent="Loaded">
                                 <BeginStoryboard>
                                     <Storyboard>
@@ -636,84 +637,102 @@
                                                          From="0" To="1"
                                                          Duration="{StaticResource DurationFast}"
                                                          EasingFunction="{StaticResource EaseOutCubic}"/>
-                                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
-                                                         From="40" To="0"
+                                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                                         From="8" To="0"
                                                          Duration="{StaticResource DurationNormal}"
                                                          EasingFunction="{StaticResource EaseOutCubic}"/>
                                     </Storyboard>
                                 </BeginStoryboard>
                             </EventTrigger>
-                        </Border.Triggers>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
+                        </Grid.Triggers>
 
-                            <!-- Type Icon Dot / Badge -->
-                            <Border Grid.Column="0"
-                                    Background="{Binding Type, Converter={StaticResource NotificationTypeToBgBrushConverter}}"
-                                    CornerRadius="14"
-                                    Width="26" Height="26"
-                                    Margin="0,0,10,0"
-                                    VerticalAlignment="Top">
-                                <TextBlock Text="{Binding Type, Converter={StaticResource NotificationTypeToIconTextConverter}}"
-                                           Foreground="{Binding Type, Converter={StaticResource NotificationTypeToBrushConverter}}"
-                                           FontWeight="Bold" FontSize="12"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
+                        <!-- Dedicated Drop Shadow Layer (No text inside to avoid disabling ClearType) -->
+                        <Border CornerRadius="{StaticResource RadiusMd}"
+                                Background="{StaticResource SurfaceCardBrush}">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#000000" BlurRadius="16" ShadowDepth="3" Opacity="0.45"/>
+                            </Border.Effect>
+                        </Border>
 
-                            <!-- Notification Message Body -->
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
-                                <TextBlock Text="{Binding Title}"
-                                           FontWeight="Bold" FontSize="12"
-                                           Foreground="{StaticResource PrimaryTextBrush}"
-                                           Margin="0,0,0,2"
-                                           TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Text="{Binding Message}"
-                                           Style="{StaticResource BodySmall}"
-                                           Foreground="{StaticResource SecondaryTextBrush}"
-                                           TextWrapping="Wrap"
-                                           LineHeight="16"/>
+                        <!-- Crisp Content Card Layer (Zero effects, full ClearType fidelity) -->
+                        <Border x:Name="toastBorder"
+                                Background="{StaticResource SurfaceCardBrush}"
+                                BorderBrush="{Binding Type, Converter={StaticResource NotificationTypeToBrushConverter}}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource RadiusMd}"
+                                Padding="14,10"
+                                SnapsToDevicePixels="True">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
 
-                                <!-- Optional Interactive Action Button -->
-                                <Button Content="{Binding ActionText}"
-                                        Style="{StaticResource SecondaryButton}"
-                                        FontSize="11"
-                                        Padding="10,4"
-                                        Margin="0,6,0,0"
-                                        HorizontalAlignment="Left"
-                                        Visibility="{Binding HasAction, Converter={StaticResource BoolToVisibilityConverter}}"
-                                        Command="{Binding ActionCommand}"/>
-                            </StackPanel>
+                                <!-- Type Icon Dot / Badge -->
+                                <Border Grid.Column="0"
+                                        Background="{Binding Type, Converter={StaticResource NotificationTypeToBgBrushConverter}}"
+                                        CornerRadius="14"
+                                        Width="26" Height="26"
+                                        Margin="0,0,10,0"
+                                        VerticalAlignment="Top">
+                                    <TextBlock Text="{Binding Type, Converter={StaticResource NotificationTypeToIconTextConverter}}"
+                                               Foreground="{Binding Type, Converter={StaticResource NotificationTypeToBrushConverter}}"
+                                               FontWeight="Bold" FontSize="12"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
 
-                            <!-- Close / Dismiss '✕' Button -->
-                            <Button Grid.Column="2"
-                                    Style="{StaticResource GhostButton}"
-                                    Width="24" Height="24"
-                                    Padding="0"
-                                    Background="Transparent"
-                                    VerticalAlignment="Top"
-                                    Cursor="Hand"
-                                    ToolTip="{DynamicResource String_Close}"
-                                    Command="{Binding DismissCommand}">
-                                <TextBlock Text="✕" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource MutedTextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Button>
-                        </Grid>
-                    </Border>
+                                <!-- Notification Message Body -->
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
+                                    <TextBlock Text="{Binding Title}"
+                                               FontWeight="Bold" FontSize="12"
+                                               Foreground="{StaticResource PrimaryTextBrush}"
+                                               Margin="0,0,0,2"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding Message}"
+                                               Style="{StaticResource BodySmall}"
+                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                               TextWrapping="Wrap"
+                                               LineHeight="16"/>
+
+                                    <!-- Optional Interactive Action Button -->
+                                    <Button Content="{Binding ActionText}"
+                                            Style="{StaticResource SecondaryButton}"
+                                            FontSize="11"
+                                            Padding="10,4"
+                                            Margin="0,6,0,0"
+                                            HorizontalAlignment="Left"
+                                            Visibility="{Binding HasAction, Converter={StaticResource BoolToVisibilityConverter}}"
+                                            Command="{Binding ActionCommand}"/>
+                                </StackPanel>
+
+                                <!-- Close / Dismiss '✕' Button -->
+                                <Button Grid.Column="2"
+                                        Style="{StaticResource GhostButton}"
+                                        Width="24" Height="24"
+                                        Padding="0"
+                                        Background="Transparent"
+                                        VerticalAlignment="Top"
+                                        Cursor="Hand"
+                                        ToolTip="{DynamicResource String_Close}"
+                                        Command="{Binding DismissCommand}">
+                                    <TextBlock Text="✕" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource MutedTextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Button>
+                            </Grid>
+                        </Border>
+                    </Grid>
                     <DataTemplate.Triggers>
                         <DataTrigger Binding="{Binding IsDismissing}" Value="True">
                             <DataTrigger.EnterActions>
                                 <BeginStoryboard>
                                     <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="toastBorder"
+                                        <DoubleAnimation Storyboard.TargetName="toastContainer"
                                                          Storyboard.TargetProperty="Opacity"
                                                          To="0" Duration="0:0:0.18"
                                                          EasingFunction="{StaticResource EaseOutCubic}"/>
-                                        <DoubleAnimation Storyboard.TargetName="toastBorder"
-                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
-                                                         To="50" Duration="0:0:0.18"
+                                        <DoubleAnimation Storyboard.TargetName="toastContainer"
+                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                                         To="8" Duration="0:0:0.18"
                                                          EasingFunction="{StaticResource EaseOutCubic}"/>
                                     </Storyboard>
                                 </BeginStoryboard>
@@ -1062,5 +1081,10 @@
                 </Grid>
             </Border>
         </ctrl:ModalOverlay>
+
+        <!-- ═══ CENTRALIZED IMPORT MODALS (Steam, ZIP, Folder) OVERLAY ═══ -->
+        <local:ImportModalsOverlay DataContext="{Binding HomeViewModel}"
+                                   Grid.Row="0" Grid.RowSpan="3"
+                                   Panel.ZIndex="1050"/>
     </Grid>
 </Window>

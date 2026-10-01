@@ -123,6 +123,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private System.Collections.ObjectModel.ObservableCollection<GameInstance> _recentShortcuts = new();
 
     [ObservableProperty]
+    private Guid? _selectedRecentInstanceId;
+
+    [ObservableProperty]
     private bool _isSidebarImportMenuOpen;
 
     // ── Live Downloads Tracker ──
@@ -707,6 +710,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         if (entry.Page == "InstanceDetail" && entry.Parameter is GameInstance inst)
         {
+            SelectedRecentInstanceId = inst.Id;
             SelectedNavigation = "Library";
             CurrentInstanceTitle = inst.Name;
             var view = new InstanceDetailView();
@@ -722,6 +726,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
         else if (entry.Page == "ExploreCategory" && !string.IsNullOrWhiteSpace(entry.CategoryId))
         {
+            SelectedRecentInstanceId = null;
             CurrentInstanceTitle = null;
             SelectedNavigation = "Explore";
             var (view, vm) = GetExploreView();
@@ -730,6 +735,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
         else
         {
+            SelectedRecentInstanceId = null;
             CurrentInstanceTitle = null;
             Navigate(entry.Page);
         }
@@ -749,6 +755,20 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     #endregion
 
+    private HomeViewModel? _homeViewModel;
+    public HomeViewModel HomeViewModel => _homeViewModel ??= CreateHomeViewModel();
+
+    private HomeViewModel CreateHomeViewModel()
+    {
+        var vm = App.Services.GetRequiredService<HomeViewModel>();
+        vm.OnNavigateRequested = Navigate;
+        vm.OnNavigateToCategoryRequested = NavigateToExploreCategory;
+        vm.OnFindSimilarRequested = OpenSimilarInExplore;
+        vm.OnManageInstanceRequested = OpenInstanceDetail;
+        vm.OnManageInstanceRequestedWithUpdate = (inst, autoCheck) => OpenInstanceDetail(inst, autoCheckUpdates: autoCheck);
+        return vm;
+    }
+
     /// <summary>
     /// Navigates to the specified view.
     /// </summary>
@@ -756,6 +776,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public void Navigate(string page)
     {
+        if (page == "Home" && CurrentView is BlueStar.App.Views.HomeView) return;
+        if ((page == "Library" || page == "Instances") && CurrentView is BlueStar.App.Views.LibraryView) return;
+        if (page == "Explore" && CurrentView is BlueStar.App.Views.BrowseView) return;
+        if (page == "Downloads" && CurrentView is BlueStar.App.Views.DownloadsView) return;
+        if (page == "Settings" && CurrentView is BlueStar.App.Views.SettingsView) return;
+
+        SelectedRecentInstanceId = null;
         CurrentInstanceTitle = null;
         PushNavigation(page);
         SelectedNavigation = page;
@@ -763,14 +790,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (page == "Home")
         {
             var view = new HomeView();
-            var vm = App.Services.GetRequiredService<HomeViewModel>();
-            vm.OnNavigateRequested = Navigate;
-            vm.OnNavigateToCategoryRequested = NavigateToExploreCategory;
-            vm.OnFindSimilarRequested = OpenSimilarInExplore;
-            vm.OnManageInstanceRequested = OpenInstanceDetail;
-            vm.OnManageInstanceRequestedWithUpdate = (inst, autoCheck) => OpenInstanceDetail(inst, autoCheckUpdates: autoCheck);
-            view.DataContext = vm;
+            view.DataContext = HomeViewModel;
             CurrentView = view;
+            _ = HomeViewModel.LoadDashboardDataAsync();
             return;
         }
 
@@ -822,7 +844,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public void OpenInstanceDetail(GameInstance instance, bool autoCheckUpdates)
     {
         if (instance == null) return;
+        SelectedRecentInstanceId = instance.Id;
         CurrentInstanceTitle = instance.Name;
+        SelectedNavigation = null;
         PushNavigation("InstanceDetail", instance);
         var view = new InstanceDetailView();
         var vm = App.Services.GetRequiredService<InstanceDetailViewModel>();
@@ -914,33 +938,21 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public async Task SidebarImportSteamAsync()
     {
         IsSidebarImportMenuOpen = false;
-        Navigate("Home");
-        if (CurrentView?.DataContext is HomeViewModel vm)
-        {
-            await vm.OpenSteamImportModalAsync();
-        }
+        await HomeViewModel.OpenSteamImportModalAsync();
     }
 
     [RelayCommand]
     public void SidebarImportZip()
     {
         IsSidebarImportMenuOpen = false;
-        Navigate("Home");
-        if (CurrentView?.DataContext is HomeViewModel vm)
-        {
-            vm.OpenZipImportModal();
-        }
+        HomeViewModel.OpenZipImportModal();
     }
 
     [RelayCommand]
     public void SidebarImportFolder()
     {
         IsSidebarImportMenuOpen = false;
-        Navigate("Home");
-        if (CurrentView?.DataContext is HomeViewModel vm)
-        {
-            vm.OpenFolderImportModal();
-        }
+        HomeViewModel.OpenFolderImportModal();
     }
 
     private void UpdateBackgroundTaskStats()

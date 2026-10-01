@@ -128,6 +128,11 @@ public record GameInstance
     public bool DisableUpdateChecks { get; init; } = false;
 
     /// <summary>
+    /// Gets or sets whether automatic emulator updates are disabled for this instance.
+    /// </summary>
+    public bool DisableEmulatorUpdates { get; init; } = false;
+
+    /// <summary>
     /// Gets or sets the origin and management type of this instance.
     /// Default is DepotBox for backward compatibility with pre-1.3 instances.
     /// </summary>
@@ -178,6 +183,16 @@ public record GameInstance
     /// Gets or sets whether to create a Start Menu shortcut upon completion of the game download.
     /// </summary>
     public bool PendingCreateStartMenuShortcut { get; init; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to create a Steam Library shortcut upon completion of the game download.
+    /// </summary>
+    public bool PendingCreateSteamShortcut { get; init; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to force the installation of all DLCs, even if none are detected.
+    /// </summary>
+    public bool ForceAllDlcs { get; init; } = false;
 
     /// <summary>
     /// Gets or sets whether advanced build options are enabled for this instance.

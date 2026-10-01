@@ -93,8 +93,8 @@ public class TransitioningContentControl : ContentControl
             return;
         }
 
-        // If not loaded yet or animations disabled in Windows accessibility settings, snap directly
-        if (!IsLoaded || !SystemParameters.ClientAreaAnimation)
+        // If not loaded yet, snap directly to avoid invisible initial render
+        if (!IsLoaded)
         {
             _contentPresenter.BeginAnimation(OpacityProperty, null);
             _contentPresenter.Opacity = 1.0;
@@ -106,7 +106,7 @@ public class TransitioningContentControl : ContentControl
             return;
         }
 
-        // Set initial state before the new content is measured/arranged
+        // Stop any running animations and set initial state for new content
         _contentPresenter.BeginAnimation(OpacityProperty, null);
         _contentPresenter.Opacity = 0.0;
 
@@ -118,8 +118,8 @@ public class TransitioningContentControl : ContentControl
 
         int currentToken = ++_transitionToken;
 
-        // Animate after layout has completed for the new content to ensure smooth 60fps
-        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, () =>
+        // Animate on next render frame after layout pass has completed
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Render, () =>
         {
             if (currentToken != _transitionToken || _contentPresenter == null)
             {
@@ -132,14 +132,29 @@ public class TransitioningContentControl : ContentControl
                 EasingFunction = ease
             };
 
+            var translateAnim = new DoubleAnimation(TransitionOffset, 0.0, TransitionDuration)
+            {
+                EasingFunction = ease
+            };
+
+            opacityAnim.Completed += (s, e) =>
+            {
+                if (currentToken == _transitionToken && _contentPresenter != null)
+                {
+                    _contentPresenter.BeginAnimation(OpacityProperty, null);
+                    _contentPresenter.Opacity = 1.0;
+                    if (_translateTransform != null)
+                    {
+                        _translateTransform.BeginAnimation(TranslateTransform.YProperty, null);
+                        _translateTransform.Y = 0.0;
+                    }
+                }
+            };
+
             _contentPresenter.BeginAnimation(OpacityProperty, opacityAnim);
 
             if (_translateTransform != null)
             {
-                var translateAnim = new DoubleAnimation(TransitionOffset, 0.0, TransitionDuration)
-                {
-                    EasingFunction = ease
-                };
                 _translateTransform.BeginAnimation(TranslateTransform.YProperty, translateAnim);
             }
         });

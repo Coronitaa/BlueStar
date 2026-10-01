@@ -294,6 +294,14 @@ public sealed class AppSettingsService
         await SaveAsync().ConfigureAwait(false);
     }
 
+    public bool DoNotShowForceDlcWarning => _current.DoNotShowForceDlcWarning;
+
+    public async Task SetDoNotShowForceDlcWarningAsync(bool doNotShow)
+    {
+        _current = _current with { DoNotShowForceDlcWarning = doNotShow };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
     private sealed record AppSettings
     {
         public string? Language { get; init; } = "en";
@@ -307,6 +315,7 @@ public sealed class AppSettingsService
         public bool CheckSystemRequirementsOnStartup { get; init; } = true;
         public bool EnableAdvancedBuildOptions { get; init; } = false;
         public bool EnableDebugSystem { get; init; } = false;
+        public bool DoNotShowForceDlcWarning { get; init; } = false;
         public string? CatalogManifestUrl { get; init; }
 
         public string? DefaultExploreSort { get; init; } = "Reviews";

@@ -416,11 +416,7 @@ echo [OK] Configured ReFix.ini in "!EXE_DIR!"
 :: Step 6: Copy Steam Shortcut Installer & PowerShell helper (Valve mode only)
 if "!ONLINE_MODE_NAME!"=="valve" (
     echo [6/6] Copying Steam Shortcut scripts...
-    if exist "!BIN_DIR!\add_steam_shortcut.ps1" (
-        copy /y "!BIN_DIR!\add_steam_shortcut.ps1" "!EXE_DIR!\add_steam_shortcut.ps1" >nul
     )
-    if exist "!BIN_DIR!\Install_ReFix_Steam_Shortcut.bat" (
-        copy /y "!BIN_DIR!\Install_ReFix_Steam_Shortcut.bat" "!EXE_DIR!\Install_ReFix_Steam_Shortcut.bat" >nul
     )
     echo [OK] Deployed Steam Shortcut Installer scripts to "!EXE_DIR!"
 ) else (
@@ -492,8 +488,6 @@ if "!ONLINE_MODE_NAME!"=="valve" (
     echo:
     echo [INFO] Running Steam Shortcut Auto-Installer...
     pushd "!EXE_DIR!"
-    if exist "Install_ReFix_Steam_Shortcut.bat" (
-        call Install_ReFix_Steam_Shortcut.bat "!GAME_NAME!" "!GAME_EXE_PATH!"
     )
     popd
 )
