@@ -1266,6 +1266,7 @@
                            CloseOnBackdropClick="True"
                            CloseOnEscape="True"
                            BackdropBrush="#C2040407"
+                           AnimateScale="False"
                            Panel.ZIndex="150">
 
             <!-- Modal dialog card -->

@@ -40,6 +40,7 @@ public class ModalOverlay : ContentControl
 
     public ModalOverlay()
     {
+        SetResourceReference(StyleProperty, typeof(ModalOverlay));
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
@@ -127,6 +128,19 @@ public class ModalOverlay : ContentControl
         set => SetValue(CloseOnEscapeProperty, value);
     }
 
+    public static readonly DependencyProperty AnimateScaleProperty =
+        DependencyProperty.Register(
+            nameof(AnimateScale),
+            typeof(bool),
+            typeof(ModalOverlay),
+            new PropertyMetadata(true));
+
+    public bool AnimateScale
+    {
+        get => (bool)GetValue(AnimateScaleProperty);
+        set => SetValue(AnimateScaleProperty, value);
+    }
+
     #endregion
 
     public override void OnApplyTemplate()
@@ -148,16 +162,11 @@ public class ModalOverlay : ContentControl
 
         if (_contentHolder != null)
         {
-            if (_contentHolder.RenderTransform is ScaleTransform st)
-            {
-                _scaleTransform = st;
-            }
-            else
-            {
-                _scaleTransform = new ScaleTransform(1.0, 1.0);
-                _contentHolder.RenderTransform = _scaleTransform;
-                _contentHolder.RenderTransformOrigin = new Point(0.5, 0.5);
-            }
+            // Always assign a fresh, unfrozen ScaleTransform
+            double initialScale = IsOpen ? 1.0 : (AnimateScale ? 0.96 : 1.0);
+            _scaleTransform = new ScaleTransform(initialScale, initialScale);
+            _contentHolder.RenderTransform = _scaleTransform;
+            _contentHolder.RenderTransformOrigin = new Point(0.5, 0.5);
         }
 
         // Apply initial visual state without transition
@@ -217,10 +226,20 @@ public class ModalOverlay : ContentControl
         {
             Visibility = Visibility.Visible;
             IsHitTestVisible = true;
-            if (_backdrop != null) _backdrop.Opacity = 1.0;
-            if (_contentHolder != null) _contentHolder.Opacity = 1.0;
+            if (_backdrop != null)
+            {
+                _backdrop.BeginAnimation(OpacityProperty, null);
+                _backdrop.Opacity = 1.0;
+            }
+            if (_contentHolder != null)
+            {
+                _contentHolder.BeginAnimation(OpacityProperty, null);
+                _contentHolder.Opacity = 1.0;
+            }
             if (_scaleTransform != null)
             {
+                _scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                _scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, null);
                 _scaleTransform.ScaleX = 1.0;
                 _scaleTransform.ScaleY = 1.0;
             }
@@ -229,12 +248,23 @@ public class ModalOverlay : ContentControl
         {
             Visibility = Visibility.Collapsed;
             IsHitTestVisible = false;
-            if (_backdrop != null) _backdrop.Opacity = 0.0;
-            if (_contentHolder != null) _contentHolder.Opacity = 0.0;
+            if (_backdrop != null)
+            {
+                _backdrop.BeginAnimation(OpacityProperty, null);
+                _backdrop.Opacity = 0.0;
+            }
+            if (_contentHolder != null)
+            {
+                _contentHolder.BeginAnimation(OpacityProperty, null);
+                _contentHolder.Opacity = 0.0;
+            }
             if (_scaleTransform != null)
             {
-                _scaleTransform.ScaleX = 0.96;
-                _scaleTransform.ScaleY = 0.96;
+                _scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                _scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                double initialScale = AnimateScale ? 0.96 : 1.0;
+                _scaleTransform.ScaleX = initialScale;
+                _scaleTransform.ScaleY = initialScale;
             }
         }
     }
@@ -257,23 +287,39 @@ public class ModalOverlay : ContentControl
             Visibility = Visibility.Visible;
             IsHitTestVisible = true;
 
+            if (!useTransitions)
+            {
+                ApplyInitialState();
+                return;
+            }
+
             var duration = TimeSpan.FromMilliseconds(220); // DurationNormal
 
             var backdropAnim = new DoubleAnimation(1.0, duration) { EasingFunction = easeOut };
             var contentOpacityAnim = new DoubleAnimation(1.0, duration) { EasingFunction = easeOut };
-            var scaleXAnim = new DoubleAnimation(1.0, duration) { EasingFunction = easeOut };
-            var scaleYAnim = new DoubleAnimation(1.0, duration) { EasingFunction = easeOut };
 
             _backdrop.BeginAnimation(OpacityProperty, backdropAnim);
             _contentHolder.BeginAnimation(OpacityProperty, contentOpacityAnim);
 
             if (_scaleTransform != null)
             {
-                _scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, scaleXAnim);
-                _scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, scaleYAnim);
+                if (AnimateScale)
+                {
+                    var scaleXAnim = new DoubleAnimation(1.0, duration) { EasingFunction = easeOut };
+                    var scaleYAnim = new DoubleAnimation(1.0, duration) { EasingFunction = easeOut };
+                    _scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, scaleXAnim);
+                    _scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, scaleYAnim);
+                }
+                else
+                {
+                    _scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                    _scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                    _scaleTransform.ScaleX = 1.0;
+                    _scaleTransform.ScaleY = 1.0;
+                }
             }
 
-            _contentHolder.Focus();
+            _contentHolder.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
         }
         else
         {
@@ -281,7 +327,7 @@ public class ModalOverlay : ContentControl
 
             if (!useTransitions)
             {
-                Visibility = Visibility.Collapsed;
+                ApplyInitialState();
                 return;
             }
 
@@ -289,8 +335,6 @@ public class ModalOverlay : ContentControl
 
             var backdropAnim = new DoubleAnimation(0.0, duration) { EasingFunction = easeOut };
             var contentOpacityAnim = new DoubleAnimation(0.0, duration) { EasingFunction = easeOut };
-            var scaleXAnim = new DoubleAnimation(0.96, duration) { EasingFunction = easeOut };
-            var scaleYAnim = new DoubleAnimation(0.96, duration) { EasingFunction = easeOut };
 
             contentOpacityAnim.Completed += (s, e) =>
             {
@@ -305,8 +349,20 @@ public class ModalOverlay : ContentControl
 
             if (_scaleTransform != null)
             {
-                _scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, scaleXAnim);
-                _scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, scaleYAnim);
+                if (AnimateScale)
+                {
+                    var scaleXAnim = new DoubleAnimation(0.96, duration) { EasingFunction = easeOut };
+                    var scaleYAnim = new DoubleAnimation(0.96, duration) { EasingFunction = easeOut };
+                    _scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, scaleXAnim);
+                    _scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, scaleYAnim);
+                }
+                else
+                {
+                    _scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                    _scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                    _scaleTransform.ScaleX = 1.0;
+                    _scaleTransform.ScaleY = 1.0;
+                }
             }
         }
     }

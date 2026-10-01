@@ -1803,9 +1803,6 @@
                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                               Opacity="0"
                               RenderTransformOrigin="0.5,0.5">
-                            <Grid.RenderTransform>
-                                <ScaleTransform ScaleX="0.96" ScaleY="0.96"/>
-                            </Grid.RenderTransform>
                             <ContentPresenter Content="{TemplateBinding Content}"
                                               ContentTemplate="{TemplateBinding ContentTemplate}"
                                               ContentTemplateSelector="{TemplateBinding ContentTemplateSelector}"/>

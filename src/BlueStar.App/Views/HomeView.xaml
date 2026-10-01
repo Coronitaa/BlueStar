@@ -1860,6 +1860,7 @@
                                CloseOnBackdropClick="True"
                                CloseOnEscape="True"
                                BackdropBrush="#C2040407"
+                               AnimateScale="False"
                                Panel.ZIndex="1400">
 
             <Border Background="{StaticResource SurfaceCardBrush}"
