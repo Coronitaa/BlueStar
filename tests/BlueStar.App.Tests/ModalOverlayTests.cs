@@ -216,6 +216,32 @@ public class ModalOverlayTests
         });
     }
 
+    [Fact]
+    public void FirstOpen_MaterializesTemplateAndEnablesVisibility()
+    {
+        RunOnStaThread(() =>
+        {
+            var template = CreateTestTemplate();
+            var overlay = new ModalOverlay { Template = template };
+
+            // Modal starts closed and not templated
+            Assert.False(overlay.IsOpen);
+            Assert.Equal(Visibility.Visible, overlay.Visibility); // Default until template or state applied
+
+            // Open for the first time
+            overlay.IsOpen = true;
+
+            Assert.True(overlay.IsOpen);
+            Assert.Equal(Visibility.Visible, overlay.Visibility);
+            Assert.True(overlay.IsHitTestVisible);
+
+            var contentHolder = overlay.Template.FindName(ModalOverlay.PartContentHolder, overlay) as Grid;
+            Assert.NotNull(contentHolder);
+            Assert.NotNull(contentHolder.RenderTransform);
+            Assert.IsType<ScaleTransform>(contentHolder.RenderTransform);
+        });
+    }
+
     private static ControlTemplate CreateTestTemplate()
     {
         var template = new ControlTemplate(typeof(ModalOverlay));

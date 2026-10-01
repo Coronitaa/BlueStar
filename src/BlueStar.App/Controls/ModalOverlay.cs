@@ -30,6 +30,7 @@ public class ModalOverlay : ContentControl
     private ScaleTransform? _scaleTransform;
     private Window? _parentWindow;
     private int _animationToken;
+    private bool _pendingOpenTransition;
 
     static ModalOverlay()
     {
@@ -163,14 +164,25 @@ public class ModalOverlay : ContentControl
         if (_contentHolder != null)
         {
             // Always assign a fresh, unfrozen ScaleTransform
-            double initialScale = IsOpen ? 1.0 : (AnimateScale ? 0.96 : 1.0);
+            double initialScale = AnimateScale ? 0.96 : 1.0;
             _scaleTransform = new ScaleTransform(initialScale, initialScale);
             _contentHolder.RenderTransform = _scaleTransform;
             _contentHolder.RenderTransformOrigin = new Point(0.5, 0.5);
         }
 
-        // Apply initial visual state without transition
-        ApplyInitialState();
+        if (_backdrop != null)
+        {
+            _backdrop.Opacity = 0.0;
+        }
+        if (_contentHolder != null)
+        {
+            _contentHolder.Opacity = 0.0;
+        }
+
+        if (!IsOpen)
+        {
+            ApplyInitialState();
+        }
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -182,9 +194,18 @@ public class ModalOverlay : ContentControl
             _parentWindow.PreviewKeyDown += OnWindowPreviewKeyDown;
         }
 
-        if (IsOpen && !ActiveModals.Contains(this))
+        if (IsOpen)
         {
-            ActiveModals.Add(this);
+            if (!ActiveModals.Contains(this))
+            {
+                ActiveModals.Add(this);
+            }
+
+            if (_pendingOpenTransition || _backdrop?.Opacity == 0.0)
+            {
+                _pendingOpenTransition = false;
+                UpdateVisualState(useTransitions: true);
+            }
         }
     }
 
@@ -210,13 +231,39 @@ public class ModalOverlay : ContentControl
                 {
                     ActiveModals.Add(overlay);
                 }
+
+                overlay.Visibility = Visibility.Visible;
+                overlay.IsHitTestVisible = true;
+
+                if (overlay._backdrop == null || overlay._contentHolder == null)
+                {
+                    overlay.ApplyTemplate();
+                }
+
+                if (overlay.IsLoaded)
+                {
+                    // Dispatch to ensure the first layout pass has arranged the newly visible template
+                    overlay.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, () =>
+                    {
+                        if (overlay.IsOpen)
+                        {
+                            overlay.UpdateVisualState(useTransitions: true);
+                        }
+                    });
+                }
+                else
+                {
+                    overlay._pendingOpenTransition = true;
+                    overlay.UpdateVisualState(useTransitions: false);
+                }
             }
             else
             {
                 ActiveModals.Remove(overlay);
+                overlay._pendingOpenTransition = false;
+                overlay.IsHitTestVisible = false;
+                overlay.UpdateVisualState(useTransitions: overlay.IsLoaded);
             }
-
-            overlay.UpdateVisualState(useTransitions: overlay.IsLoaded);
         }
     }
 
@@ -271,7 +318,7 @@ public class ModalOverlay : ContentControl
 
     private void UpdateVisualState(bool useTransitions)
     {
-        if (!IsLoaded || _backdrop == null || _contentHolder == null)
+        if (_backdrop == null || _contentHolder == null)
         {
             ApplyInitialState();
             return;

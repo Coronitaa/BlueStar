@@ -1351,15 +1351,15 @@
             </Border>
         </ctrl:ModalOverlay>
 
-        <!-- ═══ EXPLORE FIRST LOAD OVERLAY SCREEN ═══ -->
+        <!-- ═══ EXPLORE FIRST LOAD OVERLAY SCREEN (Replaced by In-Place Skeleton Cards) ═══ -->
         <Grid x:Name="ExploreLoadingOverlay"
               Grid.Row="0"
               Grid.RowSpan="3"
               Background="{StaticResource BaseBackgroundBrush}"
               Panel.ZIndex="200"
-              Opacity="1"
-              Visibility="Visible"
-              IsHitTestVisible="True">
+              Opacity="0"
+              Visibility="Collapsed"
+              IsHitTestVisible="False">
 
             <Grid.Resources>
                 <!-- Continuous Smooth Spin in place -->

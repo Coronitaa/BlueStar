@@ -352,29 +352,9 @@
             <Border Grid.Column="1" Background="{StaticResource SubtleBorderBrush}"/>
 
             <!-- ── DYNAMIC MAIN CONTENT VIEW ── -->
-            <ContentControl Grid.Column="2"
-                            Content="{Binding CurrentView, NotifyOnTargetUpdated=True}"
-                            Margin="0">
-                <ContentControl.RenderTransform>
-                    <TranslateTransform Y="0"/>
-                </ContentControl.RenderTransform>
-                <ContentControl.Triggers>
-                    <EventTrigger RoutedEvent="Binding.TargetUpdated">
-                        <BeginStoryboard>
-                            <Storyboard>
-                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                                 From="0.2" To="1.0"
-                                                 Duration="{StaticResource DurationNormal}"
-                                                 EasingFunction="{StaticResource EaseOutCubic}"/>
-                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
-                                                 From="8" To="0"
-                                                 Duration="{StaticResource DurationNormal}"
-                                                 EasingFunction="{StaticResource EaseOutCubic}"/>
-                            </Storyboard>
-                        </BeginStoryboard>
-                    </EventTrigger>
-                </ContentControl.Triggers>
-            </ContentControl>
+            <ctrl:TransitioningContentControl Grid.Column="2"
+                                             Content="{Binding CurrentView}"
+                                             Margin="0"/>
         </Grid>
 
         <!-- ═══ BOTTOM STATUS BAR (With Left Downloads Button) ═══ -->

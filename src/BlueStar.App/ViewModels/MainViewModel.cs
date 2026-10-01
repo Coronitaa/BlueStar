@@ -783,6 +783,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             vm.OnNavigateRequested = Navigate;
             view.DataContext = vm;
             CurrentView = view;
+            _ = vm.LoadInstancesAsync();
             return;
         }
 

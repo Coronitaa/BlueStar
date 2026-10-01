@@ -191,47 +191,12 @@ public partial class BrowseView : UserControl
         _webViewReady = true;
     }
 
-    // ── Explore Loading Overlay Control ──────────────────────────────────
-
+    // ── Explore Loading Overlay Control (Disabled in favor of in-place Skeleton cards) ──
     private void UpdateLoadingOverlay(bool isLoading, bool immediate = false)
     {
         if (ExploreLoadingOverlay == null) return;
-
-        if (!Dispatcher.CheckAccess())
-        {
-            Dispatcher.InvokeAsync(() => UpdateLoadingOverlay(isLoading, immediate));
-            return;
-        }
-
-        if (isLoading)
-        {
-            ExploreLoadingOverlay.BeginAnimation(UIElement.OpacityProperty, null);
-            ExploreLoadingOverlay.Opacity = 1.0;
-            ExploreLoadingOverlay.Visibility = Visibility.Visible;
-            ExploreLoadingOverlay.IsHitTestVisible = true;
-        }
-        else
-        {
-            if (immediate || ExploreLoadingOverlay.Visibility != Visibility.Visible)
-            {
-                ExploreLoadingOverlay.BeginAnimation(UIElement.OpacityProperty, null);
-                ExploreLoadingOverlay.Opacity = 0.0;
-                ExploreLoadingOverlay.Visibility = Visibility.Collapsed;
-                ExploreLoadingOverlay.IsHitTestVisible = false;
-                return;
-            }
-
-            var fadeOut = new DoubleAnimation(1.0, 0.0, new Duration(TimeSpan.FromMilliseconds(350)))
-            {
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-            };
-            fadeOut.Completed += (s, e) =>
-            {
-                ExploreLoadingOverlay.Visibility = Visibility.Collapsed;
-                ExploreLoadingOverlay.IsHitTestVisible = false;
-            };
-            ExploreLoadingOverlay.BeginAnimation(UIElement.OpacityProperty, fadeOut);
-        }
+        ExploreLoadingOverlay.Visibility = Visibility.Collapsed;
+        ExploreLoadingOverlay.IsHitTestVisible = false;
     }
 
     // ── Random Pick Dice Animations ──────────────────────────────────────

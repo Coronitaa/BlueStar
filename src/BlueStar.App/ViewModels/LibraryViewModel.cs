@@ -108,7 +108,7 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
     public ObservableCollection<Guid> SelectedGroupInstanceIds { get; } = new();
 
     [ObservableProperty]
-    private bool _isLoading;
+    private bool _isLoading = true;
 
     [ObservableProperty]
     private string? _errorMessage;

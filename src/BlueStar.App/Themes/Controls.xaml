@@ -1219,31 +1219,33 @@
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Width" Value="48"/>
-        <Setter Property="Height" Value="42"/>
-        <Setter Property="Margin" Value="0,3"/>
+        <Setter Property="Width" Value="68"/>
+        <Setter Property="Height" Value="44"/>
+        <Setter Property="Margin" Value="0,2"/>
         <Setter Property="HorizontalAlignment" Value="Center"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="FocusVisualStyle" Value="{StaticResource ModernFocusVisual}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
-                    <Grid>
-                        <!-- Active left pill indicator -->
+                    <Grid Background="Transparent">
+                        <!-- Active left rail pill indicator -->
                         <Border x:Name="activeIndicator"
                                 HorizontalAlignment="Left"
                                 VerticalAlignment="Center"
-                                Width="3" Height="20"
-                                CornerRadius="1.5"
+                                Width="3.5" Height="24"
+                                CornerRadius="0,2,2,0"
                                 Background="{StaticResource AccentBrush}"
-                                Margin="-8,0,0,0"
+                                Margin="0,0,0,0"
                                 Opacity="0"/>
 
-                        <!-- Icon Container -->
+                        <!-- Centered Icon Container -->
                         <Border x:Name="iconContainer"
                                 Width="44" Height="40"
                                 CornerRadius="{StaticResource RadiusMd}"
                                 Background="{TemplateBinding Background}"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
                                 RenderTransformOrigin="0.5,0.5"
                                 SnapsToDevicePixels="True">
                             <Path x:Name="navIcon"
@@ -1267,7 +1269,7 @@
                                         <DoubleAnimation Storyboard.TargetName="activeIndicator" Storyboard.TargetProperty="Opacity"
                                                          To="1" Duration="{StaticResource DurationFast}" EasingFunction="{StaticResource EaseOutCubic}"/>
                                         <DoubleAnimation Storyboard.TargetName="activeIndicator" Storyboard.TargetProperty="Height"
-                                                         From="10" To="20" Duration="{StaticResource DurationFast}" EasingFunction="{StaticResource EaseOutCubic}"/>
+                                                         From="8" To="24" Duration="{StaticResource DurationFast}" EasingFunction="{StaticResource EaseOutCubic}"/>
                                     </Storyboard>
                                 </BeginStoryboard>
                             </Trigger.EnterActions>
@@ -1277,7 +1279,7 @@
                                         <DoubleAnimation Storyboard.TargetName="activeIndicator" Storyboard.TargetProperty="Opacity"
                                                          To="0" Duration="{StaticResource DurationFast}" EasingFunction="{StaticResource EaseOutCubic}"/>
                                         <DoubleAnimation Storyboard.TargetName="activeIndicator" Storyboard.TargetProperty="Height"
-                                                         To="10" Duration="{StaticResource DurationFast}" EasingFunction="{StaticResource EaseOutCubic}"/>
+                                                         To="8" Duration="{StaticResource DurationFast}" EasingFunction="{StaticResource EaseOutCubic}"/>
                                     </Storyboard>
                                 </BeginStoryboard>
                             </Trigger.ExitActions>
@@ -1287,7 +1289,7 @@
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="iconContainer" Property="RenderTransform">
                                 <Setter.Value>
-                                    <ScaleTransform ScaleX="0.97" ScaleY="0.97"/>
+                                    <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
                                 </Setter.Value>
                             </Setter>
                         </Trigger>
@@ -2109,6 +2111,28 @@
                                               ContentTemplate="{TemplateBinding ContentTemplate}"
                                               ContentTemplateSelector="{TemplateBinding ContentTemplateSelector}"/>
                         </Grid>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ── 10. TRANSITIONING CONTENT CONTROL (Tab Navigation Transitions) ── -->
+    <Style TargetType="{x:Type ctrl:TransitioningContentControl}">
+        <Setter Property="IsTabStop" Value="False"/>
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ctrl:TransitioningContentControl}">
+                    <Grid Background="Transparent">
+                        <ContentPresenter x:Name="PART_ContentPresenter"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          ContentStringFormat="{TemplateBinding ContentStringFormat}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
                     </Grid>
                 </ControlTemplate>
             </Setter.Value>
