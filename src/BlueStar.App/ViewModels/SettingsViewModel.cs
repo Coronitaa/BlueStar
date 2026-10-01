@@ -260,33 +260,27 @@ public partial class SettingsViewModel : ObservableObject
     private readonly IPrerequisiteService? _prerequisiteService;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(InstallAllRequirementsCommand))]
     private System.Collections.ObjectModel.ObservableCollection<PrerequisiteItem> _systemPrerequisites = [];
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ScanRequirementsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(InstallAllRequirementsCommand))]
     private bool _isScanningRequirements;
 
-    partial void OnIsScanningRequirementsChanged(bool value)
-    {
-        ScanRequirementsCommand.NotifyCanExecuteChanged();
-        InstallAllRequirementsCommand.NotifyCanExecuteChanged();
-    }
-
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ScanRequirementsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(InstallAllRequirementsCommand))]
     private bool _isInstallingRequirements;
 
-    partial void OnIsInstallingRequirementsChanged(bool value)
-    {
-        ScanRequirementsCommand.NotifyCanExecuteChanged();
-        InstallAllRequirementsCommand.NotifyCanExecuteChanged();
-    }
-
     public bool CanScanRequirements => !IsScanningRequirements && !IsInstallingRequirements;
-    public bool CanInstallAllRequirements => !IsInstallingRequirements && !IsScanningRequirements && SystemPrerequisites.Count > 0;
+    public bool CanInstallAllRequirements => !IsInstallingRequirements && !IsScanningRequirements && HasMissingRequirements;
 
     [ObservableProperty]
     private string _installRequirementsStatusText = string.Empty;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(InstallAllRequirementsCommand))]
     private bool _hasMissingRequirements;
 
     [ObservableProperty]

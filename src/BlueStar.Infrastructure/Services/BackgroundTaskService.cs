@@ -112,7 +112,7 @@ public sealed class BackgroundTaskService : IBackgroundTaskService
                     TasksChanged?.Invoke(this, EventArgs.Empty);
                 });
 
-                await Task.Delay(1500).ConfigureAwait(false);
+                await Task.Delay(3000).ConfigureAwait(false);
                 RunOnUI(() =>
                 {
                     _tasks.Remove(taskItem);

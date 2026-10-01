@@ -22,10 +22,11 @@ public sealed class NotificationService : INotificationService
     public static Action<Action>? UiDispatcher { get; set; }
 
     /// <summary>
-    /// Gets or sets the delay allowed for the UI exit transition before an item is purged from the collection.
-    /// Default is TimeSpan.Zero (synchronous removal) for fast headless tests and immediate responses.
+    /// Optional coordinator invoked when an item is requested to be dismissed.
+    /// The coordinator triggers the UI exit transition and then invokes the provided onDismissed callback.
+    /// If null (e.g. in unit tests or headless runs), dismissal occurs immediately and synchronously.
     /// </summary>
-    public static TimeSpan ExitAnimationDelay { get; set; } = TimeSpan.Zero;
+    public static Action<NotificationItem, Action>? DismissCoordinator { get; set; }
 
     public ReadOnlyObservableCollection<NotificationItem> Notifications => _readOnlyNotifications;
 
@@ -53,11 +54,30 @@ public sealed class NotificationService : INotificationService
 
         PostToUi(() =>
         {
-            // Limit max simultaneous visible toasts to 3 so they do not exceed the vertical screen limit or overlap
-            while (_notifications.Count >= 3)
+            // Limit max simultaneous active toasts to 3:
+            // Oldest active toast initiates dismissal transition rather than disappearing abruptly
+            var activeToasts = _notifications.Where(n => !n.IsDismissing).ToList();
+            while (activeToasts.Count >= 3)
             {
-                _notifications.RemoveAt(0);
+                var oldest = activeToasts[0];
+                activeToasts.RemoveAt(0);
+                Dismiss(oldest.Id);
             }
+
+            // Safety ceiling to prevent unbounded buildup during rapid bursts of notifications
+            while (_notifications.Count >= 6)
+            {
+                var oldestDismissing = _notifications.FirstOrDefault(n => n.IsDismissing);
+                if (oldestDismissing != null)
+                {
+                    _notifications.Remove(oldestDismissing);
+                }
+                else
+                {
+                    _notifications.RemoveAt(0);
+                }
+            }
+
             _notifications.Add(item);
         });
 
@@ -97,16 +117,24 @@ public sealed class NotificationService : INotificationService
 
     public void Dismiss(Guid id)
     {
-        PostToUi(async () =>
+        PostToUi(() =>
         {
             var item = _notifications.FirstOrDefault(n => n.Id == id);
-            if (item != null && !item.IsDismissing)
+            if (item == null || item.IsDismissing) return;
+
+            if (DismissCoordinator != null)
             {
-                if (ExitAnimationDelay > TimeSpan.Zero)
+                item.IsDismissing = true;
+                DismissCoordinator(item, () =>
                 {
-                    item.IsDismissing = true;
-                    await Task.Delay(ExitAnimationDelay).ConfigureAwait(true);
-                }
+                    PostToUi(() =>
+                    {
+                        _notifications.Remove(item);
+                    });
+                });
+            }
+            else
+            {
                 _notifications.Remove(item);
             }
         });
@@ -114,17 +142,31 @@ public sealed class NotificationService : INotificationService
 
     public void ClearAll()
     {
-        PostToUi(async () =>
+        PostToUi(() =>
         {
-            if (ExitAnimationDelay > TimeSpan.Zero && _notifications.Count > 0)
+            if (_notifications.Count == 0) return;
+
+            if (DismissCoordinator != null)
             {
-                foreach (var item in _notifications)
+                var activeItems = _notifications.Where(n => !n.IsDismissing).ToList();
+                if (activeItems.Count == 0) return;
+
+                foreach (var item in activeItems)
                 {
                     item.IsDismissing = true;
+                    DismissCoordinator(item, () =>
+                    {
+                        PostToUi(() =>
+                        {
+                            _notifications.Remove(item);
+                        });
+                    });
                 }
-                await Task.Delay(ExitAnimationDelay).ConfigureAwait(true);
             }
-            _notifications.Clear();
+            else
+            {
+                _notifications.Clear();
+            }
         });
     }
 

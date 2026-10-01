@@ -332,7 +332,20 @@ public partial class App : Application
                 action();
             }
         };
-        BlueStar.Infrastructure.Services.NotificationService.ExitAnimationDelay = TimeSpan.FromMilliseconds(200);
+
+        // Wire notification dismiss coordinator to allow WPF exit transitions (0.18s in MainWindow.xaml) before collection purge
+        BlueStar.Infrastructure.Services.NotificationService.DismissCoordinator = (item, onDismissed) =>
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(200).ConfigureAwait(false);
+                    onDismissed();
+                }
+                catch { }
+            });
+        };
 
         base.OnStartup(e);
 
