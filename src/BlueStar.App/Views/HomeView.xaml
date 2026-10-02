@@ -1047,7 +1047,8 @@
             <Border Background="{StaticResource SurfaceCardBrush}"
                     BorderBrush="{StaticResource StrongBorderBrush}" BorderThickness="1"
                     CornerRadius="{StaticResource RadiusLg}"
-                    MaxWidth="1120" Margin="28"
+                    Width="1000" MaxWidth="1120" Height="750" Margin="28"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
                     ClipToBounds="True">
                 <Grid>
                     <Grid.RowDefinitions>

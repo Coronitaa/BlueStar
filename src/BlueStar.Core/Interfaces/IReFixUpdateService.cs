@@ -21,9 +21,14 @@ public interface IReFixUpdateService
     Task<ReFixVersionInfo?> CheckForUpdatesAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// Downloads and applies the new ReFix update into tools/ReFix_deploy.
+    /// Fetches all available releases from GitHub.
     /// </summary>
-    Task<bool> DownloadAndApplyUpdateAsync(ReFixVersionInfo update, IProgress<DownloadProgress>? progress = null, CancellationToken ct = default);
+    Task<System.Collections.Generic.IReadOnlyList<ReFixVersionInfo>> GetAvailableReleasesAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Downloads and applies the new ReFix update into tools/ReFix_deploy (or a custom directory).
+    /// </summary>
+    Task<bool> DownloadAndApplyUpdateAsync(ReFixVersionInfo update, IProgress<DownloadProgress>? progress = null, bool skipNotification = false, string? customTargetDirectory = null, CancellationToken ct = default);
 
     /// <summary>
     /// Performs full auto-update workflow in background (check -> download & apply -> notify -> check instances).

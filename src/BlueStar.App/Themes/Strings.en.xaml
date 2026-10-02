@@ -989,4 +989,29 @@
     <sys:String x:Key="String_TitleDownloads">Download Queue</sys:String>
     <sys:String x:Key="String_TitleSettings">Application Settings</sys:String>
     <sys:String x:Key="String_TitleAbout">About &amp; Open-Source Credits</sys:String>
+
+    <sys:String x:Key="String_ForceUnlockAllDlcs">Force install all DLCs</sys:String>
+    <sys:String x:Key="String_ForceUnlockAllDlcsDesc">Forces the game to load all possible DLCs even if they are not explicitly detected.</sys:String>
+    <sys:String x:Key="String_ForceAllDlcsWarningDesc">This option will force the activation of all DLCs the game might have available, even if they are not listed in BlueStar. Do you want to continue?</sys:String>
+    <sys:String x:Key="String_DoNotShowAgain">Do not show again</sys:String>
+    <sys:String x:Key="String_ContinueBtn">Continue</sys:String>
+
+    <!-- Export Instance Modal -->
+    <sys:String x:Key="String_ExportInstanceBtn">Export Instance</sys:String>
+    <sys:String x:Key="String_ExportInstanceModalTitle">Export Instance to ZIP</sys:String>
+    <sys:String x:Key="String_ExportInstanceModalDesc">Package this instance's game folder into a portable ZIP archive. You may also edit INI configuration values before exporting.</sys:String>
+    <sys:String x:Key="String_ExportFileName">File Name</sys:String>
+    <sys:String x:Key="String_ExportDestination">Destination Folder</sys:String>
+    <sys:String x:Key="String_BrowseBtn">Browse…</sys:String>
+    <!-- ReFix Config Modal -->
+    <sys:String x:Key="String_ConfigureReFix">Configure ReFix</sys:String>
+    <sys:String x:Key="String_ConfigureReFixDesc">Select a specific version of ReFix to deploy for this instance.</sys:String>
+    <sys:String x:Key="String_Version">Version</sys:String>
+    <sys:String x:Key="String_GroupUpdates">Group Updates</sys:String>
+    <sys:String x:Key="String_GroupUpdatesDesc">When disabled, this instance will not be updated when you update ReFix for all games.</sys:String>
+    <sys:String x:Key="String_UseVersionDeploy">Use Version AutoDeploy</sys:String>
+    <sys:String x:Key="String_UseVersionDeployDesc">If checked, uses the configuration scripts (e.g. firewall) originally bundled with the downloaded version instead of BlueStar's standard ones.</sys:String>
+    <sys:String x:Key="String_Apply">Apply</sys:String>
+    <sys:String x:Key="String_Configure">Configure</sys:String>
+    <sys:String x:Key="String_ConfigureReFixTooltip">Configure ReFix Version and Update Settings</sys:String>
 </ResourceDictionary>

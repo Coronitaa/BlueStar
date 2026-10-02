@@ -152,6 +152,8 @@ public sealed class ReFixUpdateService : IReFixUpdateService
     public async Task<bool> DownloadAndApplyUpdateAsync(
         ReFixVersionInfo update,
         IProgress<DownloadProgress>? progress = null,
+        bool skipNotification = false,
+        string? customTargetDirectory = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(update);
@@ -206,20 +208,27 @@ public sealed class ReFixUpdateService : IReFixUpdateService
             // Locate the extracted files root (handle cases where zip contains a subfolder like ReFix_deploy or Coronitaa-ReFix-*)
             var sourceDeployDir = FindDeployRoot(tempExtractDir);
 
-            // 3. Find target ReFix_deploy directories to update
+            // 3. Find target directories to update
             var targetDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            var currentDeploy = ReFixEmulator.GetReFixDeployPath();
-            if (!string.IsNullOrEmpty(currentDeploy))
-                targetDirs.Add(currentDeploy);
+            if (!string.IsNullOrWhiteSpace(customTargetDirectory))
+            {
+                targetDirs.Add(customTargetDirectory);
+            }
+            else
+            {
+                var currentDeploy = ReFixEmulator.GetReFixDeployPath();
+                if (!string.IsNullOrEmpty(currentDeploy))
+                    targetDirs.Add(currentDeploy);
 
-            // Also check standard paths in AppContext / Source
-            var defaultToolsPath = Path.Combine(AppContext.BaseDirectory, "tools", "ReFix_deploy");
-            targetDirs.Add(defaultToolsPath);
+                // Also check standard paths in AppContext / Source
+                var defaultToolsPath = Path.Combine(AppContext.BaseDirectory, "tools", "ReFix_deploy");
+                targetDirs.Add(defaultToolsPath);
 
-            var srcToolsPath = Path.Combine(Directory.GetCurrentDirectory(), "src", "BlueStar.App", "tools", "ReFix_deploy");
-            if (Directory.Exists(Path.GetDirectoryName(srcToolsPath)))
-                targetDirs.Add(srcToolsPath);
+                var srcToolsPath = Path.Combine(Directory.GetCurrentDirectory(), "src", "BlueStar.App", "tools", "ReFix_deploy");
+                if (Directory.Exists(Path.GetDirectoryName(srcToolsPath)))
+                    targetDirs.Add(srcToolsPath);
+            }
 
             foreach (var target in targetDirs)
             {
@@ -253,13 +262,16 @@ public sealed class ReFixUpdateService : IReFixUpdateService
                 }
             }
 
-            _notificationService?.ShowSuccess(
-                "ReFix Updated",
-                $"ReFix emulator was successfully updated to v{update.Version} in the background.",
-                TimeSpan.FromSeconds(8));
+            if (!skipNotification)
+            {
+                _notificationService?.ShowSuccess(
+                    "ReFix Updated",
+                    $"ReFix emulator was successfully updated to v{update.Version} in the background.",
+                    TimeSpan.FromSeconds(8));
 
-            // Check if any instances are outdated and trigger aggregated notification
-            await CheckAndNotifyOutdatedInstancesAsync(ct).ConfigureAwait(false);
+                // Check if any instances are outdated and trigger aggregated notification
+                await CheckAndNotifyOutdatedInstancesAsync(ct).ConfigureAwait(false);
+            }
 
             return true;
         }
@@ -276,6 +288,43 @@ public sealed class ReFixUpdateService : IReFixUpdateService
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<ReFixVersionInfo>> GetAvailableReleasesAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            const string releasesUrl = "https://api.github.com/repos/Coronitaa/ReFix/releases";
+            using var request = new HttpRequestMessage(HttpMethod.Get, releasesUrl);
+            request.Headers.UserAgent.ParseAdd("BlueStar-Launcher/1.2.3");
+            using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var releases = await response.Content.ReadFromJsonAsync<List<GitHubReleaseDto>>(cancellationToken: ct).ConfigureAwait(false);
+                if (releases != null)
+                {
+                    return releases
+                        .Where(r => !r.Draft && !string.IsNullOrWhiteSpace(r.TagName) && r.Assets?.Count > 0)
+                        .Select(r => new ReFixVersionInfo
+                        {
+                            Version = r.TagName!.TrimStart('v'),
+                            TagName = r.TagName,
+                            DownloadUrl = r.Assets!.FirstOrDefault(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))?.BrowserDownloadUrl ?? r.ZipballUrl ?? "",
+                            ReleaseNotes = "",
+                            PublishedAt = DateTimeOffset.UtcNow
+                        })
+                        .Where(v => !string.IsNullOrWhiteSpace(v.DownloadUrl))
+                        .ToList();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch ReFix releases from GitHub.");
+        }
+        return Array.Empty<ReFixVersionInfo>();
+    }
+
+    /// <inheritdoc />
     public async Task CheckAndPerformAutoUpdateAsync(CancellationToken ct = default)
     {
         try
@@ -289,11 +338,7 @@ public sealed class ReFixUpdateService : IReFixUpdateService
                     $"New version v{update.Version} found. Downloading in the background...",
                     TimeSpan.FromSeconds(5));
 
-                var applied = await DownloadAndApplyUpdateAsync(update, null, ct).ConfigureAwait(false);
-                if (applied)
-                {
-                    await CheckAndNotifyOutdatedInstancesAsync(ct).ConfigureAwait(false);
-                }
+                await DownloadAndApplyUpdateAsync(update, null, false, null, ct).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
@@ -445,7 +490,6 @@ public sealed class ReFixUpdateService : IReFixUpdateService
     public bool IsInstanceReFixOutdated(GameInstance instance)
     {
         if (instance == null || string.IsNullOrWhiteSpace(instance.InstallPath)) return false;
-        if (instance.DisableEmulatorUpdates) return false;
 
         // If the instance has a game-specific online fix or another non-ReFix emulator, it is NOT ReFix
         if (instance.EmulatorId == "gamefix_online" || instance.InstalledFixLayers?.Any(l => l.IsOnline) == true)
@@ -454,6 +498,11 @@ public sealed class ReFixUpdateService : IReFixUpdateService
         }
 
         if (instance.EmulatorId != null && !instance.EmulatorId.StartsWith("refix", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (instance.DisableEmulatorUpdates)
         {
             return false;
         }

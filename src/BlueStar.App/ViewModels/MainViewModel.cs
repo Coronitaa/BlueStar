@@ -90,6 +90,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _selectedNavigation = "Home";
 
+    private string _currentlyLoadedPage = string.Empty;
+
     [ObservableProperty]
     private string _statusText = "Ready";
 
@@ -776,16 +778,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public void Navigate(string page)
     {
-        if (page == "Home" && CurrentView is BlueStar.App.Views.HomeView) return;
-        if ((page == "Library" || page == "Instances") && CurrentView is BlueStar.App.Views.LibraryView) return;
-        if (page == "Explore" && CurrentView is BlueStar.App.Views.BrowseView) return;
-        if (page == "Downloads" && CurrentView is BlueStar.App.Views.DownloadsView) return;
-        if (page == "Settings" && CurrentView is BlueStar.App.Views.SettingsView) return;
+        if (_currentlyLoadedPage == page && SelectedRecentInstanceId == null) return;
 
         SelectedRecentInstanceId = null;
         CurrentInstanceTitle = null;
         PushNavigation(page);
         SelectedNavigation = page;
+        _currentlyLoadedPage = page;
 
         if (page == "Home")
         {
@@ -892,6 +891,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         CurrentInstanceTitle = null;
         PushNavigation("ExploreCategory", null, categoryId);
         SelectedNavigation = "Explore";
+        _currentlyLoadedPage = "Explore";
         var (view, vm) = GetExploreView();
         CurrentView = view;
         vm.ExpandCategory(categoryId);
@@ -930,7 +930,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public void OpenRecentShortcut(GameInstance instance)
     {
-        if (instance == null) return;
+        if (instance == null || SelectedRecentInstanceId == instance.Id) return;
         OpenInstanceDetail(instance);
     }
 

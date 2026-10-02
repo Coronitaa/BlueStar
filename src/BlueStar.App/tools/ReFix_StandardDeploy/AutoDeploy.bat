@@ -59,12 +59,9 @@ if "!TARGET_DIR!"=="" (
     goto ERROR_EXIT
 )
 
-:: Strip trailing backslash, forward slash, spaces and quotes if present
+:: Strip trailing backslash and quotes if present
 set "TARGET_DIR=!TARGET_DIR:"=!"
-:TRIM_TARGET_DIR
-if "!TARGET_DIR:~-1!"==" " set "TARGET_DIR=!TARGET_DIR:~0,-1!" & goto TRIM_TARGET_DIR
-if "!TARGET_DIR:~-1!"=="\" set "TARGET_DIR=!TARGET_DIR:~0,-1!" & goto TRIM_TARGET_DIR
-if "!TARGET_DIR:~-1!"=="/" set "TARGET_DIR=!TARGET_DIR:~0,-1!" & goto TRIM_TARGET_DIR
+if "!TARGET_DIR:~-1!"=="\" set "TARGET_DIR=!TARGET_DIR:~0,-1!"
 
 if not exist "!TARGET_DIR!" (
     echo:
@@ -220,7 +217,6 @@ if not "!EXISTING_REAL_APPID!"=="" if not "!EXISTING_REAL_APPID!"=="480" (
 set "CUSTOM_USERNAME="
 set /p "CUSTOM_USERNAME=Enter Custom Username (Optional - Enter to use Steam name): "
 if "!CUSTOM_USERNAME!"=="" set "CUSTOM_USERNAME=!EXISTING_USERNAME!"
-if "!CUSTOM_USERNAME!"=="" set "CUSTOM_USERNAME=%USERNAME%"
 set "LAN_PORT=47584"
 set "CUSTOM_BROADCASTS="
 goto AFTER_MODE_PROMPTS
@@ -232,7 +228,6 @@ echo:
 set "CUSTOM_USERNAME="
 set /p "CUSTOM_USERNAME=Enter Player Username (Leave empty to auto-generate): "
 if "!CUSTOM_USERNAME!"=="" set "CUSTOM_USERNAME=!EXISTING_USERNAME!"
-if "!CUSTOM_USERNAME!"=="" set "CUSTOM_USERNAME=%USERNAME%"
 
 set "REAL_APPID="
 if not "!EXISTING_REAL_APPID!"=="" if not "!EXISTING_REAL_APPID!"=="480" (

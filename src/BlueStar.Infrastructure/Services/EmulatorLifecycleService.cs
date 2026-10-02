@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -81,7 +81,9 @@ public sealed class EmulatorLifecycleService : IEmulatorLifecycleService
             return false;
         }
 
-        var installedVersion = ReFixEmulator.GetCurrentVersion();
+        var installedVersion = !string.IsNullOrWhiteSpace(instance.InstalledEmulatorVersion) 
+            ? instance.InstalledEmulatorVersion 
+            : ReFixEmulator.GetCurrentVersion(instance);
 
         // 4. Update instance emulator state
         var updatedInstance = instance with

@@ -151,7 +151,6 @@ public sealed class GameLauncherService : IGameLauncher
                 _logger.LogInformation("Game {GameName} exited. Session duration: {Duration}", instance.Name, duration);
 
                 _runningProcesses.TryRemove(instance.Id, out _);
-                RunningStateChanged?.Invoke(this, (instance.Id, false));
 
                 // Update instance in manager with playtime and status Ready
                 if (_instanceManager != null)
@@ -172,6 +171,8 @@ public sealed class GameLauncherService : IGameLauncher
                         _logger.LogWarning(ex, "Failed to persist instance status on exit for {Game}", instance.Name);
                     }
                 }
+                
+                RunningStateChanged?.Invoke(this, (instance.Id, false));
 
                 if (_statsService != null && instance.AppId > 0)
                 {
@@ -184,7 +185,7 @@ public sealed class GameLauncherService : IGameLauncher
             process.BeginErrorReadLine();
 
             _runningProcesses[instance.Id] = process;
-
+            
             // Update instance status to Running and save last played time
             if (_instanceManager != null)
             {

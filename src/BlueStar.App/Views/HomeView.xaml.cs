@@ -58,10 +58,7 @@ public partial class HomeView : UserControl
         try
         {
             await EnsureWebViewAsync().ConfigureAwait(true);
-            if (StorePageView.CoreWebView2 != null)
-                StorePageView.CoreWebView2.Navigate(url);
-            else
-                StorePageView.Source = new Uri(url);
+            StorePageView.CoreWebView2.Navigate(url);
         }
         catch (Exception)
         {

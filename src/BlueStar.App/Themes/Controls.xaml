@@ -1,6 +1,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:ctrl="clr-namespace:BlueStar.App.Controls">
+                    xmlns:ctrl="clr-namespace:BlueStar.App.Controls"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
 
     <!-- ══════════════════════════════════════════════════════════════════════
          BLUESTAR DESIGN SYSTEM — CONTROLS & COMPONENTS
@@ -1454,8 +1455,11 @@
                         </Border>
                     </Grid>
                     <ControlTemplate.Triggers>
-                        <!-- Active Selected State (Tag="True") -->
-                        <Trigger Property="Tag" Value="True">
+                        <!-- Active Selected State (Tag=True as boolean) -->
+                        <Trigger Property="Tag">
+                            <Trigger.Value>
+                                <sys:Boolean>True</sys:Boolean>
+                            </Trigger.Value>
                             <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
                             <Setter TargetName="border" Property="BorderThickness" Value="1.5"/>
                             <Setter TargetName="border" Property="Background" Value="#253B82F6"/>

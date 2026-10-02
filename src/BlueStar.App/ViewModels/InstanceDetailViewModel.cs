@@ -391,6 +391,19 @@ public partial class SelectableDepotItem : ObservableObject
 
 
 /// <summary>
+/// Represents a key-value pair from an INI file that can be edited before exporting.
+/// </summary>
+public partial class ExportIniVariable : ObservableObject
+{
+    public string Key { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    private string _value = string.Empty;
+
+    public string SourceFile { get; set; } = string.Empty;
+}
+
+/// <summary>
 /// Model for a DLC item with selection state and tags in the UI.
 /// </summary>
 public partial class SelectableDlcItem : ObservableObject
@@ -657,7 +670,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
     /// <summary>Whether DLC download and installation can proceed.</summary>
     public bool CanDownloadAndInstallDlcs =>
-        Dlcs.Count > 0 && SelectedDlcsCount > 0 && !IsProcessing &&
+        (Dlcs.Count > 0 && SelectedDlcsCount > 0 || (Instance?.ForceInstallAllDlcs == true)) && !IsProcessing &&
         (!IsInstanceDownloading || ActiveJob?.IsPaused == true || ActiveJob?.IsCompleted == true || ActiveJob?.IsFailed == true);
 
 
@@ -998,77 +1011,6 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _disableUpdateChecks;
 
-    [ObservableProperty]
-    private bool _disableEmulatorUpdates;
-
-    partial void OnDisableEmulatorUpdatesChanged(bool value)
-    {
-        if (Instance == null || Instance.DisableEmulatorUpdates == value) return;
-        Instance = Instance with { DisableEmulatorUpdates = value };
-        _ = _instanceManager.UpdateAsync(Instance, CancellationToken.None);
-    }
-
-    [ObservableProperty]
-    private bool _forceAllDlcs;
-    [ObservableProperty]
-    private bool _isForceAllDlcsAlertOpen;
-
-    [ObservableProperty]
-    private bool _doNotShowForceAllDlcsAlert;
-
-    private bool _pendingForceAllDlcsValue;
-    private bool _suppressForceAllDlcsPrompt;
-
-    [RelayCommand]
-    public void ToggleForceAllDlcs(bool newValue)
-    {
-        if (_suppressForceAllDlcsPrompt || _appSettings.DoNotShowForceDlcWarning)
-        {
-            ForceAllDlcs = newValue;
-            return;
-        }
-
-        if (!newValue)
-        {
-            ForceAllDlcs = false;
-            return;
-        }
-
-        _pendingForceAllDlcsValue = true;
-        IsForceAllDlcsAlertOpen = true;
-    }
-
-    [RelayCommand]
-    public async Task ConfirmForceAllDlcsAsync()
-    {
-        IsForceAllDlcsAlertOpen = false;
-        
-        if (DoNotShowForceAllDlcsAlert)
-        {
-            await _appSettings.SetDoNotShowForceDlcWarningAsync(true);
-        }
-
-        _suppressForceAllDlcsPrompt = true;
-        ForceAllDlcs = _pendingForceAllDlcsValue;
-        _suppressForceAllDlcsPrompt = false;
-    }
-
-    [RelayCommand]
-    public void CancelForceAllDlcs()
-    {
-        IsForceAllDlcsAlertOpen = false;
-        // Revert UI if needed by firing property changed on ForceAllDlcs
-        OnPropertyChanged(nameof(ForceAllDlcs));
-    }
-
-
-    partial void OnForceAllDlcsChanged(bool value)
-    {
-        if (Instance == null || Instance.ForceAllDlcs == value) return;
-        Instance = Instance with { ForceAllDlcs = value };
-        _ = _instanceManager.UpdateAsync(Instance, CancellationToken.None);
-    }
-
     partial void OnDisableUpdateChecksChanged(bool value)
     {
         if (Instance == null || Instance.DisableUpdateChecks == value) return;
@@ -1101,20 +1043,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     public bool IsInstanceDownloading => ActiveJob?.IsActive ?? false;
     public bool HasActiveJob => ActiveJob is not null && !ActiveJob.IsCompleted;
     public bool ShowDownloadButton => ActiveJob is null || ActiveJob.IsCompleted;
-    public bool IsInstalled 
-    {
-        get
-        {
-            if (Instance == null) return false;
-            bool statusOk = Instance.Status == InstanceStatus.Ready || 
-                            Instance.Status == InstanceStatus.Running || 
-                            (ActiveJob is not null && ActiveJob.IsCompleted);
-            if (!statusOk) return false;
-            if (Instance.IsSteamGame) return true;
-            if (string.IsNullOrWhiteSpace(Instance.InstallPath) || !System.IO.Directory.Exists(Instance.InstallPath)) return false;
-            try { return System.IO.Directory.EnumerateFileSystemEntries(Instance.InstallPath).Any(); } catch { return false; }
-        }
-    }
+    public bool IsInstalled => Instance?.Status == InstanceStatus.Ready ||
+                               Instance?.Status == InstanceStatus.Running ||
+                               (ActiveJob is not null && ActiveJob.IsCompleted);
+
     public bool CanDeployEmulator => IsInstalled && !IsDeployingEmulator;
 
     public double InstanceDownloadPercentage => ActiveJob?.Percentage ?? 0;
@@ -1307,6 +1239,55 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private bool _isForceDlcUnlockerConfirmOpen;
+
+    [ObservableProperty]
+    private bool _isForceAllDlcsWarningOpen;
+
+    [ObservableProperty]
+    private bool _doNotShowForceAllDlcsWarning;
+
+    public bool ForceInstallAllDlcs
+    {
+        get => Instance?.ForceInstallAllDlcs ?? false;
+        set
+        {
+            if (Instance == null || Instance.ForceInstallAllDlcs == value) return;
+
+            if (value && !_appSettings.HideForceDlcWarning)
+            {
+                IsForceAllDlcsWarningOpen = true;
+                return;
+            }
+
+            SetForceInstallAllDlcs(value);
+        }
+    }
+
+    private void SetForceInstallAllDlcs(bool value)
+    {
+        if (Instance == null) return;
+        Instance = Instance with { ForceInstallAllDlcs = value };
+        _ = _instanceManager.UpdateAsync(Instance, CancellationToken.None);
+        OnPropertyChanged(nameof(ForceInstallAllDlcs));
+    }
+
+    [RelayCommand]
+    public async Task ConfirmForceAllDlcsWarning()
+    {
+        if (DoNotShowForceAllDlcsWarning)
+        {
+            await _appSettings.SetHideForceDlcWarningAsync(true);
+        }
+        IsForceAllDlcsWarningOpen = false;
+        SetForceInstallAllDlcs(true);
+    }
+
+    [RelayCommand]
+    public void CancelForceAllDlcsWarning()
+    {
+        IsForceAllDlcsWarningOpen = false;
+        OnPropertyChanged(nameof(ForceInstallAllDlcs));
+    }
 
     /// <summary>The method the person picked while no DLC was selected, pending confirmation.</summary>
     private string? _pendingForcedDlcMethod;
@@ -1982,17 +1963,16 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         {
             InstallModalSelectedEmulator = string.Equals(RecommendedEmulatorOption.Id, "refix_goldberg", StringComparison.OrdinalIgnoreCase)
                 ? "refix_goldberg"
-                : "refix_valve";
+                : "none";
         }
         else
         {
-            InstallModalSelectedEmulator = "refix_valve";
+            InstallModalSelectedEmulator = "none";
         }
         NotifyEmulatorSelectionChanged();
 
         InstallModalCreateDesktopShortcut = true;
         InstallModalCreateStartMenuShortcut = true;
-        InstallModalCreateSteamShortcut = false;
 
         UpdateInstallModalDiskSpace();
 
@@ -2322,6 +2302,78 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     private readonly IEmulatorRatingService _emulatorRatingService;
     private readonly INotificationService? _notificationService;
     private readonly IReFixUpdateService? _refixUpdateService;
+
+    [ObservableProperty] private bool _isReFixConfigModalOpen;
+    [ObservableProperty] private ObservableCollection<ReFixVersionInfo> _availableReFixVersions = new();
+    [ObservableProperty] private ReFixVersionInfo? _selectedReFixVersion;
+    [ObservableProperty] private bool _reFixGroupUpdatesEnabled;
+    [ObservableProperty] private bool _reFixUseVersionDeployScriptEnabled;
+
+    [RelayCommand]
+    public async Task OpenReFixConfigModalAsync()
+    {
+        if (Instance == null || _refixUpdateService == null) return;
+        
+        AvailableReFixVersions.Clear();
+        var releases = await _refixUpdateService.GetAvailableReleasesAsync(CancellationToken.None);
+        foreach (var r in releases) AvailableReFixVersions.Add(r);
+        
+        SelectedReFixVersion = AvailableReFixVersions.FirstOrDefault(v => v.Version == Instance.InstalledEmulatorVersion) 
+                            ?? AvailableReFixVersions.FirstOrDefault();
+                            
+        ReFixGroupUpdatesEnabled = !Instance.DisableEmulatorUpdates;
+        ReFixUseVersionDeployScriptEnabled = Instance.UseVersionDeployScript;
+        IsReFixConfigModalOpen = true;
+    }
+
+    [RelayCommand]
+    public void CloseReFixConfigModal() => IsReFixConfigModalOpen = false;
+
+    [RelayCommand]
+    public async Task ApplyReFixConfigAsync()
+    {
+        if (Instance == null || SelectedReFixVersion == null || _refixUpdateService == null) return;
+        
+        var targetVer = SelectedReFixVersion.Version;
+        bool versionChanged = targetVer != Instance.InstalledEmulatorVersion;
+        bool scriptSettingChanged = ReFixUseVersionDeployScriptEnabled != Instance.UseVersionDeployScript;
+
+        Instance = Instance with { 
+            DisableEmulatorUpdates = !ReFixGroupUpdatesEnabled,
+            UseVersionDeployScript = ReFixUseVersionDeployScriptEnabled,
+            InstalledEmulatorVersion = targetVer
+        };
+        await _instanceManager.UpdateAsync(Instance, CancellationToken.None);
+        InstanceReFixVersion = targetVer;
+        
+        IsReFixConfigModalOpen = false;
+        
+        var baseDir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        string targetPath = Path.Combine(baseDir, "BlueStar", "tools", "ReFix_versions", $"v{targetVer}", "ReFix_deploy");
+
+        if (versionChanged && targetVer != _refixUpdateService.GetCurrentInstalledVersion() && !Directory.Exists(Path.Combine(targetPath, "bin")))
+        {
+            StatusMessage = $"⏳ Downloading ReFix {targetVer}...";
+            await _refixUpdateService.DownloadAndApplyUpdateAsync(SelectedReFixVersion, null, true, targetPath, CancellationToken.None);
+            await UpdateInstanceReFixCoreAsync(targetVer);
+        }
+        else if (versionChanged || scriptSettingChanged)
+        {
+            await UpdateInstanceReFixCoreAsync(targetVer);
+        }
+        else
+        {
+            StatusMessage = "✅ ReFix configuration updated.";
+        }
+    }
+
+    partial void OnSelectedReFixVersionChanged(ReFixVersionInfo? value)
+    {
+        if (value != null && AvailableReFixVersions.Count > 0 && value != AvailableReFixVersions[0])
+        {
+            ReFixGroupUpdatesEnabled = false;
+        }
+    }
     private readonly IDepotBoxApiClient? _apiClient;
     private readonly IDepotBoxArchiveParser? _archiveParser;
     private readonly IPrerequisiteService? _prerequisiteService;
@@ -2693,9 +2745,20 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             {
                 var exes = ShortcutHelper.FindGameExecutables(installPath, cleanGameName);
                 bool hasDownloadedDepots = depotList.Count > 0 && depotList.All(d => d.IsDownloaded);
-                if (exes.Count > 0 || hasDownloadedDepots || (!string.IsNullOrWhiteSpace(exe) && File.Exists(exe)))
+                
+                if (instance.Origin == InstanceOrigin.DepotBox)
                 {
-                    status = InstanceStatus.Ready;
+                    if (hasDownloadedDepots)
+                    {
+                        status = InstanceStatus.Ready;
+                    }
+                }
+                else
+                {
+                    if (exes.Count > 0 || hasDownloadedDepots || (!string.IsNullOrWhiteSpace(exe) && File.Exists(exe)))
+                    {
+                        status = InstanceStatus.Ready;
+                    }
                 }
             }
 
@@ -2720,8 +2783,6 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             CustomLaunchArgs = Instance.LaunchArguments ?? string.Empty;
             IsUnityEngine = Instance.Engine?.Type == EngineType.Unity;
             DisableUpdateChecks = Instance.DisableUpdateChecks;
-            DisableEmulatorUpdates = Instance.DisableEmulatorUpdates;
-            ForceAllDlcs = Instance.ForceAllDlcs;
 
             IReadOnlyDictionary<uint, string> knownKeys = new Dictionary<uint, string>();
             if (_depotKeyRepository != null && Instance.Depots.Count > 0)
@@ -6222,18 +6283,20 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
             if (success)
             {
-                var globalVer = _refixUpdateService?.GetCurrentInstalledVersion() ?? ReFixEmulator.GetCurrentVersion();
+                var activeVer = !string.IsNullOrWhiteSpace(Instance.InstalledEmulatorVersion) 
+                    ? Instance.InstalledEmulatorVersion 
+                    : (_refixUpdateService?.GetCurrentInstalledVersion() ?? ReFixEmulator.GetCurrentVersion(Instance));
                 var updatedInstance = Instance with
                 {
                     EmulatorEnabled = true,
                     EmulatorId = option.Id,
-                    InstalledEmulatorVersion = globalVer
+                    InstalledEmulatorVersion = activeVer
                 };
 
                 var targetDir = Instance.InstallPath?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                 if (!string.IsNullOrEmpty(targetDir))
                 {
-                    var deployPath = ReFixEmulator.GetReFixDeployPath();
+                    var deployPath = ReFixEmulator.GetReFixDeployPath(updatedInstance);
                     if (deployPath != null)
                     {
                         var binDir = Path.Combine(deployPath, "bin");
@@ -6246,9 +6309,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 }
 
                 Instance = updatedInstance;
+                InstanceReFixVersion = activeVer;
                 await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
                 StatusMessage = $"✅ {option.Name} installed successfully.";
-                _notificationService?.ShowSuccess("Emulator Installed", $"{option.Name} (v{globalVer}) configured for {Instance.Name}.");
+                _notificationService?.ShowSuccess("Emulator Installed", $"{option.Name} (v{activeVer}) configured for {Instance.Name}.");
             }
             else
             {
@@ -6280,7 +6344,35 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     /// Updates the installed ReFix files in this instance to the latest suite version.
     /// </summary>
     [RelayCommand]
+    public async Task ToggleDisableEmulatorUpdatesAsync()
+    {
+        if (Instance == null) return;
+
+        Instance = Instance with { DisableEmulatorUpdates = !Instance.DisableEmulatorUpdates };
+        await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+
+        if (Instance.DisableEmulatorUpdates)
+        {
+            StatusMessage = "🔒 Emulator version pinned. Bulk updates will skip this instance.";
+            IsReFixUpdateAvailableForInstance = false;
+        }
+        else
+        {
+            StatusMessage = "🔓 Emulator version unpinned. Bulk updates will now apply.";
+            if (_refixUpdateService != null)
+            {
+                IsReFixUpdateAvailableForInstance = _refixUpdateService.IsInstanceReFixOutdated(Instance);
+            }
+        }
+    }
+
+    [RelayCommand]
     public async Task UpdateInstanceReFixAsync()
+    {
+        await UpdateInstanceReFixCoreAsync(null);
+    }
+
+    public async Task UpdateInstanceReFixCoreAsync(string? targetVersion)
     {
         if (Instance == null || IsDeployingEmulator) return;
 
@@ -6291,12 +6383,17 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             return;
         }
 
+        var activeVersion = !string.IsNullOrWhiteSpace(targetVersion)
+            ? targetVersion
+            : (!string.IsNullOrWhiteSpace(Instance.InstalledEmulatorVersion) && Instance.DisableEmulatorUpdates
+                ? Instance.InstalledEmulatorVersion
+                : (_refixUpdateService?.GetCurrentInstalledVersion() ?? ReFixEmulator.GetCurrentVersion(Instance)));
+
         IsDeployingEmulator = true;
         IsDeployProgressVisible = true;
         DeployProgress = 0;
-        var globalVer = _refixUpdateService?.GetCurrentInstalledVersion() ?? ReFixEmulator.GetCurrentVersion();
-        DeployProgressMessage = $"Updating ReFix to v{globalVer}...";
-        StatusMessage = $"⏳ Updating ReFix to v{globalVer} in {Instance.Name}...";
+        DeployProgressMessage = $"Updating ReFix to v{activeVersion}...";
+        StatusMessage = $"⏳ Updating ReFix to v{activeVersion} in {Instance.Name}...";
 
         try
         {
@@ -6308,6 +6405,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 DeployProgressMessage = p.Message;
                 StatusMessage = $"⏳ {p.Message}";
             });
+
+            Instance = Instance with { InstalledEmulatorVersion = activeVersion };
 
             bool success;
             if (_emulatorLifecycleService != null)
@@ -6328,13 +6427,13 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 {
                     EmulatorEnabled = true,
                     EmulatorId = optionId,
-                    InstalledEmulatorVersion = globalVer
+                    InstalledEmulatorVersion = activeVersion
                 };
 
                 var targetDir = Instance.InstallPath?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                 if (!string.IsNullOrEmpty(targetDir))
                 {
-                    var deployPath = ReFixEmulator.GetReFixDeployPath();
+                    var deployPath = ReFixEmulator.GetReFixDeployPath(updatedInstance);
                     if (deployPath != null)
                     {
                         var binDir = Path.Combine(deployPath, "bin");
@@ -6347,6 +6446,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 }
 
                 Instance = updatedInstance;
+                InstanceReFixVersion = activeVersion;
                 await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
 
                 if (_emulatorRatingService != null)
@@ -6358,8 +6458,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                     catch { }
                 }
 
-                StatusMessage = $"✅ ReFix updated to v{globalVer} in {Instance.Name}.";
-                _notificationService?.ShowSuccess("ReFix Updated", $"ReFix updated to v{globalVer} in {Instance.Name}.");
+                StatusMessage = $"✅ ReFix updated to v{activeVersion} in {Instance.Name}.";
+                _notificationService?.ShowSuccess("ReFix Updated", $"ReFix updated to v{activeVersion} in {Instance.Name}.");
             }
             else
             {
@@ -6473,12 +6573,6 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }
     }
 
-
-    [RelayCommand]
-    public void ToggleEmulatorUpdates()
-    {
-        DisableEmulatorUpdates = !DisableEmulatorUpdates;
-    }
 
     [RelayCommand]
     public async Task ToggleEmulatorAsync()
@@ -6683,9 +6777,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             Name = customName,
             ExecutablePath = ConfiguredExecutablePath,
             LaunchArguments = CustomLaunchArgs,
-            DisableUpdateChecks = DisableUpdateChecks,
-            DisableEmulatorUpdates = DisableEmulatorUpdates,
-            ForceAllDlcs = ForceAllDlcs
+            DisableUpdateChecks = DisableUpdateChecks
         };
 
         await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
@@ -7156,7 +7248,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         if (Instance is null) return;
 
         var selectedDlcs = Dlcs.Where(d => d.IsSelected).ToList();
-        if (selectedDlcs.Count == 0)
+        
+        // If they didn't explicitly select DLCs, but they checked "Force Install All DLCs", we can proceed.
+        if (selectedDlcs.Count == 0 && !Instance.ForceInstallAllDlcs)
         {
             if (Dlcs.Count == 0 && !IsDlcUnlocked)
             {
@@ -7243,7 +7337,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             Instance = Instance with { UnlockedDlcIds = selectedIds };
             await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
 
-            var targetDlc = selectedDlcs[0].Dlc;
+            var targetDlc = selectedDlcs.FirstOrDefault()?.Dlc 
+                ?? Dlcs.FirstOrDefault()?.Dlc 
+                ?? new DlcInfo { AppId = Instance.AppId, Name = "Generic DLC Wrapper", Depots = [], IsInstalled = false };
             StatusMessage = "⏳ Configuring DLC unlocker & emulator integration...";
             var success = await _dlcInstaller
                 .InstallDlcAsync(Instance, targetDlc, CancellationToken.None, progress)
@@ -7257,12 +7353,12 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
                 foreach (var item in Dlcs)
                 {
-                    item.IsUnlocked = selectedIds.Contains(item.Dlc.AppId);
+                    item.IsUnlocked = selectedIds.Contains(item.Dlc.AppId) || Instance.ForceInstallAllDlcs;
                 }
 
                 string successMsg = dlcDepotsToDownload.Count > 0
                     ? $"DLCs queued for download and unlocker configured successfully for {Instance.Name}."
-                    : $"DLC unlocker configured successfully for {selectedDlcs.Count} DLC(s) on {Instance.Name}.";
+                    : $"DLC unlocker configured successfully for {(selectedDlcs.Count > 0 ? "{selectedDlcs.Count} DLC(s)" : "all available DLCs")} on {Instance.Name}.";
 
                 _notificationService?.ShowSuccess("DLCs Configured", successMsg);
                 StatusMessage = $"✅ {successMsg}";
@@ -7726,6 +7822,133 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             _logger.LogError(ex, "Failed to delete instance {Name}", Instance.Name);
             StatusMessage = $"❌ Failed to delete instance: {ex.Message}";
             IsDeletingInstance = false;
+        }
+    }
+
+    // ── Export Instance to ZIP ──
+
+    [ObservableProperty]
+    private bool _isExportModalOpen;
+
+    [ObservableProperty]
+    private string _exportFileName = string.Empty;
+
+    [ObservableProperty]
+    private string _exportDestinationPath = string.Empty;
+
+    [ObservableProperty]
+    private ObservableCollection<ExportIniVariable> _exportIniVariables = [];
+
+    public bool HasExportIniVariables => ExportIniVariables.Count > 0;
+
+    [RelayCommand]
+    public void OpenExportModal()
+    {
+        if (Instance == null) return;
+        ExportFileName = $"{CleanName(Instance.Name) ?? Instance.Name}.zip";
+        ExportDestinationPath = _appSettings.LastInstallDirectory ?? Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+        LoadExportIniVariables();
+        IsExportModalOpen = true;
+    }
+
+    [RelayCommand]
+    public void CloseExportModal() => IsExportModalOpen = false;
+
+    [RelayCommand]
+    public void BrowseExportDestination()
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = "Select Export Destination Folder",
+            InitialDirectory = Directory.Exists(ExportDestinationPath) ? ExportDestinationPath : Environment.GetFolderPath(Environment.SpecialFolder.Desktop)
+        };
+        if (dialog.ShowDialog() == true)
+            ExportDestinationPath = dialog.FolderName;
+    }
+
+    private void LoadExportIniVariables()
+    {
+        ExportIniVariables.Clear();
+        if (Instance?.InstallPath == null || !Directory.Exists(Instance.InstallPath)) return;
+
+        var iniCandidates = new[] { "refix.ini", "ReFix.ini", "OnlineFix.ini", "onlinefix.ini" };
+        foreach (var candidate in iniCandidates)
+        {
+            var iniPath = Path.Combine(Instance.InstallPath, candidate);
+            if (!File.Exists(iniPath)) continue;
+            try
+            {
+                foreach (var line in File.ReadAllLines(iniPath))
+                {
+                    if (line.TrimStart().StartsWith(";") || line.TrimStart().StartsWith("#") || line.TrimStart().StartsWith("[")) continue;
+                    var eqIdx = line.IndexOf('=');
+                    if (eqIdx < 1) continue;
+                    var key = line[..eqIdx].Trim();
+                    var val = line[(eqIdx + 1)..].Trim();
+                    ExportIniVariables.Add(new ExportIniVariable { Key = key, Value = val, SourceFile = iniPath });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to read INI file for export: {Path}", iniPath);
+            }
+        }
+        OnPropertyChanged(nameof(HasExportIniVariables));
+    }
+
+    [RelayCommand]
+    public async Task ConfirmExportInstanceAsync()
+    {
+        if (Instance?.InstallPath == null || !Directory.Exists(Instance.InstallPath)) return;
+        if (string.IsNullOrWhiteSpace(ExportDestinationPath) || !Directory.Exists(ExportDestinationPath)) return;
+
+        var fileName = string.IsNullOrWhiteSpace(ExportFileName) ? $"{Instance.Name}.zip" : ExportFileName;
+        if (!fileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) fileName += ".zip";
+        var outputPath = Path.Combine(ExportDestinationPath, fileName);
+
+        // Write any modified INI values back before packing
+        var byFile = ExportIniVariables.GroupBy(v => v.SourceFile);
+        foreach (var group in byFile)
+        {
+            try
+            {
+                var lines = File.ReadAllLines(group.Key).ToList();
+                for (int i = 0; i < lines.Count; i++)
+                {
+                    var eqIdx = lines[i].IndexOf('=');
+                    if (eqIdx < 1) continue;
+                    var key = lines[i][..eqIdx].Trim();
+                    var modified = group.FirstOrDefault(v => v.Key == key);
+                    if (modified != null)
+                        lines[i] = $"{key} = {modified.Value}";
+                }
+                await File.WriteAllLinesAsync(group.Key, lines).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to write INI changes before export.");
+            }
+        }
+
+        IsExportModalOpen = false;
+        StatusMessage = "⏳ Packaging instance...";
+
+        try
+        {
+            await Task.Run(() =>
+            {
+                if (File.Exists(outputPath)) File.Delete(outputPath);
+                System.IO.Compression.ZipFile.CreateFromDirectory(Instance.InstallPath, outputPath, System.IO.Compression.CompressionLevel.Optimal, false);
+            }).ConfigureAwait(true);
+
+            StatusMessage = $"✅ Instance exported to: {outputPath}";
+            _notificationService?.ShowSuccess("Export Complete", $"Instance packed to {fileName}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to export instance to ZIP.");
+            StatusMessage = $"❌ Export failed: {ex.Message}";
+            _notificationService?.ShowError("Export Failed", ex.Message);
         }
     }
 
@@ -8979,202 +9202,6 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         if (ActiveJob != null)
         {
             ActiveJob.PropertyChanged -= OnActiveJobPropertyChanged;
-        }
-    }
-
-    // ── EXPORT INSTANCE LOGIC ──
-
-    [ObservableProperty] private bool _isExportModalOpen;
-    [ObservableProperty] private string _exportPackageName = string.Empty;
-    [ObservableProperty] private string _exportPackagePath = string.Empty;
-    [ObservableProperty] private string _exportHeaderBannerPath = string.Empty;
-    [ObservableProperty] private string _exportLogoBannerPath = string.Empty;
-    [ObservableProperty] private bool _exportHasIniSettings;
-
-    public ObservableCollection<BlueStar.App.Models.IniVariable> ExportIniVariables { get; } = new();
-    private string _currentExportIniPath = string.Empty;
-
-    [RelayCommand]
-    public void OpenExportModal()
-    {
-        ExportPackageName = $"{Instance?.Name} - Export";
-        ExportPackagePath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-        ExportHeaderBannerPath = string.Empty;
-        ExportLogoBannerPath = string.Empty;
-        ExportIniVariables.Clear();
-        ExportHasIniSettings = false;
-        _currentExportIniPath = string.Empty;
-
-        // Check for refix.ini or OnlineFix.ini
-        if (Instance != null && !string.IsNullOrWhiteSpace(Instance.InstallPath) && System.IO.Directory.Exists(Instance.InstallPath))
-        {
-            var refixPath = System.IO.Path.Combine(Instance.InstallPath, "refix.ini");
-            var onlineFixPath = System.IO.Path.Combine(Instance.InstallPath, "OnlineFix.ini");
-            
-            if (System.IO.File.Exists(refixPath))
-                _currentExportIniPath = refixPath;
-            else if (System.IO.File.Exists(onlineFixPath))
-                _currentExportIniPath = onlineFixPath;
-
-            if (!string.IsNullOrEmpty(_currentExportIniPath))
-            {
-                var lines = System.IO.File.ReadAllLines(_currentExportIniPath);
-                foreach (var line in lines)
-                {
-                    if (string.IsNullOrWhiteSpace(line) || line.TrimStart().StartsWith(";") || line.TrimStart().StartsWith("#") || line.TrimStart().StartsWith("[")) continue;
-                    
-                    var parts = line.Split(new[] { '=' }, 2);
-                    if (parts.Length == 2)
-                    {
-                        ExportIniVariables.Add(new BlueStar.App.Models.IniVariable { Key = parts[0].Trim(), Value = parts[1].Trim() });
-                    }
-                }
-                ExportHasIniSettings = ExportIniVariables.Count > 0;
-            }
-        }
-
-        IsExportModalOpen = true;
-    }
-
-    [RelayCommand]
-    public void CloseExportModal()
-    {
-        IsExportModalOpen = false;
-    }
-
-    [RelayCommand]
-    public void BrowseExportPath()
-    {
-        var dialog = new Microsoft.Win32.OpenFolderDialog
-        {
-            Title = "Selecciona la carpeta donde guardar el ZIP",
-            Multiselect = false
-        };
-
-        if (dialog.ShowDialog() == true)
-        {
-            ExportPackagePath = dialog.FolderName;
-        }
-    }
-
-    [RelayCommand]
-    public void BrowseExportHeader()
-    {
-        var dialog = new Microsoft.Win32.OpenFileDialog
-        {
-            Filter = "Image Files|*.png;*.jpg;*.jpeg",
-            Title = "Selecciona un banner (Header)"
-        };
-        if (dialog.ShowDialog() == true)
-        {
-            ExportHeaderBannerPath = dialog.FileName;
-        }
-    }
-
-    [RelayCommand]
-    public void BrowseExportLogo()
-    {
-        var dialog = new Microsoft.Win32.OpenFileDialog
-        {
-            Filter = "Image Files|*.png;*.jpg;*.jpeg",
-            Title = "Selecciona un logo"
-        };
-        if (dialog.ShowDialog() == true)
-        {
-            ExportLogoBannerPath = dialog.FileName;
-        }
-    }
-
-    [RelayCommand]
-    public async Task ExportInstanceConfirmAsync()
-    {
-        if (string.IsNullOrWhiteSpace(ExportPackagePath) || string.IsNullOrWhiteSpace(ExportPackageName)) return;
-
-        IsProcessing = true;
-        StatusMessage = "Empaquetando instancia...";
-        IsExportModalOpen = false;
-
-        try
-        {
-            await Task.Run(() =>
-            {
-                var targetZip = System.IO.Path.Combine(ExportPackagePath, $"{BlueStar.Core.Helpers.PathHelper.SanitizeFolderName(ExportPackageName)}.zip");
-                
-                // We will create a temp directory to prepare the files
-                var tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"BlueStarExport_{Guid.NewGuid()}");
-                System.IO.Directory.CreateDirectory(tempDir);
-
-                try
-                {
-                    // Copy game files
-                    void CopyDir(string sourceDir, string destinationDir)
-                    {
-                        var dir = new System.IO.DirectoryInfo(sourceDir);
-                        if (!dir.Exists) throw new System.IO.DirectoryNotFoundException();
-
-                        System.IO.Directory.CreateDirectory(destinationDir);
-
-                        foreach (var file in dir.GetFiles())
-                        {
-                            file.CopyTo(System.IO.Path.Combine(destinationDir, file.Name));
-                        }
-
-                        foreach (var subDir in dir.GetDirectories())
-                        {
-                            CopyDir(subDir.FullName, System.IO.Path.Combine(destinationDir, subDir.Name));
-                        }
-                    }
-                    CopyDir(Instance.InstallPath, tempDir);
-
-                    // Update INI if needed
-                    if (ExportHasIniSettings && !string.IsNullOrEmpty(_currentExportIniPath))
-                    {
-                        var targetIni = System.IO.Path.Combine(tempDir, System.IO.Path.GetFileName(_currentExportIniPath));
-                        if (System.IO.File.Exists(targetIni))
-                        {
-                            var lines = System.IO.File.ReadAllLines(targetIni).ToList();
-                            foreach (var variable in ExportIniVariables)
-                            {
-                                for (int i = 0; i < lines.Count; i++)
-                                {
-                                    if (lines[i].TrimStart().StartsWith(variable.Key + "=") || lines[i].TrimStart().StartsWith(variable.Key + " ="))
-                                    {
-                                        lines[i] = $"{variable.Key}={variable.Value}";
-                                        break;
-                                    }
-                                }
-                            }
-                            System.IO.File.WriteAllLines(targetIni, lines);
-                        }
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(ExportHeaderBannerPath) && System.IO.File.Exists(ExportHeaderBannerPath))
-                    {
-                        System.IO.File.Copy(ExportHeaderBannerPath, System.IO.Path.Combine(tempDir, "header.jpg"), true);
-                    }
-                    if (!string.IsNullOrWhiteSpace(ExportLogoBannerPath) && System.IO.File.Exists(ExportLogoBannerPath))
-                    {
-                        System.IO.File.Copy(ExportLogoBannerPath, System.IO.Path.Combine(tempDir, "logo.png"), true);
-                    }
-
-                    if (System.IO.File.Exists(targetZip)) System.IO.File.Delete(targetZip);
-                    System.IO.Compression.ZipFile.CreateFromDirectory(tempDir, targetZip, System.IO.Compression.CompressionLevel.Fastest, false);
-                }
-                finally
-                {
-                    if (System.IO.Directory.Exists(tempDir)) System.IO.Directory.Delete(tempDir, true);
-                }
-            });
-            StatusMessage = "Exportado correctamente.";
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error exporting instance");
-            StatusMessage = "Error al exportar.";
-        }
-        finally
-        {
-            IsProcessing = false;
         }
     }
 }

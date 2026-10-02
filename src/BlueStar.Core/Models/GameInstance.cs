@@ -128,9 +128,19 @@ public record GameInstance
     public bool DisableUpdateChecks { get; init; } = false;
 
     /// <summary>
-    /// Gets or sets whether automatic emulator updates are disabled for this instance.
+    /// Gets or sets whether automatic bulk emulator updates (like ReFix updates) are disabled for this instance.
     /// </summary>
     public bool DisableEmulatorUpdates { get; init; } = false;
+
+    /// <summary>
+    /// If true, uses the deploy script bundled with the specific emulator version instead of BlueStar's standard deploy script.
+    /// </summary>
+    public bool UseVersionDeployScript { get; init; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to force install all DLCs even if none are explicitly listed.
+    /// </summary>
+    public bool ForceInstallAllDlcs { get; init; } = false;
 
     /// <summary>
     /// Gets or sets the origin and management type of this instance.
@@ -185,14 +195,9 @@ public record GameInstance
     public bool PendingCreateStartMenuShortcut { get; init; } = false;
 
     /// <summary>
-    /// Gets or sets whether to create a Steam Library shortcut upon completion of the game download.
+    /// Gets or sets whether to create a Steam shortcut upon completion of the game download.
     /// </summary>
     public bool PendingCreateSteamShortcut { get; init; } = false;
-
-    /// <summary>
-    /// Gets or sets whether to force the installation of all DLCs, even if none are detected.
-    /// </summary>
-    public bool ForceAllDlcs { get; init; } = false;
 
     /// <summary>
     /// Gets or sets whether advanced build options are enabled for this instance.

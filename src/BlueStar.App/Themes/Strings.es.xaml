@@ -989,4 +989,28 @@
     <sys:String x:Key="String_TitleDownloads">Cola de descargas</sys:String>
     <sys:String x:Key="String_TitleSettings">Ajustes de la aplicación</sys:String>
     <sys:String x:Key="String_TitleAbout">Acerca de y créditos</sys:String>
+    <sys:String x:Key="String_ForceUnlockAllDlcs">Forzar instalación de todos los DLCs</sys:String>
+    <sys:String x:Key="String_ForceUnlockAllDlcsDesc">Fuerza al juego a cargar todos los DLCs posibles incluso si no son detectados explícitamente.</sys:String>
+    <sys:String x:Key="String_ForceAllDlcsWarningDesc">Esta opción forzará la activación de todos los DLCs que pueda llegar a tener disponible el juego aunque no se listen en BlueStar. ¿Deseas continuar?</sys:String>
+    <sys:String x:Key="String_DoNotShowAgain">No volver a mostrar</sys:String>
+    <sys:String x:Key="String_ContinueBtn">Continuar</sys:String>
+
+    <!-- Export Instance Modal -->
+    <sys:String x:Key="String_ExportInstanceBtn">Exportar Instancia</sys:String>
+    <sys:String x:Key="String_ExportInstanceModalTitle">Exportar Instancia a ZIP</sys:String>
+    <sys:String x:Key="String_ExportInstanceModalDesc">Empaqueta la carpeta del juego de esta instancia en un archivo ZIP portable. También puedes editar las variables de configuración INI antes de exportar.</sys:String>
+    <sys:String x:Key="String_ExportFileName">Nombre del Archivo</sys:String>
+    <sys:String x:Key="String_ExportDestination">Carpeta de Destino</sys:String>
+    <sys:String x:Key="String_BrowseBtn">Explorar…</sys:String>
+    <!-- ReFix Config Modal -->
+    <sys:String x:Key="String_ConfigureReFix">Configurar ReFix</sys:String>
+    <sys:String x:Key="String_ConfigureReFixDesc">Selecciona una versión específica de ReFix para usar en esta instancia.</sys:String>
+    <sys:String x:Key="String_Version">Versión</sys:String>
+    <sys:String x:Key="String_GroupUpdates">Actualizaciones Grupales</sys:String>
+    <sys:String x:Key="String_GroupUpdatesDesc">Cuando está desactivado, esta instancia no se actualizará cuando actualices ReFix para todos los juegos.</sys:String>
+    <sys:String x:Key="String_UseVersionDeploy">Usar AutoDeploy de esta versión</sys:String>
+    <sys:String x:Key="String_UseVersionDeployDesc">Si está activado, utilizará los scripts de configuración (ej. cortafuegos) originales de la versión descargada en vez de los estándares de BlueStar.</sys:String>
+    <sys:String x:Key="String_Apply">Aplicar</sys:String>
+    <sys:String x:Key="String_Configure">Configurar</sys:String>
+    <sys:String x:Key="String_ConfigureReFixTooltip">Configurar Versión de ReFix y Actualizaciones</sys:String>
 </ResourceDictionary>

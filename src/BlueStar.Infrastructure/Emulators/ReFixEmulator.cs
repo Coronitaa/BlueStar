@@ -34,9 +34,34 @@ public sealed class ReFixEmulator : IEmulator
     /// Resolves the absolute path to the ReFix_deploy directory dynamically.
     /// Checks AppData tools, AppContext BaseDirectory, AppDomain BaseDirectory, and workspace tools.
     /// </summary>
-    public static string? GetReFixDeployPath()
+    public static string? GetReFixDeployPath(GameInstance? instance = null)
     {
-        var appDataTools = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BlueStar", "tools", "ReFix_deploy");
+        string baseDir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var toolsRoot = Path.Combine(baseDir, "BlueStar", "tools");
+
+        if (instance != null && !string.IsNullOrWhiteSpace(instance.InstalledEmulatorVersion))
+        {
+            var cleanVer = instance.InstalledEmulatorVersion.Trim().TrimStart('v', 'V');
+            var versionCandidates = new[]
+            {
+                Path.Combine(toolsRoot, "ReFix_versions", $"v{cleanVer}", "ReFix_deploy"),
+                Path.Combine(toolsRoot, "ReFix_versions", $"v{cleanVer}"),
+                Path.Combine(AppContext.BaseDirectory, "tools", "ReFix_versions", $"v{cleanVer}", "ReFix_deploy"),
+                Path.Combine(AppContext.BaseDirectory, "tools", "ReFix_versions", $"v{cleanVer}"),
+                Path.Combine(Directory.GetCurrentDirectory(), "src", "BlueStar.App", "tools", "ReFix_versions", $"v{cleanVer}", "ReFix_deploy"),
+                Path.Combine(Directory.GetCurrentDirectory(), "src", "BlueStar.App", "tools", "ReFix_versions", $"v{cleanVer}")
+            };
+
+            foreach (var vPath in versionCandidates)
+            {
+                if (Directory.Exists(Path.Combine(vPath, "bin")))
+                {
+                    return vPath;
+                }
+            }
+        }
+
+        var appDataTools = Path.Combine(toolsRoot, "ReFix_deploy");
 
         var candidates = new List<string>
         {
@@ -83,11 +108,15 @@ public sealed class ReFixEmulator : IEmulator
     /// <summary>
     /// Gets the current installed suite version.
     /// </summary>
-    public static string GetCurrentVersion()
+    public static string GetCurrentVersion(GameInstance? instance = null)
     {
-        var deployPath = GetReFixDeployPath();
+        var deployPath = GetReFixDeployPath(instance);
         if (deployPath == null) return "1.3";
+        return GetCurrentVersionInternal(deployPath);
+    }
 
+    private static string GetCurrentVersionInternal(string deployPath)
+    {
         var versionFile = Path.Combine(deployPath, "refix_version.json");
         if (File.Exists(versionFile))
         {
@@ -262,7 +291,7 @@ public sealed class ReFixEmulator : IEmulator
             return false;
         }
 
-        var deployPath = GetReFixDeployPath();
+        var deployPath = GetReFixDeployPath(instance);
         if (deployPath == null)
         {
             _logger.LogError("ReFix_deploy folder not found in known paths.");
@@ -278,14 +307,14 @@ public sealed class ReFixEmulator : IEmulator
         _logger.LogInformation("Deploying ReFix ({Mode}) via ReFix_deploy scripts for {Name} at {Path}", onlineMode, instance.Name, instance.InstallPath);
 
         // Verify that ReFix digital signature is installed in the system; if not, install it
-        try
-        {
-            await BlueStar.Infrastructure.Services.ReFixCertificateHelper.EnsureCertificateInstalledAsync(_logger, ct).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Non-fatal error while ensuring ReFix certificate installation.");
-        }
+        // try
+        // {
+        //     await BlueStar.Infrastructure.Services.ReFixCertificateHelper.EnsureCertificateInstalledAsync(_logger, ct).ConfigureAwait(false);
+        // }
+        // catch (Exception ex)
+        // {
+        //     _logger.LogWarning(ex, "Non-fatal error while ensuring ReFix certificate installation.");
+        // }
 
         try
         {
@@ -360,7 +389,22 @@ public sealed class ReFixEmulator : IEmulator
                 CurrentStep = "DeployHelper"
             });
 
-            var helperPs1 = Path.Combine(binDir, "deploy_helper.ps1");
+            string helperPs1;
+            if (instance.UseVersionDeployScript)
+            {
+                helperPs1 = Path.Combine(binDir, "deploy_helper.ps1");
+            }
+            else
+            {
+                var standardDeployPath = Path.Combine(AppContext.BaseDirectory, "tools", "ReFix_StandardDeploy");
+                if (!Directory.Exists(standardDeployPath))
+                {
+                    standardDeployPath = Path.Combine(Directory.GetCurrentDirectory(), "src", "BlueStar.App", "tools", "ReFix_StandardDeploy");
+                }
+                helperPs1 = Path.Combine(standardDeployPath, "bin", "deploy_helper.ps1");
+                if (!File.Exists(helperPs1)) helperPs1 = Path.Combine(binDir, "deploy_helper.ps1"); // Fallback
+            }
+
             if (!File.Exists(helperPs1))
             {
                 throw new FileNotFoundException($"Deployment script not found: {helperPs1}");
@@ -415,7 +459,7 @@ public sealed class ReFixEmulator : IEmulator
                 CurrentStep = "Shortcuts"
             });
 
-            if (!isGoldberg && Directory.Exists(exeDir))
+            if (!isGoldberg && Directory.Exists(exeDir) && instance.UseVersionDeployScript)
             {
                 var shortcutPs1 = Path.Combine(binDir, "add_steam_shortcut.ps1");
                 var shortcutBat = Path.Combine(binDir, "Install_ReFix_Steam_Shortcut.bat");
@@ -433,7 +477,22 @@ public sealed class ReFixEmulator : IEmulator
                 CurrentStep = "Firewall"
             });
 
-            var firewallPs1 = Path.Combine(binDir, "apply_firewall.ps1");
+            string firewallPs1;
+            if (instance.UseVersionDeployScript)
+            {
+                firewallPs1 = Path.Combine(binDir, "apply_firewall.ps1");
+            }
+            else
+            {
+                var standardDeployPath = Path.Combine(AppContext.BaseDirectory, "tools", "ReFix_StandardDeploy");
+                if (!Directory.Exists(standardDeployPath))
+                {
+                    standardDeployPath = Path.Combine(Directory.GetCurrentDirectory(), "src", "BlueStar.App", "tools", "ReFix_StandardDeploy");
+                }
+                firewallPs1 = Path.Combine(standardDeployPath, "bin", "apply_firewall.ps1");
+                if (!File.Exists(firewallPs1)) firewallPs1 = Path.Combine(binDir, "apply_firewall.ps1"); // Fallback
+            }
+
             if (File.Exists(firewallPs1) && !string.IsNullOrWhiteSpace(gameExePath) && File.Exists(gameExePath))
             {
                 var fwArgs = $"-NoProfile -ExecutionPolicy Bypass -File \"{firewallPs1}\" -GameExe \"{gameExePath}\" -GameName \"{gameName}\" -LanPort \"{lanPort}\" -Mode \"{onlineMode}\"";
@@ -482,7 +541,7 @@ public sealed class ReFixEmulator : IEmulator
         try
         {
             var targetDir = instance.InstallPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            var deployPath = GetReFixDeployPath();
+            var deployPath = GetReFixDeployPath(instance);
 
             // 1. Run Uninstall_ReFix.bat directly with targetDir parameter if available
             if (deployPath != null)

@@ -294,11 +294,13 @@ public sealed class AppSettingsService
         await SaveAsync().ConfigureAwait(false);
     }
 
-    public bool DoNotShowForceDlcWarning => _current.DoNotShowForceDlcWarning;
+    /// <summary>Whether to hide the Force DLC Warning modal.</summary>
+    public bool HideForceDlcWarning => _current.HideForceDlcWarning;
 
-    public async Task SetDoNotShowForceDlcWarningAsync(bool doNotShow)
+    /// <summary>Persists the Hide Force DLC Warning setting.</summary>
+    public async Task SetHideForceDlcWarningAsync(bool hide)
     {
-        _current = _current with { DoNotShowForceDlcWarning = doNotShow };
+        _current = _current with { HideForceDlcWarning = hide };
         await SaveAsync().ConfigureAwait(false);
     }
 
@@ -315,7 +317,6 @@ public sealed class AppSettingsService
         public bool CheckSystemRequirementsOnStartup { get; init; } = true;
         public bool EnableAdvancedBuildOptions { get; init; } = false;
         public bool EnableDebugSystem { get; init; } = false;
-        public bool DoNotShowForceDlcWarning { get; init; } = false;
         public string? CatalogManifestUrl { get; init; }
 
         public string? DefaultExploreSort { get; init; } = "Reviews";
@@ -324,5 +325,6 @@ public sealed class AppSettingsService
 
         public string? DefaultApiUrl { get; init; } = "https://depotbox.org";
         public string? DefaultApiKey { get; init; } = "YOUR-API-KEY";
+        public bool HideForceDlcWarning { get; init; } = false;
     }
 }

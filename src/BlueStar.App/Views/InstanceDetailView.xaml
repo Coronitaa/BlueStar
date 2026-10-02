@@ -71,11 +71,11 @@
                             <TextBlock Text="{Binding Instance.Name}" Style="{StaticResource H1}"
                                        TextTrimming="CharacterEllipsis" Margin="0,0,0,4"/>
 
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                                 <TextBlock Text="{Binding Instance.AppId, StringFormat='Steam AppID: {0}'}"
-                                           Style="{StaticResource Caption}" Margin="0,0,14,0" VerticalAlignment="Center"/>
+                                           Style="{StaticResource Caption}" Margin="0,0,14,0"/>
                                 <TextBlock Text="{Binding Instance.TotalPlayTime, Converter={StaticResource PlayTimeToFormattedConverter}, StringFormat='Playtime: {0}'}"
-                                           Style="{StaticResource Caption}" VerticalAlignment="Center"/>
+                                           Style="{StaticResource Caption}"/>
                             </StackPanel>
 
                             <!-- Badges: Dynamic Tags from ITagsService -->
@@ -118,8 +118,8 @@
                             </ItemsControl>
                         </StackPanel>
 
-                        <!-- Primary Action Buttons (Play & Shortcut) -->
                         <StackPanel Grid.Column="3" VerticalAlignment="Center" Orientation="Horizontal">
+
                             <Button Style="{StaticResource IconButton}" Margin="0,0,8,0"
                                     ToolTip="{DynamicResource String_OpenGameDirTooltip}" Command="{Binding OpenFolderCommand}">
                                 <Path Data="{StaticResource IconFolder}" Fill="{StaticResource SecondaryTextBrush}"
@@ -487,9 +487,16 @@
                                                 </StackPanel>
                                             </Border>
                                             <Button Content="{DynamicResource String_OverviewStorePageBtn}" Style="{StaticResource SecondaryButton}"
-                                                    Padding="13,7" FontSize="11" Command="{Binding OpenStorePageCommand}" Margin="0,0,8,0"/>
-                                            <Button Content="{DynamicResource String_SimilarGames}" Style="{StaticResource SecondaryButton}"
-                                                    Padding="13,7" FontSize="11" Command="{Binding FindSimilarGamesCommand}"/>
+                                                    Padding="13,7" FontSize="11" Margin="0,0,8,0" Command="{Binding OpenStorePageCommand}"/>
+                                            <Button Style="{StaticResource SecondaryButton}" Padding="13,7"
+                                                    Command="{Binding FindSimilarGamesCommand}"
+                                                    ToolTip="{DynamicResource String_SimilarGames}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Path Data="{StaticResource IconSimilar}" Fill="{StaticResource SecondaryTextBrush}"
+                                                          Stretch="Uniform" Width="12" Height="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{DynamicResource String_SimilarGames}" FontSize="11"/>
+                                                </StackPanel>
+                                            </Button>
                                         </StackPanel>
                                     </Grid>
 
@@ -1748,11 +1755,11 @@
                                 </Grid>
                             </Border>
 
-                            <CheckBox Content="Forzar instalación de DLCs (Universal)"
-                                      IsChecked="{Binding ForceAllDlcs, Mode=TwoWay}"
+                            <CheckBox Content="{DynamicResource String_ForceUnlockAllDlcs}"
                                       Style="{StaticResource DarkCheckBox}"
+                                      IsChecked="{Binding ForceInstallAllDlcs}"
                                       Margin="0,0,0,16"
-                                      ToolTip="Fuerza la activación de todos los DLCs que pueda llegar a tener el juego."/>
+                                      ToolTip="{DynamicResource String_ForceUnlockAllDlcsDesc}"/>
 
                             <!-- DLCs List -->
                             <ItemsControl ItemsSource="{Binding Dlcs}">
@@ -2233,8 +2240,23 @@
                                            Style="{StaticResource Caption}" Margin="0,4,0,0"/>
                             </StackPanel>
 
-                            <!-- Uninstall / Restore Action -->
+                            <!-- Actions -->
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Command="{Binding OpenReFixConfigModalCommand}"
+                                        Margin="0,0,8,0" Padding="14,9"
+                                        ToolTip="{DynamicResource String_ConfigureReFixTooltip}"
+                                        IsEnabled="{Binding IsEmulatorInstalled}">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="⚙ " FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <TextBlock Text="{DynamicResource String_Configure}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+
                                 <Button Content="{DynamicResource String_UninstallEmulatorBtn}"
                                         Style="{StaticResource DangerButton}"
                                         Padding="14,9"
@@ -2372,25 +2394,9 @@
                     <!-- ═══ 4. ALL REFIX EMULATOR OPTIONS LIST ═══ -->
                     <Border Style="{StaticResource Card}" Margin="0,0,0,18">
                         <StackPanel>
-                            <Grid Margin="0,0,0,16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0">
-                                    <TextBlock Text="{DynamicResource String_AvailableEmulationOptionsTitle}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                                    <TextBlock Text="{DynamicResource String_AvailableEmulationOptionsDesc}" Style="{StaticResource Caption}"/>
-                                </StackPanel>
-                                <ToggleButton Grid.Column="1" VerticalAlignment="Center" 
-                                              Style="{StaticResource SecondaryToggleButton}"
-                                              IsChecked="{Binding DisableEmulatorUpdates}"
-                                              Command="{Binding ToggleEmulatorUpdatesCommand}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Path Data="{StaticResource IconLock}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" Width="12" Height="12" Stretch="Uniform" Margin="0,0,6,0"/>
-                                        <TextBlock Text="Lock ReFix Version" FontSize="11" FontWeight="SemiBold"/>
-                                    </StackPanel>
-                                </ToggleButton>
-                            </Grid>
+                            <TextBlock Text="{DynamicResource String_AvailableEmulationOptionsTitle}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
+                            <TextBlock Text="{DynamicResource String_AvailableEmulationOptionsDesc}"
+                                       Style="{StaticResource Caption}" Margin="0,0,0,16"/>
 
                             <ItemsControl ItemsSource="{Binding AvailableEmulatorOptions}">
                                 <ItemsControl.ItemTemplate>
@@ -2766,25 +2772,6 @@
                         </Grid>
                     </Border>
 
-                    <!-- ═══ PER-INSTANCE EMULATOR UPDATE POLICY ═══ -->
-                    <Border Style="{StaticResource Card}" Margin="0,20,0,0">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
-                                <TextBlock Text="{DynamicResource String_InstanceDisableEmulatorUpdatesTitle}" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                                <TextBlock Text="{DynamicResource String_InstanceDisableEmulatorUpdatesDesc}"
-                                           Style="{StaticResource BodySmall}" TextWrapping="Wrap" Margin="0,4,0,0"/>
-                            </StackPanel>
-                            <CheckBox Grid.Column="1"
-                                      IsChecked="{Binding DisableEmulatorUpdates, Mode=TwoWay}"
-                                      Style="{StaticResource DarkCheckBox}"
-                                      VerticalAlignment="Center"/>
-                        </Grid>
-                    </Border>
-
                     <!-- ═══ RECHECK VERSION / REVERT UPDATE FAILURE ═══ -->
                     <Border Style="{StaticResource Card}" Margin="0,20,0,0">
                         <Grid>
@@ -2806,23 +2793,7 @@
                         </Grid>
                     </Border>
 
-                    <!-- ═══ EXPORT INSTANCE ═══ -->
-                    <Border Style="{StaticResource Card}" Margin="0,20,0,0">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
-                                <TextBlock Text="Exportar Instancia a ZIP" Style="{StaticResource H2}" Margin="0,0,0,4"/>
-                                <TextBlock Text="Empaqueta la instancia en un archivo ZIP incluyendo banners y configuraciones opcionales de emulación."
-                                           Style="{StaticResource BodySmall}" TextWrapping="Wrap" Margin="0,4,0,0"/>
-                            </StackPanel>
-                            <Button Grid.Column="1" Content="Exportar..." Style="{StaticResource PrimaryButton}"
-                                    Padding="14,8" VerticalAlignment="Center"
-                                    Command="{Binding OpenExportModalCommand}"/>
-                        </Grid>
-                    </Border>
+
 
                     <!-- Danger Zone & Storage Management -->
                     <Border Style="{StaticResource Card}" Margin="0,20,0,0" BorderBrush="{StaticResource DangerBorderBrush}" BorderThickness="1">
@@ -2832,6 +2803,16 @@
                                        Style="{StaticResource BodySmall}" Margin="0,0,0,16"/>
 
                             <WrapPanel Orientation="Horizontal">
+                                <!-- Export to ZIP -->
+                                <Button Style="{StaticResource SecondaryButton}"
+                                        Margin="0,0,16,10"
+                                        Command="{Binding OpenExportModalCommand}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Path Data="{StaticResource IconPackage}" Fill="{StaticResource PrimaryTextBrush}" Width="16" Height="16" Stretch="Uniform" Margin="0,0,8,0"/>
+                                        <TextBlock Text="{DynamicResource String_ExportInstanceBtn}"/>
+                                    </StackPanel>
+                                </Button>
+
                                 <!-- Uninstall Game Files (Keeps instance in BlueStar) -->
                                 <Button Content="{DynamicResource String_UninstallGameFilesBtn}"
                                         Style="{StaticResource SecondaryButton}"
@@ -2911,12 +2892,12 @@
                                             <TextBlock Text="{Binding Description}" Style="{StaticResource Body}" Margin="0,0,0,6"/>
 
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <TextBlock Text="{DynamicResource String_CategoryLabel}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                                <TextBlock Text="{Binding Category}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,16,0" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{DynamicResource String_CategoryLabel}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,4,0"/>
+                                                <TextBlock Text="{Binding Category}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,16,0"/>
 
-                                                <TextBlock Text="{DynamicResource String_LocationLabel}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{DynamicResource String_LocationLabel}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,4,0"/>
                                                 <TextBlock Text="{Binding LocalInstallerPath, FallbackValue='Official Microsoft Direct Download', TargetNullValue='Official Microsoft Direct Download'}"
-                                                           Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                                           Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis"/>
                                             </StackPanel>
                                         </StackPanel>
 
@@ -4642,10 +4623,9 @@
                 </StackPanel>
             </Border>
         </controls:ModalOverlay>
-
-        <!-- ═══ FORCE ALL DLCS (UNIVERSAL) CONFIRMATION ═══ -->
-        <controls:ModalOverlay IsOpen="{Binding IsForceAllDlcsAlertOpen}"
-                               CloseCommand="{Binding CancelForceAllDlcsCommand}"
+        <!-- ═══ FORCE ALL DLCS WARNING ═══ -->
+        <controls:ModalOverlay IsOpen="{Binding IsForceAllDlcsWarningOpen}"
+                               CloseCommand="{Binding CancelForceAllDlcsWarningCommand}"
                                CloseOnEscape="True"
                                Panel.ZIndex="1200">
             <Border Background="{StaticResource SurfaceCardElevatedBrush}"
@@ -4658,117 +4638,107 @@
                 <StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                         <Path Data="{StaticResource IconInfo}" Fill="{StaticResource WarningBrush}" Width="15" Height="15" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,9,0"/>
-                        <TextBlock Text="Forzar instalación de DLCs" Style="{StaticResource H3}" VerticalAlignment="Center"/>
+                        <TextBlock Text="{DynamicResource String_InstallModalForceDlcTitle}" Style="{StaticResource H3}" VerticalAlignment="Center"/>
                     </StackPanel>
-                    <TextBlock Text="Esta opción forzará la activación de todos los DLCs que pueda llegar a tener disponible el juego, aunque no se listen en BlueStar. Ten en cuenta que esto podría ocasionar problemas si el juego no maneja bien DLCs inexistentes."
+                    <TextBlock Text="{DynamicResource String_ForceAllDlcsWarningDesc}"
                                Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"
-                               TextWrapping="Wrap" Margin="0,0,0,14"/>
+                               TextWrapping="Wrap" Margin="0,0,0,18"/>
                     
-                    <CheckBox Content="No volver a mostrar esta advertencia"
-                              IsChecked="{Binding DoNotShowForceAllDlcsAlert, Mode=TwoWay}"
-                              Style="{StaticResource DarkCheckBox}"
-                              Margin="0,0,0,18"/>
+                    <CheckBox Content="{DynamicResource String_DoNotShowAgain}" Style="{StaticResource DarkCheckBox}" IsChecked="{Binding DoNotShowForceAllDlcsWarning}" Margin="0,0,0,18"/>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                         <Button Content="{DynamicResource String_Cancel}" Style="{StaticResource SecondaryButton}"
                                 Padding="14,8" Margin="0,0,10,0"
-                                Command="{Binding CancelForceAllDlcsCommand}"/>
-                        <Button Content="Continuar" Style="{StaticResource PrimaryButton}"
+                                Command="{Binding CancelForceAllDlcsWarningCommand}"/>
+                        <Button Content="{DynamicResource String_ContinueBtn}" Style="{StaticResource PrimaryButton}"
                                 Padding="16,8"
-                                Command="{Binding ConfirmForceAllDlcsCommand}"/>
+                                Command="{Binding ConfirmForceAllDlcsWarningCommand}"/>
                     </StackPanel>
                 </StackPanel>
             </Border>
         </controls:ModalOverlay>
-
         <!-- ═══ EXPORT INSTANCE MODAL ═══ -->
         <controls:ModalOverlay IsOpen="{Binding IsExportModalOpen}"
                                CloseCommand="{Binding CloseExportModalCommand}"
                                CloseOnEscape="True"
-                               Panel.ZIndex="1200">
-            <Border Background="{StaticResource SurfaceCardElevatedBrush}"
-                    BorderBrush="{StaticResource AccentBrush}"
+                               Panel.ZIndex="1300">
+            <Border Width="600"
+                    Background="{StaticResource SurfaceCardElevatedBrush}"
+                    BorderBrush="{StaticResource StrongBorderBrush}"
                     BorderThickness="1"
                     CornerRadius="{StaticResource RadiusLg}"
-                    Width="600"
-                    MaxHeight="700"
-                    Padding="24,20"
-                    HorizontalAlignment="Center" VerticalAlignment="Center">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
+                    Padding="24"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <StackPanel>
+                    <TextBlock Text="{DynamicResource String_ExportInstanceModalTitle}" Style="{StaticResource H2}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{DynamicResource String_ExportInstanceModalDesc}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap" Margin="0,0,0,16"/>
 
-                    <StackPanel Grid.Row="0" Margin="0,0,0,16">
-                        <TextBlock Text="Exportar Instancia" Style="{StaticResource H2}"/>
-                        <TextBlock Text="Configura los detalles de la exportación." Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
-                    </StackPanel>
+                    <TextBlock Text="{DynamicResource String_ExportFileName}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                    <TextBox Text="{Binding ExportFileName, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource DarkTextBox}" Margin="0,0,0,12"/>
 
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,16">
-                        <StackPanel>
-                            <TextBlock Text="Nombre del paquete" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
-                            <TextBox Style="{StaticResource DarkTextBox}" Text="{Binding ExportPackageName}" Margin="0,0,0,16"/>
+                    <TextBlock Text="{DynamicResource String_ExportDestination}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Text="{Binding ExportDestinationPath, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource DarkTextBox}" Margin="0,0,8,0" IsReadOnly="True"/>
+                        <Button Grid.Column="1" Content="{DynamicResource String_BrowseBtn}" Style="{StaticResource SecondaryButton}" Command="{Binding BrowseExportDestinationCommand}"/>
+                    </Grid>
 
-                            <TextBlock Text="Ubicación de destino" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
-                            <Grid Margin="0,0,0,16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBox Grid.Column="0" Style="{StaticResource DarkTextBox}" Text="{Binding ExportPackagePath}"/>
-                                <Button Grid.Column="1" Content="Explorar..." Style="{StaticResource SecondaryButton}" Margin="8,0,0,0" Command="{Binding BrowseExportPathCommand}"/>
-                            </Grid>
-
-                            <TextBlock Text="Banners del acceso directo" Style="{StaticResource H3}" Margin="0,0,0,6"/>
-                            <TextBlock Text="Selecciona imágenes personalizadas si deseas cambiarlas." Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,12"/>
-                            
-                            <TextBlock Text="Header (Encabezado)" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
-                            <Grid Margin="0,0,0,16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBox Grid.Column="0" Style="{StaticResource DarkTextBox}" Text="{Binding ExportHeaderBannerPath}"/>
-                                <Button Grid.Column="1" Content="Explorar..." Style="{StaticResource SecondaryButton}" Margin="8,0,0,0" Command="{Binding BrowseExportHeaderCommand}"/>
-                            </Grid>
-
-                            <TextBlock Text="Logo" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
-                            <Grid Margin="0,0,0,16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBox Grid.Column="0" Style="{StaticResource DarkTextBox}" Text="{Binding ExportLogoBannerPath}"/>
-                                <Button Grid.Column="1" Content="Explorar..." Style="{StaticResource SecondaryButton}" Margin="8,0,0,0" Command="{Binding BrowseExportLogoCommand}"/>
-                            </Grid>
-
-                            <TextBlock Text="Configuraciones INI (Opcional)" Style="{StaticResource H3}" Margin="0,10,0,6" Visibility="{Binding ExportHasIniSettings, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                            <TextBlock Text="Puedes editar los valores del emulador antes de exportar." Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,12" Visibility="{Binding ExportHasIniSettings, Converter={StaticResource BoolToVisibilityConverter}}"/>
-
-                            <ItemsControl ItemsSource="{Binding ExportIniVariables}" Visibility="{Binding ExportHasIniSettings, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <TextBlock Text="INI Settings" Style="{StaticResource CaptionBold}" Margin="0,0,0,4" Visibility="{Binding HasExportIniVariables, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusMd}" Padding="12,8" Margin="0,0,0,16"
+                            BorderThickness="1" BorderBrush="{StaticResource SubtleBorderBrush}" MaxHeight="150"
+                            Visibility="{Binding HasExportIniVariables, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding ExportIniVariables}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Grid Margin="0,0,0,8">
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="150"/>
-                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="2*"/>
+                                                <ColumnDefinition Width="3*"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="{Binding Key}" VerticalAlignment="Center" FontWeight="SemiBold"/>
-                                            <TextBox Grid.Column="1" Style="{StaticResource DarkTextBox}" Text="{Binding Value, Mode=TwoWay}"/>
+                                            <TextBlock Grid.Column="0" Text="{Binding Key}" VerticalAlignment="Center" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                            <TextBox Grid.Column="1" Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource DarkTextBox}"/>
                                         </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                        </StackPanel>
-                    </ScrollViewer>
+                        </ScrollViewer>
+                    </Border>
 
-                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                         <Button Content="{DynamicResource String_Cancel}" Style="{StaticResource SecondaryButton}" Padding="14,8" Margin="0,0,10,0" Command="{Binding CloseExportModalCommand}"/>
-                        <Button Content="Empaquetar" Style="{StaticResource PrimaryButton}" Padding="16,8" Command="{Binding ExportInstanceConfirmCommand}" IsEnabled="{Binding IsProcessing, Converter={StaticResource InverseBoolConverter}}"/>
+                        <Button Content="{DynamicResource String_ExportInstanceBtn}" Style="{StaticResource PrimaryButton}" Padding="16,8" Command="{Binding ConfirmExportInstanceCommand}"/>
                     </StackPanel>
-                </Grid>
+                </StackPanel>
+            </Border>
+        </controls:ModalOverlay>
+        <controls:ModalOverlay IsOpen="{Binding IsReFixConfigModalOpen}">
+            <Border Background="{StaticResource SurfaceCardBrush}" 
+                    BorderBrush="{StaticResource StrongBorderBrush}" BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusLg}" Padding="24" Width="400"
+                    VerticalAlignment="Center" HorizontalAlignment="Center">
+                <StackPanel>
+                    <TextBlock Text="{DynamicResource String_ConfigureReFix}" Style="{StaticResource H2}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{DynamicResource String_ConfigureReFixDesc}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap" Margin="0,0,0,16"/>
+
+                    <TextBlock Text="{DynamicResource String_Version}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                    <ComboBox ItemsSource="{Binding AvailableReFixVersions}" SelectedItem="{Binding SelectedReFixVersion}" Margin="0,0,0,12" DisplayMemberPath="Version" Style="{StaticResource DarkComboBox}"/>
+                    
+                    <CheckBox Content="{DynamicResource String_GroupUpdates}" Style="{StaticResource DarkCheckBox}" IsChecked="{Binding ReFixGroupUpdatesEnabled}" Margin="0,0,0,18"/>
+                    <TextBlock Text="{DynamicResource String_GroupUpdatesDesc}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap" Margin="0,-10,0,18"/>
+
+                    <CheckBox Content="{DynamicResource String_UseVersionDeploy}" Style="{StaticResource DarkCheckBox}" IsChecked="{Binding ReFixUseVersionDeployScriptEnabled}" Margin="0,0,0,18"/>
+                    <TextBlock Text="{DynamicResource String_UseVersionDeployDesc}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap" Margin="0,-10,0,18"/>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="{DynamicResource String_Cancel}" Style="{StaticResource SecondaryButton}" Padding="14,8" Margin="0,0,10,0" Command="{Binding CloseReFixConfigModalCommand}"/>
+                        <Button Content="{DynamicResource String_Apply}" Style="{StaticResource PrimaryButton}" Padding="16,8" Command="{Binding ApplyReFixConfigCommand}"/>
+                    </StackPanel>
+                </StackPanel>
             </Border>
         </controls:ModalOverlay>
     </Grid>
