@@ -36,7 +36,7 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
     private readonly ISteamStatusService? _steamStatusService;
     private readonly INotificationService? _notificationService;
     private readonly ILocalizationService? _localizationService;
-    private readonly BlueStar.Infrastructure.Storage.AppSettingsService _appSettingsService;
+    private readonly BlueStar.Infrastructure.Storage.AppSettingsService? _appSettingsService;
     private readonly ILogger<LibraryViewModel> _logger;
     private readonly SynchronizationContext _uiContext;
     private readonly CancellationTokenSource _cts = new();
@@ -325,7 +325,7 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
         IEngineDetector engineDetector,
         IGameLauncher gameLauncher,
         ILogger<LibraryViewModel> logger,
-        BlueStar.Infrastructure.Storage.AppSettingsService appSettingsService,
+        BlueStar.Infrastructure.Storage.AppSettingsService? appSettingsService = null,
         IMetadataProvider? metadataProvider = null,
         ITagsService? tagsService = null,
         IDepotBoxApiClient? depotBoxApiClient = null,
@@ -349,7 +349,10 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
         _localizationService = localizationService;
         _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
-        ColumnCount = _appSettingsService.InstancesColumnCount;
+        if (_appSettingsService != null)
+        {
+            ColumnCount = _appSettingsService.InstancesColumnCount;
+        }
 
         if (_localizationService != null)
         {
@@ -1619,6 +1622,7 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
                 InstallPath = folder,
                 ExecutablePath = exe,
                 Engine = engine,
+                Origin = InstanceOrigin.ImportedFolder,
                 Status = File.Exists(exe) ? InstanceStatus.Ready : InstanceStatus.NotInstalled
             };
 
@@ -1801,6 +1805,8 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void ManageInstance(object? item)
     {
+        if (IsSelectionModeActive) return;
+
         var instance = item is InstanceCardItem card ? card.Instance : item as GameInstance;
         if (instance != null)
         {

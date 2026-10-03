@@ -261,4 +261,30 @@ public class LibrarySelectionViewModelTests
         Assert.Equal(0, vm.SelectedInstancesCount);
         Assert.False(vm.HasSelectedInstances);
     }
+
+    [Fact]
+    public void ManageInstance_AllowedInNormalMode_BlockedInSelectionMode()
+    {
+        var (vm, _, inst1, _) = CreateTestSetup();
+        GameInstance? requestedInstance = null;
+        vm.OnManageInstanceRequested = inst => requestedInstance = inst;
+
+        var card1 = vm.FilteredInstances.First(c => c.Id == inst1.Id);
+
+        // 1. In Normal Mode: ManageInstance executes and requests detail navigation
+        vm.ManageInstanceCommand.Execute(card1);
+        Assert.NotNull(requestedInstance);
+        Assert.Equal(inst1.Id, requestedInstance.Id);
+
+        // Reset
+        requestedInstance = null;
+
+        // 2. In Selection Mode: ManageInstance is blocked and does NOT open the instance
+        vm.ToggleSelectionModeCommand.Execute(null);
+        Assert.True(vm.IsSelectionModeActive);
+
+        vm.ManageInstanceCommand.Execute(card1);
+        Assert.Null(requestedInstance);
+    }
 }
+

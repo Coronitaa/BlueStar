@@ -483,7 +483,7 @@ public partial class HomeViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public void ToggleImportMenu()
     {
-        if (!IsImportMenuOpen && (DateTime.Now - _lastImportMenuCloseTime).TotalMilliseconds < 200) return;
+        if (!IsImportMenuOpen && (DateTime.Now - _lastImportMenuCloseTime).TotalMilliseconds < 250) return;
         IsImportMenuOpen = !IsImportMenuOpen;
     }
 
@@ -1230,7 +1230,8 @@ public partial class HomeViewModel : ObservableObject, IDisposable
                 ExecutablePath = exe,
                 Status = File.Exists(exe) ? InstanceStatus.Ready : InstanceStatus.NotInstalled,
                 Metadata = meta,
-                Engine = engine
+                Engine = engine,
+                Origin = InstanceOrigin.Steam
             };
 
             var created = await _instanceManager.CreateAsync(instance, CancellationToken.None).ConfigureAwait(true);
@@ -1723,7 +1724,8 @@ public partial class HomeViewModel : ObservableObject, IDisposable
                 ExecutablePath = File.Exists(FolderExecutablePath) ? FolderExecutablePath : null,
                 Engine = FolderEngine,
                 Status = File.Exists(FolderExecutablePath) ? InstanceStatus.Ready : InstanceStatus.NotInstalled,
-                Metadata = meta
+                Metadata = meta,
+                Origin = InstanceOrigin.ImportedFolder
             };
 
             var created = await _instanceManager.CreateAsync(newInstance, CancellationToken.None).ConfigureAwait(true);

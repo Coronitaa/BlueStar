@@ -267,12 +267,14 @@ public record GameInstance
     /// <summary>
     /// Gets whether this instance was imported from a local Steam installation.
     /// </summary>
-    public bool IsSteamGame => Origin == InstanceOrigin.Steam;
+    public bool IsSteamGame => Origin == InstanceOrigin.Steam ||
+        (!string.IsNullOrEmpty(InstallPath) && (InstallPath.Contains(@"steamapps\common", StringComparison.OrdinalIgnoreCase) || InstallPath.Contains("steamapps/common", StringComparison.OrdinalIgnoreCase)));
 
     /// <summary>
     /// Gets whether this instance was imported from a folder.
     /// </summary>
-    public bool IsImportedFolder => Origin == InstanceOrigin.ImportedFolder;
+    public bool IsImportedFolder => Origin == InstanceOrigin.ImportedFolder ||
+        (Origin == InstanceOrigin.DepotBox && Depots.Count == 0 && string.IsNullOrEmpty(SourceArchivePath) && !IsSteamGame);
 
     /// <summary>
     /// Gets whether depot files and manifest downloads can be managed for this instance.

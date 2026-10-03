@@ -972,3 +972,47 @@ public sealed class EqualsToBoolConverter : IMultiValueConverter
         => throw new NotSupportedException();
 }
 
+/// <summary>
+/// Formats LastPlayedAt and TotalPlayTime for game cards into a single clean line:
+/// e.g. "Today • 2h 15m", "Yesterday • 45m", "12/03/2026 • 5h", or "Never played • 0h".
+/// </summary>
+public sealed class InstancePlayStatsConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is not GameInstance inst) return string.Empty;
+
+        string timeStr;
+        if (inst.TotalPlayTime > TimeSpan.Zero)
+        {
+            if (inst.TotalPlayTime.TotalHours >= 1)
+                timeStr = $"{inst.TotalPlayTime.TotalHours:F0}h {inst.TotalPlayTime.Minutes}m";
+            else
+                timeStr = $"{inst.TotalPlayTime.Minutes}m";
+        }
+        else
+        {
+            timeStr = "0h";
+        }
+
+        if (inst.LastPlayedAt.HasValue && inst.LastPlayedAt.Value != DateTimeOffset.MinValue)
+        {
+            var local = inst.LastPlayedAt.Value.ToLocalTime();
+            var diff = (DateTimeOffset.Now.Date - local.Date).TotalDays;
+            string dateStr;
+            if (diff == 0) dateStr = Application.Current?.TryFindResource("String_Today") as string ?? "Today";
+            else if (diff == 1) dateStr = Application.Current?.TryFindResource("String_Yesterday") as string ?? "Yesterday";
+            else if (diff < 7) dateStr = $"{(int)diff}d ago";
+            else dateStr = local.ToString("d", culture);
+
+            return $"{dateStr} • {timeStr}";
+        }
+
+        var never = Application.Current?.TryFindResource("String_NeverPlayed") as string ?? "Never played";
+        return $"{never} • {timeStr}";
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+

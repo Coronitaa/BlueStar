@@ -229,6 +229,9 @@
     <sys:String x:Key="String_ImportZipArchiveBtn">Importar Archivo ZIP</sys:String>
     <sys:String x:Key="String_AddGameFolderBtn">Añadir Carpeta de Juego</sys:String>
     <sys:String x:Key="String_ExploreCatalogBtn">Explorar Catálogo</sys:String>
+    <sys:String x:Key="String_PlayTooltip">Jugar</sys:String>
+    <sys:String x:Key="String_OpenFolderTooltip">Abrir carpeta del juego</sys:String>
+    <sys:String x:Key="String_ManageInstanceTooltip">Administrar juego</sys:String>
 
     <!-- ═══ DOWNLOADS VIEW ═══ -->
     <sys:String x:Key="String_DownloadsTitle">Descargas</sys:String>
@@ -258,6 +261,9 @@
     <!-- ═══ INSTANCE DETAIL VIEW ═══ -->
     <sys:String x:Key="String_BackToInstances">← Volver a Mis Juegos</sys:String>
     <sys:String x:Key="String_Playtime">Tiempo jugado: {0}</sys:String>
+    <sys:String x:Key="String_NeverPlayed">Sin jugar</sys:String>
+    <sys:String x:Key="String_Today">Hoy</sys:String>
+    <sys:String x:Key="String_Yesterday">Ayer</sys:String>
     <sys:String x:Key="String_OpenGameDirTooltip">Abrir Carpeta del Juego</sys:String>
     <sys:String x:Key="String_CreateShortcutsTooltip">Crear Accesos Directos (Escritorio / Steam)</sys:String>
     <sys:String x:Key="String_PlayGame">▶ Jugar</sys:String>

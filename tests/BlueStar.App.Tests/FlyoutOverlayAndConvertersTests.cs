@@ -146,4 +146,37 @@ public class FlyoutOverlayAndConvertersTests
         Assert.Throws<NotSupportedException>(() =>
             converter.ConvertBack(true, new[] { typeof(object), typeof(object) }, null!, CultureInfo.InvariantCulture));
     }
+
+    [Fact]
+    public void InstancePlayStatsConverter_FormatsNeverPlayedAndActivePlaytime()
+    {
+        var converter = new InstancePlayStatsConverter();
+
+        // Null / invalid value
+        Assert.Equal(string.Empty, converter.Convert(null!, typeof(string), null!, CultureInfo.InvariantCulture));
+
+        // Never played
+        var instanceNever = new BlueStar.Core.Models.GameInstance
+        {
+            Name = "Unplayed Game",
+            InstallPath = @"C:\Games\Unplayed",
+            TotalPlayTime = TimeSpan.Zero,
+            LastPlayedAt = null
+        };
+        var resNever = converter.Convert(instanceNever, typeof(string), null!, CultureInfo.InvariantCulture)?.ToString();
+        Assert.NotNull(resNever);
+        Assert.Contains("0h", resNever);
+
+        // Played today with 2h 15m
+        var instanceToday = new BlueStar.Core.Models.GameInstance
+        {
+            Name = "Played Game",
+            InstallPath = @"C:\Games\Played",
+            TotalPlayTime = TimeSpan.FromMinutes(135),
+            LastPlayedAt = DateTimeOffset.Now
+        };
+        var resToday = converter.Convert(instanceToday, typeof(string), null!, CultureInfo.InvariantCulture)?.ToString();
+        Assert.NotNull(resToday);
+        Assert.Contains("2h 15m", resToday);
+    }
 }

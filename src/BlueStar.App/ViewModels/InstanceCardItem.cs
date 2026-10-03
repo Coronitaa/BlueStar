@@ -23,8 +23,8 @@ public partial class InstanceCardItem : ObservableObject
 
     public bool IsDepotBoxBacked => Instance.Origin == InstanceOrigin.DepotBox || Instance.IsDepotBoxAssociated;
     public bool IsNotInstalled => Instance.Status == InstanceStatus.NotInstalled && Instance.Origin != InstanceOrigin.Steam;
-    public bool IsSteamGame => Instance.Origin == InstanceOrigin.Steam;
-    public bool IsImportedFolder => Instance.Origin == InstanceOrigin.ImportedFolder;
+    public bool IsSteamGame => Instance.IsSteamGame;
+    public bool IsImportedFolder => Instance.IsImportedFolder;
     public bool HasUpdateAvailable => Instance.HasUpdateAvailable;
     public string? UpdateDescription => Instance.UpdateDescription;
 

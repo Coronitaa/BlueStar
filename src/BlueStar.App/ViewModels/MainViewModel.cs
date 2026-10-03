@@ -620,6 +620,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
             return new NavigationEntry(SelectedNavigation, param, categoryId, tab, scrollOffset);
         }
 
+        if (!string.IsNullOrWhiteSpace(_currentlyLoadedPage))
+        {
+            return new NavigationEntry(_currentlyLoadedPage, param, categoryId, tab, scrollOffset);
+        }
+
         return null;
     }
 
@@ -713,11 +718,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (entry.Page == "InstanceDetail" && entry.Parameter is GameInstance inst)
         {
             SelectedRecentInstanceId = inst.Id;
-            SelectedNavigation = "Library";
+            SelectedNavigation = null;
             CurrentInstanceTitle = inst.Name;
+            _currentlyLoadedPage = "InstanceDetail";
             var view = new InstanceDetailView();
             var vm = App.Services.GetRequiredService<InstanceDetailViewModel>();
-            vm.OnNavigateBack = () => Navigate("Library");
+            vm.OnNavigateBack = () =>
+            {
+                if (CanGoBack) GoBack();
+                else Navigate("Library");
+            };
+            vm.OnFindSimilarRequested = OpenSimilarInExplore;
+            vm.OnOpenTagRequested = OpenTagInExplore;
             view.DataContext = vm;
             _ = vm.LoadInstanceAsync(inst, autoCheckDepotUpdates: false);
             if (!string.IsNullOrWhiteSpace(entry.Tab))
@@ -844,13 +856,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public void OpenInstanceDetail(GameInstance instance, bool autoCheckUpdates)
     {
         if (instance == null) return;
+        PushNavigation("InstanceDetail", instance);
         SelectedRecentInstanceId = instance.Id;
         CurrentInstanceTitle = instance.Name;
         SelectedNavigation = null;
-        PushNavigation("InstanceDetail", instance);
+        _currentlyLoadedPage = "InstanceDetail";
         var view = new InstanceDetailView();
         var vm = App.Services.GetRequiredService<InstanceDetailViewModel>();
-        vm.OnNavigateBack = () => Navigate("Library");
+        vm.OnNavigateBack = () =>
+        {
+            if (CanGoBack) GoBack();
+            else Navigate("Library");
+        };
         vm.OnFindSimilarRequested = OpenSimilarInExplore;
         vm.OnOpenTagRequested = OpenTagInExplore;
         view.DataContext = vm;
@@ -938,7 +955,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public void ToggleSidebarImportMenu()
     {
-        if (!IsSidebarImportMenuOpen && (DateTime.Now - _lastSidebarImportMenuCloseTime).TotalMilliseconds < 200) return;
+        if (!IsSidebarImportMenuOpen && (DateTime.Now - _lastSidebarImportMenuCloseTime).TotalMilliseconds < 250) return;
         IsSidebarImportMenuOpen = !IsSidebarImportMenuOpen;
     }
 

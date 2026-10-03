@@ -217,14 +217,13 @@
 
                             <!-- 5. "+" Add Instance Button with Right Flyout Popup -->
                             <Grid Margin="0,2">
-                                <ToggleButton x:Name="SidebarImportToggle"
-                                              Width="40" Height="40"
-                                              Style="{StaticResource GhostToggleButton}"
-                                              IsChecked="{Binding IsSidebarImportMenuOpen, Mode=TwoWay}"
-                                              Command="{Binding ToggleSidebarImportMenuCommand}"
-                                              ToolTip="{DynamicResource String_ImportGame}"
-                                              Padding="0"
-                                              HorizontalAlignment="Center">
+                                <Button x:Name="SidebarImportToggle"
+                                        Width="40" Height="40"
+                                        Style="{StaticResource GhostButton}"
+                                        Command="{Binding ToggleSidebarImportMenuCommand}"
+                                        ToolTip="{DynamicResource String_ImportGame}"
+                                        Padding="0"
+                                        HorizontalAlignment="Center">
                                     <Border Background="{StaticResource SurfaceCardBrush}"
                                             BorderBrush="{StaticResource SubtleBorderBrush}"
                                             BorderThickness="1"
@@ -242,7 +241,7 @@
                                             <Path.Style>
                                                 <Style TargetType="Path">
                                                     <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsChecked, ElementName=SidebarImportToggle}" Value="True">
+                                                        <DataTrigger Binding="{Binding IsSidebarImportMenuOpen}" Value="True">
                                                             <DataTrigger.EnterActions>
                                                                 <BeginStoryboard>
                                                                     <Storyboard>
@@ -265,7 +264,7 @@
                                             </Path.Style>
                                         </Path>
                                     </Border>
-                                </ToggleButton>
+                                </Button>
                                 <!-- Right-Opening Popup Flyout -->
                                 <Popup x:Name="SidebarImportPopup"
                                        IsOpen="{Binding IsSidebarImportMenuOpen, Mode=TwoWay}"

@@ -22,6 +22,7 @@
     <conv:PercentToAngleConverter x:Key="PercentToAngleConverter"/>
     <conv:DlcUnlockButtonTextConverter x:Key="DlcUnlockButtonTextConverter"/>
     <conv:PlayTimeToFormattedConverter x:Key="PlayTimeToFormattedConverter"/>
+    <conv:InstancePlayStatsConverter x:Key="InstancePlayStatsConverter"/>
     <conv:NotificationTypeToBrushConverter x:Key="NotificationTypeToBrushConverter"/>
     <conv:NotificationTypeToBgBrushConverter x:Key="NotificationTypeToBgBrushConverter"/>
     <conv:NotificationTypeToIconTextConverter x:Key="NotificationTypeToIconTextConverter"/>

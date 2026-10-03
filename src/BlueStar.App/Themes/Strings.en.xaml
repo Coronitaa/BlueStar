@@ -229,6 +229,9 @@
     <sys:String x:Key="String_ImportZipArchiveBtn">Import ZIP Archive</sys:String>
     <sys:String x:Key="String_AddGameFolderBtn">Add Game Folder</sys:String>
     <sys:String x:Key="String_ExploreCatalogBtn">Explore Catalog</sys:String>
+    <sys:String x:Key="String_PlayTooltip">Play game</sys:String>
+    <sys:String x:Key="String_OpenFolderTooltip">Open game folder</sys:String>
+    <sys:String x:Key="String_ManageInstanceTooltip">Manage game instance</sys:String>
 
     <!-- ═══ DOWNLOADS VIEW ═══ -->
     <sys:String x:Key="String_DownloadsTitle">Downloads</sys:String>
@@ -258,6 +261,9 @@
     <!-- ═══ INSTANCE DETAIL VIEW ═══ -->
     <sys:String x:Key="String_BackToInstances">← Back to Instances</sys:String>
     <sys:String x:Key="String_Playtime">Playtime: {0}</sys:String>
+    <sys:String x:Key="String_NeverPlayed">Never played</sys:String>
+    <sys:String x:Key="String_Today">Today</sys:String>
+    <sys:String x:Key="String_Yesterday">Yesterday</sys:String>
     <sys:String x:Key="String_OpenGameDirTooltip">Open Game Directory</sys:String>
     <sys:String x:Key="String_CreateShortcutsTooltip">Create Desktop / Steam Shortcuts</sys:String>
     <sys:String x:Key="String_PlayGame">▶ Play Game</sys:String>
