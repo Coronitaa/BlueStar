@@ -66,9 +66,9 @@ public class TagsServiceTests
     }
 
     [Fact]
-    public void GetInstanceDetailHeroTags_IncludesOriginEngineStatusAndDlcs()
+    public void GetInstanceDetailHeroTags_ExcludesReadyNotInstalledAndRunningTags()
     {
-        var instance = new GameInstance
+        var readyInstance = new GameInstance
         {
             Name = "Hollow Knight",
             InstallPath = @"C:\Games\HollowKnight",
@@ -78,10 +78,23 @@ public class TagsServiceTests
             Dlcs = [new DlcInfo { AppId = 1, Name = "Godmaster", Depots = [], IsInstalled = true }]
         };
 
-        var heroTags = _tagsService.GetInstanceDetailHeroTags(instance, hasUpdateAvailable: false);
+        var heroTags = _tagsService.GetInstanceDetailHeroTags(readyInstance, hasUpdateAvailable: false);
 
         heroTags.Should().Contain(t => t.Text.Contains("Unity") && t.Type == TagType.Engine);
-        heroTags.Should().Contain(t => t.Text == "Ready" && t.Type == TagType.Status);
+        heroTags.Should().NotContain(t => t.Text == "Ready" && t.Type == TagType.Status);
+        heroTags.Should().NotContain(t => t.Type == TagType.Status);
         heroTags.Should().Contain(t => t.Text.Contains("1 DLC") && t.Type == TagType.DlcCount);
+
+        var runningInstance = readyInstance with { Status = InstanceStatus.Running };
+        var runningTags = _tagsService.GetInstanceTags(runningInstance);
+        runningTags.Should().NotContain(t => t.Text == "Running");
+
+        var notInstalledInstance = readyInstance with { Status = InstanceStatus.NotInstalled };
+        var notInstalledTags = _tagsService.GetInstanceTags(notInstalledInstance);
+        notInstalledTags.Should().NotContain(t => t.Text == "Not Installed");
+
+        var downloadingInstance = readyInstance with { Status = InstanceStatus.Downloading };
+        var downloadingTags = _tagsService.GetInstanceTags(downloadingInstance);
+        downloadingTags.Should().Contain(t => t.Text == "Downloading" && t.Type == TagType.Status);
     }
 }

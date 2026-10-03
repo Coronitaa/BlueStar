@@ -697,21 +697,11 @@
                                             <!-- Debug & Diagnostics System -->
                                             <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="14,12" Margin="0,0,0,10">
                                                 <StackPanel>
-                                                    <Grid Margin="0,0,0,10">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*"/>
-                                                            <ColumnDefinition Width="Auto"/>
-                                                        </Grid.ColumnDefinitions>
-                                                        <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
-                                                            <TextBlock Text="{DynamicResource String_DebugSystemLabel}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
-                                                            <TextBlock Text="{DynamicResource String_DebugSystemDesc}"
-                                                                       Style="{StaticResource Muted}" TextWrapping="Wrap"/>
-                                                        </StackPanel>
-                                                        <CheckBox Grid.Column="1"
-                                                                  IsChecked="{Binding EnableDebugSystem, Mode=TwoWay}"
-                                                                  Style="{StaticResource DarkCheckBox}"
-                                                                  VerticalAlignment="Center"/>
-                                                    </Grid>
+                                                    <StackPanel Margin="0,0,0,10">
+                                                        <TextBlock Text="{DynamicResource String_DebugSystemLabel}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
+                                                        <TextBlock Text="{DynamicResource String_DebugSystemDesc}"
+                                                                   Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                                                    </StackPanel>
 
                                                     <!-- Debug Quick Actions Toolbar -->
                                                     <WrapPanel Orientation="Horizontal" Margin="0,2,0,0">

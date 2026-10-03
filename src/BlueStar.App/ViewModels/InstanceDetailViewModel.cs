@@ -526,14 +526,26 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(IsDepotBoxInstance))]
     [NotifyPropertyChangedFor(nameof(IsSteamInstance))]
     [NotifyPropertyChangedFor(nameof(IsImportedUnassociatedInstance))]
+    [NotifyPropertyChangedFor(nameof(IsFolderWithoutSteamAssociation))]
     [NotifyPropertyChangedFor(nameof(IsDepotBoxTabsVisible))]
+    [NotifyPropertyChangedFor(nameof(IsVersionsTabVisible))]
+    [NotifyPropertyChangedFor(nameof(IsPrerequisitesTabVisible))]
+    [NotifyPropertyChangedFor(nameof(IsDetectedVersionVisible))]
+    [NotifyPropertyChangedFor(nameof(ForceInstallAllDlcs))]
+    [NotifyPropertyChangedFor(nameof(CanDownloadAndInstallDlcs))]
     private GameInstance _instance = null!;
 
     public IReadOnlyList<GameTag> HeroTags => _tagsService?.GetInstanceDetailHeroTags(Instance, HasGameUpdateAvailable) ?? [];
     public bool IsDepotBoxInstance => Instance != null && (Instance.Origin == InstanceOrigin.DepotBox || Instance.IsDepotBoxAssociated);
     public bool IsSteamInstance => Instance != null && Instance.Origin == InstanceOrigin.Steam;
     public bool IsImportedUnassociatedInstance => Instance != null && Instance.Origin == InstanceOrigin.ImportedFolder && !Instance.IsDepotBoxAssociated;
-    public bool IsDepotBoxTabsVisible => Instance != null && Instance.CanManageDepots;
+    public bool IsFolderWithoutSteamAssociation => Instance != null &&
+        (Instance.Origin == InstanceOrigin.ImportedFolder || Instance.IsImportedFolder) &&
+        (Instance.AppId == 0 || Instance.AppId == 480);
+    public bool IsVersionsTabVisible => Instance != null && Instance.CanManageDepots && !IsFolderWithoutSteamAssociation;
+    public bool IsDepotBoxTabsVisible => IsVersionsTabVisible;
+    public bool IsPrerequisitesTabVisible => Instance != null && !IsFolderWithoutSteamAssociation;
+    public bool IsDetectedVersionVisible => Instance != null && !IsFolderWithoutSteamAssociation;
 
 
     // ── Association Modal State (ImportedFolder -> DepotBox) ──
@@ -1255,6 +1267,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
             if (value && !_appSettings.HideForceDlcWarning)
             {
+                DoNotShowForceAllDlcsWarning = false;
                 IsForceAllDlcsWarningOpen = true;
                 return;
             }
@@ -1269,6 +1282,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         Instance = Instance with { ForceInstallAllDlcs = value };
         _ = _instanceManager.UpdateAsync(Instance, CancellationToken.None);
         OnPropertyChanged(nameof(ForceInstallAllDlcs));
+        OnPropertyChanged(nameof(CanDownloadAndInstallDlcs));
+        OnPropertyChanged(nameof(DlcActionButtonText));
+        DownloadAndInstallDlcsCommand.NotifyCanExecuteChanged();
     }
 
     [RelayCommand]
@@ -1287,6 +1303,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     {
         IsForceAllDlcsWarningOpen = false;
         OnPropertyChanged(nameof(ForceInstallAllDlcs));
+        OnPropertyChanged(nameof(CanDownloadAndInstallDlcs));
+        OnPropertyChanged(nameof(DlcActionButtonText));
+        DownloadAndInstallDlcsCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>The method the person picked while no DLC was selected, pending confirmation.</summary>
@@ -2846,7 +2865,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 _ = CheckWorkshopSupportAsync();
             }
             _ = LoadEmulatorsAsync();
-            _ = ScanPrerequisitesAsync();
+            if (IsPrerequisitesTabVisible)
+            {
+                _ = ScanPrerequisitesAsync();
+            }
 
             if (Dlcs.Count > 0)
             {
@@ -2982,7 +3004,18 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             }
 
             OnPropertyChanged(nameof(IsModsTabVisible));
+            OnPropertyChanged(nameof(IsVersionsTabVisible));
+            OnPropertyChanged(nameof(IsPrerequisitesTabVisible));
+            OnPropertyChanged(nameof(IsDetectedVersionVisible));
             if (!IsModsTabVisible && SelectedTab == "Mods")
+            {
+                SelectedTab = "Overview";
+            }
+            if (!IsVersionsTabVisible && SelectedTab == "Files")
+            {
+                SelectedTab = "Overview";
+            }
+            if (!IsPrerequisitesTabVisible && SelectedTab == "Prerequisites")
             {
                 SelectedTab = "Overview";
             }
@@ -4273,22 +4306,45 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>Opens the game's Steam store page.</summary>
+    [ObservableProperty]
+    private bool _isStorePageModalOpen;
+
+    [ObservableProperty]
+    private string? _storePageUrl;
+
+    /// <summary>Opens the game's Steam store page inside the app modal.</summary>
     [RelayCommand]
     public void OpenStorePage()
+    {
+        if (Instance == null || Instance.AppId == 0) return;
+        StorePageUrl = $"https://store.steampowered.com/app/{Instance.AppId}";
+        IsStorePageModalOpen = true;
+    }
+
+    /// <summary>Closes the Steam store page modal.</summary>
+    [RelayCommand]
+    public void CloseStorePage()
+    {
+        IsStorePageModalOpen = false;
+        StorePageUrl = null;
+    }
+
+    /// <summary>Opens the game on SteamDB in the external browser.</summary>
+    [RelayCommand]
+    public void OpenSteamDb()
     {
         if (Instance == null || Instance.AppId == 0) return;
         try
         {
             Process.Start(new ProcessStartInfo
             {
-                FileName = $"https://store.steampowered.com/app/{Instance.AppId}",
+                FileName = $"https://steamdb.info/app/{Instance.AppId}/",
                 UseShellExecute = true
             });
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Could not open the store page for AppId {AppId}", Instance?.AppId);
+            _logger.LogWarning(ex, "Could not open SteamDB for AppId {AppId}", Instance?.AppId);
         }
     }
 
@@ -5043,7 +5099,13 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    public void SwitchTab(string tabName) => SelectedTab = tabName;
+    public void SwitchTab(string tabName)
+    {
+        if (tabName == "Files" && !IsVersionsTabVisible) return;
+        if (tabName == "Prerequisites" && !IsPrerequisitesTabVisible) return;
+        if (tabName == "Mods" && !IsModsTabVisible) return;
+        SelectedTab = tabName;
+    }
 
     // ── Launch Game Command ──
     [RelayCommand]
@@ -7242,12 +7304,17 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     }
 
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanDownloadAndInstallDlcs))]
     public async Task DownloadAndInstallDlcsAsync()
     {
         if (Instance is null) return;
 
         var selectedDlcs = Dlcs.Where(d => d.IsSelected).ToList();
+        if (Instance.ForceInstallAllDlcs && Dlcs.Count > 0)
+        {
+            selectedDlcs = Dlcs.ToList();
+            foreach (var item in Dlcs) item.IsSelected = true;
+        }
         
         // If they didn't explicitly select DLCs, but they checked "Force Install All DLCs", we can proceed.
         if (selectedDlcs.Count == 0 && !Instance.ForceInstallAllDlcs)
@@ -7719,6 +7786,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public void FindSimilarGames()
     {
+        IsStorePageModalOpen = false;
         if (Instance == null || Instance.AppId == 0) return;
 
         var candidates = new List<string>();

@@ -819,7 +819,7 @@
 
                         <DataTemplate x:Key="InstanceCardTemplate">
                             <Viewbox Stretch="Uniform" HorizontalAlignment="Stretch" VerticalAlignment="Top" Margin="8,0,8,16">
-                                  <Border Width="360" Height="346" Padding="0" ClipToBounds="True" Cursor="Hand">
+                                  <Border Width="360" Height="308" Padding="0" ClipToBounds="True" Cursor="Hand">
                                 <Border.Style>
                                     <Style TargetType="Border" BasedOn="{StaticResource InteractiveCard}">
                                         <Style.Triggers>
@@ -960,8 +960,9 @@
                                                    Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,2,0,0"/>
                                     </StackPanel>
 
-                                    <!-- Dynamic Badges from ITagsService -->
-                                    <ItemsControl Grid.Row="2" ItemsSource="{Binding Tags}" Margin="16,8,16,0">
+                                    <!-- Dynamic Badges from ITagsService: Only show first row -->
+                                    <ItemsControl Grid.Row="2" ItemsSource="{Binding Tags}" Margin="16,8,16,0"
+                                                  MaxHeight="24" ClipToBounds="True">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
                                                 <WrapPanel Orientation="Horizontal"/>
@@ -986,43 +987,9 @@
                                     </ItemsControl>
 
                                     <!-- Action Buttons -->
-                                    <Grid Grid.Row="4" Margin="16,0,16,16">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="6"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <!-- Update Available (DepotBox) Button — only shown when update is available -->
-                                        <Button Grid.Column="0"
-                                                ToolTip="Update Available (DepotBox)"
-                                                Visibility="{Binding HasUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                Command="{Binding DataContext.CheckDepotBoxUpdatesCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                CommandParameter="{Binding}">
-                                            <Button.Style>
-                                                <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
-                                                    <Setter Property="BorderBrush" Value="#F59E0B"/>
-                                                    <Setter Property="BorderThickness" Value="1"/>
-                                                    <Setter Property="Background" Value="#26F59E0B"/>
-                                                </Style>
-                                            </Button.Style>
-                                            <Path Data="{StaticResource IconDownload}" Fill="#F59E0B"
-                                                  Stretch="Uniform" Width="13" Height="13"/>
-                                        </Button>
-
-                                        <!-- Open Game Folder Button -->
-                                        <Button Grid.Column="2" Style="{StaticResource IconButton}"
-                                                ToolTip="{DynamicResource String_OpenFolderTooltip}"
-                                                Command="{Binding DataContext.OpenFolderCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                CommandParameter="{Binding}">
-                                            <Path Data="{StaticResource IconFolder}" Fill="{StaticResource SecondaryTextBrush}"
-                                                  Stretch="Uniform" Width="14" Height="14"/>
-                                        </Button>
-
-                                        <!-- Play or Install Button -->
-                                        <Button Grid.Column="4"
+                                    <DockPanel Grid.Row="4" Margin="16,0,16,16" LastChildFill="False">
+                                        <!-- Play or Install Button (Right-aligned) -->
+                                        <Button DockPanel.Dock="Right"
                                                 Padding="20,8"
                                                 Command="{Binding DataContext.PlayInstanceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding}"
@@ -1039,7 +1006,36 @@
                                                 </Style>
                                             </Button.Style>
                                         </Button>
-                                    </Grid>
+
+                                        <!-- Left Action Buttons (Update + Folder) -->
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <!-- Update Available (DepotBox) Button — only shown when update is available -->
+                                            <Button Margin="0,0,6,0"
+                                                    ToolTip="Update Available (DepotBox)"
+                                                    Visibility="{Binding HasUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                    Command="{Binding DataContext.CheckDepotBoxUpdatesCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
+                                                        <Setter Property="BorderBrush" Value="#F59E0B"/>
+                                                        <Setter Property="BorderThickness" Value="1"/>
+                                                        <Setter Property="Background" Value="#26F59E0B"/>
+                                                    </Style>
+                                                </Button.Style>
+                                                <Path Data="{StaticResource IconDownload}" Fill="#F59E0B"
+                                                      Stretch="Uniform" Width="13" Height="13"/>
+                                            </Button>
+
+                                            <!-- Open Game Folder Button -->
+                                            <Button Style="{StaticResource IconButton}"
+                                                    ToolTip="{DynamicResource String_OpenFolderTooltip}"
+                                                    Command="{Binding DataContext.OpenFolderCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}">
+                                                <Path Data="{StaticResource IconFolder}" Fill="{StaticResource SecondaryTextBrush}"
+                                                      Stretch="Uniform" Width="14" Height="14"/>
+                                            </Button>
+                                        </StackPanel>
+                                    </DockPanel>
                                 </Grid>
                             </Border>
                         </Viewbox>
@@ -1095,6 +1091,7 @@
         <!-- ═══ UNIFIED EXPANDABLE ADD INSTANCE MODAL OVERLAY ═══ -->
         <controls:ModalOverlay IsOpen="{Binding IsAddInstanceModalOpen}"
                                CloseCommand="{Binding CloseAddInstanceModalCommand}"
+                               CloseOnBackdropClick="True"
                                CloseOnEscape="True"
                                Panel.ZIndex="1000">
             <Border Background="{StaticResource SurfaceCardElevatedBrush}"
@@ -1164,7 +1161,7 @@
                         </StackPanel>
 
                         <!-- Close ✕ Button -->
-                        <Button Grid.Column="2" Content="✕" Style="{StaticResource GhostButton}"
+                        <Button Grid.Column="2" Content="✕" Style="{StaticResource ModalCloseButton}"
                                 Command="{Binding CloseAddInstanceModalCommand}"/>
                     </Grid>
 
@@ -1710,12 +1707,18 @@
                         <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="440">
                             <StackPanel>
                                 <!-- Large Drop Box when no folder selected -->
-                                <Border Background="{StaticResource SurfaceCardBrush}"
+                                <Border x:Name="LibraryFolderDropBox"
+                                        Background="{StaticResource SurfaceCardBrush}"
                                         BorderBrush="{StaticResource SubtleBorderBrush}"
                                         BorderThickness="2"
                                         CornerRadius="{StaticResource RadiusLg}"
                                         Padding="32,24"
                                         Margin="0,0,0,14"
+                                        AllowDrop="True"
+                                        Drop="FolderDropZone_Drop"
+                                        DragEnter="FolderDropZone_DragEnter"
+                                        DragOver="FolderDropZone_DragOver"
+                                        DragLeave="FolderDropZone_DragLeave"
                                         Visibility="{Binding FolderPath, Converter={StaticResource InverseNullToVisibilityConverter}}">
                                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <Border Background="{StaticResource SuccessBgBrush}"
@@ -1891,6 +1894,7 @@
         <!-- ═══ STEAM STORE SEARCH SUB-MODAL OVERLAY ═══ -->
         <controls:ModalOverlay IsOpen="{Binding IsSteamSearchModalOpen}"
                                CloseCommand="{Binding CloseSteamSearchModalCommand}"
+                               CloseOnBackdropClick="True"
                                CloseOnEscape="True"
                                Panel.ZIndex="1005">
             <Border Background="{StaticResource SurfaceCardElevatedBrush}"
@@ -1919,7 +1923,7 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="🔍 Search Game on Steam" Style="{StaticResource H3}"/>
-                        <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}" Command="{Binding CloseSteamSearchModalCommand}"/>
+                        <Button Grid.Column="1" Content="✕" Style="{StaticResource ModalCloseButton}" Command="{Binding CloseSteamSearchModalCommand}"/>
                     </Grid>
 
                     <!-- Search Input -->

@@ -240,6 +240,8 @@ public class ModalOverlay : ContentControl
                     overlay.ApplyTemplate();
                 }
 
+                overlay.SetHwndHostsVisibility(Visibility.Hidden);
+
                 if (overlay.IsLoaded)
                 {
                     // Dispatch to ensure the first layout pass has arranged the newly visible template
@@ -262,6 +264,7 @@ public class ModalOverlay : ContentControl
                 ActiveModals.Remove(overlay);
                 overlay._pendingOpenTransition = false;
                 overlay.IsHitTestVisible = false;
+                overlay.SetHwndHostsVisibility(Visibility.Hidden);
                 overlay.UpdateVisualState(useTransitions: overlay.IsLoaded);
             }
         }
@@ -273,6 +276,7 @@ public class ModalOverlay : ContentControl
         {
             Visibility = Visibility.Visible;
             IsHitTestVisible = true;
+            SetHwndHostsVisibility(Visibility.Visible);
             if (_backdrop != null)
             {
                 _backdrop.BeginAnimation(OpacityProperty, null);
@@ -295,6 +299,7 @@ public class ModalOverlay : ContentControl
         {
             Visibility = Visibility.Collapsed;
             IsHitTestVisible = false;
+            SetHwndHostsVisibility(Visibility.Hidden);
             if (_backdrop != null)
             {
                 _backdrop.BeginAnimation(OpacityProperty, null);
@@ -340,10 +345,21 @@ public class ModalOverlay : ContentControl
                 return;
             }
 
+            // Keep HwndHosts (e.g. WebView2) hidden during entrance transition so it doesn't punch through
+            SetHwndHostsVisibility(Visibility.Hidden);
+
             var duration = TimeSpan.FromMilliseconds(220); // DurationNormal
 
             var backdropAnim = new DoubleAnimation(1.0, duration) { EasingFunction = easeOut };
             var contentOpacityAnim = new DoubleAnimation(1.0, duration) { EasingFunction = easeOut };
+
+            contentOpacityAnim.Completed += (s, e) =>
+            {
+                if (currentToken == _animationToken && IsOpen)
+                {
+                    SetHwndHostsVisibility(Visibility.Visible);
+                }
+            };
 
             _backdrop.BeginAnimation(OpacityProperty, backdropAnim);
             _contentHolder.BeginAnimation(OpacityProperty, contentOpacityAnim);
@@ -371,6 +387,9 @@ public class ModalOverlay : ContentControl
         else
         {
             IsHitTestVisible = false;
+
+            // Immediately hide any hosted HWNDs (e.g. WebView2) so they don't linger or cut through the fade out
+            SetHwndHostsVisibility(Visibility.Hidden);
 
             if (!useTransitions)
             {
@@ -411,6 +430,34 @@ public class ModalOverlay : ContentControl
                     _scaleTransform.ScaleY = 1.0;
                 }
             }
+        }
+    }
+
+    private void SetHwndHostsVisibility(Visibility visibility)
+    {
+        if (_contentHolder == null) return;
+        var list = new List<System.Windows.Interop.HwndHost>();
+        FindHwndHosts(_contentHolder, list);
+        foreach (var host in list)
+        {
+            if (host.Visibility != visibility)
+            {
+                host.Visibility = visibility;
+            }
+        }
+    }
+
+    private static void FindHwndHosts(DependencyObject parent, List<System.Windows.Interop.HwndHost> results)
+    {
+        int count = VisualTreeHelper.GetChildrenCount(parent);
+        for (int i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is System.Windows.Interop.HwndHost host)
+            {
+                results.Add(host);
+            }
+            FindHwndHosts(child, results);
         }
     }
 

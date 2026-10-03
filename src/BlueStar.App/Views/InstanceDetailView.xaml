@@ -4,6 +4,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:BlueStar.App.ViewModels"
              xmlns:controls="clr-namespace:BlueStar.App.Controls"
+             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
              d:DataContext="{d:DesignInstance vm:InstanceDetailViewModel}"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -317,7 +318,7 @@
 
                     <RadioButton Style="{StaticResource RailNavButton}"
                                  ToolTip="{DynamicResource String_TabVersion}"
-                                 Visibility="{Binding IsDepotBoxTabsVisible, Converter={StaticResource BoolToVisibilityConverter}}"
+                                 Visibility="{Binding IsVersionsTabVisible, Converter={StaticResource BoolToVisibilityConverter}}"
                                  IsChecked="{Binding SelectedTab, Converter={StaticResource StringMatchConverter}, ConverterParameter=Files}"
                                  Command="{Binding SwitchTabCommand}" CommandParameter="Files">
                         <Grid>
@@ -381,6 +382,7 @@
 
                     <RadioButton Style="{StaticResource RailNavButton}"
                                  ToolTip="{DynamicResource String_TabPrerequisites}"
+                                 Visibility="{Binding IsPrerequisitesTabVisible, Converter={StaticResource BoolToVisibilityConverter}}"
                                  IsChecked="{Binding SelectedTab, Converter={StaticResource StringMatchConverter}, ConverterParameter=Prerequisites}"
                                  Command="{Binding SwitchTabCommand}" CommandParameter="Prerequisites">
                         <StackPanel>
@@ -487,10 +489,12 @@
                                                 </StackPanel>
                                             </Border>
                                             <Button Content="{DynamicResource String_OverviewStorePageBtn}" Style="{StaticResource SecondaryButton}"
-                                                    Padding="13,7" FontSize="11" Margin="0,0,8,0" Command="{Binding OpenStorePageCommand}"/>
+                                                    Padding="13,7" FontSize="11" Margin="0,0,8,0" Command="{Binding OpenStorePageCommand}"
+                                                    Visibility="{Binding IsImportedUnassociatedInstance, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
                                             <Button Style="{StaticResource SecondaryButton}" Padding="13,7"
                                                     Command="{Binding FindSimilarGamesCommand}"
-                                                    ToolTip="{DynamicResource String_SimilarGames}">
+                                                    ToolTip="{DynamicResource String_SimilarGames}"
+                                                    Visibility="{Binding IsImportedUnassociatedInstance, Converter={StaticResource InverseBoolToVisibilityConverter}}">
                                                 <StackPanel Orientation="Horizontal">
                                                     <Path Data="{StaticResource IconSimilar}" Fill="{StaticResource SecondaryTextBrush}"
                                                           Stretch="Uniform" Width="12" Height="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
@@ -610,7 +614,8 @@
                                         <TextBlock Grid.Column="0" Text="{DynamicResource String_OverviewTagsTitle}" Style="{StaticResource H2}" VerticalAlignment="Center"/>
                                         <Button Grid.Column="1" Style="{StaticResource SecondaryButton}" Padding="10,5"
                                                 Command="{Binding FindSimilarGamesCommand}"
-                                                ToolTip="{DynamicResource String_SimilarGames}">
+                                                ToolTip="{DynamicResource String_SimilarGames}"
+                                                Visibility="{Binding IsImportedUnassociatedInstance, Converter={StaticResource InverseBoolToVisibilityConverter}}">
                                             <StackPanel Orientation="Horizontal">
                                                 <Path Data="{StaticResource IconSimilar}" Fill="{StaticResource SecondaryTextBrush}"
                                                       Stretch="Uniform" Width="12" Height="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
@@ -803,29 +808,31 @@
                                     </StackPanel>
                                     <Border Height="1" Background="{StaticResource SubtleBorderBrush}"/>
 
-                                    <Grid Margin="18,13">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" Margin="0,0,10,0">
-                                            <TextBlock Text="{DynamicResource String_InstalledVersion}" Style="{StaticResource CaptionBold}"
-                                                       Foreground="{StaticResource MutedTextBrush}"/>
-                                            <TextBlock Text="{Binding InstalledVersionText}" Style="{StaticResource BodyMedium}"
-                                                       TextWrapping="Wrap" Margin="0,5,0,0"/>
-                                            <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,0">
-                                                <Run Text="{DynamicResource String_LatestOnSteam}"/>
-                                                <Run Text=" "/>
-                                                <Run Text="{Binding LatestVersionText, Mode=OneWay}"/>
-                                            </TextBlock>
-                                        </StackPanel>
-                                        <Border Grid.Column="1" Background="{StaticResource WarningBgBrush}" BorderBrush="{StaticResource WarningBrush}"
-                                                BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,3" VerticalAlignment="Top"
-                                                Visibility="{Binding HasGameUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}">
-                                            <TextBlock Text="{DynamicResource String_OverviewUpdateBadge}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource WarningBrush}"/>
-                                        </Border>
-                                    </Grid>
-                                    <Border Height="1" Background="{StaticResource SubtleBorderBrush}"/>
+                                    <StackPanel Visibility="{Binding IsDetectedVersionVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <Grid Margin="18,13">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                                <TextBlock Text="{DynamicResource String_InstalledVersion}" Style="{StaticResource CaptionBold}"
+                                                           Foreground="{StaticResource MutedTextBrush}"/>
+                                                <TextBlock Text="{Binding InstalledVersionText}" Style="{StaticResource BodyMedium}"
+                                                           TextWrapping="Wrap" Margin="0,5,0,0"/>
+                                                <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,3,0,0">
+                                                    <Run Text="{DynamicResource String_LatestOnSteam}"/>
+                                                    <Run Text=" "/>
+                                                    <Run Text="{Binding LatestVersionText, Mode=OneWay}"/>
+                                                </TextBlock>
+                                            </StackPanel>
+                                            <Border Grid.Column="1" Background="{StaticResource WarningBgBrush}" BorderBrush="{StaticResource WarningBrush}"
+                                                    BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,3" VerticalAlignment="Top"
+                                                    Visibility="{Binding HasGameUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <TextBlock Text="{DynamicResource String_OverviewUpdateBadge}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource WarningBrush}"/>
+                                            </Border>
+                                        </Grid>
+                                        <Border Height="1" Background="{StaticResource SubtleBorderBrush}"/>
+                                    </StackPanel>
 
                                     <Grid Margin="18,13">
                                         <Grid.ColumnDefinitions>
@@ -4626,6 +4633,7 @@
         <!-- ═══ FORCE ALL DLCS WARNING ═══ -->
         <controls:ModalOverlay IsOpen="{Binding IsForceAllDlcsWarningOpen}"
                                CloseCommand="{Binding CancelForceAllDlcsWarningCommand}"
+                               CloseOnBackdropClick="True"
                                CloseOnEscape="True"
                                Panel.ZIndex="1200">
             <Border Background="{StaticResource SurfaceCardElevatedBrush}"
@@ -4739,6 +4747,89 @@
                         <Button Content="{DynamicResource String_Apply}" Style="{StaticResource PrimaryButton}" Padding="16,8" Command="{Binding ApplyReFixConfigCommand}"/>
                     </StackPanel>
                 </StackPanel>
+            </Border>
+        </controls:ModalOverlay>
+
+        <!-- ═══ STORE PAGE MODAL ═══ -->
+        <controls:ModalOverlay IsOpen="{Binding IsStorePageModalOpen}"
+                               CloseCommand="{Binding CloseStorePageCommand}"
+                               CloseOnBackdropClick="True"
+                               CloseOnEscape="True"
+                               BackdropBrush="#C2040407"
+                               Panel.ZIndex="1400">
+
+            <Border Background="{StaticResource SurfaceCardBrush}"
+                    BorderBrush="{StaticResource StrongBorderBrush}" BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Width="1000" MaxWidth="1120" Height="750" Margin="28"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    ClipToBounds="True">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Modal header -->
+                    <Border Grid.Row="0" Background="{StaticResource TopBarBackgroundBrush}"
+                            BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="0,0,0,1"
+                            CornerRadius="11,11,0,0"
+                            Padding="14,9">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                                <TextBlock Text="{Binding Instance.GameName, FallbackValue='Steam Store'}" FontSize="14" FontWeight="SemiBold"
+                                           Foreground="{StaticResource PrimaryTextBrush}"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding StorePageUrl}" FontSize="10.5"
+                                           FontFamily="{StaticResource MonospaceFontFamily}"
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Style="{StaticResource ModalCloseButton}"
+                                    Command="{Binding CloseStorePageCommand}">
+                                <Path Data="{StaticResource IconClose}" Fill="{StaticResource SecondaryTextBrush}"
+                                      Stretch="Uniform" Width="11" Height="11"/>
+                            </Button>
+                        </Grid>
+                    </Border>
+
+                    <!-- Embedded store page -->
+                    <Grid Grid.Row="1" Background="#1B2838">
+                        <wv2:WebView2 x:Name="StorePageView"/>
+                    </Grid>
+
+                    <!-- Modal actions -->
+                    <Border Grid.Row="2" Background="{StaticResource TopBarBackgroundBrush}"
+                            BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="0,1,0,0"
+                            CornerRadius="0,0,11,11"
+                            Padding="14,10">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Style="{StaticResource SecondaryButton}" Padding="12,8" Margin="0,0,8,0"
+                                    Command="{Binding FindSimilarGamesCommand}"
+                                    ToolTip="{DynamicResource String_SimilarGames}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Data="{StaticResource IconSimilar}" Fill="{StaticResource SecondaryTextBrush}"
+                                          Stretch="Uniform" Width="12" Height="12" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{DynamicResource String_SimilarGames}" FontSize="12"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource SecondaryButton}" Padding="12,8" Margin="0,0,8,0"
+                                    ToolTip="{DynamicResource String_ViewOnSteamDb}"
+                                    Command="{Binding OpenSteamDbCommand}">
+                                <Path Data="{StaticResource IconSteamDb}" Fill="{StaticResource SecondaryTextBrush}"
+                                      Stretch="Uniform" Width="14" Height="14"/>
+                            </Button>
+                            <Button Style="{StaticResource SecondaryButton}" Padding="14,8"
+                                    Command="{Binding CloseStorePageCommand}"
+                                    Content="{DynamicResource String_Close}"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
             </Border>
         </controls:ModalOverlay>
     </Grid>

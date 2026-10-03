@@ -69,17 +69,23 @@ public sealed class TagsService : ITagsService
 
         var tags = new List<GameTag>();
 
-        // Status Badge
-        var statusText = instance.Status switch
+        // Status Badge (hide "Ready", "Not Installed", "Running" per UI requirements)
+        if (instance.Status != InstanceStatus.Ready &&
+            instance.Status != InstanceStatus.NotInstalled &&
+            instance.Status != InstanceStatus.Running)
         {
-            InstanceStatus.Ready => "Ready",
-            InstanceStatus.Running => "Running",
-            InstanceStatus.Downloading => "Downloading",
-            InstanceStatus.Updating => "Updating",
-            InstanceStatus.Error => "Error",
-            _ => "Not Installed"
-        };
-        tags.Add(new GameTag(statusText, TagType.Status));
+            var statusText = instance.Status switch
+            {
+                InstanceStatus.Downloading => "Downloading",
+                InstanceStatus.Updating => "Updating",
+                InstanceStatus.Error => "Error",
+                _ => null
+            };
+            if (statusText != null)
+            {
+                tags.Add(new GameTag(statusText, TagType.Status));
+            }
+        }
 
         // 4. Engine Badge
         if (instance.Engine != null && instance.Engine.Type != EngineType.Generic)

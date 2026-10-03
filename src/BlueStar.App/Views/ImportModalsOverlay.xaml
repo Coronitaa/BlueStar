@@ -15,6 +15,7 @@
              ═══════════════════════════════════════════════════════════════ -->
         <controls:ModalOverlay IsOpen="{Binding IsSteamImportModalOpen}"
                                CloseCommand="{Binding CloseSteamImportModalCommand}"
+                               CloseOnBackdropClick="True"
                                CloseOnEscape="True"
                                Panel.ZIndex="100">
             
@@ -51,7 +52,7 @@
                             <TextBlock Text="{DynamicResource String_ModalImportSteamSubtitle}"
                                        Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,4,0,0"/>
                         </StackPanel>
-                        <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}"
+                        <Button Grid.Column="1" Content="✕" Style="{StaticResource ModalCloseButton}"
                                 Command="{Binding CloseSteamImportModalCommand}"/>
                     </Grid>
 
@@ -198,6 +199,7 @@
              ═══════════════════════════════════════════════════════════════ -->
         <controls:ModalOverlay IsOpen="{Binding IsZipImportModalOpen}"
                                CloseCommand="{Binding CloseZipImportModalCommand}"
+                               CloseOnBackdropClick="True"
                                CloseOnEscape="True"
                                Panel.ZIndex="100">
             
@@ -232,7 +234,7 @@
                             <TextBlock Text="{DynamicResource String_ModalImportZipSubtitle}"
                                        Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,4,0,0"/>
                         </StackPanel>
-                        <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}"
+                        <Button Grid.Column="1" Content="✕" Style="{StaticResource ModalCloseButton}"
                                 Command="{Binding CloseZipImportModalCommand}"/>
                     </Grid>
 
@@ -503,6 +505,7 @@
              ═══════════════════════════════════════════════════════════════ -->
         <controls:ModalOverlay IsOpen="{Binding IsFolderImportModalOpen}"
                                CloseCommand="{Binding CloseFolderImportModalCommand}"
+                               CloseOnBackdropClick="True"
                                CloseOnEscape="True"
                                Panel.ZIndex="100">
             
@@ -537,7 +540,7 @@
                             <TextBlock Text="{DynamicResource String_ModalImportFolderSubtitle}"
                                        Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,4,0,0"/>
                         </StackPanel>
-                        <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}"
+                        <Button Grid.Column="1" Content="✕" Style="{StaticResource ModalCloseButton}"
                                 Command="{Binding CloseFolderImportModalCommand}"/>
                     </Grid>
 
@@ -546,13 +549,17 @@
                         <StackPanel>
                             
                             <!-- ── 1. LARGE CENTERED DROP BOX (When no folder selected) ── -->
-                            <Border Background="{StaticResource SurfaceCardBrush}"
+                            <Border x:Name="FolderDropBox"
+                                    Background="{StaticResource SurfaceCardBrush}"
                                     BorderBrush="{StaticResource SubtleBorderBrush}"
                                     BorderThickness="2"
                                     CornerRadius="{StaticResource RadiusLg}"
                                     Padding="32,28"
                                     AllowDrop="True"
                                     Drop="OnFolderDrop"
+                                    DragEnter="OnFolderDragEnter"
+                                    DragOver="OnFolderDragOver"
+                                    DragLeave="OnFolderDragLeave"
                                     Margin="0,0,0,14"
                                     Visibility="{Binding FolderPath, Converter={StaticResource InverseNullToVisibilityConverter}}">
                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -739,6 +746,7 @@
              ═══════════════════════════════════════════════════════════════ -->
         <controls:ModalOverlay IsOpen="{Binding IsSteamSearchModalOpen}"
                                CloseCommand="{Binding CloseSteamSearchModalCommand}"
+                               CloseOnBackdropClick="True"
                                CloseOnEscape="True"
                                Panel.ZIndex="150">
             <Border Background="{StaticResource SurfaceCardElevatedBrush}"
@@ -770,7 +778,7 @@
                             <TextBlock Text="🔍 " Style="{StaticResource H3}"/>
                             <TextBlock Text="{DynamicResource String_SearchGameOnSteamTitle}" Style="{StaticResource H3}"/>
                         </StackPanel>
-                        <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}" Command="{Binding CloseSteamSearchModalCommand}"/>
+                        <Button Grid.Column="1" Content="✕" Style="{StaticResource ModalCloseButton}" Command="{Binding CloseSteamSearchModalCommand}"/>
                     </Grid>
 
                     <!-- Search Input -->

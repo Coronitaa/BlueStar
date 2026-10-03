@@ -87,6 +87,7 @@ public partial class HomeView : UserControl
 
         await StorePageView.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
 
+        StorePageView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 27, 40, 56);
         StorePageView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
         StorePageView.CoreWebView2.Settings.IsStatusBarEnabled = false;
         StorePageView.CoreWebView2.NewWindowRequested += (s, args) =>
