@@ -113,8 +113,56 @@
                     </Button>
                 </Grid>
 
-                <!-- ── COMPACT FILTERS TOOLBAR ROW (Matching user reference) ── -->
-                <WrapPanel Orientation="Horizontal" Margin="0,0,0,24">
+                <!-- ── COMPACT FILTERS & SELECTION TOOLBAR ROW ── -->
+                <DockPanel Margin="0,0,0,24" LastChildFill="False">
+                    <!-- Right Actions Bar (Anchored to the right, visible when IsSelectionModeActive) -->
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center"
+                                Visibility="{Binding IsSelectionModeActive, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <!-- Number of selected items text -->
+                        <Border Background="{StaticResource SurfaceInputBrush}"
+                                BorderBrush="{StaticResource SubtleBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource RadiusMd}"
+                                Padding="12,6"
+                                Margin="0,0,10,0"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="{Binding SelectedInstancesCountText}"
+                                       FontWeight="SemiBold"
+                                       FontSize="12"
+                                       Foreground="{StaticResource PrimaryTextBrush}"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+
+                        <!-- Delete Button (active/enabled only if has at least 1 selected) -->
+                        <Button Style="{StaticResource DangerButton}"
+                                Padding="14,7"
+                                Margin="0,0,8,0"
+                                VerticalAlignment="Center"
+                                IsEnabled="{Binding HasSelectedInstances}"
+                                Command="{Binding OpenBulkDeleteModalCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Data="{StaticResource IconTrash}" Fill="#FFFFFF"
+                                      Stretch="Uniform" Width="13" Height="13"
+                                      Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="{DynamicResource String_DeleteSelected}"
+                                           FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Cancel cross button (anchored to the far right) -->
+                        <Button Style="{StaticResource GhostButton}"
+                                Padding="9,7"
+                                ToolTip="{DynamicResource String_CancelSelection}"
+                                Command="{Binding ExitSelectionModeCommand}"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="✕" FontSize="13" FontWeight="Bold"
+                                       Foreground="{StaticResource MutedTextBrush}"
+                                       VerticalAlignment="Center"/>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Left Toolbar Controls -->
+                    <WrapPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
                     <!-- 1. Sort Controls: Invert Sort Button + Sort Dropdown -->
                     <StackPanel Orientation="Horizontal" Margin="0,0,10,0">
                         <!-- Invert Sort Direction Button (⇅) -->
@@ -376,7 +424,53 @@
                             </Border>
                         </Popup>
                     </Grid>
+
+                    <!-- 4. Select Mode Toggle Button (tick with box icon only) -->
+                    <Button Margin="0,0,10,0"
+                            Padding="10,7"
+                            ToolTip="{DynamicResource String_SelectInstances}"
+                            Command="{Binding ToggleSelectionModeCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSelectionModeActive}" Value="True">
+                                        <Setter Property="BorderBrush" Value="#10B981"/>
+                                        <Setter Property="Background" Value="#1a10B981"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <Path Data="{StaticResource IconCheckSquare}"
+                              Stretch="Uniform" Width="14" Height="14"
+                              VerticalAlignment="Center">
+                            <Path.Style>
+                                <Style TargetType="Path">
+                                    <Setter Property="Fill" Value="{StaticResource SecondaryTextBrush}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsSelectionModeActive}" Value="True">
+                                            <Setter Property="Fill" Value="#10B981"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Path.Style>
+                        </Path>
+                    </Button>
+
+                    <!-- 5. Clear Selection Button (red cross + "clear selection" / "borrar selección", visible when active) -->
+                    <Button Style="{StaticResource GhostButton}"
+                            Margin="0,0,10,0"
+                            Padding="10,7"
+                            VerticalAlignment="Center"
+                            ToolTip="{DynamicResource String_ClearSelection}"
+                            Command="{Binding ClearSelectionCommand}"
+                            Visibility="{Binding IsSelectionModeActive, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="✕ " FontSize="12" FontWeight="Bold" Foreground="{StaticResource DangerBrush}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{DynamicResource String_ClearSelection}" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource DangerBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
                 </WrapPanel>
+            </DockPanel>
 
                 <!-- ── ERROR BANNER ── -->
                 <Border Background="{StaticResource DangerBgBrush}"
@@ -500,7 +594,17 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Style="{StaticResource Card}" Width="360" Margin="0,0,16,16">
+                            <Border Width="360" Margin="0,0,16,16" Padding="0" ClipToBounds="True">
+                                <Border.Style>
+                                    <Style TargetType="Border" BasedOn="{StaticResource Card}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                <Setter Property="BorderBrush" Value="#10B981"/>
+                                                <Setter Property="Background" Value="#1410B981"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="168"/>
@@ -510,18 +614,68 @@
                                         <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
 
-                                    <!-- Game banner / cover image -->
-                                    <Border Grid.Row="0" CornerRadius="8,8,0,0"
-                                            Background="{StaticResource SurfaceCardHoverBrush}"
-                                            ClipToBounds="True"
-                                            Margin="-16,-16,-16,12">
+                                    <!-- ── SELECTION CIRCLE (Top-left, visible in selection mode) ── -->
+                                    <Border Grid.Row="0" Grid.RowSpan="5"
+                                            HorizontalAlignment="Left" VerticalAlignment="Top"
+                                            Margin="10,10,0,0"
+                                            Width="28" Height="28"
+                                            CornerRadius="14"
+                                            Panel.ZIndex="52"
+                                            IsHitTestVisible="False"
+                                            Visibility="{Binding DataContext.IsSelectionModeActive, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <Border.Effect>
+                                            <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="2" Opacity="0.6"/>
+                                        </Border.Effect>
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="#D9161822"/>
+                                                <Setter Property="BorderBrush" Value="#80FFFFFF"/>
+                                                <Setter Property="BorderThickness" Value="2"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                        <Setter Property="Background" Value="#10B981"/>
+                                                        <Setter Property="BorderBrush" Value="#FFFFFF"/>
+                                                        <Setter Property="BorderThickness" Value="2"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <Path Data="{StaticResource IconCheck}" Fill="#FFFFFF"
+                                              Stretch="Uniform" Width="13" Height="13"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                    </Border>
+
+                                    <!-- ── FULL-CARD SELECTION CLICK INTERCEPTOR OVERLAY ── -->
+                                    <!-- In Selection Mode: blocks all button clicks underneath and toggles card selection -->
+                                    <Button Grid.Row="0" Grid.RowSpan="5"
+                                            Margin="0"
+                                            Style="{StaticResource GhostButton}"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Cursor="Hand"
+                                            Panel.ZIndex="50"
+                                            ToolTip="{Binding Name}"
+                                            Command="{Binding DataContext.ToggleInstanceSelectionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}"
+                                            Visibility="{Binding DataContext.IsSelectionModeActive, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                                    <!-- Game banner / cover image (460x215 aspect ratio, 360x168).
+                                         The artwork is the Border's own background so it follows the
+                                         card's corner radius instead of spilling over it. -->
+                                    <Border Grid.Row="0" CornerRadius="11,11,0,0"
+                                            Background="{StaticResource SurfaceCardHoverBrush}">
                                         <Grid>
                                             <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}"
                                                   Stretch="Uniform" Width="36" Height="36"
                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            <Image Source="{Binding HeaderImageUrl, Converter={StaticResource CachedImageConverter}}"
-                                                   Stretch="UniformToFill"
-                                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                                            <Border CornerRadius="11,11,0,0">
+                                                <Border.Background>
+                                                    <ImageBrush ImageSource="{Binding HeaderImageUrl, Converter={StaticResource CachedImageConverter}}"
+                                                                Stretch="UniformToFill"
+                                                                RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                </Border.Background>
+                                            </Border>
 
                                             <!-- 🔔 TOP-RIGHT GAME UPDATE BADGE -->
                                             <Border HorizontalAlignment="Right" VerticalAlignment="Top"
@@ -545,7 +699,7 @@
                                     </Border>
 
                                     <!-- Title & Steam AppId -->
-                                    <StackPanel Grid.Row="1">
+                                    <StackPanel Grid.Row="1" Margin="16,12,16,0">
                                         <DockPanel LastChildFill="True">
                                             <!-- Origin Icons docked right of title -->
                                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
@@ -574,7 +728,7 @@
                                     </StackPanel>
 
                                     <!-- Dynamic Badges from ITagsService -->
-                                    <ItemsControl Grid.Row="2" ItemsSource="{Binding Tags}" Margin="0,8,0,0">
+                                    <ItemsControl Grid.Row="2" ItemsSource="{Binding Tags}" Margin="16,8,16,0">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
                                                 <WrapPanel Orientation="Horizontal"/>
@@ -590,16 +744,16 @@
                                                         BorderThickness="1"
                                                         ToolTip="{Binding Tooltip}">
                                                     <TextBlock Text="{Binding Text}"
-                                                               FontSize="10"
-                                                               FontWeight="Normal"
-                                                               Foreground="{Binding Type, Converter={StaticResource TagTypeToBrushConverter}}"/>
+                                                                FontSize="10"
+                                                                FontWeight="Normal"
+                                                                Foreground="{Binding Type, Converter={StaticResource TagTypeToBrushConverter}}"/>
                                                 </Border>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
 
                                     <!-- Action Buttons -->
-                                    <Grid Grid.Row="4">
+                                    <Grid Grid.Row="4" Margin="16,0,16,16">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="4"/>
@@ -1710,6 +1864,87 @@
                                 Command="{Binding StartSteamAndLaunchCommand}"
                                 IsEnabled="{Binding IsStartingSteam, Converter={StaticResource InverseBoolConverter}}"/>
                     </StackPanel>
+                </StackPanel>
+            </Border>
+        </controls:ModalOverlay>
+
+        <!-- ═══ MODAL: BULK INSTANCE DELETION CONFIRMATION ═══ -->
+        <controls:ModalOverlay IsOpen="{Binding IsBulkDeleteModalOpen}"
+                               CloseCommand="{Binding CloseBulkDeleteModalCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="1000">
+            <Border Background="{StaticResource SurfaceCardBrush}"
+                    BorderBrush="{StaticResource SubtleBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="28"
+                    MaxWidth="540"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <StackPanel>
+                    <TextBlock Text="{DynamicResource String_DeleteModalTitle}" Style="{StaticResource H1}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{Binding BulkDeleteModalSubtitle}"
+                               Style="{StaticResource Body}" TextWrapping="Wrap" Margin="0,0,0,20"/>
+
+                    <!-- Option 1: Only Unlink from BlueStar -->
+                    <Border Background="{StaticResource SurfaceInputBrush}"
+                            BorderBrush="{StaticResource SubtleBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusMd}"
+                            Padding="16" Margin="0,0,0,12">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                                <TextBlock Text="{DynamicResource String_UnlinkFromBlueStarOnlyTitle}" FontWeight="SemiBold" FontSize="14" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{DynamicResource String_UnlinkFromBlueStarOnlyDesc}"
+                                           Style="{StaticResource BodySmall}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="{DynamicResource String_UnlinkActionBtn}"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Padding="16,9"
+                                    VerticalAlignment="Center"
+                                    Command="{Binding ConfirmBulkDeleteInstancesCommand}"
+                                    CommandParameter="false"
+                                    IsEnabled="{Binding IsDeletingBulkInstances, Converter={StaticResource InverseBoolConverter}}"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Option 2: Delete Instances and Purge Data Files -->
+                    <Border Background="{StaticResource DangerBgBrush}"
+                            BorderBrush="{StaticResource DangerBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusMd}"
+                            Padding="16" Margin="0,0,0,20">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                                <TextBlock Text="{DynamicResource String_DeleteInstanceAndPurgeTitle}" FontWeight="SemiBold" FontSize="14" Foreground="{StaticResource DangerBrush}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{DynamicResource String_DeleteInstanceAndPurgeDesc}"
+                                           Style="{StaticResource BodySmall}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="{DynamicResource String_DeleteAllActionBtn}"
+                                    Style="{StaticResource DangerButton}"
+                                    Padding="16,9"
+                                    VerticalAlignment="Center"
+                                    Command="{Binding ConfirmBulkDeleteInstancesCommand}"
+                                    CommandParameter="true"
+                                    IsEnabled="{Binding IsDeletingBulkInstances, Converter={StaticResource InverseBoolConverter}}"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Cancel Button -->
+                    <Button Content="{DynamicResource String_Cancel}"
+                            Style="{StaticResource GhostButton}"
+                            HorizontalAlignment="Right"
+                            Padding="18,8"
+                            Command="{Binding CloseBulkDeleteModalCommand}"
+                            IsEnabled="{Binding IsDeletingBulkInstances, Converter={StaticResource InverseBoolConverter}}"/>
                 </StackPanel>
             </Border>
         </controls:ModalOverlay>

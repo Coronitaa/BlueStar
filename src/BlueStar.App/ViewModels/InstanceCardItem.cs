@@ -8,7 +8,7 @@ namespace BlueStar.App.ViewModels;
 /// <summary>
 /// Display item representing an instance card in the Library view with dynamically calculated tags and state badges.
 /// </summary>
-public sealed class InstanceCardItem
+public partial class InstanceCardItem : ObservableObject
 {
     public GameInstance Instance { get; }
     public IReadOnlyList<GameTag> Tags { get; }
@@ -28,9 +28,13 @@ public sealed class InstanceCardItem
     public bool HasUpdateAvailable => Instance.HasUpdateAvailable;
     public string? UpdateDescription => Instance.UpdateDescription;
 
-    public InstanceCardItem(GameInstance instance, IReadOnlyList<GameTag> tags)
+    [ObservableProperty]
+    private bool _isSelected;
+
+    public InstanceCardItem(GameInstance instance, IReadOnlyList<GameTag> tags, bool isSelected = false)
     {
         Instance = instance ?? throw new ArgumentNullException(nameof(instance));
         Tags = tags ?? [];
+        IsSelected = isSelected;
     }
 }

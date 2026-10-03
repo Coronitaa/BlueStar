@@ -8,6 +8,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
 using BlueStar.Core.Helpers;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
@@ -34,6 +35,7 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
     private readonly IBackgroundTaskService? _backgroundTaskService;
     private readonly ISteamStatusService? _steamStatusService;
     private readonly INotificationService? _notificationService;
+    private readonly ILocalizationService? _localizationService;
     private readonly ILogger<LibraryViewModel> _logger;
     private readonly SynchronizationContext _uiContext;
     private readonly CancellationTokenSource _cts = new();
@@ -106,6 +108,72 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
     private readonly Dictionary<string, HashSet<Guid>> _groupMemberships = new();
 
     public ObservableCollection<Guid> SelectedGroupInstanceIds { get; } = new();
+
+    // ── Instance Selection & Bulk Action Mode ──
+    [ObservableProperty]
+    private bool _isSelectionModeActive;
+
+    [ObservableProperty]
+    private int _selectedInstancesCount;
+
+    [ObservableProperty]
+    private bool _hasSelectedInstances;
+
+    [ObservableProperty]
+    private bool _isBulkDeleteModalOpen;
+
+    [ObservableProperty]
+    private bool _isDeletingBulkInstances;
+
+    private readonly HashSet<Guid> _selectedInstanceIds = new();
+
+    public string SelectedInstancesCountText
+    {
+        get
+        {
+            var count = SelectedInstancesCount;
+            if (Application.Current?.TryFindResource("String_SelectedInstancesCount") is string format)
+            {
+                try
+                {
+                    return string.Format(format, count);
+                }
+                catch
+                {
+                    return $"{count} selected";
+                }
+            }
+            return $"{count} selected";
+        }
+    }
+
+    public string BulkDeleteModalSubtitle
+    {
+        get
+        {
+            var count = SelectedInstancesCount;
+            if (Application.Current?.TryFindResource("String_BulkDeleteModalSubtitle") is string format)
+            {
+                try
+                {
+                    return string.Format(format, count);
+                }
+                catch
+                {
+                    return $"How would you like to delete the {count} selected instances?";
+                }
+            }
+            return $"How would you like to delete the {count} selected instances?";
+        }
+    }
+
+    partial void OnIsSelectionModeActiveChanged(bool value)
+    {
+        if (!value)
+        {
+            ClearSelection();
+        }
+    }
 
     [ObservableProperty]
     private bool _isLoading = true;
@@ -258,7 +326,8 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
         IDepotBoxApiClient? depotBoxApiClient = null,
         IBackgroundTaskService? backgroundTaskService = null,
         ISteamStatusService? steamStatusService = null,
-        INotificationService? notificationService = null)
+        INotificationService? notificationService = null,
+        ILocalizationService? localizationService = null)
     {
         _instanceManager = instanceManager;
         _archiveParser = archiveParser;
@@ -271,11 +340,30 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
         _backgroundTaskService = backgroundTaskService;
         _steamStatusService = steamStatusService;
         _notificationService = notificationService;
+        _localizationService = localizationService;
         _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
+
+        if (_localizationService != null)
+        {
+            _localizationService.LanguageChanged += OnLanguageChanged;
+        }
 
         _gameLauncher.RunningStateChanged += OnRunningStateChanged;
 
         _ = LoadInstancesAsync();
+    }
+
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        if (_isDisposed) return;
+        _uiContext.Post(_ =>
+        {
+            if (_isDisposed) return;
+            OnPropertyChanged(nameof(SelectedSortDisplayName));
+            OnPropertyChanged(nameof(SelectedGroupDisplayName));
+            OnPropertyChanged(nameof(SelectedInstancesCountText));
+            OnPropertyChanged(nameof(BulkDeleteModalSubtitle));
+        }, null);
     }
 
     private void OnRunningStateChanged(object? sender, (Guid InstanceId, bool IsRunning) e)
@@ -308,7 +396,7 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
     partial void OnSelectedSortChanged(string value) => ApplyFilters();
     partial void OnIsSortAscendingChanged(bool value) => ApplyFilters();
 
-    private void ApplyFilters()
+    public void ApplyFilters()
     {
         var rawSearch = (SearchFilter ?? string.Empty).Trim();
         var query = Instances.AsEnumerable();
@@ -403,10 +491,12 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
             var tags = _tagsService != null
                 ? _tagsService.GetInstanceTags(inst, inst.HasUpdateAvailable)
                 : [];
-            return new InstanceCardItem(inst, tags);
+            bool isSelected = _selectedInstanceIds.Contains(inst.Id);
+            return new InstanceCardItem(inst, tags, isSelected);
         }).ToList();
 
         FilteredInstances = new ObservableCollection<InstanceCardItem>(cardItems);
+        UpdateSelectionCounts();
     }
 
     [RelayCommand]
@@ -604,6 +694,155 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
         SelectedStatusFilter = "All";
         OnPropertyChanged(nameof(HasActiveFilter));
         ApplyFilters();
+    }
+
+    // ── Instance Selection & Bulk Action Commands ──
+    [RelayCommand]
+    public void ToggleSelectionMode()
+    {
+        IsSelectionModeActive = !IsSelectionModeActive;
+    }
+
+    [RelayCommand]
+    public void ExitSelectionMode()
+    {
+        IsSelectionModeActive = false;
+    }
+
+    [RelayCommand]
+    public void ClearSelection()
+    {
+        _selectedInstanceIds.Clear();
+        foreach (var card in FilteredInstances)
+        {
+            card.IsSelected = false;
+        }
+        UpdateSelectionCounts();
+    }
+
+    [RelayCommand]
+    public void ToggleInstanceSelection(object? item)
+    {
+        if (!IsSelectionModeActive) return;
+
+        var card = item as InstanceCardItem;
+        if (card == null) return;
+
+        if (_selectedInstanceIds.Contains(card.Id))
+        {
+            _selectedInstanceIds.Remove(card.Id);
+            card.IsSelected = false;
+        }
+        else
+        {
+            _selectedInstanceIds.Add(card.Id);
+            card.IsSelected = true;
+        }
+
+        foreach (var c in FilteredInstances.Where(x => x.Id == card.Id))
+        {
+            c.IsSelected = card.IsSelected;
+        }
+
+        UpdateSelectionCounts();
+    }
+
+    private void UpdateSelectionCounts()
+    {
+        SelectedInstancesCount = _selectedInstanceIds.Count;
+        HasSelectedInstances = SelectedInstancesCount > 0;
+        OnPropertyChanged(nameof(SelectedInstancesCountText));
+        OnPropertyChanged(nameof(BulkDeleteModalSubtitle));
+    }
+
+    [RelayCommand]
+    public void OpenBulkDeleteModal()
+    {
+        if (SelectedInstancesCount > 0)
+        {
+            IsBulkDeleteModalOpen = true;
+        }
+    }
+
+    [RelayCommand]
+    public void CloseBulkDeleteModal()
+    {
+        if (!IsDeletingBulkInstances)
+        {
+            IsBulkDeleteModalOpen = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task ConfirmBulkDeleteInstancesAsync(string deleteFilesOption)
+    {
+        if (SelectedInstancesCount == 0 || IsDeletingBulkInstances) return;
+
+        bool deleteFiles = string.Equals(deleteFilesOption, "true", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(deleteFilesOption, "with_data", StringComparison.OrdinalIgnoreCase);
+
+        IsDeletingBulkInstances = true;
+        try
+        {
+            var idsToDelete = _selectedInstanceIds.ToList();
+            var instancesToDelete = Instances.Where(i => idsToDelete.Contains(i.Id)).ToList();
+
+            foreach (var inst in instancesToDelete)
+            {
+                if (deleteFiles && !string.IsNullOrWhiteSpace(inst.InstallPath) && Directory.Exists(inst.InstallPath))
+                {
+                    try
+                    {
+                        var fullPath = Path.GetFullPath(inst.InstallPath);
+                        var root = Path.GetPathRoot(fullPath);
+
+                        // Safety guard: do not delete root of drive or short paths
+                        if (!string.Equals(fullPath, root, StringComparison.OrdinalIgnoreCase) && fullPath.Length > 4)
+                        {
+                            _logger.LogInformation("Deleting game install directory on disk: {Path}", fullPath);
+                            Directory.Delete(fullPath, recursive: true);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to delete files for instance {Name} at {Path}", inst.Name, inst.InstallPath);
+                    }
+                }
+
+                try
+                {
+                    await _instanceManager.DeleteAsync(inst.Id, CancellationToken.None).ConfigureAwait(true);
+                    _logger.LogInformation("Deleted instance {Name} ({Id}) from BlueStar (DeletedFiles={DeletedFiles})", inst.Name, inst.Id, deleteFiles);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to delete instance {Name} ({Id})", inst.Name, inst.Id);
+                }
+            }
+
+            foreach (var inst in instancesToDelete)
+            {
+                Instances.Remove(inst);
+            }
+
+            var countDeleted = instancesToDelete.Count;
+            ExitSelectionMode();
+            ApplyFilters();
+            IsBulkDeleteModalOpen = false;
+
+            _notificationService?.ShowSuccess(
+                "Instances Deleted",
+                $"{countDeleted} instance(s) removed successfully.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed during bulk deletion of instances");
+            ErrorMessage = $"Bulk delete failed: {ex.Message}";
+        }
+        finally
+        {
+            IsDeletingBulkInstances = false;
+        }
     }
 
     [RelayCommand]
@@ -1554,6 +1793,8 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
             if (toRemove is not null)
             {
                 Instances.Remove(toRemove);
+                _selectedInstanceIds.Remove(id);
+                UpdateSelectionCounts();
                 ApplyFilters();
             }
         }
@@ -1700,6 +1941,10 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
         catch { }
 
         _gameLauncher.RunningStateChanged -= OnRunningStateChanged;
+        if (_localizationService != null)
+        {
+            _localizationService.LanguageChanged -= OnLanguageChanged;
+        }
     }
 }
 

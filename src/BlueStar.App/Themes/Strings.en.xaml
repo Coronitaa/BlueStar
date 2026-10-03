@@ -218,6 +218,12 @@
     <sys:String x:Key="String_StatusNotInstalled">Not Installed</sys:String>
     <sys:String x:Key="String_StatusUpdateAvailable">Update Available</sys:String>
     <sys:String x:Key="String_ClearFilters">Clear filters</sys:String>
+    <sys:String x:Key="String_SelectInstances">Select</sys:String>
+    <sys:String x:Key="String_ClearSelection">Clear selection</sys:String>
+    <sys:String x:Key="String_SelectedInstancesCount">{0} selected</sys:String>
+    <sys:String x:Key="String_DeleteSelected">Delete</sys:String>
+    <sys:String x:Key="String_CancelSelection">Cancel</sys:String>
+    <sys:String x:Key="String_BulkDeleteModalSubtitle">How would you like to delete the {0} selected instances?</sys:String>
     <sys:String x:Key="String_NoGameInstancesFound">No game instances found</sys:String>
     <sys:String x:Key="String_NoGameInstancesFoundDesc">Import a DepotBox ZIP archive or add an existing installed game folder to get started.</sys:String>
     <sys:String x:Key="String_ImportZipArchiveBtn">Import ZIP Archive</sys:String>
