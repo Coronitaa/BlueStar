@@ -473,9 +473,17 @@ public partial class HomeViewModel : ObservableObject, IDisposable
         };
     }
 
+    private DateTime _lastImportMenuCloseTime = DateTime.MinValue;
+
+    partial void OnIsImportMenuOpenChanged(bool value)
+    {
+        if (!value) _lastImportMenuCloseTime = DateTime.Now;
+    }
+
     [RelayCommand]
     public void ToggleImportMenu()
     {
+        if (!IsImportMenuOpen && (DateTime.Now - _lastImportMenuCloseTime).TotalMilliseconds < 200) return;
         IsImportMenuOpen = !IsImportMenuOpen;
     }
 

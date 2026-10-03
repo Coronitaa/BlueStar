@@ -221,7 +221,7 @@
                                               Width="40" Height="40"
                                               Style="{StaticResource GhostToggleButton}"
                                               IsChecked="{Binding IsSidebarImportMenuOpen, Mode=TwoWay}"
-                                              ctrl:PopupToggleHelper.Popup="{Binding ElementName=SidebarImportPopup}"
+                                              Command="{Binding ToggleSidebarImportMenuCommand}"
                                               ToolTip="{DynamicResource String_ImportGame}"
                                               Padding="0"
                                               HorizontalAlignment="Center">

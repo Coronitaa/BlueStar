@@ -928,8 +928,19 @@ public partial class MainViewModel : ObservableObject, IDisposable
         return (_exploreView, (BrowseViewModel)_exploreView.DataContext);
     }
 
+    private DateTime _lastSidebarImportMenuCloseTime = DateTime.MinValue;
+
+    partial void OnIsSidebarImportMenuOpenChanged(bool value)
+    {
+        if (!value) _lastSidebarImportMenuCloseTime = DateTime.Now;
+    }
+
     [RelayCommand]
-    public void ToggleSidebarImportMenu() => IsSidebarImportMenuOpen = !IsSidebarImportMenuOpen;
+    public void ToggleSidebarImportMenu()
+    {
+        if (!IsSidebarImportMenuOpen && (DateTime.Now - _lastSidebarImportMenuCloseTime).TotalMilliseconds < 200) return;
+        IsSidebarImportMenuOpen = !IsSidebarImportMenuOpen;
+    }
 
     [RelayCommand]
     public void CloseSidebarImportMenu() => IsSidebarImportMenuOpen = false;

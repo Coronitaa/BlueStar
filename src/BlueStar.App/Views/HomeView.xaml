@@ -74,7 +74,7 @@
                             <Grid Margin="0,0,10,0">
                                 <ToggleButton x:Name="ImportMenuButton"
                                               IsChecked="{Binding IsImportMenuOpen, Mode=TwoWay}"
-                                              controls:PopupToggleHelper.Popup="{Binding ElementName=ImportMenuPopup}"
+                                              Command="{Binding ToggleImportMenuCommand}"
                                               Width="34" Height="34"
                                               Padding="0"
                                               ToolTip="{DynamicResource String_ImportInstanceFrom}"
