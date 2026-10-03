@@ -88,7 +88,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [ObservableProperty]
-    private string _selectedNavigation = "Home";
+    private string? _selectedNavigation = "Home";
 
     private string _currentlyLoadedPage = string.Empty;
 
@@ -764,6 +764,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         var vm = App.Services.GetRequiredService<HomeViewModel>();
         vm.OnNavigateRequested = Navigate;
+        vm.OnSearchInExploreRequested = SearchInExplore;
         vm.OnNavigateToCategoryRequested = NavigateToExploreCategory;
         vm.OnFindSimilarRequested = OpenSimilarInExplore;
         vm.OnManageInstanceRequested = OpenInstanceDetail;
@@ -855,6 +856,15 @@ public partial class MainViewModel : ObservableObject, IDisposable
         view.DataContext = vm;
         _ = vm.LoadInstanceAsync(instance, autoCheckDepotUpdates: autoCheckUpdates);
         CurrentView = view;
+    }
+
+    public void SearchInExplore(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return;
+        Navigate("Explore");
+        var vm = GetExploreView().ViewModel;
+        vm.SearchQuery = query;
+        _ = vm.RunSearchAsync();
     }
 
     /// <summary>

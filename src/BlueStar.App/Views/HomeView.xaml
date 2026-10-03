@@ -832,8 +832,7 @@
                                                 Style="{StaticResource GhostButton}"
                                                 Foreground="{StaticResource AccentBrush}"
                                                 Padding="8,4"
-                                                Command="{Binding NavigateToCommand}"
-                                                CommandParameter="Explore"/>
+                                                Command="{Binding SearchInExploreCommand}"/>
                                     </StackPanel>
                                 </Grid>
 

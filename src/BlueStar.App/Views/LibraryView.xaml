@@ -161,6 +161,34 @@
                         </Button>
                     </StackPanel>
 
+                                        <!-- View Mode Toggle Button (Anchored right, visible when NOT in selection mode) -->
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center"
+                                Visibility="{Binding IsSelectionModeActive, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                        <Button Style="{StaticResource SecondaryButton}"
+                                Padding="10,7"
+                                Command="{Binding CycleColumnCountCommand}"
+                                ToolTip="Toggle view layout">
+                            <Path Stretch="Uniform" Width="14" Height="14" Fill="{StaticResource SecondaryTextBrush}">
+                                <Path.Style>
+                                    <Style TargetType="Path">
+                                        <Setter Property="Data" Value="{StaticResource IconGridView3x3}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ColumnCount}" Value="4">
+                                                <Setter Property="Data" Value="{StaticResource IconGridView4x4}"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding ColumnCount}" Value="5">
+                                                <Setter Property="Data" Value="{StaticResource IconGridView5x5}"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding ColumnCount}" Value="0">
+                                                <Setter Property="Data" Value="{StaticResource IconListView}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Path.Style>
+                            </Path>
+                        </Button>
+                    </StackPanel>
+
                     <!-- Left Toolbar Controls -->
                     <WrapPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
                     <!-- 1. Sort Controls: Invert Sort Button + Sort Dropdown -->
@@ -185,7 +213,7 @@
                                 </StackPanel>
                             </Button>
 
-                            <Popup IsOpen="{Binding IsSortDropdownOpen}"
+                            <Popup IsOpen="{Binding IsSortDropdownOpen, Mode=TwoWay}"
                                    StaysOpen="False"
                                    Placement="Bottom"
                                    VerticalOffset="4"
@@ -257,7 +285,7 @@
                             </StackPanel>
                         </Button>
 
-                        <Popup IsOpen="{Binding IsGroupDropdownOpen}"
+                        <Popup IsOpen="{Binding IsGroupDropdownOpen, Mode=TwoWay}"
                                StaysOpen="False"
                                Placement="Bottom"
                                VerticalOffset="4"
@@ -344,7 +372,7 @@
                             </StackPanel>
                         </Button>
 
-                        <Popup IsOpen="{Binding IsFilterDropdownOpen}"
+                        <Popup IsOpen="{Binding IsFilterDropdownOpen, Mode=TwoWay}"
                                StaysOpen="False"
                                Placement="Bottom"
                                VerticalOffset="4"
@@ -586,15 +614,181 @@
                     </Border>
 
                     <!-- ── INSTANCES GRID ── -->
-                    <ItemsControl ItemsSource="{Binding FilteredInstances}" HorizontalAlignment="Center">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center"/>
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Border Width="360" Margin="0,0,16,16" Padding="0" ClipToBounds="True">
+                    <ItemsControl ItemsSource="{Binding FilteredInstances}" HorizontalAlignment="Stretch">
+<ItemsControl.Resources>
+                        <DataTemplate x:Key="InstanceListRowTemplate">
+                            <Border Padding="0" Margin="0,0,0,10" Cursor="Hand" HorizontalAlignment="Stretch">
+                                <Border.Style>
+                                    <Style TargetType="Border" BasedOn="{StaticResource InteractiveCard}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                <Setter Property="BorderBrush" Value="#10B981"/>
+                                                <Setter Property="Background" Value="#1410B981"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <Border.InputBindings>
+                                    <MouseBinding MouseAction="LeftClick"
+                                                  Command="{Binding DataContext.ToggleInstanceSelectionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                  CommandParameter="{Binding}"/>
+                                </Border.InputBindings>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="200"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <Border Grid.Column="0" CornerRadius="8,0,0,8" ClipToBounds="True">
+                                        <Border.Background>
+                                            <ImageBrush ImageSource="{Binding HeaderImageUrl, Converter={StaticResource CachedImageConverter}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                        </Border.Background>
+                                    </Border>
+
+                                    <StackPanel Grid.Column="1" Margin="16,10,16,10" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}" Style="{StaticResource H3}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                            <TextBlock Text="{Binding EngineName}" Style="{StaticResource CaptionBold}" Foreground="{Binding Type, Converter={StaticResource TagTypeToBrushConverter}, FallbackValue={StaticResource SecondaryTextBrush}}" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding AppId, StringFormat=' • Steam AppID: {0}'}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                        <ItemsControl ItemsSource="{Binding Tags}" Margin="0,6,0,0">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border CornerRadius="{StaticResource RadiusSm}"
+                                                            Padding="7,2"
+                                                            Margin="0,0,5,4"
+                                                            Background="{Binding Type, Converter={StaticResource TagTypeToBgBrushConverter}}"
+                                                            BorderBrush="{Binding Type, Converter={StaticResource TagTypeToBorderBrushConverter}}"
+                                                            BorderThickness="1"
+                                                            ToolTip="{Binding Tooltip}">
+                                                        <TextBlock Text="{Binding Text}"
+                                                                    FontSize="10"
+                                                                    FontWeight="Normal"
+                                                                    Foreground="{Binding Type, Converter={StaticResource TagTypeToBrushConverter}}"/>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="16" VerticalAlignment="Center">
+                                        <!-- Start / Play Button -->
+                                        <Button Margin="0,0,8,0" Padding="16,8"
+                                                Command="{Binding DataContext.PlayInstanceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="{DynamicResource String_PlayTooltip}">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+                                                    <Setter Property="Content">
+                                                        <Setter.Value>
+                                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                                                <Path Data="{StaticResource IconPlay}" Fill="#FFFFFF" Stretch="Uniform" Width="10" Height="10" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                                <TextBlock Text="{DynamicResource String_Play}" FontWeight="Bold" FontSize="13" VerticalAlignment="Center"/>
+                                                            </StackPanel>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsNotInstalled}" Value="True">
+                                                            <Setter Property="Content" Value="? Install"/>
+                                                            <Setter Property="Background" Value="{StaticResource AccentHoverBrush}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+
+                                        <!-- Open Folder Button -->
+                                        <Button Margin="0,0,8,0" Style="{StaticResource SecondaryButton}" Padding="10,8"
+                                                Command="{Binding DataContext.OpenFolderCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="{DynamicResource String_OpenFolderTooltip}">
+                                            <Path Data="{StaticResource IconFolder}" Fill="{StaticResource SecondaryTextBrush}" Stretch="Uniform" Width="14" Height="14" VerticalAlignment="Center"/>
+                                        </Button>
+
+                                        <!-- Manage Button -->
+                                        <Button Style="{StaticResource SecondaryButton}" Padding="10,8"
+                                                Command="{Binding DataContext.ManageInstanceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="{DynamicResource String_ManageInstanceTooltip}">
+                                            <Path Data="{StaticResource IconSettings}" Fill="{StaticResource SecondaryTextBrush}" Stretch="Uniform" Width="14" Height="14" VerticalAlignment="Center"/>
+                                        </Button>
+                                    </StackPanel>
+
+                                    <!-- FULL-ROW SELECTION CLICK INTERCEPTOR OVERLAY -->
+                                    <Button Grid.Column="0" Grid.ColumnSpan="3"
+                                            Margin="0"
+                                            Cursor="Hand"
+                                            Panel.ZIndex="50"
+                                            Command="{Binding DataContext.ToggleInstanceSelectionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}"
+                                            Visibility="{Binding DataContext.IsSelectionModeActive, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="Transparent"/>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
+
+                                    <!-- SELECTION CIRCLE (Top-left, visible in selection mode) -->
+                                    <Border Grid.Column="0" Grid.ColumnSpan="3"
+                                            HorizontalAlignment="Left" VerticalAlignment="Top"
+                                            Margin="10,10,0,0"
+                                            Width="28" Height="28"
+                                            CornerRadius="14"
+                                            Panel.ZIndex="52"
+                                            IsHitTestVisible="False"
+                                            Visibility="{Binding DataContext.IsSelectionModeActive, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <Border.Effect>
+                                            <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="2" Opacity="0.6"/>
+                                        </Border.Effect>
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="#D9161822"/>
+                                                <Setter Property="BorderBrush" Value="#80FFFFFF"/>
+                                                <Setter Property="BorderThickness" Value="2"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                        <Setter Property="Background" Value="#10B981"/>
+                                                        <Setter Property="BorderBrush" Value="#FFFFFF"/>
+                                                        <Setter Property="BorderThickness" Value="2"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <Path Data="{StaticResource IconCheck}" Fill="#FFFFFF"
+                                              Stretch="Uniform" Width="13" Height="13"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                    </Border>
+                                    
+                                    <!-- Overlay Selection Border -->
+                                    <Border Grid.Column="0" Grid.ColumnSpan="3"
+                                            CornerRadius="12"
+                                            BorderThickness="2"
+                                            IsHitTestVisible="False"
+                                            Panel.ZIndex="51">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="BorderBrush" Value="Transparent"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                        <Setter Property="BorderBrush" Value="#10B981"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+
+                        <DataTemplate x:Key="InstanceCardTemplate">
+                            <Viewbox Stretch="Uniform" HorizontalAlignment="Stretch" VerticalAlignment="Top" Margin="8,0,8,16">
+                                  <Border Width="360" Height="346" Padding="0" ClipToBounds="True">
                                 <Border.Style>
                                     <Style TargetType="Border" BasedOn="{StaticResource Card}">
                                         <Style.Triggers>
@@ -610,7 +804,7 @@
                                         <RowDefinition Height="168"/>
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="14"/>
+                                        <RowDefinition Height="*"/>
                                         <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
 
@@ -723,8 +917,8 @@
                                                        TextTrimming="CharacterEllipsis"
                                                        VerticalAlignment="Center"/>
                                         </DockPanel>
-                                        <TextBlock Text="{Binding AppId, StringFormat='Steam AppID: {0}'}"
-                                                   Style="{StaticResource Caption}" Margin="0,2,0,0"/>
+                                        <TextBlock Text="{Binding AppId, StringFormat=' • AppID: {0}'}"
+                                                   Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,2,0,0"/>
                                     </StackPanel>
 
                                     <!-- Dynamic Badges from ITagsService -->
@@ -814,8 +1008,50 @@
                                     </Grid>
                                 </Grid>
                             </Border>
+                        </Viewbox>
+                        </DataTemplate>
+                    </ItemsControl.Resources>
+                    <ItemsControl.Style>
+                        <Style TargetType="ItemsControl">
+                            <Setter Property="ItemsPanel">
+                                <Setter.Value>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Columns="{Binding ColumnCount}" HorizontalAlignment="Stretch" VerticalAlignment="Top"/>
+                                    </ItemsPanelTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ColumnCount}" Value="0">
+                                    <Setter Property="ItemsPanel">
+                                        <Setter.Value>
+                                            <ItemsPanelTemplate>
+                                                <VirtualizingStackPanel Orientation="Vertical"/>
+                                            </ItemsPanelTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ItemsControl.Style>
+
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <ContentControl Content="{Binding}">
+                                <ContentControl.Style>
+                                    <Style TargetType="ContentControl">
+                                        <Setter Property="ContentTemplate" Value="{DynamicResource InstanceCardTemplate}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding DataContext.ColumnCount, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="0">
+                                                <Setter Property="ContentTemplate" Value="{DynamicResource InstanceListRowTemplate}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ContentControl.Style>
+                            </ContentControl>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
+
+                    
                 </ItemsControl>
                 </StackPanel>
 
@@ -1161,7 +1397,7 @@
                                                     <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                                         <TextBlock Text="{Binding Name}" Style="{StaticResource BodyMedium}" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
                                                         <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                                                            <TextBlock Text="{Binding AppId, StringFormat='AppID: {0}'}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                            <TextBlock Text="{Binding AppId, StringFormat=' • AppID: {0}'}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
                                                             <TextBlock Text="{Binding FormattedSize, StringFormat=' • {0}'}" Style="{StaticResource Caption}" Foreground="{StaticResource AccentBrush}"/>
                                                         </StackPanel>
                                                     </StackPanel>
@@ -1376,7 +1612,7 @@
                                                             <ColumnDefinition Width="Auto"/>
                                                         </Grid.ColumnDefinitions>
                                                         <TextBlock Text="{Binding Name}" Style="{StaticResource CaptionBold}" TextTrimming="CharacterEllipsis"/>
-                                                        <TextBlock Grid.Column="1" Text="{Binding AppId, StringFormat='AppID: {0}'}" Style="{StaticResource Caption}" Foreground="{StaticResource AccentBrush}"/>
+                                                        <TextBlock Grid.Column="1" Text="{Binding AppId, StringFormat=' • AppID: {0}'}" Style="{StaticResource Caption}" Foreground="{StaticResource AccentBrush}"/>
                                                     </Grid>
                                                 </Border>
                                             </DataTemplate>
@@ -1691,7 +1927,7 @@
                                                     </Border>
                                                     <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                                         <TextBlock Text="{Binding Name}" Style="{StaticResource BodySmall}" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
-                                                        <TextBlock Text="{Binding AppId, StringFormat='AppID: {0}'}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                        <TextBlock Text="{Binding AppId, StringFormat=' • AppID: {0}'}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
                                                     </StackPanel>
                                                     <Button Grid.Column="3" Content="Select" Style="{StaticResource PrimaryButton}" Padding="10,4" FontSize="11"
                                                             Command="{Binding DataContext.SelectSteamSearchResultCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
@@ -1950,3 +2186,6 @@
         </controls:ModalOverlay>
     </Grid>
 </UserControl>
+
+
+

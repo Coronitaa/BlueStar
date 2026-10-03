@@ -36,10 +36,14 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
     private readonly ISteamStatusService? _steamStatusService;
     private readonly INotificationService? _notificationService;
     private readonly ILocalizationService? _localizationService;
+    private readonly BlueStar.Infrastructure.Storage.AppSettingsService _appSettingsService;
     private readonly ILogger<LibraryViewModel> _logger;
     private readonly SynchronizationContext _uiContext;
     private readonly CancellationTokenSource _cts = new();
     private bool _isDisposed;
+
+    [ObservableProperty]
+    private int _columnCount = 3;
 
     [ObservableProperty]
     private ObservableCollection<GameInstance> _instances = [];
@@ -321,6 +325,7 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
         IEngineDetector engineDetector,
         IGameLauncher gameLauncher,
         ILogger<LibraryViewModel> logger,
+        BlueStar.Infrastructure.Storage.AppSettingsService appSettingsService,
         IMetadataProvider? metadataProvider = null,
         ITagsService? tagsService = null,
         IDepotBoxApiClient? depotBoxApiClient = null,
@@ -334,6 +339,7 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
         _engineDetector = engineDetector;
         _gameLauncher = gameLauncher;
         _logger = logger;
+        _appSettingsService = appSettingsService;
         _metadataProvider = metadataProvider;
         _tagsService = tagsService;
         _depotBoxApiClient = depotBoxApiClient;
@@ -342,6 +348,8 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
         _notificationService = notificationService;
         _localizationService = localizationService;
         _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
+
+        ColumnCount = _appSettingsService.InstancesColumnCount;
 
         if (_localizationService != null)
         {
@@ -595,9 +603,18 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
         IsSortAscending = !IsSortAscending;
     }
 
+    private DateTime _lastSortDropdownCloseTime = DateTime.MinValue;
+
+    partial void OnIsSortDropdownOpenChanged(bool value)
+    {
+        if (!value) _lastSortDropdownCloseTime = DateTime.Now;
+    }
+
     [RelayCommand]
     public void ToggleSortDropdown()
     {
+        if (!IsSortDropdownOpen && (DateTime.Now - _lastSortDropdownCloseTime).TotalMilliseconds < 200) return;
+
         IsSortDropdownOpen = !IsSortDropdownOpen;
         if (IsSortDropdownOpen)
         {
@@ -618,9 +635,18 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
         ApplyFilters();
     }
 
+    private DateTime _lastGroupDropdownCloseTime = DateTime.MinValue;
+
+    partial void OnIsGroupDropdownOpenChanged(bool value)
+    {
+        if (!value) _lastGroupDropdownCloseTime = DateTime.Now;
+    }
+
     [RelayCommand]
     public void ToggleGroupDropdown()
     {
+        if (!IsGroupDropdownOpen && (DateTime.Now - _lastGroupDropdownCloseTime).TotalMilliseconds < 200) return;
+
         IsGroupDropdownOpen = !IsGroupDropdownOpen;
         if (IsGroupDropdownOpen)
         {
@@ -657,9 +683,18 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
         }
     }
 
+    private DateTime _lastFilterDropdownCloseTime = DateTime.MinValue;
+
+    partial void OnIsFilterDropdownOpenChanged(bool value)
+    {
+        if (!value) _lastFilterDropdownCloseTime = DateTime.Now;
+    }
+
     [RelayCommand]
     public void ToggleFilterDropdown()
     {
+        if (!IsFilterDropdownOpen && (DateTime.Now - _lastFilterDropdownCloseTime).TotalMilliseconds < 200) return;
+
         IsFilterDropdownOpen = !IsFilterDropdownOpen;
         if (IsFilterDropdownOpen)
         {
@@ -1923,6 +1958,24 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
                 name = name[p.Length..].Trim();
         }
         return name;
+    }
+
+    [RelayCommand]
+    private async Task CycleColumnCountAsync()
+    {
+        // Cycles: 3 -> 4 -> 5 -> 0 (list view) -> 3
+        ColumnCount = ColumnCount switch
+        {
+            3 => 4,
+            4 => 5,
+            5 => 0,
+            _ => 3
+        };
+
+        if (_appSettingsService != null)
+        {
+            await _appSettingsService.SetInstancesColumnCountAsync(ColumnCount).ConfigureAwait(false);
+        }
     }
 
     /// <summary>

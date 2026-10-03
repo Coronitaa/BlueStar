@@ -37,6 +37,7 @@ public partial class HomeViewModel : ObservableObject, IDisposable
     private readonly INotificationService? _notificationService;
     private readonly BlueStar.Infrastructure.Storage.AppSettingsService? _settingsService;
     private readonly IBackgroundTaskService? _backgroundTaskService;
+    private readonly ISteamCatalogSearchService? _catalogSearch;
     private readonly ILogger<HomeViewModel> _logger;
     private readonly CancellationTokenSource _cts = new();
     private bool _isDisposed;
@@ -247,6 +248,7 @@ public partial class HomeViewModel : ObservableObject, IDisposable
     }
 
     public Action<string>? OnNavigateRequested { get; set; }
+    public Action<string>? OnSearchInExploreRequested { get; set; }
     public Action<SearchResult>? OnFindSimilarRequested { get; set; }
     public Action<string>? OnNavigateToCategoryRequested { get; set; }
     public Action<GameInstance>? OnManageInstanceRequested { get; set; }
@@ -264,7 +266,8 @@ public partial class HomeViewModel : ObservableObject, IDisposable
         IMetadataProvider? metadataProvider = null,
         INotificationService? notificationService = null,
         BlueStar.Infrastructure.Storage.AppSettingsService? settingsService = null,
-        IBackgroundTaskService? backgroundTaskService = null)
+        IBackgroundTaskService? backgroundTaskService = null,
+        ISteamCatalogSearchService? catalogSearch = null)
     {
         _instanceManager = instanceManager;
         _downloadQueueManager = downloadQueueManager;
@@ -278,6 +281,7 @@ public partial class HomeViewModel : ObservableObject, IDisposable
         _notificationService = notificationService;
         _settingsService = settingsService;
         _backgroundTaskService = backgroundTaskService;
+        _catalogSearch = catalogSearch;
 
         if (_settingsService != null)
         {
@@ -554,6 +558,13 @@ public partial class HomeViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    public void SearchInExplore()
+    {
+        if (string.IsNullOrWhiteSpace(CatalogSearchQuery)) return;
+        OnSearchInExploreRequested?.Invoke(CatalogSearchQuery);
+    }
+
+    [RelayCommand]
     public async Task SearchCatalogAsync()
     {
         if (string.IsNullOrWhiteSpace(CatalogSearchQuery))
@@ -569,11 +580,29 @@ public partial class HomeViewModel : ObservableObject, IDisposable
 
         try
         {
-            _logger.LogInformation("Home searching DepotBox for: {Query}", CatalogSearchQuery);
-            var searchResults = await _apiClient.SearchGamesAsync(CatalogSearchQuery, CancellationToken.None).ConfigureAwait(true);
-            var filtered = FilterBySettings(searchResults).Take(12).ToList();
-            DiscoveredGames = new ObservableCollection<SearchResult>(filtered);
-            _ = EnrichResultsAsync(filtered, null, DiscoveredGames);
+            if (_catalogSearch != null)
+            {
+                _logger.LogInformation("Home searching Steam catalog for: {Query}", CatalogSearchQuery);
+                var query = new SteamSearchQuery
+                {
+                    Term = CatalogSearchQuery,
+                    Language = "english",
+                    Start = 0,
+                    Count = 12
+                };
+                var page = await _catalogSearch.SearchAsync(query, CancellationToken.None).ConfigureAwait(true);
+                var filtered = FilterBySettings(page.Items).Take(12).ToList();
+                DiscoveredGames = new ObservableCollection<SearchResult>(filtered);
+                _ = EnrichResultsAsync(filtered, null, DiscoveredGames);
+            }
+            else
+            {
+                _logger.LogInformation("Home searching DepotBox for: {Query}", CatalogSearchQuery);
+                var searchResults = await _apiClient.SearchGamesAsync(CatalogSearchQuery, CancellationToken.None).ConfigureAwait(true);
+                var filtered = FilterBySettings(searchResults).Take(12).ToList();
+                DiscoveredGames = new ObservableCollection<SearchResult>(filtered);
+                _ = EnrichResultsAsync(filtered, null, DiscoveredGames);
+            }
         }
         catch (UnauthorizedAccessException)
         {

@@ -191,6 +191,10 @@
 
     <!-- Grid view -->
     <Geometry x:Key="IconGridView">M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z</Geometry>
+    
+    <Geometry x:Key="IconGridView3x3">M4 4h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4z M4 10h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4z M4 16h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4z</Geometry>
+    <Geometry x:Key="IconGridView4x4">M4 4h3v3H4zm4 0h3v3H8zm4 0h3v3h-3zm4 0h3v3h-3z M4 8h3v3H4zm4 0h3v3H8zm4 0h3v3h-3zm4 0h3v3h-3z M4 12h3v3H4zm4 0h3v3H8zm4 0h3v3h-3zm4 0h3v3h-3z M4 16h3v3H4zm4 0h3v3H8zm4 0h3v3h-3zm4 0h3v3h-3z</Geometry>
+    <Geometry x:Key="IconGridView5x5">M5 5h2v2H5zm3 0h2v2H8zm3 0h2v2h-2zm3 0h2v2h-2zm3 0h2v2h-2z M5 8h2v2H5zm3 0h2v2H8zm3 0h2v2h-2zm3 0h2v2h-2zm3 0h2v2h-2z M5 11h2v2H5zm3 0h2v2H8zm3 0h2v2h-2zm3 0h2v2h-2zm3 0h2v2h-2z M5 14h2v2H5zm3 0h2v2H8zm3 0h2v2h-2zm3 0h2v2h-2zm3 0h2v2h-2z M5 17h2v2H5zm3 0h2v2H8zm3 0h2v2h-2zm3 0h2v2h-2zm3 0h2v2h-2z</Geometry>
 
     <!-- Row list view -->
     <Geometry x:Key="IconListView">M3 4h18v6H3zm0 10h18v6H3z</Geometry>

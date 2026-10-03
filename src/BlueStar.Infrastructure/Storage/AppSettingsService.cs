@@ -304,6 +304,16 @@ public sealed class AppSettingsService
         await SaveAsync().ConfigureAwait(false);
     }
 
+    /// <summary>Number of columns for the instances grid (0 means List View).</summary>
+    public int InstancesColumnCount => _current.InstancesColumnCount;
+
+    /// <summary>Persists the instances column count setting.</summary>
+    public async Task SetInstancesColumnCountAsync(int count)
+    {
+        _current = _current with { InstancesColumnCount = count };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
     private sealed record AppSettings
     {
         public string? Language { get; init; } = "en";
@@ -321,10 +331,11 @@ public sealed class AppSettingsService
 
         public string? DefaultExploreSort { get; init; } = "Reviews";
         public bool DefaultExploreSortDescending { get; init; } = true;
-        public string? DefaultExploreStoreList { get; init; } = "popularnew";
+    public string? DefaultExploreStoreList { get; init; } = "popularnew";
 
-        public string? DefaultApiUrl { get; init; } = "https://depotbox.org";
-        public string? DefaultApiKey { get; init; } = "YOUR-API-KEY";
-        public bool HideForceDlcWarning { get; init; } = false;
-    }
+    public string? DefaultApiUrl { get; init; } = "https://depotbox.org";
+    public string? DefaultApiKey { get; init; } = "YOUR-API-KEY";
+    public bool HideForceDlcWarning { get; init; } = false;
+    public int InstancesColumnCount { get; init; } = 3;
+}
 }
