@@ -2,10 +2,10 @@
 
 > **Universal Steam Game Instance Manager, Depot Staging, Manifest Resolver, and Multi-Engine Launcher**
 
-[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
+[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20(x64)-brightgreen.svg)]()
 [![.NET 8.0](https://img.shields.io/badge/.NET-8.0%20WPF-purple.svg)]()
-[![Release: v1.4.2](https://img.shields.io/badge/Release-v1.4.2-orange.svg)](https://github.com/Coronitaa/BlueStar/releases/latest)
+[![Release: v1.4.3](https://img.shields.io/badge/Release-v1.4.3-orange.svg)](https://github.com/Coronitaa/BlueStar/releases/latest)
 [![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)](https://github.com/Coronitaa/BlueStar/actions)
 
 BlueStar is an all-in-one desktop game management and launcher ecosystem for modern PC gaming. It brings together Steam depot downloads, manifest staging, engine detection, online and LAN multiplayer emulation, DLC unlocking, prerequisite management, and mod injection into a clean, modern dark-themed interface.
@@ -22,8 +22,8 @@ BlueStar is an all-in-one desktop game management and launcher ecosystem for mod
 
 | Package | Asset Name | Download | Description |
 | :--- | :--- | :---: | :--- |
-| **Windows Setup (Recommended)** | `BlueStar-v1.4.2-Setup-win-x64.exe` | [![Download Setup](https://img.shields.io/badge/Download-Installer-0078D4?style=flat-square&logo=windows&logoColor=white)](https://github.com/Coronitaa/BlueStar/releases/download/v1.4.2/BlueStar-v1.4.2-Setup-win-x64.exe) | Standard Windows installer with start menu shortcuts, uninstaller, and update support. |
-| **Portable Edition** | `BlueStar-v1.4.2-Portable-win-x64.zip` | [![Download Portable](https://img.shields.io/badge/Download-ZIP-gray?style=flat-square&logo=archive&logoColor=white)](https://github.com/Coronitaa/BlueStar/releases/download/v1.4.2/BlueStar-v1.4.2-Portable-win-x64.zip) | Zero-install standalone archive. Extract anywhere and launch `BlueStar.exe`. |
+| **Windows Setup (Recommended)** | `BlueStar-v1.4.3-Setup-win-x64.exe` | [![Download Setup](https://img.shields.io/badge/Download-Installer-0078D4?style=flat-square&logo=windows&logoColor=white)](https://github.com/Coronitaa/BlueStar/releases/download/v1.4.3/BlueStar-v1.4.3-Setup-win-x64.exe) | Standard Windows installer with start menu shortcuts, uninstaller, and update support. |
+| **Portable Edition** | `BlueStar-v1.4.3-Portable-win-x64.zip` | [![Download Portable](https://img.shields.io/badge/Download-ZIP-gray?style=flat-square&logo=archive&logoColor=white)](https://github.com/Coronitaa/BlueStar/releases/download/v1.4.3/BlueStar-v1.4.3-Portable-win-x64.zip) | Zero-install standalone archive. Extract anywhere and launch `BlueStar.exe`. |
 
 > [!NOTE]
 > All release packages are self-contained for 64-bit Windows systems (Windows 10 / 11). No separate .NET runtime installation required.
@@ -135,5 +135,5 @@ To create release packages:
 
 ## 📄 License
 
-This project is licensed under the [GNU General Public License v3.0](LICENSE).  
+This project is licensed under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)](LICENSE).  
 Copyright (C) 2026 **Corøna** & BlueStar Contributors.

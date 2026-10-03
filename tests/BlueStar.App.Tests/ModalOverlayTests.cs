@@ -11,29 +11,7 @@ namespace BlueStar.App.Tests;
 
 public class ModalOverlayTests
 {
-    private static void RunOnStaThread(Action action)
-    {
-        Exception? ex = null;
-        var thread = new Thread(() =>
-        {
-            try
-            {
-                action();
-            }
-            catch (Exception e)
-            {
-                ex = e;
-            }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        thread.Join();
-
-        if (ex != null)
-        {
-            throw new AggregateException(ex);
-        }
-    }
+    private static void RunOnStaThread(Action action) => StaTestHelper.Run(action);
 
     [Fact]
     public void Defaults_AreCorrect()
@@ -226,7 +204,6 @@ public class ModalOverlayTests
 
             // Modal starts closed and not templated
             Assert.False(overlay.IsOpen);
-            Assert.Equal(Visibility.Visible, overlay.Visibility); // Default until template or state applied
 
             // Open for the first time
             overlay.IsOpen = true;

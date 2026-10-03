@@ -9,29 +9,7 @@ namespace BlueStar.App.Tests;
 
 public class TransitioningContentControlTests
 {
-    private static void RunOnStaThread(Action action)
-    {
-        Exception? ex = null;
-        var thread = new Thread(() =>
-        {
-            try
-            {
-                action();
-            }
-            catch (Exception e)
-            {
-                ex = e;
-            }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        thread.Join();
-
-        if (ex != null)
-        {
-            throw new AggregateException(ex);
-        }
-    }
+    private static void RunOnStaThread(Action action) => StaTestHelper.Run(action);
 
     [Fact]
     public void Defaults_AreCorrect()

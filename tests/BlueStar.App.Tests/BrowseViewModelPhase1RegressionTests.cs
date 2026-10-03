@@ -29,7 +29,7 @@ public class BrowseViewModelPhase1RegressionTests
 
     private BrowseViewModel CreateViewModel(ISteamTagCatalogService? tagCatalog = null, ILocalCatalogRepository? localRepo = null)
     {
-        return new BrowseViewModel(
+        var vm = new BrowseViewModel(
             _mockApiClient.Object,
             _mockInstanceManager.Object,
             _mockArchiveParser.Object,
@@ -38,7 +38,10 @@ public class BrowseViewModelPhase1RegressionTests
             catalogSearch: _mockCatalogSearch.Object,
             tagCatalog: tagCatalog,
             searchPipeline: _spyPipeline,
-            localRepo: localRepo);
+            localRepo: localRepo,
+            autoSearch: false);
+        vm.InitTask.GetAwaiter().GetResult();
+        return vm;
     }
 
     /// <summary>

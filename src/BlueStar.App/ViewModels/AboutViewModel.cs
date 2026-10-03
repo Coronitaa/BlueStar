@@ -13,7 +13,7 @@ namespace BlueStar.App.ViewModels;
 public partial class AboutViewModel : ObservableObject
 {
     [ObservableProperty]
-    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.4.2";
+    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.4.3";
 
     [ObservableProperty]
     private ObservableCollection<ProjectCredit> _projects = [];
@@ -33,7 +33,7 @@ public partial class AboutViewModel : ObservableObject
                 Role = "Core Application & Instance Manager",
                 Description = "Universal Steam game instance manager, depot staging, manifest resolver, multi-layer fix pipeline, and multi-engine launcher.",
                 Author = "Corøna & Contributors",
-                License = "GPL-3.0",
+                License = "CC BY-NC-SA 4.0",
                 GitHubUrl = "https://github.com/Coronitaa/BlueStar",
                 CategoryBadge = "Core App",
                 IsCore = true

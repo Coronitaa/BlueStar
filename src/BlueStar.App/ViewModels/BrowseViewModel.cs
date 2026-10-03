@@ -137,6 +137,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     private string _loadingStatusText = "Loading Explore Catalog…";
 
     private Task? _initTask;
+    public Task InitTask => _initTask ?? Task.CompletedTask;
 
     [ObservableProperty]
     private bool _isCreatingInstance;
@@ -285,7 +286,8 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         ISteamTagCatalogService? tagCatalog = null,
         ICacheService? cache = null,
         ISearchPipeline? searchPipeline = null,
-        ILocalCatalogRepository? localRepo = null)
+        ILocalCatalogRepository? localRepo = null,
+        bool autoSearch = true)
     {
         _apiClient = apiClient;
         _instanceManager = instanceManager;
@@ -350,7 +352,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         System.Windows.Data.BindingOperations.EnableCollectionSynchronization(_results, _resultsLock);
         System.Windows.Data.BindingOperations.EnableCollectionSynchronization(_activeFilters, _activeFiltersLock);
 
-        _initTask = InitializeAsync();
+        _initTask = InitializeAsync(autoSearch);
     }
 
     private static void Dispatch(Action action)
@@ -370,7 +372,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     /// Builds the filter panel, loads the store events, and runs the opening query.
     /// Explore opens on Steam's popular new releases rather than an empty page.
     /// </summary>
-    private async Task InitializeAsync()
+    private async Task InitializeAsync(bool autoSearch = true)
     {
         Dispatch(() =>
         {
@@ -378,11 +380,16 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
             LoadingStatusText = Localize("ExploreLoadingFilters", "Loading filters and catalog…");
         });
 
-        var minDisplayTask = Task.Delay(1300, _cts.Token);
+        var minDisplayTask = autoSearch ? Task.Delay(1300, _cts.Token) : Task.CompletedTask;
         try
         {
             await LoadUsageAsync().ConfigureAwait(false);
             await BuildFilterGroupsAsync().ConfigureAwait(false);
+
+            if (!autoSearch)
+            {
+                return;
+            }
 
             Dispatch(() =>
             {

@@ -122,7 +122,7 @@ public class GitHubUpdateService : IUpdateService
                 try
                 {
                     var request = new HttpRequestMessage(HttpMethod.Get, GitHubReleasesUrl);
-                    request.Headers.UserAgent.ParseAdd("BlueStar-Updater/1.2.3");
+                    request.Headers.UserAgent.ParseAdd("BlueStar-Updater/1.4.3");
                     var response = await _httpClient.SendAsync(request, innerCt).ConfigureAwait(false);
                     if (response.IsSuccessStatusCode)
                     {
@@ -137,7 +137,7 @@ public class GitHubUpdateService : IUpdateService
                     {
                         const string fallbackUrl = "https://api.github.com/repos/Coronitaa/BlueStar/releases";
                         var request = new HttpRequestMessage(HttpMethod.Get, fallbackUrl);
-                        request.Headers.UserAgent.ParseAdd("BlueStar-Updater/1.2.3");
+                        request.Headers.UserAgent.ParseAdd("BlueStar-Updater/1.4.3");
                         var response = await _httpClient.SendAsync(request, innerCt).ConfigureAwait(false);
                         if (response.IsSuccessStatusCode)
                         {
@@ -164,7 +164,7 @@ public class GitHubUpdateService : IUpdateService
                 var rawCurrent = Assembly.GetEntryAssembly()?.GetName().Version
                               ?? Assembly.GetExecutingAssembly().GetName().Version
                               ?? typeof(GitHubUpdateService).Assembly.GetName().Version
-                              ?? new Version(1, 2, 3);
+                              ?? new Version(1, 4, 3);
 
                 var currentVersion = new Version(
                     Math.Max(0, rawCurrent.Major),

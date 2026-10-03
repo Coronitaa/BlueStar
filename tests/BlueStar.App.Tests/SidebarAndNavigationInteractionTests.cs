@@ -18,75 +18,7 @@ namespace BlueStar.App.Tests;
 
 public class SidebarAndNavigationInteractionTests
 {
-    private static void EnsureApplicationResources()
-    {
-        if (Application.Current == null)
-        {
-            new Application();
-        }
-
-        if (Application.Current != null && Application.Current.Resources.MergedDictionaries.Count == 0)
-        {
-            try
-            {
-                var dicts = new[]
-                {
-                    "pack://application:,,,/BlueStar;component/Themes/Colors.xaml",
-                    "pack://application:,,,/BlueStar;component/Themes/Icons.xaml",
-                    "pack://application:,,,/BlueStar;component/Themes/Typography.xaml",
-                    "pack://application:,,,/BlueStar;component/Themes/Motion.xaml",
-                    "pack://application:,,,/BlueStar;component/Themes/Controls.xaml",
-                    "pack://application:,,,/BlueStar;component/Themes/DarkTheme.xaml",
-                    "pack://application:,,,/BlueStar;component/Themes/Strings.en.xaml"
-                };
-
-                foreach (var uri in dicts)
-                {
-                    Application.Current.Resources.MergedDictionaries.Add(
-                        new ResourceDictionary { Source = new Uri(uri, UriKind.Absolute) });
-                }
-            }
-            catch
-            {
-                // Fallback in case pack URI assembly loader is not registered in isolated test harness
-                Application.Current.Resources["BaseBackgroundBrush"] = new SolidColorBrush(Color.FromRgb(10, 10, 14));
-                Application.Current.Resources["PrimaryTextBrush"] = new SolidColorBrush(Color.FromRgb(255, 255, 255));
-                Application.Current.Resources["SecondaryTextBrush"] = new SolidColorBrush(Color.FromRgb(160, 160, 170));
-                Application.Current.Resources["MutedTextBrush"] = new SolidColorBrush(Color.FromRgb(100, 100, 110));
-                Application.Current.Resources["SubtleBorderBrush"] = new SolidColorBrush(Color.FromRgb(30, 30, 40));
-                Application.Current.Resources["SurfaceCardBrush"] = new SolidColorBrush(Color.FromRgb(20, 20, 28));
-                Application.Current.Resources["SurfaceCardHoverBrush"] = new SolidColorBrush(Color.FromRgb(30, 30, 42));
-                Application.Current.Resources["SurfaceCardElevatedBrush"] = new SolidColorBrush(Color.FromRgb(26, 26, 36));
-                Application.Current.Resources["AccentBrush"] = new SolidColorBrush(Color.FromRgb(59, 130, 246));
-                Application.Current.Resources["MainFontFamily"] = new FontFamily("Segoe UI");
-            }
-        }
-    }
-
-    private static void RunOnStaThread(Action action)
-    {
-        Exception? ex = null;
-        var thread = new Thread(() =>
-        {
-            try
-            {
-                EnsureApplicationResources();
-                action();
-            }
-            catch (Exception e)
-            {
-                ex = e;
-            }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        thread.Join();
-
-        if (ex != null)
-        {
-            throw new AggregateException(ex);
-        }
-    }
+    private static void RunOnStaThread(Action action) => StaTestHelper.Run(action);
 
     private static (MainViewModel MainVm, HomeViewModel HomeVm) CreateTestViewModels()
     {
