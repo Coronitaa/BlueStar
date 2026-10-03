@@ -78,10 +78,71 @@ public class GitHubUpdateService : IUpdateService
         return null;
     }
 
+    /// <summary>
+    /// Gets the normalized three-component version (Major.Minor.Build) of the running BlueStar instance.
+    /// </summary>
+    public static Version GetCurrentVersion()
+    {
+        var rawCurrent = Assembly.GetEntryAssembly()?.GetName().Version
+                      ?? Assembly.GetExecutingAssembly().GetName().Version
+                      ?? typeof(GitHubUpdateService).Assembly.GetName().Version;
+
+        if (rawCurrent == null || rawCurrent == new Version(0, 0, 0, 0))
+        {
+            try
+            {
+                var mainModulePath = Process.GetCurrentProcess().MainModule?.FileName;
+                if (!string.IsNullOrEmpty(mainModulePath) && File.Exists(mainModulePath))
+                {
+                    var fvi = FileVersionInfo.GetVersionInfo(mainModulePath);
+                    if (!string.IsNullOrEmpty(fvi.ProductVersion))
+                    {
+                        var cleanProd = fvi.ProductVersion.Split('+')[0].Trim().TrimStart('v');
+                        if (Version.TryParse(cleanProd, out var pv))
+                        {
+                            rawCurrent = pv;
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        rawCurrent ??= new Version(1, 4, 3);
+
+        return new Version(
+            Math.Max(0, rawCurrent.Major),
+            Math.Max(0, rawCurrent.Minor),
+            Math.Max(0, rawCurrent.Build));
+    }
+
+    /// <summary>
+    /// Checks whether a candidate version string represents a version strictly greater than currentVersion.
+    /// </summary>
+    public static bool IsNewerVersion(string? candidateVersionStr, Version currentVersion)
+    {
+        if (string.IsNullOrWhiteSpace(candidateVersionStr)) return false;
+        var clean = candidateVersionStr.Trim().TrimStart('v').Trim();
+        if (!Version.TryParse(clean, out var candidate)) return false;
+
+        var normalizedCandidate = new Version(
+            Math.Max(0, candidate.Major),
+            Math.Max(0, candidate.Minor),
+            Math.Max(0, candidate.Build));
+
+        var normalizedCurrent = new Version(
+            Math.Max(0, currentVersion.Major),
+            Math.Max(0, currentVersion.Minor),
+            Math.Max(0, currentVersion.Build));
+
+        return normalizedCandidate > normalizedCurrent;
+    }
+
     /// <inheritdoc />
     public async Task<UpdateInfo?> CheckForUpdatesAsync(CancellationToken ct)
     {
-        const string cacheKey = "github_update_check_latest";
+        var currentVersion = GetCurrentVersion();
+        var cacheKey = $"github_update_check_v{currentVersion.Major}_{currentVersion.Minor}_{currentVersion.Build}";
 
         if (_cacheService != null)
         {
@@ -91,7 +152,11 @@ public class GitHubUpdateService : IUpdateService
                 if (cached != null)
                 {
                     _metrics?.OnCacheHit("GitHub", GitHubReleasesUrl);
-                    return cached.Update;
+                    if (cached.Update != null && IsNewerVersion(cached.Update.Version, currentVersion))
+                    {
+                        return cached.Update;
+                    }
+                    return null;
                 }
             }
             catch { }
@@ -107,7 +172,11 @@ public class GitHubUpdateService : IUpdateService
                     if (cached != null)
                     {
                         _metrics?.OnCacheHit("GitHub", GitHubReleasesUrl);
-                        return cached.Update;
+                        if (cached.Update != null && IsNewerVersion(cached.Update.Version, currentVersion))
+                        {
+                            return cached.Update;
+                        }
+                        return null;
                     }
                 }
                 catch { }
@@ -161,16 +230,6 @@ public class GitHubUpdateService : IUpdateService
                 if (!Version.TryParse(latestVersionStr, out var latestVersion))
                     return null;
 
-                var rawCurrent = Assembly.GetEntryAssembly()?.GetName().Version
-                              ?? Assembly.GetExecutingAssembly().GetName().Version
-                              ?? typeof(GitHubUpdateService).Assembly.GetName().Version
-                              ?? new Version(1, 4, 3);
-
-                var currentVersion = new Version(
-                    Math.Max(0, rawCurrent.Major),
-                    Math.Max(0, rawCurrent.Minor),
-                    Math.Max(0, rawCurrent.Build));
-
                 var normalizedLatest = new Version(
                     Math.Max(0, latestVersion.Major),
                     Math.Max(0, latestVersion.Minor),
@@ -178,9 +237,18 @@ public class GitHubUpdateService : IUpdateService
 
                 if (normalizedLatest > currentVersion)
                 {
-                    var asset = release.Assets?.FirstOrDefault(a =>
-                        a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
-                        a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+                    var isInstalled = File.Exists(Path.Combine(AppContext.BaseDirectory, "unins000.exe"));
+                    GitHubAsset? asset = null;
+                    if (isInstalled)
+                    {
+                        asset = release.Assets?.FirstOrDefault(a => a.Name.EndsWith("-Setup-win-x64.exe", StringComparison.OrdinalIgnoreCase) || a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                             ?? release.Assets?.FirstOrDefault(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+                    }
+                    else
+                    {
+                        asset = release.Assets?.FirstOrDefault(a => a.Name.EndsWith("-Portable-win-x64.zip", StringComparison.OrdinalIgnoreCase) || a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                             ?? release.Assets?.FirstOrDefault(a => a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
+                    }
 
                     _logger.LogInformation("New update available: v{Version} (Current: v{CurrentVersion})", latestVersion, currentVersion);
 
@@ -300,6 +368,16 @@ public class GitHubUpdateService : IUpdateService
         }
         catch { }
 
+        // Also invalidate update cache so next launch checks afresh or sees up-to-date state
+        try
+        {
+            var curVer = GetCurrentVersion();
+            var cKey = $"github_update_check_v{curVer.Major}_{curVer.Minor}_{curVer.Build}";
+            _ = _cacheService?.RemoveAsync(cKey, CancellationToken.None);
+            _ = _cacheService?.RemoveAsync("github_update_check_latest", CancellationToken.None);
+        }
+        catch { }
+
         var appDir = AppContext.BaseDirectory.TrimEnd('\\', '/');
         var mainExe = Process.GetCurrentProcess().MainModule?.FileName ?? Path.Combine(appDir, "BlueStar.exe");
         var pid = Environment.ProcessId;
@@ -317,7 +395,8 @@ if not errorlevel 1 (
     timeout /t 1 /nobreak > nul
     goto WAIT_PID
 )
-start """" ""{updateFilePath}"" /SILENT /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS
+start /wait """" ""{updateFilePath}"" /SILENT /SUPPRESSMSGBOXES
+start """" ""{mainExe}""
 del ""%~f0"" & exit
 ";
             File.WriteAllText(batScript, batContent);
