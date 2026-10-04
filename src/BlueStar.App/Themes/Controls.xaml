@@ -2135,27 +2135,22 @@
 
     <Style TargetType="ProgressBar">
         <Setter Property="Height" Value="4"/>
-        <Setter Property="Background" Value="{StaticResource SurfaceInputBrush}"/>
+        <Setter Property="Background" Value="{StaticResource SubtleBorderBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ProgressBar">
                     <Grid x:Name="TemplateRoot" SnapsToDevicePixels="True" ClipToBounds="True">
-                        <Border Background="{TemplateBinding Background}"
+                        <Border x:Name="TrackBackground"
+                                Background="{TemplateBinding Background}"
                                 CornerRadius="{StaticResource RadiusPill}"/>
-                        <Track x:Name="PART_Track">
-                            <Track.DecreaseRepeatButton>
-                                <RepeatButton Command="Slider.DecreaseLarge">
-                                    <RepeatButton.Template>
-                                        <ControlTemplate TargetType="RepeatButton">
-                                            <Border CornerRadius="{StaticResource RadiusPill}"
-                                                    Background="{TemplateBinding Foreground}"/>
-                                        </ControlTemplate>
-                                    </RepeatButton.Template>
-                                </RepeatButton>
-                            </Track.DecreaseRepeatButton>
-                        </Track>
+                        <Border x:Name="PART_Track">
+                            <Border x:Name="PART_Indicator"
+                                    HorizontalAlignment="Left"
+                                    Background="{TemplateBinding Foreground}"
+                                    CornerRadius="{StaticResource RadiusPill}"/>
+                        </Border>
                         <Border x:Name="IndeterminateBlock"
                                 Width="140"
                                 HorizontalAlignment="Left"
@@ -2168,6 +2163,13 @@
                         </Border>
                     </Grid>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="Orientation" Value="Vertical">
+                            <Setter TargetName="TemplateRoot" Property="LayoutTransform">
+                                <Setter.Value>
+                                    <RotateTransform Angle="-90"/>
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
                         <Trigger Property="IsIndeterminate" Value="True">
                             <Setter TargetName="PART_Track" Property="Visibility" Value="Collapsed"/>
                             <Setter TargetName="IndeterminateBlock" Property="Visibility" Value="Visible"/>
@@ -2193,6 +2195,43 @@
 
     <Style x:Key="DownloadProgressBar" TargetType="ProgressBar" BasedOn="{StaticResource {x:Type ProgressBar}}">
         <Setter Property="Height" Value="6"/>
+    </Style>
+
+    <!-- Loading Spinner (Circular Indeterminate ProgressBar) -->
+    <Style x:Key="LoadingSpinner" TargetType="ProgressBar">
+        <Setter Property="Width" Value="16"/>
+        <Setter Property="Height" Value="16"/>
+        <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+        <Setter Property="IsIndeterminate" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ProgressBar">
+                    <Viewbox Width="{TemplateBinding Width}" Height="{TemplateBinding Height}">
+                        <Path Data="{StaticResource IconRefresh}"
+                              Fill="{TemplateBinding Foreground}"
+                              Width="16" Height="16"
+                              Stretch="Uniform"
+                              RenderTransformOrigin="0.5,0.5">
+                            <Path.RenderTransform>
+                                <RotateTransform x:Name="SpinnerTransform" Angle="0"/>
+                            </Path.RenderTransform>
+                            <Path.Triggers>
+                                <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                                    <BeginStoryboard>
+                                        <Storyboard RepeatBehavior="Forever">
+                                            <DoubleAnimation Storyboard.TargetName="SpinnerTransform"
+                                                             Storyboard.TargetProperty="Angle"
+                                                             From="0" To="360"
+                                                             Duration="0:0:1.0"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </EventTrigger>
+                            </Path.Triggers>
+                        </Path>
+                    </Viewbox>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- ── 7. SCROLLBAR & TOOLTIPS ── -->

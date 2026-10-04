@@ -182,7 +182,7 @@
                         </Grid>
                         <ProgressBar Margin="0,8,0,0" Value="{Binding GameFixDeployProgress}" Maximum="100" Height="6"
                                      Foreground="{StaticResource AccentBrush}"
-                                     Background="{StaticResource SurfaceInputBrush}"
+                                     Background="{StaticResource SubtleBorderBrush}"
                                      BorderThickness="0"
                                      Visibility="{Binding IsGameFixDeployProgressVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
                     </StackPanel>
@@ -279,7 +279,7 @@
                         <ProgressBar Value="{Binding ActiveJob.Percentage}" Maximum="100" Height="8"
                                      IsIndeterminate="{Binding ActiveJob.IsIndeterminate}"
                                      Foreground="{StaticResource AccentBrush}"
-                                     Background="{StaticResource SurfaceInputBrush}"
+                                     Background="{StaticResource SubtleBorderBrush}"
                                      BorderThickness="0"/>
                     </StackPanel>
                 </Border>
@@ -2157,7 +2157,7 @@
                             </Grid>
                             <ProgressBar Value="{Binding DeployProgress}" Maximum="100" Height="8"
                                          Foreground="{StaticResource AccentBrush}"
-                                         Background="{StaticResource SurfaceInputBrush}"
+                                         Background="{StaticResource SubtleBorderBrush}"
                                          BorderThickness="0"/>
                         </StackPanel>
                     </Border>
@@ -3801,7 +3801,7 @@
                             Padding="12,10" Margin="0,0,0,16"
                             Visibility="{Binding IsStartingSteam, Converter={StaticResource BoolToVisibilityConverter}}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <ProgressBar IsIndeterminate="True" Width="16" Height="16" Margin="0,0,10,0"/>
+                            <ProgressBar Style="{StaticResource LoadingSpinner}" Margin="0,0,10,0"/>
                             <TextBlock Text="{Binding SteamLaunchStatusText, FallbackValue='Starting Steam and waiting for user profile to load...'}"
                                        Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}" TextWrapping="Wrap" VerticalAlignment="Center"/>
                         </StackPanel>

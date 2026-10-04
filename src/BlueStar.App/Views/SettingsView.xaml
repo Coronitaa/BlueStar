@@ -595,7 +595,7 @@
                                                 <StackPanel>
                                                     <ProgressBar Height="4" IsIndeterminate="True"
                                                                  Foreground="{StaticResource AccentBrush}"
-                                                                 Background="{StaticResource SurfaceCardBrush}"
+                                                                 Background="{StaticResource SubtleBorderBrush}"
                                                                  BorderThickness="0" Margin="0,0,0,6"/>
                                                     <TextBlock Text="{Binding InstallRequirementsStatusText}" Style="{StaticResource Caption}" Foreground="{StaticResource AccentBrush}"/>
                                                 </StackPanel>

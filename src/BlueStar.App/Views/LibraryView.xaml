@@ -2121,7 +2121,7 @@
                             Padding="12,10" Margin="0,0,0,16"
                             Visibility="{Binding IsStartingSteam, Converter={StaticResource BoolToVisibilityConverter}}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <ProgressBar IsIndeterminate="True" Width="16" Height="16" Margin="0,0,10,0"/>
+                            <ProgressBar Style="{StaticResource LoadingSpinner}" Margin="0,0,10,0"/>
                             <TextBlock Text="{Binding SteamLaunchStatusText, FallbackValue='Starting Steam and waiting for user profile to load...'}"
                                        Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}" TextWrapping="Wrap" VerticalAlignment="Center"/>
                         </StackPanel>

@@ -535,7 +535,7 @@
                                            HorizontalAlignment="Right"/>
                             </Grid>
                             <ProgressBar Value="{Binding TotalTasksProgressPercentage}" Height="6"
-                                         Foreground="{StaticResource AccentBrush}" Background="{StaticResource SurfaceCardBrush}"
+                                         Foreground="{StaticResource AccentBrush}" Background="{StaticResource SubtleBorderBrush}"
                                          BorderThickness="0" Margin="0,0,0,4"/>
                             <TextBlock Text="{Binding ActiveTasksCount, StringFormat='{}{0} active operations running'}"
                                        Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
@@ -589,7 +589,7 @@
 
                                                 <!-- Individual Progress Bar -->
                                                 <ProgressBar Grid.Row="1" Value="{Binding ProgressPercentage}" Height="5" Margin="0,0,0,6"
-                                                             Foreground="{StaticResource AccentBrush}" Background="{StaticResource SurfaceInputBrush}"
+                                                             Foreground="{StaticResource AccentBrush}" Background="{StaticResource SubtleBorderBrush}"
                                                              BorderThickness="0"/>
 
                                                 <!-- Step Message -->
@@ -1031,7 +1031,7 @@
                             <StackPanel>
                                 <ProgressBar Height="4" IsIndeterminate="True"
                                              Foreground="{StaticResource AccentBrush}"
-                                             Background="{StaticResource SurfaceCardBrush}"
+                                             Background="{StaticResource SubtleBorderBrush}"
                                              BorderThickness="0" Margin="0,0,0,6"/>
                                 <TextBlock Text="{Binding SystemPrerequisitesInstallStatusText, FallbackValue='Installing component...'}"
                                            Style="{StaticResource Caption}" Foreground="{StaticResource AccentBrush}"/>
