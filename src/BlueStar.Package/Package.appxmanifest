@@ -18,7 +18,7 @@
 
   <Properties>
     <DisplayName>BlueStar Launcher</DisplayName>
-    <PublisherDisplayName>CorÃƒÂ¸na's Studios</PublisherDisplayName>
+    <PublisherDisplayName>CorÃ¸na's Studios</PublisherDisplayName>
     <Logo>Images\StoreLogo.png</Logo>
   </Properties>
 
@@ -38,7 +38,7 @@
       <uap:VisualElements
         DisplayName="BlueStar"
         Description="Universal Steam Game Instance Manager, Depot Staging, Manifest Resolver, and Multi-Engine Launcher"
-        BackgroundColor="#1a1a2e"
+        BackgroundColor="transparent"
         Square150x150Logo="Images\Square150x150Logo.png"
         Square44x44Logo="Images\Square44x44Logo.png">
         <uap:DefaultTile Wide310x150Logo="Images\Wide310x150Logo.png"
@@ -51,7 +51,7 @@
             <uap:ShowOn Tile="square310x310Logo"/>
           </uap:ShowNameOnTiles>
         </uap:DefaultTile>
-        <uap:SplashScreen Image="Images\SplashScreen.png" BackgroundColor="#1a1a2e"/>
+        <uap:SplashScreen Image="Images\SplashScreen.png" BackgroundColor="transparent"/>
       </uap:VisualElements>
     </Application>
   </Applications>
@@ -61,6 +61,7 @@
     <rescap:Capability Name="runFullTrust" />
   </Capabilities>
 </Package>
+
 
 
 

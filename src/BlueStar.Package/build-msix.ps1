@@ -168,6 +168,60 @@ if (-not $msixFile -and -not $msixBundle) {
 
         if ($LASTEXITCODE -eq 0) {
             Write-Host "  MSIX created: $outputMsix" -ForegroundColor Green
+
+            # Find signtool.exe
+            $signtool = $null
+            foreach ($sdkPath in $sdkPaths) {
+                $candidate = Join-Path $sdkPath.FullName "x64\signtool.exe"
+                if (Test-Path $candidate) {
+                    $signtool = $candidate
+                    break
+                }
+            }
+
+            # Sign with publisher certificate
+            $subject = "CN=16138BAA-C137-4D82-9EB1-FA186856FF82"
+            $cert = Get-ChildItem -Path "Cert:\CurrentUser\My" | Where-Object { $_.Subject -eq $subject } | Select-Object -First 1
+            if (-not $cert) {
+                Write-Host "  Generating code-signing certificate for $subject..." -ForegroundColor Cyan
+                $cert = New-SelfSignedCertificate `
+                    -Type Custom `
+                    -Subject $subject `
+                    -KeyUsage DigitalSignature `
+                    -FriendlyName "Corøna's Studios (BlueStar)" `
+                    -CertStoreLocation "Cert:\CurrentUser\My" `
+                    -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}") `
+                    -NotAfter (Get-Date).AddYears(5)
+            }
+
+            # Trust certificate in CurrentUser\TrustedPeople for local testing
+            $trusted = Get-ChildItem -Path "Cert:\CurrentUser\TrustedPeople" | Where-Object { $_.Thumbprint -eq $cert.Thumbprint }
+            if (-not $trusted) {
+                $store = Get-Item "Cert:\CurrentUser\TrustedPeople"
+                $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+                $store.Add($cert)
+                $store.Close()
+            }
+
+            # Export public certificate for distribution
+            $cerPath = Join-Path $msixOutputDir "CoronasStudios.cer"
+            Export-Certificate -Cert $cert -FilePath $cerPath -Force | Out-Null
+
+            if ($signtool) {
+                Write-Host "  Signing MSIX with certificate: $subject ($($cert.Thumbprint))..." -ForegroundColor Cyan
+                & $signtool sign /fd SHA256 /sha1 $cert.Thumbprint $outputMsix
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "  MSIX signed successfully!" -ForegroundColor Green
+                } else {
+                    Write-Warning "SignTool failed to sign MSIX."
+                }
+            }
+
+            # Create alias without trailing build number if applicable
+            $cleanMsix = Join-Path $msixOutputDir "BlueStar-v1.4.3-win-x64.msix"
+            if ($outputMsix -ne $cleanMsix) {
+                Copy-Item $outputMsix $cleanMsix -Force
+            }
         } else {
             Write-Warning "MakeAppx.exe failed. You may need to install the Windows SDK."
         }
