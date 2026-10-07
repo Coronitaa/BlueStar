@@ -32,12 +32,22 @@ SetupIconFile=src\BlueStar.App\Assets\bluestar.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
+
+[CustomMessages]
+english.PrereqChecking=Checking system prerequisites...
+spanish.PrereqChecking=Comprobando prerrequisitos del sistema...
+english.PrereqDownloading=Downloading required prerequisites...
+spanish.PrereqDownloading=Descargando prerrequisitos necesarios...
+english.PrereqInstalling=Installing prerequisites (Visual C++, DirectX, WebView2, .NET)...
+spanish.PrereqInstalling=Instalando prerrequisitos (Visual C++, DirectX, WebView2, .NET)...
+english.PrereqDownloadFailed=Failed to download some prerequisites. Do you want to continue the installation anyway?
+spanish.PrereqDownloadFailed=No se pudieron descargar algunos prerrequisitos. ¿Desea continuar con la instalación de todas formas?
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -45,6 +55,13 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "dist\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
+
+; Optional pre-bundled redistributables (bundled if present in redist\ directory, skipped otherwise)
+Source: "redist\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "redist\vc_redist.x86.exe"; DestDir: "{tmp}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "redist\MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "redist\dxwebsetup.exe"; DestDir: "{tmp}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "redist\windowsdesktop-runtime-8.0-win-x64.exe"; DestDir: "{tmp}"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -54,6 +71,156 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
+var
+  DownloadPage: TDownloadWizardPage;
+  NeedVc64Flag: Boolean;
+  NeedVcx86Flag: Boolean;
+  NeedWebView2Flag: Boolean;
+  NeedDirectXFlag: Boolean;
+  NeedDotNetFlag: Boolean;
+  DownloadCount: Integer;
+
+function NeedVc64(): Boolean;
+var
+  Installed: Cardinal;
+begin
+  Result := True;
+  if RegQueryDWordValue(HKLM, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64', 'Installed', Installed) and (Installed = 1) then
+    Result := False
+  else if RegQueryDWordValue(HKLM, 'SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\X64', 'Installed', Installed) and (Installed = 1) then
+    Result := False
+  else if FileExists(ExpandConstant('{sys}\msvcp140.dll')) and FileExists(ExpandConstant('{sys}\vcruntime140.dll')) then
+    Result := False;
+end;
+
+function NeedVcx86(): Boolean;
+var
+  Installed: Cardinal;
+begin
+  Result := True;
+  if RegQueryDWordValue(HKLM, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X86', 'Installed', Installed) and (Installed = 1) then
+    Result := False
+  else if RegQueryDWordValue(HKLM, 'SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\X86', 'Installed', Installed) and (Installed = 1) then
+    Result := False
+  else if FileExists(ExpandConstant('{syswow64}\msvcp140.dll')) and FileExists(ExpandConstant('{syswow64}\vcruntime140.dll')) then
+    Result := False;
+end;
+
+function NeedWebView2(): Boolean;
+var
+  Pv: String;
+begin
+  Result := True;
+  if RegQueryStringValue(HKLM, 'SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', Pv) and (Pv <> '') and (Pv <> '0.0.0.0') then
+    Result := False
+  else if RegQueryStringValue(HKLM, 'SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', Pv) and (Pv <> '') and (Pv <> '0.0.0.0') then
+    Result := False
+  else if RegQueryStringValue(HKCU, 'SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', Pv) and (Pv <> '') and (Pv <> '0.0.0.0') then
+    Result := False;
+end;
+
+function NeedDirectX(): Boolean;
+begin
+  // Check if critical legacy DirectX components are present (D3DX9, D3DCompiler)
+  Result := not (FileExists(ExpandConstant('{sys}\d3dx9_43.dll')) and FileExists(ExpandConstant('{sys}\d3dcompiler_43.dll')));
+end;
+
+function NeedDotNet(): Boolean;
+var
+  DotNetDir: String;
+  FindRec: TFindRec;
+begin
+  Result := True;
+  if RegKeyExists(HKLM, 'SOFTWARE\dotnet\Setup\InstalledVersions\x64\sharedfx\Microsoft.WindowsDesktop.App') then
+  begin
+    Result := False;
+    Exit;
+  end;
+  DotNetDir := ExpandConstant('{commonpf64}\dotnet\shared\Microsoft.WindowsDesktop.App');
+  if DirExists(DotNetDir) then
+  begin
+    if FindFirst(DotNetDir + '\8.*', FindRec) then
+    begin
+      FindClose(FindRec);
+      Result := False;
+    end;
+  end;
+end;
+
+function OnDownloadProgress(const Url, FileName: String; const Progress, ProgressMax: Int64): Boolean;
+begin
+  Result := True;
+end;
+
+procedure InitializeWizard();
+begin
+  DownloadPage := CreateDownloadPage(SetupMessage(msgWizardPreparing), CustomMessage('PrereqDownloading'), @OnDownloadProgress);
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+begin
+  Result := True;
+  if CurPageID = wpReady then
+  begin
+    NeedVc64Flag := NeedVc64();
+    NeedVcx86Flag := NeedVcx86();
+    NeedWebView2Flag := NeedWebView2();
+    NeedDirectXFlag := NeedDirectX();
+    NeedDotNetFlag := NeedDotNet();
+
+    DownloadPage.Clear;
+    DownloadCount := 0;
+
+    if NeedVc64Flag and not FileExists(ExpandConstant('{tmp}\vc_redist.x64.exe')) then
+    begin
+      DownloadPage.Add('https://aka.ms/vs/17/release/vc_redist.x64.exe', 'vc_redist.x64.exe', '');
+      DownloadCount := DownloadCount + 1;
+    end;
+
+    if NeedVcx86Flag and not FileExists(ExpandConstant('{tmp}\vc_redist.x86.exe')) then
+    begin
+      DownloadPage.Add('https://aka.ms/vs/17/release/vc_redist.x86.exe', 'vc_redist.x86.exe', '');
+      DownloadCount := DownloadCount + 1;
+    end;
+
+    if NeedWebView2Flag and not FileExists(ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe')) then
+    begin
+      DownloadPage.Add('https://go.microsoft.com/fwlink/p/?LinkId=2124703', 'MicrosoftEdgeWebview2Setup.exe', '');
+      DownloadCount := DownloadCount + 1;
+    end;
+
+    if NeedDirectXFlag and not FileExists(ExpandConstant('{tmp}\dxwebsetup.exe')) then
+    begin
+      DownloadPage.Add('https://download.microsoft.com/download/1/7/1/1718CCC4-6315-4D8E-9543-8E28A4E18C4C/dxwebsetup.exe', 'dxwebsetup.exe', '');
+      DownloadCount := DownloadCount + 1;
+    end;
+
+    if NeedDotNetFlag and not FileExists(ExpandConstant('{tmp}\windowsdesktop-runtime-8.0-win-x64.exe')) then
+    begin
+      DownloadPage.Add('https://aka.ms/dotnet/8.0/windowsdesktop-runtime-win-x64.exe', 'windowsdesktop-runtime-8.0-win-x64.exe', '');
+      DownloadCount := DownloadCount + 1;
+    end;
+
+    if DownloadCount > 0 then
+    begin
+      DownloadPage.Show;
+      try
+        try
+          DownloadPage.Download;
+        except
+          if SuppressibleMsgBox(AddPeriod(GetExceptionMessage) + #13#10#13#10 + CustomMessage('PrereqDownloadFailed'), mbError, MB_YESNO, IDNO) = IDNO then
+          begin
+            Result := False;
+            Exit;
+          end;
+        end;
+      finally
+        DownloadPage.Hide;
+      end;
+    end;
+  end;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   SettingsFile: String;
@@ -61,8 +228,28 @@ var
   SelectedLang: String;
   FileContent: AnsiString;
   ContentStr: String;
+  ResultCode: Integer;
 begin
-  if CurStep = ssPostInstall then
+  if CurStep = ssInstall then
+  begin
+    WizardForm.StatusLabel.Caption := CustomMessage('PrereqInstalling');
+
+    if NeedVc64Flag and FileExists(ExpandConstant('{tmp}\vc_redist.x64.exe')) then
+      Exec(ExpandConstant('{tmp}\vc_redist.x64.exe'), '/install /quiet /norestart', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+    if NeedVcx86Flag and FileExists(ExpandConstant('{tmp}\vc_redist.x86.exe')) then
+      Exec(ExpandConstant('{tmp}\vc_redist.x86.exe'), '/install /quiet /norestart', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+    if NeedWebView2Flag and FileExists(ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe')) then
+      Exec(ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe'), '/silent /install', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+    if NeedDirectXFlag and FileExists(ExpandConstant('{tmp}\dxwebsetup.exe')) then
+      Exec(ExpandConstant('{tmp}\dxwebsetup.exe'), '/Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+    if NeedDotNetFlag and FileExists(ExpandConstant('{tmp}\windowsdesktop-runtime-8.0-win-x64.exe')) then
+      Exec(ExpandConstant('{tmp}\windowsdesktop-runtime-8.0-win-x64.exe'), '/install /quiet /norestart', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end
+  else if CurStep = ssPostInstall then
   begin
     if ActiveLanguage = 'spanish' then
       SelectedLang := 'es'

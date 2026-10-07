@@ -33,4 +33,14 @@ public interface IUpdateService
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
     Task ApplyUpdateAsync(string updateFilePath, CancellationToken ct);
+
+    /// <summary>
+    /// Gets a value indicating whether the application is running as a packaged app (e.g. Microsoft Store MSIX package).
+    /// </summary>
+    bool IsPackaged { get; }
+
+    /// <summary>
+    /// Opens the Microsoft Store application page for updating the application.
+    /// </summary>
+    void OpenStoreForUpdates();
 }

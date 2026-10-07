@@ -53,11 +53,73 @@ public class GitHubUpdateService : IUpdateService
         _metrics = metrics;
     }
 
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    private static extern int GetCurrentPackageFullName(ref int packageFullNameLength, System.Text.StringBuilder? packageFullName);
+
+    /// <inheritdoc />
+    public bool IsPackaged => IsRunningAsPackaged();
+
+    /// <summary>
+    /// Detects whether the current process is running inside an MSIX package (such as the Microsoft Store build).
+    /// </summary>
+    public static bool IsRunningAsPackaged()
+    {
+        if (AppContext.BaseDirectory.Contains("WindowsApps", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        try
+        {
+            int length = 0;
+            int result = GetCurrentPackageFullName(ref length, null);
+            // APPMODEL_ERROR_NO_PACKAGE = 15700 (0x3D54)
+            // ERROR_INSUFFICIENT_BUFFER = 122 (0x7A) - indicates package identity exists
+            return result == 0 || result == 122;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <inheritdoc />
+    public void OpenStoreForUpdates()
+    {
+        try
+        {
+            _logger.LogInformation("Opening Microsoft Store for BlueStar updates (Product ID: 9N9HHDBXT4PW)...");
+            Process.Start(new ProcessStartInfo("ms-windows-store://pdp/?productid=9N9HHDBXT4PW")
+            {
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to launch ms-windows-store protocol, falling back to web URL...");
+            try
+            {
+                Process.Start(new ProcessStartInfo("https://apps.microsoft.com/detail/9N9HHDBXT4PW")
+                {
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception webEx)
+            {
+                _logger.LogError(webEx, "Failed to open Microsoft Store web page.");
+            }
+        }
+    }
+
     /// <summary>
     /// Checks if a downloaded update from a previous session is waiting to be installed.
     /// </summary>
     public static string? GetPendingUpdateFilePath()
     {
+        if (IsRunningAsPackaged())
+        {
+            try { if (File.Exists(PendingUpdateMarkerPath)) File.Delete(PendingUpdateMarkerPath); } catch { }
+            return null;
+        }
+
         try
         {
             if (!File.Exists(PendingUpdateMarkerPath)) return null;
@@ -288,6 +350,13 @@ public class GitHubUpdateService : IUpdateService
     /// <inheritdoc />
     public async Task<string> DownloadUpdateAsync(UpdateInfo update, IProgress<DownloadProgress>? progress, CancellationToken ct)
     {
+        if (IsPackaged)
+        {
+            _logger.LogInformation("Application is packaged as Microsoft Store MSIX. Redirecting to Store rather than downloading standalone installer.");
+            OpenStoreForUpdates();
+            return string.Empty;
+        }
+
         if (update is null) throw new ArgumentNullException(nameof(update));
         if (string.IsNullOrWhiteSpace(update.DownloadUrl))
             throw new ArgumentException("Update DownloadUrl cannot be empty.", nameof(update));
@@ -355,6 +424,13 @@ public class GitHubUpdateService : IUpdateService
     /// <inheritdoc />
     public Task ApplyUpdateAsync(string updateFilePath, CancellationToken ct)
     {
+        if (IsPackaged)
+        {
+            _logger.LogInformation("Applying update in packaged mode: Opening Microsoft Store.");
+            OpenStoreForUpdates();
+            return Task.CompletedTask;
+        }
+
         if (string.IsNullOrWhiteSpace(updateFilePath) || !File.Exists(updateFilePath))
             throw new FileNotFoundException("Update installer file not found.", updateFilePath);
 

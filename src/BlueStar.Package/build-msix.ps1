@@ -54,7 +54,7 @@ if (-not (Test-Path (Join-Path $imagesDir "StoreLogo.png"))) {
 Write-Host "[2/4] Updating manifest version to $msixVersion..." -ForegroundColor Yellow
 $manifestPath = Join-Path $packageDir "Package.appxmanifest"
 $manifestContent = Get-Content $manifestPath -Raw
-$manifestContent = $manifestContent -replace 'Version="[\d.]+"', "Version=""$msixVersion"""
+$manifestContent = $manifestContent -replace '(?<=<Identity[\s\S]*?Version=)"[\d.]+"', """$msixVersion"""
 Set-Content -Path $manifestPath -Value $manifestContent -Encoding UTF8
 
 # 3. Build the MSIX package
@@ -121,8 +121,8 @@ if (-not $msixFile -and -not $msixBundle) {
     Write-Host "  Using MakeAppx.exe fallback..." -ForegroundColor Yellow
 
     # Find MakeAppx.exe
-    $sdkPaths = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Directory -ErrorAction SilentlyContinue |
-        Sort-Object Name -Descending | Select-Object -First 3
+    $sdkPaths = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Filter "10.*" -Directory -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending
 
     $makeappx = $null
     foreach ($sdkPath in $sdkPaths) {
@@ -133,6 +133,11 @@ if (-not $msixFile -and -not $msixBundle) {
         }
     }
 
+    if (-not $makeappx) {
+        $appCert = "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\makeappx.exe"
+        if (Test-Path $appCert) { $makeappx = $appCert }
+    }
+
     if ($makeappx) {
         $publishDir = Join-Path $rootDir "src\BlueStar.App\bin\Release\net8.0-windows\win-x64\publish"
         if (-not (Test-Path $publishDir)) {
@@ -141,7 +146,7 @@ if (-not $msixFile -and -not $msixBundle) {
 
         $mappingFile = Join-Path $msixOutputDir "mapping.txt"
         $mappingContent = @("[Files]")
-        $mappingContent += "`"$manifestPath`" `"Package.appxmanifest`""
+        $mappingContent += "`"$manifestPath`" `"AppxManifest.xml`""
 
         # Add images
         Get-ChildItem -Path $imagesDir -Filter "*.png" | ForEach-Object {

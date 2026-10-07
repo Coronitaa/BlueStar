@@ -217,37 +217,77 @@ public sealed class ReFixUpdateService : IReFixUpdateService
             }
             else
             {
+                // ALWAYS target the writable user AppData directory first
+                var appDataDeployPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "BlueStar", "tools", "ReFix_deploy");
+                targetDirs.Add(appDataDeployPath);
+
+                // Also check if current deploy path is writable and not inside WindowsApps or Program Files
                 var currentDeploy = ReFixEmulator.GetReFixDeployPath();
-                if (!string.IsNullOrEmpty(currentDeploy))
+                if (!string.IsNullOrEmpty(currentDeploy) &&
+                    !currentDeploy.Contains("WindowsApps", StringComparison.OrdinalIgnoreCase) &&
+                    IsDirectoryWritable(currentDeploy))
+                {
                     targetDirs.Add(currentDeploy);
+                }
 
-                // Also check standard paths in AppContext / Source
-                var defaultToolsPath = Path.Combine(AppContext.BaseDirectory, "tools", "ReFix_deploy");
-                targetDirs.Add(defaultToolsPath);
-
+                // If running in development source tree and it exists and is writable, also update it
                 var srcToolsPath = Path.Combine(Directory.GetCurrentDirectory(), "src", "BlueStar.App", "tools", "ReFix_deploy");
-                if (Directory.Exists(Path.GetDirectoryName(srcToolsPath)))
+                if (Directory.Exists(Path.GetDirectoryName(srcToolsPath)) && IsDirectoryWritable(srcToolsPath))
+                {
                     targetDirs.Add(srcToolsPath);
+                }
+
+                // If running portable (writable AppContext.BaseDirectory not in WindowsApps)
+                var defaultToolsPath = Path.Combine(AppContext.BaseDirectory, "tools", "ReFix_deploy");
+                if (!defaultToolsPath.Equals(appDataDeployPath, StringComparison.OrdinalIgnoreCase) &&
+                    !defaultToolsPath.Contains("WindowsApps", StringComparison.OrdinalIgnoreCase) &&
+                    IsDirectoryWritable(defaultToolsPath))
+                {
+                    targetDirs.Add(defaultToolsPath);
+                }
             }
 
+            int successfulTargets = 0;
             foreach (var target in targetDirs)
             {
-                _logger.LogInformation("Applying ReFix v{Version} update to directory: {Target}", update.Version, target);
-                CopyDirectoryRecursive(sourceDeployDir, target);
-
-                // Write refix_version.json
-                var versionInfoPath = Path.Combine(target, "refix_version.json");
-                var versionData = new
+                if (!IsDirectoryWritable(target))
                 {
-                    version = update.Version,
-                    tag = update.TagName,
-                    updatedAt = DateTimeOffset.UtcNow,
-                    downloadUrl = update.DownloadUrl
-                };
-                File.WriteAllText(versionInfoPath, JsonSerializer.Serialize(versionData, new JsonSerializerOptions { WriteIndented = true }));
+                    _logger.LogInformation("Skipping non-writable or read-only target directory: {Target}", target);
+                    continue;
+                }
+
+                try
+                {
+                    _logger.LogInformation("Applying ReFix v{Version} update to directory: {Target}", update.Version, target);
+                    CopyDirectoryRecursive(sourceDeployDir, target);
+
+                    // Write refix_version.json
+                    var versionInfoPath = Path.Combine(target, "refix_version.json");
+                    var versionData = new
+                    {
+                        version = update.Version,
+                        tag = update.TagName,
+                        updatedAt = DateTimeOffset.UtcNow,
+                        downloadUrl = update.DownloadUrl
+                    };
+                    File.WriteAllText(versionInfoPath, JsonSerializer.Serialize(versionData, new JsonSerializerOptions { WriteIndented = true }));
+                    successfulTargets++;
+                }
+                catch (Exception targetEx)
+                {
+                    _logger.LogWarning(targetEx, "Failed to apply ReFix update to target {Target}", target);
+                }
             }
 
-            _logger.LogInformation("ReFix update v{Version} successfully applied!", update.Version);
+            if (successfulTargets == 0)
+            {
+                _logger.LogError("Failed to apply ReFix update to any target directory.");
+                return false;
+            }
+
+            _logger.LogInformation("ReFix update v{Version} successfully applied to {Count} location(s)!", update.Version, successfulTargets);
 
             // Reset community ratings to 0 for this emulator on version update
             if (_emulatorRatingService != null)
@@ -606,6 +646,25 @@ public sealed class ReFixUpdateService : IReFixUpdateService
         }
 
         return extractedFolder;
+    }
+
+    private static bool IsDirectoryWritable(string dirPath)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(dirPath)) return false;
+            if (dirPath.Contains("WindowsApps", StringComparison.OrdinalIgnoreCase)) return false;
+
+            Directory.CreateDirectory(dirPath);
+            var testFile = Path.Combine(dirPath, $".write_test_{Guid.NewGuid():N}.tmp");
+            File.WriteAllText(testFile, "test");
+            File.Delete(testFile);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static void CopyDirectoryRecursive(string sourceDir, string targetDir)

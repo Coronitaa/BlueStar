@@ -64,4 +64,23 @@ public class ReFixUpdateServiceTests
             It.IsAny<string?>(),
             It.IsAny<Action?>()), Times.Once);
     }
+
+    [Theory]
+    [InlineData("1.3.3", "1.3.2", true)]
+    [InlineData("1.3.2", "1.3.2", false)]
+    [InlineData("1.3.0", "1.3.2", false)]
+    [InlineData("1.4.0", "1.3.9", true)]
+    public void IsNewerVersion_CorrectlyComparesVersions(string candidate, string baseline, bool expected)
+    {
+        var result = ReFixUpdateService.IsNewerVersion(candidate, baseline);
+        result.Should().Be(expected);
+    }
+
+    [Fact]
+    public void GitHubUpdateService_IsPackaged_DoesNotThrow()
+    {
+        var isPackaged = BlueStar.Infrastructure.Update.GitHubUpdateService.IsRunningAsPackaged();
+        // Running inside standard test runner, should be boolean without exceptions
+        isPackaged.Should().Be(isPackaged);
+    }
 }

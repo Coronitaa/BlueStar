@@ -132,7 +132,7 @@ public sealed class ReFixEmulator : IEmulator
             catch { }
         }
 
-        return "1.1";
+        return "1.3";
     }
 
     public bool IsSupported(GameInstance instance)

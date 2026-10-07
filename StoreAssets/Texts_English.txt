@@ -1,0 +1,20 @@
+﻿--- 1. DESCRIPTION ---
+BlueStar is an all-in-one desktop game management and launcher for modern PC gaming.
+
+Key Features:
+• Manage game instances from multiple sources (Steam, local folders, DepotBox).
+• Ultra-fast offline catalog with instant search and community ratings.
+• Integrated depot downloader with manifest verification.
+• Online multiplayer via Steamworks and offline LAN multiplayer with zero Steam dependency.
+• 1-Click DLC unlocking and integrated mod management (Unity, Unreal).
+• Automatic Windows prerequisites scanner and installer (VC++, DirectX, .NET).
+
+--- 2. PRODUCT FEATURES (Add one by one) ---
+1. Game instance manager and multiplayer launcher
+2. Ultra-fast offline game catalog and search
+3. Integrated Steam Depot downloader
+4. LAN emulation and online Steamworks support
+5. Automatic prerequisites installer
+
+--- 3. SEARCH TERMS ---
+game launcher, steam, depot downloader, game manager, multiplayer

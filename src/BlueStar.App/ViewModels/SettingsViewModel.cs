@@ -961,6 +961,51 @@ public partial class SettingsViewModel : ObservableObject
     {
         if (_updateService == null) return;
 
+        if (_updateService.IsPackaged)
+        {
+            if (HasUpdateAvailable)
+            {
+                _updateService.OpenStoreForUpdates();
+                return;
+            }
+
+            try
+            {
+                IsCheckingForUpdates = true;
+                UpdateButtonText = _localizationService.CurrentLanguage == "es" ? "Buscando..." : "Checking...";
+                var update = await _updateService.CheckForUpdatesAsync(CancellationToken.None).ConfigureAwait(true);
+                if (update != null)
+                {
+                    HasUpdateAvailable = true;
+                    AvailableUpdateInfo = update;
+                    AvailableUpdateVersion = update.Version;
+                    UpdateButtonText = _localizationService.CurrentLanguage == "es" ? "Actualizar en Store" : "Update in Store";
+                    _notificationService.ShowInfo(
+                        _localizationService.CurrentLanguage == "es" ? "Actualización Encontrada" : "Update Found",
+                        _localizationService.CurrentLanguage == "es" ? $"BlueStar v{update.Version} está disponible en la Microsoft Store." : $"BlueStar v{update.Version} is available on the Microsoft Store.");
+                }
+                else
+                {
+                    HasUpdateAvailable = false;
+                    UpdateButtonText = _localizationService.CurrentLanguage == "es" ? "Buscar actualizaciones" : "Check for updates";
+                    _notificationService.ShowInfo(
+                        _localizationService.CurrentLanguage == "es" ? "Sin Actualizaciones" : "No Updates Found",
+                        _localizationService.CurrentLanguage == "es" ? "Estás ejecutando la versión más reciente de BlueStar." : "You are running the latest version of BlueStar.");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking for BlueStar updates");
+                _notificationService.ShowError("Update Check Failed", ex.Message);
+                UpdateButtonText = _localizationService.CurrentLanguage == "es" ? "Buscar actualizaciones" : "Check for updates";
+            }
+            finally
+            {
+                IsCheckingForUpdates = false;
+            }
+            return;
+        }
+
         if (HasUpdateAvailable && AvailableUpdateInfo != null)
         {
             try

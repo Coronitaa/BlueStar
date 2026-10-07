@@ -319,15 +319,30 @@ public partial class MainViewModel : ObservableObject, IDisposable
             var update = await _updateService.CheckForUpdatesAsync(CancellationToken.None).ConfigureAwait(true);
             if (update != null)
             {
-                _notificationService.ShowInfo(
-                    "New BlueStar Version",
-                    $"BlueStar v{update.Version} is available.",
-                    duration: TimeSpan.FromSeconds(25),
-                    actionText: "Download",
-                    action: () =>
-                    {
-                        _ = DownloadAndPromptUpdateAsync(update);
-                    });
+                if (_updateService.IsPackaged)
+                {
+                    _notificationService.ShowInfo(
+                        "New BlueStar Version",
+                        $"BlueStar v{update.Version} is available on the Microsoft Store.",
+                        duration: TimeSpan.FromSeconds(30),
+                        actionText: "Update in Store",
+                        action: () =>
+                        {
+                            _updateService.OpenStoreForUpdates();
+                        });
+                }
+                else
+                {
+                    _notificationService.ShowInfo(
+                        "New BlueStar Version",
+                        $"BlueStar v{update.Version} is available.",
+                        duration: TimeSpan.FromSeconds(25),
+                        actionText: "Download",
+                        action: () =>
+                        {
+                            _ = DownloadAndPromptUpdateAsync(update);
+                        });
+                }
             }
         }
         catch { }

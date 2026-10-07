@@ -1,0 +1,20 @@
+﻿--- 1. DESCRIPCIÓN (Descripción de la tienda) ---
+BlueStar es un gestor y lanzador de juegos todo-en-uno para PC gaming moderno.
+
+Características principales:
+• Gestiona instancias de juegos desde múltiples fuentes (Steam, local, DepotBox).
+• Catálogo offline ultrarrápido con búsqueda instantánea y puntuaciones.
+• Descargador de depots integrado con verificación de manifiestos.
+• Multijugador online vía Steamworks y multijugador LAN offline sin dependencia de Steam.
+• Desbloqueo de DLC y gestión de mods (Unity, Unreal) integrada.
+• Escáner automático de prerrequisitos de Windows (VC++, DirectX, .NET).
+
+--- 2. CARACTERÍSTICAS DEL PRODUCTO (Añadir una por una) ---
+1. Gestor de instancias y lanzador multijugador
+2. Catálogo offline con búsqueda ultrarrápida
+3. Descargador de Depots de Steam integrado
+4. Emulación LAN y Steamworks online
+5. Instalador automático de prerrequisitos
+
+--- 3. TÉRMINOS DE BÚSQUEDA ---
+game launcher, steam, depot downloader, game manager, multiplayer
