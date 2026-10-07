@@ -21,7 +21,7 @@
 #>
 
 param(
-    [string]$Version = "1.4.3.1",
+    [string]$Version = "1.4.4.0",
     [string]$Configuration = "Release"
 )
 
@@ -218,11 +218,11 @@ if (-not $msixFile -and -not $msixBundle) {
                 }
             }
 
-            # Create aliases for convenient upload and testing
-            $v143Msix = Join-Path $msixOutputDir "BlueStar-v1.4.3-win-x64.msix"
-            $v1431Msix = Join-Path $msixOutputDir "BlueStar-v1.4.3.1-win-x64.msix"
-            if ($outputMsix -ne $v143Msix) { Copy-Item $outputMsix $v143Msix -Force }
-            if ($outputMsix -ne $v1431Msix) { Copy-Item $outputMsix $v1431Msix -Force }
+            # Ensure standard release filename
+            $releaseMsix = Join-Path $msixOutputDir "BlueStar-v1.4.3-win-x64.msix"
+            if ($outputMsix -ne $releaseMsix) {
+                Copy-Item $outputMsix $releaseMsix -Force
+            }
         } else {
             Write-Warning "MakeAppx.exe failed. You may need to install the Windows SDK."
         }
