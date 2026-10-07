@@ -307,5 +307,106 @@ public class ShortcutHelperTests
 
         act.Should().NotThrow();
     }
+
+    [Fact]
+    public void CleanSteamShortcutName_PreservesSymbolsAndSpecialCharacters()
+    {
+        // Symbols should NOT be replaced by '_'
+        const string rawName = "HALF-LIFE: 2 ™ & ® [ReFix] (2024)! #1 / 100% {Final}";
+        var cleaned = ShortcutHelper.CleanSteamShortcutName(rawName);
+
+        cleaned.Should().Be("HALF-LIFE: 2 ™ & ® [ReFix] (2024)! #1 / 100% {Final}");
+        cleaned.Should().NotContain("_");
+        cleaned.Should().Contain("™");
+        cleaned.Should().Contain("®");
+        cleaned.Should().Contain(":");
+        cleaned.Should().Contain("[ReFix]");
+        cleaned.Should().Contain("(2024)!");
+
+        // Unicode and accents should be preserved
+        const string unicodeName = "NieR:Automata™ - Edición Especial (日本語 & Français)";
+        ShortcutHelper.CleanSteamShortcutName(unicodeName).Should().Be(unicodeName);
+
+        // Control characters (\0, \r, \n) should be removed to preserve VDF binary structure
+        const string nameWithControlChars = "Game\0Title\r\n: Deluxe Edition™";
+        ShortcutHelper.CleanSteamShortcutName(nameWithControlChars).Should().Be("GameTitle: Deluxe Edition™");
+
+        // Null and whitespace fallback to "Game"
+        ShortcutHelper.CleanSteamShortcutName(null).Should().Be("Game");
+        ShortcutHelper.CleanSteamShortcutName("   ").Should().Be("Game");
+        ShortcutHelper.CleanSteamShortcutName("\0\r\n").Should().Be("Game");
+    }
+
+    [Fact]
+    public void BuildVdfEntry_WithSpecialCharacters_PreservesExactSymbols()
+    {
+        const string gameNameWithSymbols = "STEINS;GATE 0 [ReFix] ™ & ®: Special Edition!";
+        var entryBytes = ShortcutHelper.BuildVdfEntry(0, gameNameWithSymbols, @"C:\Games\[ReFix] SG0\game.exe", @"C:\Games\[ReFix] SG0");
+
+        var text = System.Text.Encoding.UTF8.GetString(entryBytes);
+        text.Should().Contain(gameNameWithSymbols);
+        text.Should().Contain("™");
+        text.Should().Contain("®");
+        text.Should().Contain("[ReFix]");
+        text.Should().NotContain("STEINS_GATE");
+    }
+
+    [Fact]
+    public void AddSteamShortcutToUser_WithSpecialCharacters_PreservesExactSymbolsInVdf()
+    {
+        var tempVdf = Path.Combine(Path.GetTempPath(), "shortcuts_symbols_test_" + Guid.NewGuid() + ".vdf");
+        try
+        {
+            const string specialGameName = "Super Game: Definitive Edition™ [2024] (v1.0)! & DLCs";
+            var success = ShortcutHelper.AddSteamShortcutToUser(
+                tempVdf,
+                specialGameName,
+                @"C:\Games\[Special] Game\launch.exe",
+                @"C:\Games\[Special] Game");
+
+            success.Should().BeTrue();
+            File.Exists(tempVdf).Should().BeTrue();
+
+            var bytes = File.ReadAllBytes(tempVdf);
+            var vdfContent = System.Text.Encoding.UTF8.GetString(bytes);
+
+            vdfContent.Should().Contain(specialGameName);
+            vdfContent.Should().Contain("™");
+            vdfContent.Should().Contain(":");
+            vdfContent.Should().Contain("[2024]");
+            vdfContent.Should().NotContain("Super_Game");
+        }
+        finally
+        {
+            if (File.Exists(tempVdf))
+            {
+                try { File.Delete(tempVdf); } catch { }
+            }
+        }
+    }
+
+    [Fact]
+    public void FindGameExecutables_WithBracketsAndSymbolsInFolder_FindsAndRanksExecutable()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "bluestar_find_test_" + Guid.NewGuid() + " [Deluxe Edition] ™");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var exePath = Path.Combine(tempDir, "AwesomeGame.exe");
+            File.WriteAllBytes(exePath, [0x4D, 0x5A]); // MZ header dummy
+
+            var results = ShortcutHelper.FindGameExecutables(tempDir, "Awesome Game [2024] ™");
+            results.Should().NotBeEmpty();
+            results[0].Should().Be(exePath);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                try { Directory.Delete(tempDir, recursive: true); } catch { }
+            }
+        }
+    }
 }
 

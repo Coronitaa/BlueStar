@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "BlueStar"
-#define MyAppVersion "1.4.3"
+#define MyAppVersion "1.4.4"
 #define MyAppPublisher "BlueStar Devs"
 #define MyAppURL "https://github.com/Coronitaa/BlueStar"
 #define MyAppExeName "BlueStar.exe"

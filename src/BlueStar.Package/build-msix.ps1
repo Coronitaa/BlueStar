@@ -219,7 +219,7 @@ if (-not $msixFile -and -not $msixBundle) {
             }
 
             # Ensure standard release filename
-            $releaseMsix = Join-Path $msixOutputDir "BlueStar-v1.4.3-win-x64.msix"
+            $releaseMsix = Join-Path $msixOutputDir "BlueStar-v${Version}-win-x64.msix"
             if ($outputMsix -ne $releaseMsix) {
                 Copy-Item $outputMsix $releaseMsix -Force
             }

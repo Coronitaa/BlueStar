@@ -23,6 +23,9 @@ bld/
 [Ll]og/
 [Ll]ogs/
 
+# Project tools
+!src/BlueStar.App/tools/**
+
 # NuGet
 *.nupkg
 *.snupkg

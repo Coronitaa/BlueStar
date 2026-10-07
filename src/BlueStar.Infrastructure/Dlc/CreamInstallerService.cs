@@ -79,7 +79,7 @@ public class CreamInstallerService : IDlcInstaller
         }
 
         // 1. Check if ReFix_deploy dlc_unlocker.ps1 script is available
-        var deployPath = Emulators.ReFixEmulator.GetReFixDeployPath();
+        var deployPath = Emulators.ReFixEmulator.GetReFixDeployPath(instance);
         if (!string.IsNullOrEmpty(deployPath))
         {
             var binDir = Directory.Exists(Path.Combine(deployPath, "bin")) ? Path.Combine(deployPath, "bin") : deployPath;
@@ -89,7 +89,15 @@ public class CreamInstallerService : IDlcInstaller
                 Report(progress, "🚀 Executing ReFix Suite dlc_unlocker.ps1...");
                 var appIdStr = instance.AppId > 0 ? instance.AppId.ToString() : "480";
                 var gameName = !string.IsNullOrWhiteSpace(instance.Name) ? instance.Name : Path.GetFileName(instance.InstallPath);
-                var args = $"-NoProfile -ExecutionPolicy Bypass -File \"{dlcScript}\" -TargetDir \"{instance.InstallPath}\" -BinDir \"{binDir}\" -Action \"install\" -AppId \"{appIdStr}\" -GameName \"{gameName}\" -DLCMode \"all\"";
+                var args = $"-NoProfile -ExecutionPolicy Bypass -File \"{dlcScript}\" -TargetDir \"{Emulators.ReFixEmulator.EscapePsArg(instance.InstallPath)}\" -BinDir \"{Emulators.ReFixEmulator.EscapePsArg(binDir)}\" -Action \"install\" -AppId \"{Emulators.ReFixEmulator.EscapePsArg(appIdStr)}\" -GameName \"{Emulators.ReFixEmulator.EscapePsArg(gameName)}\" -DLCMode \"all\"";
+
+                var env = new Dictionary<string, string>
+                {
+                    ["BLUESTAR_TARGET_DIR"] = instance.InstallPath,
+                    ["BLUESTAR_BIN_DIR"] = binDir,
+                    ["BLUESTAR_GAME_NAME"] = gameName,
+                    ["BLUESTAR_APP_ID"] = appIdStr
+                };
 
                 var (exitCode, stdout, stderr) = await Emulators.ReFixEmulator.RunProcessAsync(
                     "powershell.exe",
@@ -100,7 +108,8 @@ public class CreamInstallerService : IDlcInstaller
                         _logger.LogInformation("[dlc_unlocker] {Line}", line);
                         Report(progress, line);
                     },
-                    ct).ConfigureAwait(false);
+                    ct,
+                    env).ConfigureAwait(false);
 
                 if (exitCode == 0)
                 {
@@ -282,7 +291,7 @@ public class CreamInstallerService : IDlcInstaller
         ArgumentNullException.ThrowIfNull(instance);
         try
         {
-            var deployPath = Emulators.ReFixEmulator.GetReFixDeployPath();
+            var deployPath = Emulators.ReFixEmulator.GetReFixDeployPath(instance);
             if (!string.IsNullOrEmpty(deployPath))
             {
                 var binDir = Directory.Exists(Path.Combine(deployPath, "bin")) ? Path.Combine(deployPath, "bin") : deployPath;
@@ -290,14 +299,21 @@ public class CreamInstallerService : IDlcInstaller
                 if (File.Exists(dlcScript))
                 {
                     Report(progress, "🗑 Restoring files via ReFix Suite dlc_unlocker.ps1...");
-                    var args = $"-NoProfile -ExecutionPolicy Bypass -File \"{dlcScript}\" -TargetDir \"{instance.InstallPath}\" -BinDir \"{binDir}\" -Action \"uninstall\"";
+                    var args = $"-NoProfile -ExecutionPolicy Bypass -File \"{dlcScript}\" -TargetDir \"{Emulators.ReFixEmulator.EscapePsArg(instance.InstallPath)}\" -BinDir \"{Emulators.ReFixEmulator.EscapePsArg(binDir)}\" -Action \"uninstall\"";
+
+                    var env = new Dictionary<string, string>
+                    {
+                        ["BLUESTAR_TARGET_DIR"] = instance.InstallPath,
+                        ["BLUESTAR_BIN_DIR"] = binDir
+                    };
 
                     await Emulators.ReFixEmulator.RunProcessAsync(
                         "powershell.exe",
                         args,
                         binDir,
                         line => _logger.LogInformation("[dlc_unlocker] {Line}", line),
-                        ct).ConfigureAwait(false);
+                        ct,
+                        env).ConfigureAwait(false);
                 }
             }
 

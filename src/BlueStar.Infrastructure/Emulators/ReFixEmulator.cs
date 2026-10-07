@@ -413,20 +413,30 @@ public sealed class ReFixEmulator : IEmulator
             var helperArgs = new StringBuilder();
             helperArgs.Append("-NoProfile -ExecutionPolicy Bypass -File ");
             helperArgs.Append($"\"{helperPs1}\" ");
-            helperArgs.Append($"-TargetDir \"{targetDir}\" ");
-            helperArgs.Append($"-BinDir \"{binDir}\" ");
-            helperArgs.Append($"-ExeDir \"{exeDir}\" ");
-            helperArgs.Append($"-EngineType \"{engineType}\" ");
-            helperArgs.Append($"-OnlineMode \"{onlineMode}\" ");
-            helperArgs.Append($"-GameName \"{gameName}\" ");
-            helperArgs.Append($"-UserName \"{userName}\" ");
-            helperArgs.Append($"-RealAppId \"{realAppIdStr}\" ");
-            helperArgs.Append($"-MaskAppId \"{maskAppIdStr}\" ");
+            helperArgs.Append($"-TargetDir \"{EscapePsArg(targetDir)}\" ");
+            helperArgs.Append($"-BinDir \"{EscapePsArg(binDir)}\" ");
+            helperArgs.Append($"-ExeDir \"{EscapePsArg(exeDir)}\" ");
+            helperArgs.Append($"-EngineType \"{EscapePsArg(engineType)}\" ");
+            helperArgs.Append($"-OnlineMode \"{EscapePsArg(onlineMode)}\" ");
+            helperArgs.Append($"-GameName \"{EscapePsArg(gameName)}\" ");
+            helperArgs.Append($"-UserName \"{EscapePsArg(userName)}\" ");
+            helperArgs.Append($"-RealAppId \"{EscapePsArg(realAppIdStr)}\" ");
+            helperArgs.Append($"-MaskAppId \"{EscapePsArg(maskAppIdStr)}\" ");
             helperArgs.Append("-Language \"english\" ");
-            helperArgs.Append($"-DLCs \"{dlcListStr}\" ");
-            helperArgs.Append($"-DLCMode \"{dlcMode}\" ");
-            helperArgs.Append($"-ListenPort \"{lanPort}\" ");
+            helperArgs.Append($"-DLCs \"{EscapePsArg(dlcListStr)}\" ");
+            helperArgs.Append($"-DLCMode \"{EscapePsArg(dlcMode)}\" ");
+            helperArgs.Append($"-ListenPort \"{EscapePsArg(lanPort)}\" ");
             helperArgs.Append("-CustomBroadcasts \"\"");
+
+            var envVars = new Dictionary<string, string>
+            {
+                ["BLUESTAR_TARGET_DIR"] = targetDir,
+                ["BLUESTAR_BIN_DIR"] = binDir,
+                ["BLUESTAR_EXE_DIR"] = exeDir,
+                ["BLUESTAR_GAME_NAME"] = gameName,
+                ["BLUESTAR_USER_NAME"] = userName,
+                ["BLUESTAR_APP_ID"] = realAppIdStr
+            };
 
             var (helperExitCode, helperOutput, helperError) = await RunProcessAsync(
                 "powershell.exe",
@@ -442,7 +452,8 @@ public sealed class ReFixEmulator : IEmulator
                         CurrentStep = "DeployHelper"
                     });
                 },
-                ct).ConfigureAwait(false);
+                ct,
+                envVars).ConfigureAwait(false);
 
             if (helperExitCode != 0)
             {
@@ -495,13 +506,19 @@ public sealed class ReFixEmulator : IEmulator
 
             if (File.Exists(firewallPs1) && !string.IsNullOrWhiteSpace(gameExePath) && File.Exists(gameExePath))
             {
-                var fwArgs = $"-NoProfile -ExecutionPolicy Bypass -File \"{firewallPs1}\" -GameExe \"{gameExePath}\" -GameName \"{gameName}\" -LanPort \"{lanPort}\" -Mode \"{onlineMode}\"";
+                var fwArgs = $"-NoProfile -ExecutionPolicy Bypass -File \"{firewallPs1}\" -GameExe \"{EscapePsArg(gameExePath)}\" -GameName \"{EscapePsArg(gameName)}\" -LanPort \"{EscapePsArg(lanPort)}\" -Mode \"{EscapePsArg(onlineMode)}\"";
+                var fwEnv = new Dictionary<string, string>
+                {
+                    ["BLUESTAR_EXE_PATH"] = gameExePath,
+                    ["BLUESTAR_GAME_NAME"] = gameName
+                };
                 await RunProcessAsync(
                     "powershell.exe",
                     fwArgs,
                     binDir,
                     line => _logger.LogInformation("[apply_firewall] {Line}", line),
-                    ct).ConfigureAwait(false);
+                    ct,
+                    fwEnv).ConfigureAwait(false);
             }
 
             // ─────────────────────────────────────────────────────────────
@@ -550,12 +567,17 @@ public sealed class ReFixEmulator : IEmulator
                 if (File.Exists(uninstallerBat))
                 {
                     _logger.LogInformation("Executing Uninstall_ReFix.bat for {Path}", targetDir);
+                    var uninstEnv = new Dictionary<string, string>
+                    {
+                        ["BLUESTAR_TARGET_DIR"] = targetDir
+                    };
                     await RunProcessAsync(
                         "cmd.exe",
                         $"/c \"call \"{uninstallerBat}\" \"{targetDir}\" <nul\"",
                         deployPath,
                         line => _logger.LogInformation("[Uninstall_ReFix] {Line}", line),
-                        ct).ConfigureAwait(false);
+                        ct,
+                        uninstEnv).ConfigureAwait(false);
                 }
             }
 
@@ -593,6 +615,15 @@ public sealed class ReFixEmulator : IEmulator
     // ─────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
+    /// Escapes double quotes for PowerShell CLI arguments.
+    /// </summary>
+    public static string EscapePsArg(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return "";
+        return value.Replace("\"", "`\"");
+    }
+
+    /// <summary>
     /// Runs an external process asynchronously with redirected streams and non-blocking stdin.
     /// </summary>
     public static async Task<(int ExitCode, string Output, string Error)> RunProcessAsync(
@@ -600,7 +631,8 @@ public sealed class ReFixEmulator : IEmulator
         string arguments,
         string workingDirectory,
         Action<string>? onOutputLine = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        IDictionary<string, string>? environment = null)
     {
         var outputBuilder = new StringBuilder();
         var errorBuilder = new StringBuilder();
@@ -621,6 +653,14 @@ public sealed class ReFixEmulator : IEmulator
                 StandardErrorEncoding = Encoding.UTF8
             }
         };
+
+        if (environment != null)
+        {
+            foreach (var (k, v) in environment)
+            {
+                process.StartInfo.EnvironmentVariables[k] = v;
+            }
+        }
 
         process.OutputDataReceived += (_, e) =>
         {
@@ -667,12 +707,17 @@ public sealed class ReFixEmulator : IEmulator
         {
             try
             {
+                var detectEnv = new Dictionary<string, string>
+                {
+                    ["BLUESTAR_TARGET_DIR"] = targetDir
+                };
                 var (exitCode, stdout, _) = await RunProcessAsync(
                     "powershell.exe",
-                    $"-NoProfile -ExecutionPolicy Bypass -File \"{detectScript}\" -TargetDir \"{targetDir}\"",
+                    $"-NoProfile -ExecutionPolicy Bypass -File \"{detectScript}\" -TargetDir \"{EscapePsArg(targetDir)}\"",
                     binDir,
                     null,
-                    ct).ConfigureAwait(false);
+                    ct,
+                    detectEnv).ConfigureAwait(false);
 
                 if (exitCode == 0 && !string.IsNullOrWhiteSpace(stdout))
                 {

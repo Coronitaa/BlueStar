@@ -1007,7 +1007,7 @@ public class DownloadQueueManager
                         }
 
                         // 2. Post-installation shortcuts creation
-                        if ((updatedInstance.PendingCreateDesktopShortcut || updatedInstance.PendingCreateStartMenuShortcut) &&
+                        if ((updatedInstance.PendingCreateDesktopShortcut || updatedInstance.PendingCreateStartMenuShortcut || updatedInstance.PendingCreateSteamShortcut) &&
                             !string.IsNullOrWhiteSpace(updatedInstance.InstallPath) && Directory.Exists(updatedInstance.InstallPath))
                         {
                             try
@@ -1020,15 +1020,15 @@ public class DownloadQueueManager
 
                                 if (!string.IsNullOrWhiteSpace(targetExe))
                                 {
-                                    _logger.LogInformation("Creating post-install shortcuts for {Game} (Desktop={Desktop}, StartMenu={StartMenu})",
-                                        updatedInstance.Name, updatedInstance.PendingCreateDesktopShortcut, updatedInstance.PendingCreateStartMenuShortcut);
+                                    _logger.LogInformation("Creating post-install shortcuts for {Game} (Desktop={Desktop}, StartMenu={StartMenu}, Steam={Steam})",
+                                        updatedInstance.Name, updatedInstance.PendingCreateDesktopShortcut, updatedInstance.PendingCreateStartMenuShortcut, updatedInstance.PendingCreateSteamShortcut);
 
                                     await BlueStar.Core.Helpers.ShortcutHelper.CreateShortcutsAsync(
                                         targetExe,
                                         updatedInstance.Name,
                                         createDesktop: updatedInstance.PendingCreateDesktopShortcut,
                                         createStartMenu: updatedInstance.PendingCreateStartMenuShortcut,
-                                        createSteam: false,
+                                        createSteam: updatedInstance.PendingCreateSteamShortcut,
                                         originalGameAppId: updatedInstance.AppId,
                                         customHeaderUrl: updatedInstance.HeaderImageUrl,
                                         ct: CancellationToken.None).ConfigureAwait(false);
@@ -1037,6 +1037,7 @@ public class DownloadQueueManager
                                     {
                                         PendingCreateDesktopShortcut = false,
                                         PendingCreateStartMenuShortcut = false,
+                                        PendingCreateSteamShortcut = false,
                                         ExecutablePath = targetExe
                                     };
                                     await _instanceManager.UpdateAsync(updatedInstance, CancellationToken.None).ConfigureAwait(false);

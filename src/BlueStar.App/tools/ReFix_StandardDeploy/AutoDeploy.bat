@@ -1,4 +1,6 @@
 @echo off
+chcp 65001 >nul
+set "RAW_ARG1=%~1"
 setlocal enabledelayedexpansion
 title ReFix - Universal AutoDeploy Tool v1.2
 
@@ -17,8 +19,8 @@ if not exist "!BIN_DIR!\steam_api64.dll" (
     goto ERROR_EXIT
 )
 
-if not "%~1"=="" (
-    set "TARGET_DIR=%~1"
+if not "!RAW_ARG1!"=="" (
+    set "TARGET_DIR=!RAW_ARG1!"
     goto GOT_TARGET_DIR
 )
 
@@ -84,6 +86,7 @@ set "DETECTED_APPID="
 set "CANDIDATE_EXES="
 
 if exist "!BIN_DIR!\detect_game.ps1" (
+    set "BLUESTAR_TARGET_DIR=!TARGET_DIR!"
     for /f "usebackq tokens=1,* delims==" %%A in (`powershell -NoProfile -ExecutionPolicy Bypass -File "!BIN_DIR!\detect_game.ps1" -TargetDir "!TARGET_DIR!" ^<nul`) do (
         if /i "%%A"=="ENGINE_TYPE" set "ENGINE_TYPE=%%B"
         if /i "%%A"=="EXE_DIR" set "EXE_DIR=%%B"
@@ -338,6 +341,12 @@ echo [1/6] Skipping winmm.dll proxy for offline/native mode...
 
 :: Steps 2 & 3: Run PowerShell helper for deployment & configuration synchronization
 if exist "!BIN_DIR!\deploy_helper.ps1" (
+    set "BLUESTAR_TARGET_DIR=!TARGET_DIR!"
+    set "BLUESTAR_BIN_DIR=!BIN_DIR!"
+    set "BLUESTAR_EXE_DIR=!EXE_DIR!"
+    set "BLUESTAR_GAME_NAME=!GAME_NAME!"
+    set "BLUESTAR_USER_NAME=!CUSTOM_USERNAME!"
+    set "BLUESTAR_EXE_PATH=!GAME_EXE_PATH!"
     powershell -NoProfile -ExecutionPolicy Bypass -File "!BIN_DIR!\deploy_helper.ps1" -TargetDir "!TARGET_DIR!" -BinDir "!BIN_DIR!" -ExeDir "!EXE_DIR!" -EngineType "!ENGINE_TYPE!" -OnlineMode "!ONLINE_MODE_NAME!" -GameName "!GAME_NAME!" -UserName "!CUSTOM_USERNAME!" -RealAppId "!REAL_APPID!" -MaskAppId "!MASK_APPID!" -Language "english" -DLCs "!DLCS!" -DLCMode "!DLC_MODE!" -ListenPort "!LAN_PORT!" -CustomBroadcasts "!CUSTOM_BROADCASTS!" -PhotonAppId "!PHOTON_APPID!" -PhotonRegion "!PHOTON_REGION!"
 ) else (
     echo [ERROR] !BIN_DIR!\deploy_helper.ps1 missing!

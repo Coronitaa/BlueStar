@@ -77,6 +77,9 @@ public sealed class BackgroundTaskService : IBackgroundTaskService
                 {
                     RunOnUI(() =>
                     {
+                        if (taskItem.Status != BackgroundTaskStatus.Running && taskItem.Status != BackgroundTaskStatus.Queued)
+                            return;
+
                         taskItem.ProgressPercentage = Math.Clamp(p.Percentage, 0, 100);
                         taskItem.CurrentStepMessage = p.Message;
                         TasksChanged?.Invoke(this, EventArgs.Empty);

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -109,12 +110,12 @@ public static class ShortcutHelper
                 candidates.Add(exePath);
             }
 
-            var cleanGameName = (gameName ?? "").ToLowerInvariant().Replace(" ", "").Replace(":", "").Replace("-", "").Replace("_", "");
+            var cleanGameName = Regex.Replace(gameName ?? "", @"[^\p{L}\p{Nd}]", "").ToLowerInvariant();
 
             return candidates
                 .OrderByDescending(path =>
                 {
-                    var name = Path.GetFileNameWithoutExtension(path).ToLowerInvariant().Replace(" ", "").Replace(":", "").Replace("-", "").Replace("_", "");
+                    var name = Regex.Replace(Path.GetFileNameWithoutExtension(path) ?? "", @"[^\p{L}\p{Nd}]", "").ToLowerInvariant();
                     int score = 0;
 
                     // Root folder exe gets a bonus
@@ -876,9 +877,12 @@ public static class ShortcutHelper
             return new ShortcutCreationResult(false, "Please select at least one shortcut destination (Desktop, Start Menu, or Steam).", []);
         }
 
-        var safeName = PathHelper.SanitizeFolderName(string.IsNullOrWhiteSpace(shortcutName)
+        var rawName = string.IsNullOrWhiteSpace(shortcutName)
             ? Path.GetFileNameWithoutExtension(targetExePath)
-            : shortcutName);
+            : shortcutName;
+
+        var safeName = PathHelper.SanitizeFolderName(rawName);
+        var steamShortcutName = CleanSteamShortcutName(rawName);
 
         var workingDir = Path.GetDirectoryName(targetExePath) ?? "";
         var created = new List<string>();
@@ -897,7 +901,7 @@ public static class ShortcutHelper
                 if (!string.IsNullOrWhiteSpace(desktopPath))
                 {
                     var shortcutFile = Path.Combine(desktopPath, $"{safeName}.lnk");
-                    if (CreateSingleShortcut(shortcutFile, targetExePath, workingDir, safeName, arguments, iconPath))
+                    if (CreateSingleShortcut(shortcutFile, targetExePath, workingDir, rawName, arguments, iconPath))
                     {
                         created.Add("Desktop");
                     }
@@ -922,7 +926,7 @@ public static class ShortcutHelper
                 {
                     Directory.CreateDirectory(startMenuPrograms);
                     var shortcutFile = Path.Combine(startMenuPrograms, $"{safeName}.lnk");
-                    if (CreateSingleShortcut(shortcutFile, targetExePath, workingDir, safeName, arguments, iconPath))
+                    if (CreateSingleShortcut(shortcutFile, targetExePath, workingDir, rawName, arguments, iconPath))
                     {
                         created.Add("Start Menu");
                     }
@@ -944,7 +948,7 @@ public static class ShortcutHelper
             {
                 var steamRes = await AddSteamShortcutsAsync(
                     targetExePath,
-                    safeName,
+                    steamShortcutName,
                     originalGameAppId,
                     customHeaderUrl,
                     customCapsuleUrl,
@@ -974,6 +978,18 @@ public static class ShortcutHelper
         }
 
         return new ShortcutCreationResult(false, $"❌ Failed to create shortcuts: {string.Join(", ", errors)}", []);
+    }
+
+    /// <summary>
+    /// Cleans a shortcut name for Steam's shortcuts.vdf without stripping legitimate symbols
+    /// (e.g. colons, hyphens, trademarks, quotes, slashes, unicode) unlike filesystem folder sanitization.
+    /// Only control characters (\0, \r, \n) are removed to preserve VDF binary structure.
+    /// </summary>
+    public static string CleanSteamShortcutName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "Game";
+        var cleaned = name.Replace("\0", "").Replace("\r", "").Replace("\n", "").Trim();
+        return string.IsNullOrWhiteSpace(cleaned) ? "Game" : cleaned;
     }
 
     /// <summary>

@@ -1,6 +1,14 @@
 ====================================================================
-               ReFix Deployment Suite v1.3.2 (Standalone)
+               ReFix Deployment Suite v1.3.3 (Standalone)
 ====================================================================
+
+WHAT'S NEW IN v1.3.3:
+- Universal AutoDeploy Path Robustness: Fixed special character loss ('!', '&', '()', '[]', '^', '%', and Unicode directory paths).
+- Physical Post-Deployment Verification: Every critical file is verified on disk with strict exit code failure reporting.
+- Steamworks SDK 1.60 Full Export Coverage: Added forwarders for modern Steamworks interfaces (1,141 exports total) fixing initialization crashes.
+- Nested Executable Configuration Discovery: Automatic ancestor directory lookup for ReFix.ini and configuration files.
+- Full Online Compatibility: Preserves seamless SteamNetworkingSockets (SDR), Facepunch, EOS, Mirror, Godot, and Unity networking.
+
 
 INCLUDED TOOLS:
 
