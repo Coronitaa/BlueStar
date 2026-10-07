@@ -53,9 +53,10 @@ if (-not (Test-Path (Join-Path $imagesDir "StoreLogo.png"))) {
 # 2. Update Package.appxmanifest version
 Write-Host "[2/4] Updating manifest version to $msixVersion..." -ForegroundColor Yellow
 $manifestPath = Join-Path $packageDir "Package.appxmanifest"
-$manifestContent = Get-Content $manifestPath -Raw
-$manifestContent = $manifestContent -replace '(?<=<Identity[\s\S]*?Version=)"[\d.]+"', """$msixVersion"""
-Set-Content -Path $manifestPath -Value $manifestContent -Encoding UTF8
+$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+$manifestContent = [System.IO.File]::ReadAllText($manifestPath, [System.Text.Encoding]::UTF8)
+$manifestContent = [regex]::Replace($manifestContent, '(?<=<Identity\b[^>]*?\bVersion=")[^"]+', $msixVersion)
+[System.IO.File]::WriteAllText($manifestPath, $manifestContent, $utf8NoBom)
 
 # 3. Build the MSIX package
 Write-Host "[3/4] Building MSIX package..." -ForegroundColor Yellow
