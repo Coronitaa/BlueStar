@@ -583,6 +583,16 @@ public sealed partial class SteamCatalogSearchService : ISteamCatalogSearchServi
             {
                 result.ReviewPercent = pct;
             }
+
+            var countMatch = Regex.Match(head[1], @"%\s+[^0-9]+(?<count>[\d,.\u00A0]+)\s+");
+            if (countMatch.Success)
+            {
+                var digitsOnly = new string(countMatch.Groups["count"].Value.Where(char.IsDigit).ToArray());
+                if (int.TryParse(digitsOnly, NumberStyles.Integer, CultureInfo.InvariantCulture, out var cnt))
+                {
+                    result.ReviewCount = cnt;
+                }
+            }
         }
     }
 

@@ -259,6 +259,7 @@ public class SearchResult : INotifyPropertyChanged
     private IReadOnlyList<StoreTagRef> _storeTags = [];
     private string? _reviewSummary;
     private int? _reviewPercent;
+    private int? _reviewCount;
     private string? _priceText;
     private string? _originalPriceText;
     private int _discountPercent;
@@ -315,6 +316,15 @@ public class SearchResult : INotifyPropertyChanged
                 OnPropertyChanged(nameof(ReviewDisplayText));
             }
         }
+    }
+
+    /// <summary>
+    /// Total number of user reviews, when known.
+    /// </summary>
+    public int? ReviewCount
+    {
+        get => _reviewCount;
+        set => SetField(ref _reviewCount, value);
     }
 
     /// <summary>

@@ -21,10 +21,14 @@ public static partial class DeterministicNormalizer
     [GeneratedRegex(@"[^\p{L}\p{Nd}]+", RegexOptions.Compiled)]
     private static partial Regex NonAlphanumericRegex();
 
+    [GeneratedRegex(@"(?i)\b(\p{L}\.)+(\p{L}\.?)", RegexOptions.Compiled)]
+    private static partial Regex AcronymRegex();
+
     /// <summary>
     /// Normalizes text into lower-case, unaccented, punctuation-free string separated by single spaces.
     /// E.g. "The Witcher® 3: Wild Hunt" -> "the witcher 3 wild hunt"
     /// E.g. "Counter-Strike: Global Offensive" -> "counter strike global offensive"
+    /// E.g. "R.E.P.O." -> "repo"
     /// </summary>
     public static string Normalize(string? input)
     {
@@ -33,16 +37,19 @@ public static partial class DeterministicNormalizer
         // 1. Remove diacritics
         var unaccented = RemoveDiacritics(input);
 
-        // 2. Replace hyphens and separators with spaces before removing other punctuation
-        var spaced = unaccented.Replace('-', ' ')
-                               .Replace('_', ' ')
-                               .Replace('/', ' ')
-                               .Replace('\\', ' ')
-                               .Replace(':', ' ')
-                               .Replace(';', ' ')
-                               .Replace('.', ' ');
+        // 2. Collapse single-letter acronyms with periods (e.g. "R.E.P.O." -> "REPO", "S.T.A.L.K.E.R." -> "STALKER")
+        var collapsedAcronyms = AcronymRegex().Replace(unaccented, m => m.Value.Replace(".", ""));
 
-        // 3. Remove remaining punctuation / special symbols
+        // 3. Replace hyphens and separators with spaces before removing other punctuation
+        var spaced = collapsedAcronyms.Replace('-', ' ')
+                                      .Replace('_', ' ')
+                                      .Replace('/', ' ')
+                                      .Replace('\\', ' ')
+                                      .Replace(':', ' ')
+                                      .Replace(';', ' ')
+                                      .Replace('.', ' ');
+
+        // 4. Remove remaining punctuation / special symbols
         var cleaned = PunctuationRegex().Replace(spaced, " ");
 
         // 4. Collapse spaces and trim

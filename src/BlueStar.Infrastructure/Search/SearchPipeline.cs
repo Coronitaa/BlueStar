@@ -990,8 +990,8 @@ public sealed class SearchPipeline : ISearchPipeline
                 ? items.OrderByDescending(i => i.Name, StringComparer.CurrentCultureIgnoreCase).ThenByDescending(i => i.AppId).ToList()
                 : items.OrderBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(i => i.AppId).ToList(),
             "reviews" => descending
-                ? items.OrderByDescending(i => i.ReviewPercent ?? 0).ThenByDescending(i => i.MatchedTagCount).ThenByDescending(i => i.AppId).ToList()
-                : items.OrderBy(i => i.ReviewPercent ?? 100).ThenBy(i => i.MatchedTagCount).ThenBy(i => i.AppId).ToList(),
+                ? items.OrderByDescending(i => Math.Min(i.ReviewPercent ?? 0, 99)).ThenByDescending(i => i.ReviewCount ?? 0).ThenByDescending(i => i.MatchedTagCount).ThenByDescending(i => i.AppId).ToList()
+                : items.OrderBy(i => Math.Min(i.ReviewPercent ?? 100, 99)).ThenBy(i => i.ReviewCount ?? 0).ThenBy(i => i.MatchedTagCount).ThenBy(i => i.AppId).ToList(),
             "appid" => descending
                 ? items.OrderByDescending(i => i.AppId).ToList()
                 : items.OrderBy(i => i.AppId).ToList(),
@@ -1124,6 +1124,7 @@ public sealed class SearchPipeline : ISearchPipeline
             HasEula = hasEula,
             EulaName = item.EulaName,
             ReviewPercent = item.ReviewPercent,
+            ReviewCount = item.ReviewCount,
             ReviewSummary = item.ReviewPercent.HasValue
                 ? RatingEngine.GetReviewSummary(item.ReviewPercent.Value, item.ReviewCount ?? 100)
                 : null,
@@ -1166,6 +1167,7 @@ public sealed class SearchPipeline : ISearchPipeline
             HasEula = result.HasEula || !string.IsNullOrWhiteSpace(result.EulaName),
             EulaName = result.EulaName,
             ReviewPercent = result.ReviewPercent,
+            ReviewCount = result.ReviewCount,
             PriceCents = result.PriceCents,
             PriceText = result.PriceText,
             DiscountPercent = result.DiscountPercent,

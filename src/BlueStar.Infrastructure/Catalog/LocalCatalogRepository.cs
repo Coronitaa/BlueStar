@@ -541,7 +541,10 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
                     SELECT a.* FROM apps_fts f
                     JOIN apps a ON f.rowid = a.app_id
                     WHERE apps_fts MATCH @query
-                    ORDER BY rank
+                    ORDER BY 
+                        (COALESCE(a.review_count, 0) * (COALESCE(CASE WHEN a.review_percent >= 100 THEN 99 ELSE a.review_percent END, 50) / 100.0)) DESC,
+                        rank ASC,
+                        a.app_id ASC
                     LIMIT @limit
                     """;
                 ftsCmd.Parameters.AddWithValue("@query", ftsQuery);
@@ -568,6 +571,9 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             likeCmd.CommandText = """
                 SELECT * FROM apps 
                 WHERE normalized_name LIKE @prefix OR compact_name LIKE @compactPrefix
+                ORDER BY 
+                    (COALESCE(review_count, 0) * (COALESCE(CASE WHEN review_percent >= 100 THEN 99 ELSE review_percent END, 50) / 100.0)) DESC,
+                    app_id ASC
                 LIMIT @limit
                 """;
             likeCmd.Parameters.AddWithValue("@prefix", normalized + "%");
@@ -611,6 +617,7 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             else
             {
                 var normalized = DeterministicNormalizer.Normalize(query.Term);
+                var compact = DeterministicNormalizer.ToCompactKey(query.Term);
                 var tokens = normalized
                     .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .Select(t => $"\"{t.Replace("\"", "\"\"")}\"*")
@@ -621,6 +628,10 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
                     ftsQuery = string.Join(" AND ", tokens);
                     hasFts = true;
                     parameters.Add(new SqliteParameter("@ftsQuery", ftsQuery));
+                    parameters.Add(new SqliteParameter("@termNorm", normalized));
+                    parameters.Add(new SqliteParameter("@termCompact", compact));
+                    parameters.Add(new SqliteParameter("@termNormPrefix", normalized + "%"));
+                    parameters.Add(new SqliteParameter("@termCompactPrefix", compact + "%"));
                 }
             }
         }
@@ -746,12 +757,26 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             "name" => $"ORDER BY a.name {dir}, a.app_id {dir}",
             "released" => $"ORDER BY a.release_date_utc {dir} NULLS LAST, a.app_id {dir}",
             "modified" or "last_modified" => $"ORDER BY a.last_modified {dir}, a.app_id {dir}",
-            "reviews" or "rating" => $"ORDER BY a.review_percent {dir} NULLS LAST, a.review_count DESC, a.app_id {dir}",
+            "reviews" or "rating" => $"ORDER BY (CASE WHEN a.review_percent >= 100 THEN 99 ELSE a.review_percent END) {dir} NULLS LAST, a.review_count DESC NULLS LAST, a.app_id {dir}",
             "reviewcount" or "reviews_count" => $"ORDER BY a.review_count {dir} NULLS LAST, a.app_id {dir}",
             "price" => $"ORDER BY (CASE WHEN a.price_cents IS NOT NULL THEN a.price_cents WHEN a.price_text IS NULL OR a.price_text = '' THEN 999999 WHEN LOWER(a.price_text) LIKE '%free%' OR LOWER(a.price_text) LIKE '%gratis%' THEN 0 ELSE CAST(REPLACE(REPLACE(REPLACE(a.price_text, '$', ''), '€', ''), ',', '.') AS REAL) * 100 END) {dir}, a.release_date_utc DESC NULLS LAST, a.app_id {dir}",
             "discount" => $"ORDER BY a.discount_percent {dir}, a.app_id {dir}",
             "appid" => $"ORDER BY a.app_id {dir}",
-            _ => hasFts ? "ORDER BY rank" : "ORDER BY a.app_id ASC"
+            _ => hasFts
+                ? """
+                  ORDER BY 
+                      (CASE 
+                          WHEN a.compact_name = @termCompact THEN 1 
+                          WHEN a.normalized_name = @termNorm THEN 2
+                          WHEN a.compact_name LIKE @termCompactPrefix THEN 3
+                          WHEN a.normalized_name LIKE @termNormPrefix THEN 4
+                          ELSE 5 
+                      END) ASC,
+                      (COALESCE(a.review_count, 0) * (COALESCE(CASE WHEN a.review_percent >= 100 THEN 99 ELSE a.review_percent END, 50) / 100.0)) DESC,
+                      rank ASC,
+                      a.app_id ASC
+                  """
+                : "ORDER BY a.app_id ASC"
         };
 
         // 3. Paging

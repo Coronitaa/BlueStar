@@ -36,6 +36,9 @@ public class LocalCatalogRepositoryTests : IDisposable
     [InlineData("Portal 2", "portal 2", "portal2")]
     [InlineData("The Witcher® 3: Wild Hunt", "the witcher 3 wild hunt", "thewitcher3wildhunt")]
     [InlineData("Pokémon Trading Card Game", "pokemon trading card game", "pokemontradingcardgame")]
+    [InlineData("R.E.P.O.", "repo", "repo")]
+    [InlineData("S.T.A.L.K.E.R.: Shadow of Chernobyl", "stalker shadow of chernobyl", "stalkershadowofchernobyl")]
+    [InlineData("F.E.A.R. 2: Project Origin", "fear 2 project origin", "fear2projectorigin")]
     public void DeterministicNormalizer_TransformsConsistently(string input, string expectedNorm, string expectedCompact)
     {
         var norm = DeterministicNormalizer.Normalize(input);
@@ -307,5 +310,114 @@ public class LocalCatalogRepositoryTests : IDisposable
             try { if (File.Exists(dbPath)) File.Delete(dbPath); } catch { }
         }
     }
+
+    [Fact]
+    public async Task Test_QueryAsync_ReviewsSort_Caps100PercentAt99AndTieBreaksByCount()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"reviews_sort_test_{Guid.NewGuid():N}.sqlite");
+        try
+        {
+            using var repo = new LocalCatalogRepository(NullLogger<LocalCatalogRepository>.Instance, dbPath);
+            await repo.InitializeAsync();
+
+            var appA = new CatalogAppItem { AppId = 1, Name = "Obscure Game (100% 2 reviews)", ReviewPercent = 100, ReviewCount = 2 };
+            var appB = new CatalogAppItem { AppId = 2, Name = "Popular Gem (99% 50000 reviews)", ReviewPercent = 99, ReviewCount = 50000 };
+            var appC = new CatalogAppItem { AppId = 3, Name = "Indie Hit (99% 1000 reviews)", ReviewPercent = 99, ReviewCount = 1000 };
+            var appD = new CatalogAppItem { AppId = 4, Name = "Niche (100% 500 reviews)", ReviewPercent = 100, ReviewCount = 500 };
+            var appE = new CatalogAppItem { AppId = 5, Name = "Classic (98% 200000 reviews)", ReviewPercent = 98, ReviewCount = 200000 };
+
+            await repo.UpsertAppsAsync([appA, appB, appC, appD, appE]);
+
+            var (items, count) = await repo.QueryAsync(new LocalCatalogQuery
+            {
+                SortBy = "reviews",
+                Descending = true,
+                Limit = 10
+            });
+
+            Assert.Equal(5, count);
+            // 99% with 50,000 reviews must beat 100% with 500 reviews and 100% with 2 reviews because 100% is capped at 99%!
+            Assert.Equal(2u, items[0].AppId); // AppB: 99%, 50000
+            Assert.Equal(3u, items[1].AppId); // AppC: 99%, 1000
+            Assert.Equal(4u, items[2].AppId); // AppD: 100% -> 99%, 500
+            Assert.Equal(1u, items[3].AppId); // AppA: 100% -> 99%, 2
+            Assert.Equal(5u, items[4].AppId); // AppE: 98%
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            try { if (File.Exists(dbPath)) File.Delete(dbPath); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task Test_QueryAsync_SearchSymbolsAndAcronyms_REPO_RanksByPopularity()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"repo_symbol_test_{Guid.NewGuid():N}.sqlite");
+        try
+        {
+            using var repo = new LocalCatalogRepository(NullLogger<LocalCatalogRepository>.Instance, dbPath);
+            await repo.InitializeAsync();
+
+            var game1 = new CatalogAppItem
+            {
+                AppId = 100,
+                Name = "Repossession",
+                NormalizedName = DeterministicNormalizer.Normalize("Repossession"),
+                CompactName = DeterministicNormalizer.ToCompactKey("Repossession"),
+                ReviewPercent = null,
+                ReviewCount = 0
+            };
+            var game2 = new CatalogAppItem
+            {
+                AppId = 200,
+                Name = "R.E.P.O.",
+                NormalizedName = DeterministicNormalizer.Normalize("R.E.P.O."),
+                CompactName = DeterministicNormalizer.ToCompactKey("R.E.P.O."),
+                ReviewPercent = 96,
+                ReviewCount = 65000
+            };
+            var game3 = new CatalogAppItem
+            {
+                AppId = 300,
+                Name = "REPO MAN",
+                NormalizedName = DeterministicNormalizer.Normalize("REPO MAN"),
+                CompactName = DeterministicNormalizer.ToCompactKey("REPO MAN"),
+                ReviewPercent = 75,
+                ReviewCount = 300
+            };
+
+            await repo.UpsertAppsAsync([game1, game2, game3]);
+
+            // Search by "repo" without dots
+            var (itemsRepo, countRepo) = await repo.QueryAsync(new LocalCatalogQuery
+            {
+                Term = "repo",
+                Limit = 10
+            });
+
+            Assert.Equal(3, countRepo);
+            // R.E.P.O. must rank #1 due to exact match and overwhelming popularity!
+            Assert.Equal(200u, itemsRepo[0].AppId); // R.E.P.O.
+            Assert.Equal(300u, itemsRepo[1].AppId); // REPO MAN
+            Assert.Equal(100u, itemsRepo[2].AppId); // Repossession (0 reviews)
+
+            // Search by "R.E.P.O." with dots
+            var (itemsDotted, countDotted) = await repo.QueryAsync(new LocalCatalogQuery
+            {
+                Term = "R.E.P.O.",
+                Limit = 10
+            });
+
+            Assert.True(countDotted > 0);
+            Assert.Equal(200u, itemsDotted[0].AppId); // R.E.P.O.
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            try { if (File.Exists(dbPath)) File.Delete(dbPath); } catch { }
+        }
+    }
 }
+
 
