@@ -474,4 +474,133 @@ public sealed class ManifestHubClientTests : IDisposable
         downloadedPath.Should().NotBeNull();
         File.Exists(downloadedPath).Should().BeTrue();
     }
+
+    [Fact]
+    public async Task ManifestHubProvider_GetRevisionsForAppAsync_PreservesAuthenticDates_AndNeverDefaultsToUtcNow()
+    {
+        var cacheDir = Path.Combine(_testDir, "cache_revisions");
+        var cacheService = new ManifestCacheService(NullLogger<ManifestCacheService>.Instance, cacheDir);
+
+        var json = """
+        [
+          {
+            "depotId": 555001,
+            "manifestId": 987654321098765432,
+            "depotName": "Game Content",
+            "date": "2023-11-15T18:30:00Z",
+            "size": 52428800,
+            "source": "ManifestHub"
+          },
+          {
+            "depotId": 555002,
+            "manifestId": 123456789012345678,
+            "depotName": "Game Binaries",
+            "size": 1048576,
+            "source": "ManifestHub"
+          }
+        ]
+        """;
+
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync((HttpRequestMessage req, CancellationToken _) =>
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(json, Encoding.UTF8, "application/json")
+                };
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object);
+        var provider = new ManifestHubProvider(httpClient, cacheService, NullLogger<ManifestHubProvider>.Instance);
+
+        var revisions = await provider.GetRevisionsForAppAsync(555000);
+
+        revisions.Should().HaveCount(2);
+
+        // Revision 1: authentic date is verified and preserved
+        var rev1 = revisions.First(r => r.DepotId == 555001);
+        rev1.HasAuthenticDate.Should().BeTrue();
+        rev1.AuthenticPublicationDate.Should().Be(DateTimeOffset.Parse("2023-11-15T18:30:00Z"));
+        rev1.Provenance.Should().Be("ManifestHub");
+
+        // Revision 2: date was absent; MUST NOT be fabricated or defaulted to UtcNow
+        var rev2 = revisions.First(r => r.DepotId == 555002);
+        rev2.HasAuthenticDate.Should().BeFalse();
+        rev2.AuthenticPublicationDate.Should().BeNull();
+        rev2.Provenance.Should().Be("ManifestHub");
+    }
+
+    [Fact]
+    public async Task ContributionTransportService_GetStardustBalanceAsync_QueriesServerLedger_DistinguishesConfirmedAndPending()
+    {
+        var appSettings = new AppSettingsService(NullLogger<AppSettingsService>.Instance, Path.Combine(_testDir, "settings.json"));
+        await appSettings.SetHubServerUrlAsync("http://127.0.0.1:5088");
+
+        HttpRequestMessage? capturedRequest = null;
+        var ledgerJson = """
+        {
+          "confirmedPoints": 250,
+          "pendingPoints": 75,
+          "totalPoints": 325
+        }
+        """;
+
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync((HttpRequestMessage req, CancellationToken _) =>
+            {
+                capturedRequest = req;
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(ledgerJson, Encoding.UTF8, "application/json")
+                };
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object);
+        var transport = new ContributionTransportService(httpClient, null, NullLogger<ContributionTransportService>.Instance, null, appSettings);
+
+        var contributorId = Guid.NewGuid().ToString();
+        var balance = await transport.GetStardustBalanceAsync(contributorId);
+
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.RequestUri!.ToString().Should().Be($"http://127.0.0.1:5088/api/v1/stardust/balance/{contributorId}");
+        balance.ConfirmedPoints.Should().Be(250);
+        balance.PendingPoints.Should().Be(75);
+        balance.TotalPoints.Should().Be(325);
+    }
+
+    [Fact]
+    public async Task ContributionTransportService_GetStardustBalanceAsync_WhenEndpointOffline_FallsBackToVerifiedCreditedTotal()
+    {
+        var appSettings = new AppSettingsService(NullLogger<AppSettingsService>.Instance, Path.Combine(_testDir, "settings_offline.json"));
+        await appSettings.SetHubServerUrlAsync("http://127.0.0.1:5088");
+
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync((HttpRequestMessage _, CancellationToken _) =>
+            {
+                return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object);
+        var transport = new ContributionTransportService(httpClient, null, NullLogger<ContributionTransportService>.Instance, null, appSettings);
+
+        var balance = await transport.GetStardustBalanceAsync("anon-user-uuid");
+
+        balance.ConfirmedPoints.Should().Be(transport.GetTotalStardustCredited());
+        balance.PendingPoints.Should().Be(0);
+    }
 }

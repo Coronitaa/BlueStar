@@ -386,6 +386,17 @@ public partial class SelectableDepotItem : ObservableObject
         OnPropertyChanged(nameof(IsRecommended));
         OnPropertyChanged(nameof(ImageUrl));
     }
+
+    public Func<SelectableDepotItem, Task>? OnContributeRequested;
+
+    [RelayCommand]
+    public async Task ContributeAsync()
+    {
+        if (OnContributeRequested != null)
+        {
+            await OnContributeRequested(this);
+        }
+    }
 }
 
 
@@ -520,6 +531,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     private readonly EventHandler _settingsChangedHandler;
     private readonly ILocalizationService? _localizationService;
     private readonly EventHandler? _languageChangedHandler;
+    private readonly BlueStar.Infrastructure.Providers.Manifest.ManifestHubProvider? _manifestHubProvider;
+    private readonly IVoluntaryContributionService? _voluntaryContributionService;
+    private readonly IContributionTransportService? _contributionTransportService;
+    private readonly IStardustService? _stardustService;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HeroTags))]
@@ -2231,7 +2246,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                     AvailabilityChecker = CheckDepotManifestAvailabilityAsync,
                     OnSelectionChanged = RecalculateSelectedSize,
                     OnManifestUpdated = HandleDepotManifestUpdated,
-                    OnManifestTextChanged = RecomputeCustomBuildValidation
+                    OnManifestTextChanged = RecomputeCustomBuildValidation,
+                    OnContributeRequested = RequestContributeManifestAsync
                 });
             }
         }
@@ -2455,7 +2471,11 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         IManifestCacheService? manifestCacheService = null,
         ILocalizationService? localizationService = null,
         ICacheService? cacheService = null,
-        IRecommendationProvider? recommendationProvider = null)
+        IRecommendationProvider? recommendationProvider = null,
+        BlueStar.Infrastructure.Providers.Manifest.ManifestHubProvider? manifestHubProvider = null,
+        IVoluntaryContributionService? voluntaryContributionService = null,
+        IContributionTransportService? contributionTransportService = null,
+        IStardustService? stardustService = null)
     {
         _instanceManager = instanceManager;
         _dlcInstaller = dlcInstaller;
@@ -2488,6 +2508,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         _localizationService = localizationService;
         _cacheService = cacheService;
         _recommendationProvider = recommendationProvider;
+        _manifestHubProvider = manifestHubProvider;
+        _voluntaryContributionService = voluntaryContributionService;
+        _contributionTransportService = contributionTransportService;
+        _stardustService = stardustService;
         _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
         if (_localizationService != null)
@@ -2832,7 +2856,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                         AvailabilityChecker = CheckDepotManifestAvailabilityAsync,
                         OnSelectionChanged = RecalculateSelectedSize,
                         OnManifestUpdated = HandleDepotManifestUpdated,
-                        OnManifestTextChanged = RecomputeCustomBuildValidation
+                        OnManifestTextChanged = RecomputeCustomBuildValidation,
+                        OnContributeRequested = RequestContributeManifestAsync
                     };
                 }).ToList();
 
@@ -4356,18 +4381,21 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     public const string VersionModeCurated  = "Curated";
     public const string VersionModeRollback = "Rollback";
     public const string VersionModeCustom   = "Custom";
+    public const string VersionModeHub      = "Hub";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsVersionModeLatest))]
     [NotifyPropertyChangedFor(nameof(IsVersionModeCurated))]
     [NotifyPropertyChangedFor(nameof(IsVersionModeRollback))]
     [NotifyPropertyChangedFor(nameof(IsVersionModeCustom))]
+    [NotifyPropertyChangedFor(nameof(IsVersionModeHub))]
     private string _versionMode = VersionModeLatest;
 
     public bool IsVersionModeLatest   => VersionMode == VersionModeLatest;
     public bool IsVersionModeCurated  => VersionMode == VersionModeCurated;
     public bool IsVersionModeRollback => VersionMode == VersionModeRollback;
     public bool IsVersionModeCustom   => VersionMode == VersionModeCustom;
+    public bool IsVersionModeHub      => VersionMode == VersionModeHub;
 
     partial void OnVersionModeChanged(string value)
     {
@@ -4382,6 +4410,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         else if (value == VersionModeCustom)
         {
             RecomputeCustomBuildValidation();
+        }
+        else if (value == VersionModeHub)
+        {
+            _ = LoadHubRevisionsAsync();
         }
     }
 
@@ -4966,6 +4998,243 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             StatusMessage = $"❌ {ex.Message}";
             _notificationService?.ShowError(GetString("String_VersionCustomFailedTitle", "Custom Build Failed"), ex.Message);
         }
+    }
+
+    // ── Mode 5: Manifest Hub Revisions ────────────────────────────────────────
+
+    [ObservableProperty]
+    private ObservableCollection<HubRevisionItem> _hubRevisions = [];
+
+    [ObservableProperty]
+    private bool _isLoadingHubRevisions;
+
+    [ObservableProperty]
+    private string? _hubRevisionsError;
+
+    [ObservableProperty]
+    private HubRevisionItem? _selectedHubRevision;
+
+    public bool HasHubRevisions => HubRevisions.Count > 0;
+
+    [RelayCommand]
+    public async Task LoadHubRevisionsAsync()
+    {
+        if (Instance == null || Instance.AppId == 0) return;
+        IsLoadingHubRevisions = true;
+        HubRevisionsError = null;
+
+        try
+        {
+            var provider = _manifestHubProvider ?? (BlueStar.Infrastructure.Providers.Manifest.ManifestHubProvider?)App.Services?.GetService(typeof(BlueStar.Infrastructure.Providers.Manifest.ManifestHubProvider));
+            if (provider == null)
+            {
+                HubRevisionsError = "Manifest Hub provider is not available.";
+                return;
+            }
+
+            var revisions = await provider.GetRevisionsForAppAsync(Instance.AppId, CancellationToken.None).ConfigureAwait(false);
+
+            await (App.Current?.Dispatcher?.InvokeAsync(() =>
+            {
+                HubRevisions.Clear();
+                foreach (var rev in revisions)
+                {
+                    HubRevisions.Add(rev);
+                }
+                OnPropertyChanged(nameof(HasHubRevisions));
+                if (HubRevisions.Count == 0)
+                {
+                    HubRevisionsError = "No revisions found for this App ID in Manifest Hub.";
+                }
+            })?.Task ?? Task.CompletedTask);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load Hub revisions for AppId {AppId}", Instance.AppId);
+            HubRevisionsError = ex.Message;
+        }
+        finally
+        {
+            IsLoadingHubRevisions = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task ApplyHubRevisionAsync(HubRevisionItem? revision)
+    {
+        revision ??= SelectedHubRevision;
+        if (Instance == null || revision == null) return;
+
+        try
+        {
+            var updatedDepots = Instance.Depots.Select(d =>
+                d.DepotId == revision.DepotId
+                    ? d with { ManifestId = revision.ManifestId, IsDownloaded = false }
+                    : d).ToList();
+
+            if (!updatedDepots.Any(d => d.DepotId == revision.DepotId))
+            {
+                updatedDepots.Add(new DepotInfo
+                {
+                    DepotId = revision.DepotId,
+                    ManifestId = revision.ManifestId,
+                    SizeBytes = revision.SizeOriginal,
+                    IsDownloaded = false
+                });
+            }
+
+            var map = new Dictionary<uint, ulong>(Instance.InstalledManifestMap)
+            {
+                [revision.DepotId] = revision.ManifestId
+            };
+
+            Instance = Instance with
+            {
+                Depots = updatedDepots.AsReadOnly(),
+                InstalledManifestMap = map,
+                IsBuildPinned = true
+            };
+
+            await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+            await LoadInstanceAsync(Instance).ConfigureAwait(true);
+
+            StatusMessage = $"✅ Pinned Depot {revision.DepotId} to Manifest {revision.ManifestId}.";
+            _notificationService?.ShowSuccess(
+                "Manifest Revision Applied",
+                $"Depot {revision.DepotId} set to revision {revision.ManifestId} ({revision.Provenance})");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to apply Hub revision {ManifestId}", revision.ManifestId);
+            StatusMessage = $"❌ {ex.Message}";
+            _notificationService?.ShowError("Failed to Apply Revision", ex.Message);
+        }
+    }
+
+    // ── Voluntary Manifest Contribution Flow ──────────────────────────────────
+
+    [ObservableProperty]
+    private bool _isContributionConsentModalOpen;
+
+    [ObservableProperty]
+    private ContributionPreview? _activeContributionPreview;
+
+    [ObservableProperty]
+    private bool _contributionConsentGranted;
+
+    [ObservableProperty]
+    private bool _isTransmittingContribution;
+
+    [RelayCommand]
+    public async Task RequestContributeManifestAsync(SelectableDepotItem? item)
+    {
+        if (Instance == null || item == null || item.ManifestId == 0) return;
+
+        if (_voluntaryContributionService == null)
+        {
+            _notificationService?.ShowWarning("Contribution Unavailable", "Voluntary contribution service is not initialized.");
+            return;
+        }
+
+        try
+        {
+            var manifestFilePath = _manifestCacheService?.GetManifestPath(item.Depot.DepotId, item.ManifestId);
+            if (string.IsNullOrEmpty(manifestFilePath) || !File.Exists(manifestFilePath))
+            {
+                var instanceManifestDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "BlueStar", "instances", Instance.Id.ToString(), "manifests");
+                var candidate = Path.Combine(instanceManifestDir, $"{item.Depot.DepotId}_{item.ManifestId}.manifest");
+                if (File.Exists(candidate))
+                {
+                    manifestFilePath = candidate;
+                }
+            }
+
+            if (string.IsNullOrEmpty(manifestFilePath) || !File.Exists(manifestFilePath))
+            {
+                _notificationService?.ShowWarning("Manifest Missing", $"Manifest {item.ManifestId} for Depot {item.Depot.DepotId} was not found on local disk.");
+                return;
+            }
+
+            var preview = await _voluntaryContributionService.CreatePreviewAsync(
+                Instance.AppId, item.Depot.DepotId, item.ManifestId, manifestFilePath, null, CancellationToken.None).ConfigureAwait(true);
+            ActiveContributionPreview = preview;
+            ContributionConsentGranted = false;
+            IsContributionConsentModalOpen = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to create contribution preview");
+            _notificationService?.ShowError("Contribution Preview Failed", ex.Message);
+        }
+    }
+
+    [RelayCommand]
+    public void CloseContributionConsentModal()
+    {
+        IsContributionConsentModalOpen = false;
+        ContributionConsentGranted = false;
+        ActiveContributionPreview = null;
+    }
+
+    [RelayCommand]
+    public void TransmitActiveContribution()
+    {
+        if (ActiveContributionPreview == null || !ContributionConsentGranted)
+        {
+            _notificationService?.ShowWarning("Consent Required", "Please review the data and grant explicit consent.");
+            return;
+        }
+
+        if (_backgroundTaskService == null || _voluntaryContributionService == null || _contributionTransportService == null)
+        {
+            return;
+        }
+
+        var preview = ActiveContributionPreview;
+        IsContributionConsentModalOpen = false;
+        IsTransmittingContribution = true;
+
+        _backgroundTaskService.QueueTask("Manifest Hub Contribution", $"Depot {preview.DepotId}", async (progress, ct) =>
+        {
+            try
+            {
+                progress.Report(new BackgroundTaskProgress(10, "Auditing payload privacy and preparing sanitized submission..."));
+                var submission = await _voluntaryContributionService.PrepareSubmissionAsync(preview, true, ct).ConfigureAwait(false);
+
+                progress.Report(new BackgroundTaskProgress(40, "Sanitization verified. Transmitting to Hub receiver..."));
+                var receipt = await _contributionTransportService.TransmitContributionAsync(submission, ct).ConfigureAwait(false);
+
+                progress.Report(new BackgroundTaskProgress(80, "Verifying publication receipt and updating Stardust ledger..."));
+
+                if (receipt.IsSuccess)
+                {
+                    _stardustService?.NotifyRewardConfirmed(receipt.StardustCredited);
+
+                    progress.Report(new BackgroundTaskProgress(100, $"Published! Receipt ID: {receipt.ReceiptId} (+{receipt.StardustCredited} Stardust)"));
+                    _notificationService?.ShowSuccess("Contribution Published", $"Receipt: {receipt.ReceiptId} (+{receipt.StardustCredited} Stardust)");
+                }
+                else
+                {
+                    progress.Report(new BackgroundTaskProgress(100, $"Hub rejected publication: {receipt.Status}"));
+                    _notificationService?.ShowWarning("Publication Notice", $"Contribution status: {receipt.Status}. No points awarded.");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to transmit voluntary contribution");
+                progress.Report(new BackgroundTaskProgress(100, $"Contribution error: {ex.Message}"));
+                _notificationService?.ShowError("Contribution Failed", ex.Message);
+            }
+            finally
+            {
+                App.Current?.Dispatcher?.Invoke(() =>
+                {
+                    IsTransmittingContribution = false;
+                });
+            }
+        });
     }
 
     /// <summary>

@@ -22,6 +22,13 @@ public sealed class BuildSnapshot
     [JsonPropertyName("timestamp")]
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
 
+    /// <summary>
+    /// Authentic manifest/build creation timestamp when known; strictly null if absent.
+    /// UtcNow MUST NOT be used as a proxy for creation time.
+    /// </summary>
+    [JsonPropertyName("creationTime")]
+    public DateTimeOffset? CreationTime { get; init; }
+
     [JsonPropertyName("branch")]
     public string Branch { get; init; } = "public";
 

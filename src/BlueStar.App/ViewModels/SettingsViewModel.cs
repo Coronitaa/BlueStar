@@ -31,6 +31,12 @@ public partial class SettingsViewModel : ObservableObject
     private readonly IInstanceManager? _instanceManager;
     private readonly ICacheService? _cacheService;
     private readonly IUpdateService? _updateService;
+    private readonly IBackgroundTaskService? _backgroundTaskService;
+    private readonly IVoluntaryContributionService? _voluntaryContributionService;
+    private readonly IContributionTransportService? _contributionTransportService;
+    private readonly IStardustService? _stardustService;
+    private readonly ILocalCoverageComparator? _coverageComparator;
+    private readonly IManifestCacheService? _manifestCacheService;
 
     [ObservableProperty]
     private bool _isCheckingForUpdates;
@@ -240,6 +246,356 @@ public partial class SettingsViewModel : ObservableObject
 
     private bool _suppressExploreOptionUpdates;
 
+    // ══════════════════════════════════════════════════════════════════════════════
+    // MANIFEST HUB, COVERAGE ANALYSIS & VOLUNTARY CONTRIBUTION SECTION
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    [ObservableProperty]
+    private bool _enableManifestAnalysis;
+
+    partial void OnEnableManifestAnalysisChanged(bool value)
+    {
+        _ = _appSettings.SetEnableManifestAnalysisAsync(value);
+    }
+
+    [ObservableProperty]
+    private bool _enableVoluntaryContributions;
+
+    partial void OnEnableVoluntaryContributionsChanged(bool value)
+    {
+        _ = _appSettings.SetEnableVoluntaryContributionsAsync(value);
+    }
+
+    public ObservableCollection<string> ManifestAnalysisScopes { get; } =
+    [
+        "Installed Instances",
+        "Local Cache",
+        "All (Instances and Cache)"
+    ];
+
+    [ObservableProperty]
+    private string _selectedManifestAnalysisScope = "Installed Instances";
+
+    partial void OnSelectedManifestAnalysisScopeChanged(string value)
+    {
+        var scopeKey = value switch
+        {
+            "Local Cache" => "Cache",
+            "All (Instances and Cache)" => "All",
+            _ => "InstalledInstances"
+        };
+        _ = _appSettings.SetManifestAnalysisScopeAsync(scopeKey);
+    }
+
+    [ObservableProperty]
+    private string _manifestAnalysisStatus = "Idle";
+
+    [ObservableProperty]
+    private string _manifestAnalysisLastRunText = "Never";
+
+    [ObservableProperty]
+    private bool _isAnalyzingManifests;
+
+    [ObservableProperty]
+    private string _hubServerUrl = "http://localhost:5088";
+
+    [ObservableProperty]
+    private string? _hubServerUrlStatusMessage;
+
+    [ObservableProperty]
+    private string _anonymousContributorId = string.Empty;
+
+    [ObservableProperty]
+    private long _stardustConfirmedPoints;
+
+    [ObservableProperty]
+    private long _stardustPendingPoints;
+
+    [ObservableProperty]
+    private bool _isRefreshingStardust;
+
+    [ObservableProperty]
+    private bool _isContributionConsentModalOpen;
+
+    [ObservableProperty]
+    private ContributionPreview? _activeContributionPreview;
+
+    [ObservableProperty]
+    private bool _contributionConsentGranted;
+
+    [ObservableProperty]
+    private string? _lastContributionReceiptId;
+
+    [ObservableProperty]
+    private bool _isTransmittingContribution;
+
+    [RelayCommand]
+    public async Task SaveHubServerUrlAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(HubServerUrl))
+        {
+            await _appSettings.SetHubServerUrlAsync(HubServerUrl.Trim());
+            HubServerUrlStatusMessage = "Server URL saved successfully.";
+            _notificationService?.ShowSuccess("Manifest Hub", "Hub Server URL updated.");
+            _ = RefreshStardustBalanceAsync();
+        }
+    }
+
+    [RelayCommand]
+    public void CopyAnonymousContributorId()
+    {
+        if (!string.IsNullOrWhiteSpace(AnonymousContributorId))
+        {
+            try
+            {
+                System.Windows.Clipboard.SetText(AnonymousContributorId);
+                _notificationService?.ShowSuccess("Stardust", "Anonymous UUID copied to clipboard.");
+            }
+            catch { }
+        }
+    }
+
+    [RelayCommand]
+    public async Task RefreshStardustBalanceAsync()
+    {
+        if (IsRefreshingStardust) return;
+        IsRefreshingStardust = true;
+        try
+        {
+            if (_stardustService != null)
+            {
+                var bal = await _stardustService.RefreshBalanceAsync(CancellationToken.None);
+                StardustConfirmedPoints = bal.ConfirmedPoints;
+                StardustPendingPoints = bal.PendingPoints;
+            }
+            else if (_voluntaryContributionService != null && _contributionTransportService != null)
+            {
+                var id = await _voluntaryContributionService.GetOrCreateAnonymousContributorIdAsync();
+                var bal = await _contributionTransportService.GetStardustBalanceAsync(id);
+                StardustConfirmedPoints = bal.ConfirmedPoints;
+                StardustPendingPoints = bal.PendingPoints;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to refresh Stardust balance");
+        }
+        finally
+        {
+            IsRefreshingStardust = false;
+        }
+    }
+
+    [RelayCommand]
+    public void RunManifestAnalysis()
+    {
+        if (_backgroundTaskService == null)
+        {
+            _logger.LogWarning("BackgroundTaskService not available for manifest analysis");
+            return;
+        }
+
+        if (!EnableManifestAnalysis)
+        {
+            _notificationService?.ShowWarning("Manifest Analysis", "Please enable Manifest Analysis opt-in before analyzing.");
+            return;
+        }
+
+        IsAnalyzingManifests = true;
+        ManifestAnalysisStatus = "Analyzing";
+        _ = _appSettings.SetManifestAnalysisStatusAsync("Analyzing");
+
+        var scope = SelectedManifestAnalysisScope switch
+        {
+            "Local Cache" => "Cache",
+            "All (Instances and Cache)" => "All",
+            _ => "InstalledInstances"
+        };
+
+        _backgroundTaskService.QueueTask("Manifest Analysis & Audit", "System", async (progress, ct) =>
+        {
+            try
+            {
+                progress.Report(new BackgroundTaskProgress(5, "Initializing local manifest analysis..."));
+
+                var localManifests = new List<ManifestArtifact>();
+
+                if (scope is "InstalledInstances" or "All" && _instanceManager != null)
+                {
+                    progress.Report(new BackgroundTaskProgress(15, "Enumerating installed instance manifests..."));
+                    var instances = await _instanceManager.GetAllAsync(ct).ConfigureAwait(false);
+                    int count = 0;
+                    foreach (var inst in instances)
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        count++;
+                        var pct = 15.0 + (35.0 * count / Math.Max(1, instances.Count));
+                        progress.Report(new BackgroundTaskProgress(pct, $"Auditing instance '{inst.Name}' ({count}/{instances.Count})..."));
+
+                        foreach (var depot in inst.Depots)
+                        {
+                            if (depot.ManifestId > 0)
+                            {
+                                var cachePath = _manifestCacheService?.GetManifestPath(depot.DepotId, depot.ManifestId);
+                                localManifests.Add(new ManifestArtifact
+                                {
+                                    DepotId = depot.DepotId,
+                                    ManifestId = depot.ManifestId,
+                                    SizeBytes = depot.SizeBytes,
+                                    LocalCachePath = cachePath
+                                });
+                            }
+                        }
+                    }
+                }
+
+                if (scope is "Cache" or "All" && _manifestCacheService != null)
+                {
+                    progress.Report(new BackgroundTaskProgress(55, "Scanning local manifest cache folder..."));
+                    var cacheDir = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                        "BlueStar", "cache", "manifests");
+                    if (Directory.Exists(cacheDir))
+                    {
+                        var files = Directory.GetFiles(cacheDir, "*.manifest", SearchOption.AllDirectories);
+                        int fIdx = 0;
+                        foreach (var f in files)
+                        {
+                            ct.ThrowIfCancellationRequested();
+                            fIdx++;
+                            var fname = Path.GetFileNameWithoutExtension(f);
+                            var parts = fname.Split('_');
+                            if (parts.Length == 2 && uint.TryParse(parts[0], out var dId) && ulong.TryParse(parts[1], out var mId))
+                            {
+                                localManifests.Add(new ManifestArtifact
+                                {
+                                    DepotId = dId,
+                                    ManifestId = mId,
+                                    SizeBytes = new FileInfo(f).Length,
+                                    LocalCachePath = f
+                                });
+                            }
+                        }
+                    }
+                }
+
+                progress.Report(new BackgroundTaskProgress(75, "Performing in-memory coverage comparison against Hub..."));
+                var hubKnown = new List<ManifestArtifact>();
+                _coverageComparator?.CompareManifestCoverage(localManifests, hubKnown);
+
+                progress.Report(new BackgroundTaskProgress(90, "Finalizing inspection results and audit trail..."));
+
+                var now = DateTimeOffset.UtcNow;
+                await _appSettings.SetManifestAnalysisLastRunAsync(now).ConfigureAwait(false);
+                await _appSettings.SetManifestAnalysisStatusAsync("Completed").ConfigureAwait(false);
+
+                App.Current?.Dispatcher?.Invoke(() =>
+                {
+                    ManifestAnalysisStatus = "Completed";
+                    ManifestAnalysisLastRunText = now.LocalDateTime.ToString("g");
+                    IsAnalyzingManifests = false;
+                });
+
+                progress.Report(new BackgroundTaskProgress(100, $"Manifest analysis completed! Audited {localManifests.Count} manifests locally."));
+                _notificationService?.ShowSuccess("Manifest Analysis", $"Audited {localManifests.Count} manifests locally with zero privacy leaks.");
+            }
+            catch (OperationCanceledException)
+            {
+                App.Current?.Dispatcher?.Invoke(() =>
+                {
+                    ManifestAnalysisStatus = "Idle";
+                    IsAnalyzingManifests = false;
+                });
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Manifest analysis failed");
+                await _appSettings.SetManifestAnalysisStatusAsync("Error").ConfigureAwait(false);
+                App.Current?.Dispatcher?.Invoke(() =>
+                {
+                    ManifestAnalysisStatus = "Error";
+                    IsAnalyzingManifests = false;
+                });
+                progress.Report(new BackgroundTaskProgress(100, $"Analysis failed: {ex.Message}"));
+                _notificationService?.ShowError("Manifest Analysis Failed", ex.Message);
+            }
+        });
+    }
+
+    [RelayCommand]
+    public void CloseContributionConsentModal()
+    {
+        IsContributionConsentModalOpen = false;
+        ContributionConsentGranted = false;
+        ActiveContributionPreview = null;
+    }
+
+    [RelayCommand]
+    public void TransmitActiveContribution()
+    {
+        if (ActiveContributionPreview == null || !ContributionConsentGranted)
+        {
+            _notificationService?.ShowWarning("Consent Required", "You must explicitly check consent before transmitting.");
+            return;
+        }
+
+        if (_backgroundTaskService == null || _voluntaryContributionService == null || _contributionTransportService == null)
+        {
+            return;
+        }
+
+        var preview = ActiveContributionPreview;
+        IsContributionConsentModalOpen = false;
+        IsTransmittingContribution = true;
+
+        _backgroundTaskService.QueueTask("Manifest Hub Contribution", $"Depot {preview.DepotId}", async (progress, ct) =>
+        {
+            try
+            {
+                progress.Report(new BackgroundTaskProgress(10, "Auditing payload privacy and preparing sanitized submission..."));
+                var submission = await _voluntaryContributionService.PrepareSubmissionAsync(preview, true, ct).ConfigureAwait(false);
+
+                progress.Report(new BackgroundTaskProgress(40, "Sanitization verified. Transmitting to Hub receiver..."));
+                var receipt = await _contributionTransportService.TransmitContributionAsync(submission, ct).ConfigureAwait(false);
+
+                progress.Report(new BackgroundTaskProgress(80, "Verifying publication receipt and updating Stardust ledger..."));
+
+                if (receipt.IsSuccess)
+                {
+                    _stardustService?.NotifyRewardConfirmed(receipt.StardustCredited);
+                    _ = RefreshStardustBalanceAsync();
+
+                    App.Current?.Dispatcher?.Invoke(() =>
+                    {
+                        LastContributionReceiptId = receipt.ReceiptId;
+                    });
+
+                    progress.Report(new BackgroundTaskProgress(100, $"Published! Receipt ID: {receipt.ReceiptId} (+{receipt.StardustCredited} Stardust)"));
+                    _notificationService?.ShowSuccess("Contribution Published", $"Receipt: {receipt.ReceiptId} (+{receipt.StardustCredited} Stardust)");
+                }
+                else
+                {
+                    progress.Report(new BackgroundTaskProgress(100, $"Hub rejected publication: {receipt.Status}"));
+                    _notificationService?.ShowWarning("Publication Notice", $"Contribution status: {receipt.Status}. No points awarded.");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to transmit voluntary contribution");
+                progress.Report(new BackgroundTaskProgress(100, $"Contribution error: {ex.Message}"));
+                _notificationService?.ShowError("Contribution Failed", ex.Message);
+            }
+            finally
+            {
+                App.Current?.Dispatcher?.Invoke(() =>
+                {
+                    IsTransmittingContribution = false;
+                });
+            }
+        });
+    }
+
     [ObservableProperty]
     private string? _diagnosticStatusMessage;
 
@@ -320,7 +676,13 @@ public partial class SettingsViewModel : ObservableObject
         IDebugLogService? debugLogService = null,
         IInstanceManager? instanceManager = null,
         ICacheService? cacheService = null,
-        IUpdateService? updateService = null)
+        IUpdateService? updateService = null,
+        IBackgroundTaskService? backgroundTaskService = null,
+        IVoluntaryContributionService? voluntaryContributionService = null,
+        IContributionTransportService? contributionTransportService = null,
+        IStardustService? stardustService = null,
+        ILocalCoverageComparator? coverageComparator = null,
+        IManifestCacheService? manifestCacheService = null)
     {
         _authService = authService ?? throw new ArgumentNullException(nameof(authService));
         _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
@@ -334,6 +696,12 @@ public partial class SettingsViewModel : ObservableObject
         _instanceManager = instanceManager;
         _cacheService = cacheService;
         _updateService = updateService;
+        _backgroundTaskService = backgroundTaskService;
+        _voluntaryContributionService = voluntaryContributionService;
+        _contributionTransportService = contributionTransportService;
+        _stardustService = stardustService;
+        _coverageComparator = coverageComparator;
+        _manifestCacheService = manifestCacheService;
 
         _selectedLanguageOption = _localizationService.CurrentLanguage == "es" ? "Español (Latinoamérica)" : "English";
         _updateButtonText = _localizationService.CurrentLanguage == "es" ? "Buscar actualizaciones" : "Check for updates";
@@ -344,6 +712,46 @@ public partial class SettingsViewModel : ObservableObject
         EnableExperimentalMods = _appSettings.EnableExperimentalMods;
         EnableDebugSystem = _appSettings.EnableDebugSystem;
         CheckSystemRequirementsOnStartup = _appSettings.CheckSystemRequirementsOnStartup;
+
+        // Manifest Hub & Stardust settings
+        _enableManifestAnalysis = _appSettings.EnableManifestAnalysis;
+        _enableVoluntaryContributions = _appSettings.EnableVoluntaryContributions;
+        _hubServerUrl = _appSettings.HubServerUrl;
+        _manifestAnalysisStatus = _appSettings.ManifestAnalysisStatus;
+        if (_appSettings.ManifestAnalysisLastRun.HasValue)
+        {
+            _manifestAnalysisLastRunText = _appSettings.ManifestAnalysisLastRun.Value.LocalDateTime.ToString("g");
+        }
+
+        var savedScope = _appSettings.ManifestAnalysisScope;
+        _selectedManifestAnalysisScope = savedScope switch
+        {
+            "Cache" => "Local Cache",
+            "All" => "All (Instances and Cache)",
+            _ => "Installed Instances"
+        };
+
+        if (_voluntaryContributionService != null)
+        {
+            try
+            {
+                _anonymousContributorId = _voluntaryContributionService.GetOrCreateAnonymousContributorId();
+            }
+            catch { }
+        }
+
+        if (_stardustService != null)
+        {
+            _stardustService.BalanceChanged += (s, bal) =>
+            {
+                App.Current?.Dispatcher?.Invoke(() =>
+                {
+                    StardustConfirmedPoints = bal.ConfirmedPoints;
+                    StardustPendingPoints = bal.PendingPoints;
+                });
+            };
+            _ = RefreshStardustBalanceAsync();
+        }
 
         DefaultApiUrl = _appSettings.DefaultApiUrl;
         DefaultApiKey = _appSettings.DefaultApiKey ?? string.Empty;

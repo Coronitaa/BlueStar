@@ -314,6 +314,79 @@ public sealed class AppSettingsService
         await SaveAsync().ConfigureAwait(false);
     }
 
+    /// <summary>Whether manifest analysis and coverage inspection is opted in (default false).</summary>
+    public bool EnableManifestAnalysis => _current.EnableManifestAnalysis;
+
+    /// <summary>Persists the manifest analysis opt-in setting.</summary>
+    public async Task SetEnableManifestAnalysisAsync(bool enabled)
+    {
+        _current = _current with { EnableManifestAnalysis = enabled };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Whether voluntary manifest contributions to the Hub are opted in (default false).</summary>
+    public bool EnableVoluntaryContributions => _current.EnableVoluntaryContributions;
+
+    /// <summary>Persists the voluntary contributions opt-in setting.</summary>
+    public async Task SetEnableVoluntaryContributionsAsync(bool enabled)
+    {
+        _current = _current with { EnableVoluntaryContributions = enabled };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Scope of manifest coverage analysis ("InstalledInstances", "Cache", "All").</summary>
+    public string ManifestAnalysisScope => string.IsNullOrWhiteSpace(_current.ManifestAnalysisScope) ? "InstalledInstances" : _current.ManifestAnalysisScope;
+
+    /// <summary>Persists the manifest analysis scope setting.</summary>
+    public async Task SetManifestAnalysisScopeAsync(string scope)
+    {
+        _current = _current with { ManifestAnalysisScope = string.IsNullOrWhiteSpace(scope) ? "InstalledInstances" : scope };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Last known manifest analysis execution status ("Idle", "Analyzing", "Completed", "Error").</summary>
+    public string ManifestAnalysisStatus => string.IsNullOrWhiteSpace(_current.ManifestAnalysisStatus) ? "Idle" : _current.ManifestAnalysisStatus;
+
+    /// <summary>Persists the manifest analysis execution status.</summary>
+    public async Task SetManifestAnalysisStatusAsync(string status)
+    {
+        _current = _current with { ManifestAnalysisStatus = string.IsNullOrWhiteSpace(status) ? "Idle" : status };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Timestamp of last manifest analysis execution.</summary>
+    public DateTimeOffset? ManifestAnalysisLastRun => _current.ManifestAnalysisLastRun;
+
+    /// <summary>Persists the timestamp of last manifest analysis execution.</summary>
+    public async Task SetManifestAnalysisLastRunAsync(DateTimeOffset? timestamp)
+    {
+        _current = _current with { ManifestAnalysisLastRun = timestamp };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Authorized Manifest Hub server URL.</summary>
+    public string HubServerUrl
+    {
+        get
+        {
+            var envUrl = Environment.GetEnvironmentVariable("BLUESTAR_HUB_SERVER_URL")
+                         ?? Environment.GetEnvironmentVariable("MANIFEST_HUB_URL");
+            if (!string.IsNullOrWhiteSpace(envUrl))
+            {
+                return envUrl.Trim().TrimEnd('/');
+            }
+
+            return string.IsNullOrWhiteSpace(_current.HubServerUrl) ? "http://localhost:5088" : _current.HubServerUrl.Trim().TrimEnd('/');
+        }
+    }
+
+    /// <summary>Persists the Manifest Hub server URL.</summary>
+    public async Task SetHubServerUrlAsync(string url)
+    {
+        _current = _current with { HubServerUrl = string.IsNullOrWhiteSpace(url) ? "http://localhost:5088" : url.Trim().TrimEnd('/') };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
     private sealed record AppSettings
     {
         public string? Language { get; init; } = "en";
@@ -331,11 +404,19 @@ public sealed class AppSettingsService
 
         public string? DefaultExploreSort { get; init; } = "Reviews";
         public bool DefaultExploreSortDescending { get; init; } = true;
-    public string? DefaultExploreStoreList { get; init; } = "popularnew";
+        public string? DefaultExploreStoreList { get; init; } = "popularnew";
 
-    public string? DefaultApiUrl { get; init; } = "https://depotbox.org";
-    public string? DefaultApiKey { get; init; } = "YOUR-API-KEY";
-    public bool HideForceDlcWarning { get; init; } = false;
-    public int InstancesColumnCount { get; init; } = 3;
+        public string? DefaultApiUrl { get; init; } = "https://depotbox.org";
+        public string? DefaultApiKey { get; init; } = "YOUR-API-KEY";
+        public bool HideForceDlcWarning { get; init; } = false;
+        public int InstancesColumnCount { get; init; } = 3;
+
+        public bool EnableManifestAnalysis { get; init; } = false;
+        public bool EnableVoluntaryContributions { get; init; } = false;
+        public string? ManifestAnalysisScope { get; init; } = "InstalledInstances";
+        public string? ManifestAnalysisStatus { get; init; } = "Idle";
+        public DateTimeOffset? ManifestAnalysisLastRun { get; init; }
+        public string? HubServerUrl { get; init; } = "http://localhost:5088";
+    }
 }
-}
+

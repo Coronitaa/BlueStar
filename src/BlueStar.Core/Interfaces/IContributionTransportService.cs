@@ -32,4 +32,13 @@ public interface IContributionTransportService
     /// Gets the total verified Stardust units credited to this anonymous contributor.
     /// </summary>
     long GetTotalStardustCredited();
+
+    /// <summary>
+    /// Fetches the authoritative Stardust point balance directly from the server's ledger endpoint
+    /// (GET /api/v1/stardust/balance/{contributorId}), distinguishing confirmed points from pending points.
+    /// </summary>
+    /// <param name="contributorId">The anonymous contributor UUID v4.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The verified Stardust balance information.</returns>
+    Task<StardustBalanceInfo> GetStardustBalanceAsync(string contributorId, CancellationToken ct = default);
 }

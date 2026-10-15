@@ -75,6 +75,41 @@
                             WindowChrome.IsHitTestVisibleInChrome="True"
                             VerticalAlignment="Center">
 
+                    <!-- Stardust Balance Pill -->
+                    <Button Command="{Binding OpenStardustSettingsCommand}"
+                            Background="{StaticResource SurfaceInputBrush}"
+                            BorderBrush="{StaticResource SubtleBorderBrush}"
+                            BorderThickness="1"
+                            Padding="10,4"
+                            Margin="0,0,10,0"
+                            VerticalAlignment="Center"
+                            ToolTip="{Binding StardustTooltipText}"
+                            Cursor="Hand">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="{StaticResource RadiusMd}"
+                                        Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="{StaticResource SurfaceCardHoverBrush}"/>
+                                        <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="★" FontSize="11" Foreground="#F59E0B" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding StardustBalanceText}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding StardustPendingText}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="4,0,0,0" VerticalAlignment="Center"
+                                       Visibility="{Binding HasPendingStardust, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                        </StackPanel>
+                    </Button>
+
                     <!-- Steam Status Indicator Pill -->
                     <Border Background="{StaticResource SurfaceInputBrush}"
                             BorderBrush="{StaticResource SubtleBorderBrush}"

@@ -249,6 +249,171 @@
                                             </StackPanel>
                                         </Expander>
 
+                        <!-- ═══ MANIFEST HUB & VOLUNTARY CONTRIBUTION SECTION ═══ -->
+                        <Expander Style="{StaticResource SettingsExpanderCard}" IsExpanded="True">
+                            <Expander.Header>
+                                <Grid Margin="0,0,12,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Background="#163B82F6"
+                                            BorderBrush="#353B82F6" BorderThickness="1"
+                                            Width="40" Height="40" CornerRadius="{StaticResource RadiusSm}"
+                                            VerticalAlignment="Center" Margin="0,0,14,0">
+                                        <TextBlock Text="★" FontSize="18" Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{DynamicResource String_ManifestHubSettingsTitle}" Style="{StaticResource H2}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="{DynamicResource String_ManifestHubSettingsDesc}"
+                                                   Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Expander.Header>
+                            <StackPanel Margin="0,4,0,0">
+                                <!-- Privacy Notice Box -->
+                                <Border Background="{StaticResource SurfaceInputBrush}"
+                                        BorderBrush="#353B82F6" BorderThickness="1"
+                                        CornerRadius="{StaticResource RadiusSm}"
+                                        Padding="14,12" Margin="0,0,0,14">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                            <TextBlock Text="🛡 " FontSize="13" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{DynamicResource String_PrivacyNoticeTitle}" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource AccentBrush}"/>
+                                        </StackPanel>
+                                        <TextBlock Text="{DynamicResource String_PrivacyNoticeDesc}"
+                                                   Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Opt-In Toggles -->
+                                <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,10" Margin="0,0,0,10">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{DynamicResource String_OptInManifestAnalysis}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
+                                            <TextBlock Text="{DynamicResource String_OptInManifestAnalysisDesc}" Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <CheckBox Grid.Column="1" IsChecked="{Binding EnableManifestAnalysis, Mode=TwoWay}" Style="{StaticResource DarkCheckBox}" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+
+                                <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,10" Margin="0,0,0,10">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{DynamicResource String_OptInVoluntaryContributions}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
+                                            <TextBlock Text="{DynamicResource String_OptInVoluntaryContributionsDesc}" Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <CheckBox Grid.Column="1" IsChecked="{Binding EnableVoluntaryContributions, Mode=TwoWay}" Style="{StaticResource DarkCheckBox}" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Scope Selector & Trigger Analysis -->
+                                <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="12,10" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="{DynamicResource String_AnalysisScopeLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
+                                        <ComboBox ItemsSource="{Binding ManifestAnalysisScopes}"
+                                                  SelectedItem="{Binding SelectedManifestAnalysisScope, Mode=TwoWay}"
+                                                  Height="32" Style="{StaticResource DarkComboBox}" Margin="0,0,0,10"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                    <TextBlock Text="{DynamicResource String_ManifestAnalysisStatusLabel}" Style="{StaticResource Caption}" Margin="0,0,6,0"/>
+                                                    <TextBlock Text="{Binding ManifestAnalysisStatus}" FontWeight="SemiBold" FontSize="11" Foreground="{StaticResource AccentBrush}"/>
+                                                </StackPanel>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{DynamicResource String_ManifestAnalysisLastRunLabel}" Style="{StaticResource Caption}" Margin="0,0,6,0"/>
+                                                    <TextBlock Text="{Binding ManifestAnalysisLastRunText}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                            <Button Grid.Column="1" Content="{DynamicResource String_AnalyzeNowBtn}"
+                                                    Style="{StaticResource PrimaryButton}"
+                                                    Padding="14,6" FontSize="11"
+                                                    Command="{Binding RunManifestAnalysisCommand}"
+                                                    IsEnabled="{Binding IsAnalyzingManifests, Converter={StaticResource InverseBoolConverter}}"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Hub Server URL -->
+                                <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,10" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="{DynamicResource String_HubServerUrlLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="8"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox Grid.Column="0" Style="{StaticResource DarkTextBox}" Text="{Binding HubServerUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <Button Grid.Column="2" Content="{DynamicResource String_Save}" Style="{StaticResource SecondaryButton}" Padding="14,6" Command="{Binding SaveHubServerUrlCommand}"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Stardust Balance & Contributor UUID -->
+                                <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,10" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="{DynamicResource String_StardustSectionTitle}" Style="{StaticResource CaptionBold}"/>
+                                            </StackPanel>
+                                            <Button Grid.Column="1" Content="{DynamicResource String_RefreshBalanceBtn}"
+                                                    Style="{StaticResource GhostButton}"
+                                                    Padding="10,4" FontSize="11"
+                                                    Command="{Binding RefreshStardustBalanceCommand}"
+                                                    IsEnabled="{Binding IsRefreshingStardust, Converter={StaticResource InverseBoolConverter}}"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Background="{StaticResource SurfaceCardBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="10,8" Margin="0,0,4,0">
+                                                <StackPanel>
+                                                    <TextBlock Text="{DynamicResource String_StardustConfirmedPoints}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                    <TextBlock Text="{Binding StardustConfirmedPoints, StringFormat='{}{0} ★'}" FontWeight="Bold" FontSize="15" Foreground="{StaticResource AccentBrush}"/>
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Grid.Column="1" Background="{StaticResource SurfaceCardBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="10,8" Margin="4,0,0,0">
+                                                <StackPanel>
+                                                    <TextBlock Text="{DynamicResource String_StardustPendingPoints}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                    <TextBlock Text="{Binding StardustPendingPoints, StringFormat='{}{0} pend.'}" FontWeight="SemiBold" FontSize="15" Foreground="{StaticResource MutedTextBrush}"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+
+                                        <TextBlock Text="{DynamicResource String_AnonymousContributorUuid}" Style="{StaticResource Caption}" Margin="0,0,0,4"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="8"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox Grid.Column="0" Style="{StaticResource DarkTextBox}" Text="{Binding AnonymousContributorId, Mode=OneWay}" IsReadOnly="True" FontSize="11"/>
+                                            <Button Grid.Column="2" Content="{DynamicResource String_CopyPathBtn}" Style="{StaticResource SecondaryButton}" Padding="12,5" FontSize="11" Command="{Binding CopyAnonymousContributorIdCommand}"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Expander>
+
                         <!-- ═══ APPLICATION CACHE & STORAGE SECTION ═══ -->
                                     <Expander Style="{StaticResource SettingsExpanderCard}">
                                         <Expander.Header>
@@ -1303,6 +1468,150 @@
                             Style="{StaticResource PrimaryButton}"
                             Padding="16,10"
                             Command="{Binding RestartAppCommand}"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+    </ctrl:ModalOverlay>
+
+    <!-- ═══ VOLUNTARY CONTRIBUTION CONSENT MODAL ═══ -->
+    <ctrl:ModalOverlay IsOpen="{Binding IsContributionConsentModalOpen}"
+                       CloseCommand="{Binding CloseContributionConsentModalCommand}"
+                       CloseOnEscape="True"
+                       Panel.ZIndex="1002">
+        <Border Background="{StaticResource SurfaceCardElevatedBrush}"
+                BorderBrush="{StaticResource SubtleBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource RadiusLg}"
+                Padding="28" Width="520"
+                HorizontalAlignment="Center" VerticalAlignment="Center">
+            <StackPanel>
+                <!-- Modal Header -->
+                <Grid Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Width="36" Height="36" CornerRadius="18"
+                            Background="{StaticResource AccentTranslucentBrush}"
+                            BorderBrush="{StaticResource AccentBrush}" BorderThickness="1"
+                            Margin="0,0,12,0" VerticalAlignment="Center">
+                        <TextBlock Text="★" FontSize="18" Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="{DynamicResource String_ContributionConsentTitle}" Style="{StaticResource H2}"/>
+                        <TextBlock Text="{DynamicResource String_ContributionConsentSubtitle}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                    </StackPanel>
+
+                    <Button Grid.Column="2" Content="✕" Style="{StaticResource GhostButton}" Width="24" Height="24" Padding="0"
+                            Command="{Binding CloseContributionConsentModalCommand}"/>
+                </Grid>
+
+                <!-- Metadata Summary Box -->
+                <Border Background="{StaticResource SurfaceInputBrush}"
+                        BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                        CornerRadius="{StaticResource RadiusSm}"
+                        Padding="14,12" Margin="0,0,0,14">
+                    <StackPanel>
+                        <TextBlock Text="{DynamicResource String_ContributionMetadataTitle}" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,8" Foreground="{StaticResource PrimaryTextBrush}"/>
+                        
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="App ID:" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding ActiveContributionPreview.AppId}" Style="{StaticResource CaptionBold}"/>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Depot ID:" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding ActiveContributionPreview.DepotId}" Style="{StaticResource CaptionBold}"/>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Manifest ID:" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding ActiveContributionPreview.ManifestId}" Style="{StaticResource CaptionBold}"/>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Size:" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding ActiveContributionPreview.ManifestSizeBytes, StringFormat='{}{0:N0} bytes'}" Style="{StaticResource CaptionBold}"/>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="SHA-256 Hash:" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding ActiveContributionPreview.ManifestHashSha256}" Style="{StaticResource CaptionBold}" TextTrimming="CharacterEllipsis"/>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Anonymous UUID:" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding ActiveContributionPreview.AnonymousContributorId}" Style="{StaticResource CaptionBold}" TextTrimming="CharacterEllipsis"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Privacy Guarantee Banner -->
+                <Border Background="#1610B981" BorderBrush="#3510B981" BorderThickness="1"
+                        CornerRadius="{StaticResource RadiusSm}" Padding="12,10" Margin="0,0,0,16">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="🛡 " FontSize="12" VerticalAlignment="Center"/>
+                            <TextBlock Text="{DynamicResource String_PrivacyGuaranteedTitle}" FontWeight="SemiBold" FontSize="11" Foreground="#10B981"/>
+                        </StackPanel>
+                        <TextBlock Text="{DynamicResource String_PrivacyGuaranteedDesc}"
+                                   Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Explicit Consent Checkbox -->
+                <CheckBox IsChecked="{Binding ContributionConsentGranted, Mode=TwoWay}"
+                          Style="{StaticResource DarkCheckBox}"
+                          Margin="0,0,0,20">
+                    <TextBlock Text="{DynamicResource String_ExplicitConsentCheckboxLabel}"
+                               Style="{StaticResource BodyMedium}" TextWrapping="Wrap"/>
+                </CheckBox>
+
+                <!-- Action Buttons -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button Grid.Column="0" Content="{DynamicResource String_Cancel}"
+                            Style="{StaticResource SecondaryButton}"
+                            Padding="16,10"
+                            Command="{Binding CloseContributionConsentModalCommand}"/>
+
+                    <Button Grid.Column="2" Content="{DynamicResource String_TransmitContributionBtn}"
+                            Style="{StaticResource PrimaryButton}"
+                            Padding="16,10"
+                            IsEnabled="{Binding ContributionConsentGranted}"
+                            Command="{Binding TransmitActiveContributionCommand}"/>
                 </Grid>
             </StackPanel>
         </Border>

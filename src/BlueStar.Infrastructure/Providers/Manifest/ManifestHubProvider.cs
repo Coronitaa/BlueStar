@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
 using BlueStar.Infrastructure.Services;
+using BlueStar.Infrastructure.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace BlueStar.Infrastructure.Providers.Manifest;
@@ -35,6 +36,8 @@ public sealed class ManifestHubProvider : IManifestProvider
     private readonly ICacheService? _generalCache;
     private readonly IRequestCoordinator _coordinator;
     private readonly INetworkMetricsObserver? _metrics;
+    private readonly AppSettingsService? _appSettings;
+    private readonly string? _hubBaseUrl;
 
     public string ProviderId => "manifesthub";
     public string DisplayName => "ManifestHub (Community)";
@@ -61,7 +64,9 @@ public sealed class ManifestHubProvider : IManifestProvider
         IDepotKeyRepository? keyRepository = null,
         ICacheService? generalCache = null,
         IRequestCoordinator? coordinator = null,
-        INetworkMetricsObserver? metrics = null)
+        INetworkMetricsObserver? metrics = null,
+        AppSettingsService? appSettings = null,
+        string? hubBaseUrl = null)
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _cacheService = cacheService ?? throw new ArgumentNullException(nameof(cacheService));
@@ -70,6 +75,41 @@ public sealed class ManifestHubProvider : IManifestProvider
         _generalCache = generalCache;
         _coordinator = coordinator ?? RequestCoordinator.Instance;
         _metrics = metrics;
+        _appSettings = appSettings;
+        _hubBaseUrl = hubBaseUrl;
+    }
+
+    private string GetEffectiveHubBaseUrl()
+    {
+        if (_appSettings != null && !string.IsNullOrWhiteSpace(_appSettings.HubServerUrl))
+        {
+            return _appSettings.HubServerUrl.TrimEnd('/');
+        }
+        if (!string.IsNullOrWhiteSpace(_hubBaseUrl))
+        {
+            return _hubBaseUrl.TrimEnd('/');
+        }
+        return string.Empty;
+    }
+
+    private string GetPrimaryBuildsUrl(uint appId)
+    {
+        var effective = GetEffectiveHubBaseUrl();
+        if (!string.IsNullOrEmpty(effective))
+        {
+            return $"{effective}/builds/{appId}.json";
+        }
+        return $"{PrimaryBuildsBaseUrl}/{appId}.json";
+    }
+
+    private string GetPrimaryManifestUrl(uint depotId, ulong manifestId)
+    {
+        var effective = GetEffectiveHubBaseUrl();
+        if (!string.IsNullOrEmpty(effective))
+        {
+            return $"{effective}/manifests/{depotId}/{manifestId}.manifest";
+        }
+        return $"{PrimaryManifestsBaseUrl}/{depotId}/{manifestId}.manifest";
     }
 
     /// <inheritdoc />
@@ -665,5 +705,267 @@ public sealed class ManifestHubProvider : IManifestProvider
             });
         }
         return list.AsReadOnly();
+    }
+
+    /// <summary>
+    /// Retrieves all known manifest revisions and build snapshots for the specified App ID from the Manifest Hub.
+    /// Strictly guarantees authentic publication dates are never fabricated and chronology is not deduced from ManifestGIDs.
+    /// </summary>
+    public async Task<IReadOnlyList<HubRevisionItem>> GetRevisionsForAppAsync(uint appId, CancellationToken ct = default)
+    {
+        if (appId == 0) return [];
+
+        var list = new List<HubRevisionItem>();
+        var seen = new HashSet<(uint DepotId, ulong ManifestId)>();
+
+        // 1. Try Primary: Configured Hub or Coronitaa/BlueStar-ManifestHub builds snapshot
+        var primaryUrl = GetPrimaryBuildsUrl(appId);
+        try
+        {
+            using var resp = await _http.GetAsync(primaryUrl, ct).ConfigureAwait(false);
+            if (resp.IsSuccessStatusCode)
+            {
+                var json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                if (root.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var element in root.EnumerateArray())
+                    {
+                        ParseRevisionElement(element, appId, "ManifestHub", list, seen);
+                    }
+                }
+                else if (root.ValueKind == JsonValueKind.Object)
+                {
+                    ParseRevisionElement(root, appId, "ManifestHub", list, seen);
+                }
+            }
+            else if (!string.IsNullOrEmpty(GetEffectiveHubBaseUrl()))
+            {
+                // Fallback to GitHub raw primary if configured hub returned 404
+                var githubUrl = $"{PrimaryBuildsBaseUrl}/{appId}.json";
+                using var ghResp = await _http.GetAsync(githubUrl, ct).ConfigureAwait(false);
+                if (ghResp.IsSuccessStatusCode)
+                {
+                    var ghJson = await ghResp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    using var ghDoc = JsonDocument.Parse(ghJson);
+                    if (ghDoc.RootElement.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var element in ghDoc.RootElement.EnumerateArray())
+                            ParseRevisionElement(element, appId, "ManifestHub", list, seen);
+                    }
+                    else if (ghDoc.RootElement.ValueKind == JsonValueKind.Object)
+                    {
+                        ParseRevisionElement(ghDoc.RootElement, appId, "ManifestHub", list, seen);
+                    }
+                }
+            }
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to load primary Hub revisions for AppId {AppId}", appId);
+        }
+
+        // 2. Try Secondary: SSMGAlt/ManifestHub2
+        var secondaryUrl = $"{SecondaryManifestHub2BaseUrl}/{appId}/{appId}.json";
+        try
+        {
+            using var resp = await _http.GetAsync(secondaryUrl, ct).ConfigureAwait(false);
+            if (resp.IsSuccessStatusCode)
+            {
+                var json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("depot", out var depotEl) && depotEl.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var depotProp in depotEl.EnumerateObject())
+                    {
+                        if (!uint.TryParse(depotProp.Name, out var depotId)) continue;
+                        var depotObj = depotProp.Value;
+
+                        if (depotObj.TryGetProperty("manifests", out var manifestsEl) && manifestsEl.ValueKind == JsonValueKind.Object)
+                        {
+                            foreach (var branchProp in manifestsEl.EnumerateObject())
+                            {
+                                if (branchProp.Value.TryGetProperty("gid", out var gidProp))
+                                {
+                                    if (ulong.TryParse(gidProp.GetString(), out var manifestId) && manifestId > 0)
+                                    {
+                                        if (seen.Add((depotId, manifestId)))
+                                        {
+                                            long size = 0;
+                                            if (branchProp.Value.TryGetProperty("size", out var sProp))
+                                            {
+                                                if (sProp.ValueKind == JsonValueKind.Number) sProp.TryGetInt64(out size);
+                                                else if (sProp.ValueKind == JsonValueKind.String) long.TryParse(sProp.GetString(), out size);
+                                            }
+
+                                            DateTimeOffset? authenticDate = null;
+                                            if (branchProp.Value.TryGetProperty("date", out var dProp) && dProp.ValueKind == JsonValueKind.String)
+                                            {
+                                                if (DateTimeOffset.TryParse(dProp.GetString(), out var parsedDate))
+                                                    authenticDate = parsedDate;
+                                            }
+                                            else if (branchProp.Value.TryGetProperty("time", out var tProp) && tProp.ValueKind == JsonValueKind.Number)
+                                            {
+                                                if (tProp.TryGetInt64(out var unixTime) && unixTime > 0)
+                                                    authenticDate = DateTimeOffset.FromUnixTimeSeconds(unixTime);
+                                            }
+
+                                            list.Add(new HubRevisionItem
+                                            {
+                                                AppId = appId,
+                                                DepotId = depotId,
+                                                ManifestId = manifestId,
+                                                BranchName = branchProp.Name,
+                                                DepotName = $"Depot {depotId}",
+                                                AuthenticPublicationDate = authenticDate, // Strictly null if absent
+                                                IngestionDate = DateTimeOffset.UtcNow,
+                                                Provenance = "ManifestHub2",
+                                                SizeOriginal = size,
+                                                Status = "Available"
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to load secondary Hub revisions for AppId {AppId}", appId);
+        }
+
+        // Order: revisions with authentic publication date come first (ordered by publication date descending),
+        // followed by revisions with unknown dates (without using numerical ManifestId as chronological proxy).
+        var ordered = list
+            .OrderByDescending(r => r.HasAuthenticDate)
+            .ThenByDescending(r => r.AuthenticPublicationDate ?? DateTimeOffset.MinValue)
+            .ThenByDescending(r => r.IngestionDate ?? DateTimeOffset.MinValue)
+            .ToList();
+
+        return ordered.AsReadOnly();
+    }
+
+    private static void ParseRevisionElement(
+        JsonElement element,
+        uint appId,
+        string provenance,
+        List<HubRevisionItem> list,
+        HashSet<(uint DepotId, ulong ManifestId)> seen)
+    {
+        string? buildId = null;
+        if (element.TryGetProperty("buildId", out var bProp))
+            buildId = bProp.ToString();
+
+        string branch = "public";
+        if (element.TryGetProperty("branch", out var brProp))
+            branch = brProp.GetString() ?? "public";
+
+        DateTimeOffset? authenticDate = null;
+        if ((element.TryGetProperty("creationTime", out var ctProp) || element.TryGetProperty("date", out ctProp)) && ctProp.ValueKind == JsonValueKind.String)
+        {
+            if (DateTimeOffset.TryParse(ctProp.GetString(), out var ctParsed))
+                authenticDate = ctParsed;
+        }
+        else if (element.TryGetProperty("time", out var timeProp) && timeProp.ValueKind == JsonValueKind.Number)
+        {
+            if (timeProp.TryGetInt64(out var unixSec) && unixSec > 0)
+                authenticDate = DateTimeOffset.FromUnixTimeSeconds(unixSec);
+        }
+
+        DateTimeOffset? ingestionDate = null;
+        if (element.TryGetProperty("timestamp", out var tsProp) && tsProp.ValueKind == JsonValueKind.String)
+        {
+            if (DateTimeOffset.TryParse(tsProp.GetString(), out var tsParsed))
+                ingestionDate = tsParsed;
+        }
+        else if (element.TryGetProperty("ingestedAt", out var ingProp) && ingProp.ValueKind == JsonValueKind.String)
+        {
+            if (DateTimeOffset.TryParse(ingProp.GetString(), out var ingParsed))
+                ingestionDate = ingParsed;
+        }
+
+        string prov = provenance;
+        if (element.TryGetProperty("source", out var srcProp) && srcProp.ValueKind == JsonValueKind.String)
+        {
+            var s = srcProp.GetString();
+            if (!string.IsNullOrWhiteSpace(s)) prov = s;
+        }
+
+        if (element.TryGetProperty("depotManifests", out var dmProp) && dmProp.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in dmProp.EnumerateObject())
+            {
+                if (uint.TryParse(prop.Name, out var depotId))
+                {
+                    ulong manifestId = 0;
+                    if (prop.Value.ValueKind == JsonValueKind.Number) prop.Value.TryGetUInt64(out manifestId);
+                    else if (prop.Value.ValueKind == JsonValueKind.String) ulong.TryParse(prop.Value.GetString(), out manifestId);
+
+                    if (manifestId > 0 && seen.Add((depotId, manifestId)))
+                    {
+                        list.Add(new HubRevisionItem
+                        {
+                            AppId = appId,
+                            DepotId = depotId,
+                            ManifestId = manifestId,
+                            BuildId = buildId,
+                            BranchName = branch,
+                            DepotName = $"Depot {depotId}",
+                            AuthenticPublicationDate = authenticDate,
+                            IngestionDate = ingestionDate,
+                            Provenance = prov,
+                            Status = "Available"
+                        });
+                    }
+                }
+            }
+        }
+        else if (element.TryGetProperty("depotId", out var dIdProp) && element.TryGetProperty("manifestId", out var mIdProp))
+        {
+            uint depotId = 0;
+            if (dIdProp.ValueKind == JsonValueKind.Number) dIdProp.TryGetUInt32(out depotId);
+            else if (dIdProp.ValueKind == JsonValueKind.String) uint.TryParse(dIdProp.GetString(), out depotId);
+
+            ulong manifestId = 0;
+            if (mIdProp.ValueKind == JsonValueKind.Number) mIdProp.TryGetUInt64(out manifestId);
+            else if (mIdProp.ValueKind == JsonValueKind.String) ulong.TryParse(mIdProp.GetString(), out manifestId);
+
+            long size = 0;
+            if (element.TryGetProperty("sizeOriginal", out var sProp) || element.TryGetProperty("size", out sProp))
+            {
+                if (sProp.ValueKind == JsonValueKind.Number) sProp.TryGetInt64(out size);
+                else if (sProp.ValueKind == JsonValueKind.String) long.TryParse(sProp.GetString(), out size);
+            }
+
+            string? sha256 = null;
+            if (element.TryGetProperty("sha256", out var shaProp))
+                sha256 = shaProp.GetString();
+
+            if (depotId > 0 && manifestId > 0 && seen.Add((depotId, manifestId)))
+            {
+                list.Add(new HubRevisionItem
+                {
+                    AppId = appId,
+                    DepotId = depotId,
+                    ManifestId = manifestId,
+                    BuildId = buildId,
+                    BranchName = branch,
+                    DepotName = $"Depot {depotId}",
+                    AuthenticPublicationDate = authenticDate,
+                    IngestionDate = ingestionDate,
+                    Provenance = prov,
+                    SizeOriginal = size,
+                    Sha256 = sha256,
+                    Status = "Available"
+                });
+            }
+        }
     }
 }

@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
+using BlueStar.Infrastructure.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -26,6 +27,8 @@ public sealed class ContributionTransportService : IContributionTransportService
     private readonly HttpClient? _httpClient;
     private readonly ISecureStorage? _secureStorage;
     private readonly ILogger<ContributionTransportService> _logger;
+    private readonly AppSettingsService? _appSettings;
+    private readonly string? _hubBaseUrl;
     private readonly string _publishEndpoint;
 
     private readonly ConcurrentDictionary<(uint DepotId, ulong ManifestId), PublicationReceipt> _creditedReceipts = new();
@@ -40,14 +43,30 @@ public sealed class ContributionTransportService : IContributionTransportService
         HttpClient? httpClient = null,
         ISecureStorage? secureStorage = null,
         ILogger<ContributionTransportService>? logger = null,
-        string? hubBaseUrl = null)
+        string? hubBaseUrl = null,
+        AppSettingsService? appSettings = null)
     {
         _httpClient = httpClient;
         _secureStorage = secureStorage;
         _logger = logger ?? NullLogger<ContributionTransportService>.Instance;
+        _appSettings = appSettings;
+        _hubBaseUrl = hubBaseUrl;
 
         var baseUrl = !string.IsNullOrWhiteSpace(hubBaseUrl) ? hubBaseUrl.TrimEnd('/') : "";
         _publishEndpoint = !string.IsNullOrEmpty(baseUrl) ? $"{baseUrl}/api/v1/contributions/publish" : "/api/v1/contributions/publish";
+    }
+
+    private string GetEffectiveHubBaseUrl()
+    {
+        if (_appSettings != null && !string.IsNullOrWhiteSpace(_appSettings.HubServerUrl))
+        {
+            return _appSettings.HubServerUrl.TrimEnd('/');
+        }
+        if (!string.IsNullOrWhiteSpace(_hubBaseUrl))
+        {
+            return _hubBaseUrl.TrimEnd('/');
+        }
+        return string.Empty;
     }
 
     /// <inheritdoc />
@@ -114,7 +133,10 @@ public sealed class ContributionTransportService : IContributionTransportService
 
         // 5. Remote transport to authorized Hub service
         PublicationReceipt receipt;
-        if (_httpClient != null && _httpClient.BaseAddress != null)
+        var effectiveBase = GetEffectiveHubBaseUrl();
+        var publishUrl = !string.IsNullOrEmpty(effectiveBase) ? $"{effectiveBase}/api/v1/contributions/publish" : _publishEndpoint;
+
+        if (_httpClient != null && (_httpClient.BaseAddress != null || !string.IsNullOrEmpty(effectiveBase)))
         {
             var transportPayload = new
             {
@@ -129,7 +151,7 @@ public sealed class ContributionTransportService : IContributionTransportService
             };
 
             using var content = new StringContent(JsonSerializer.Serialize(transportPayload), Encoding.UTF8, "application/json");
-            var response = await _httpClient.PostAsync(_publishEndpoint, content, ct).ConfigureAwait(false);
+            var response = await _httpClient.PostAsync(publishUrl, content, ct).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
 
             var responseBody = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
@@ -194,5 +216,95 @@ public sealed class ContributionTransportService : IContributionTransportService
     public long GetTotalStardustCredited()
     {
         return Interlocked.Read(ref _totalStardustCredited);
+    }
+
+    /// <inheritdoc />
+    public async Task<StardustBalanceInfo> GetStardustBalanceAsync(string contributorId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(contributorId))
+        {
+            return new StardustBalanceInfo();
+        }
+
+        var effectiveBase = GetEffectiveHubBaseUrl();
+        var client = _httpClient;
+
+        if (client != null)
+        {
+            try
+            {
+                string requestUrl;
+                if (!string.IsNullOrEmpty(effectiveBase))
+                {
+                    requestUrl = $"{effectiveBase}/api/v1/stardust/balance/{Uri.EscapeDataString(contributorId)}";
+                }
+                else if (client.BaseAddress != null)
+                {
+                    requestUrl = $"/api/v1/stardust/balance/{Uri.EscapeDataString(contributorId)}";
+                }
+                else
+                {
+                    requestUrl = string.Empty;
+                }
+
+                if (!string.IsNullOrEmpty(requestUrl))
+                {
+                    using var response = await client.GetAsync(requestUrl, ct).ConfigureAwait(false);
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                        using var doc = JsonDocument.Parse(body);
+                        var root = doc.RootElement;
+
+                        long confirmed = 0;
+                        long pending = 0;
+
+                        if (root.TryGetProperty("confirmedPoints", out var cp) || root.TryGetProperty("confirmedBalance", out cp) || root.TryGetProperty("confirmed", out cp))
+                        {
+                            if (cp.ValueKind == JsonValueKind.Number) cp.TryGetInt64(out confirmed);
+                            else if (cp.ValueKind == JsonValueKind.String) long.TryParse(cp.GetString(), out confirmed);
+                        }
+                        else if (root.TryGetProperty("balance", out var b))
+                        {
+                            if (b.ValueKind == JsonValueKind.Number) b.TryGetInt64(out confirmed);
+                            else if (b.ValueKind == JsonValueKind.String) long.TryParse(b.GetString(), out confirmed);
+                        }
+                        else if (root.TryGetProperty("points", out var p))
+                        {
+                            if (p.ValueKind == JsonValueKind.Number) p.TryGetInt64(out confirmed);
+                            else if (p.ValueKind == JsonValueKind.String) long.TryParse(p.GetString(), out confirmed);
+                        }
+
+                        if (root.TryGetProperty("pendingPoints", out var pp) || root.TryGetProperty("pendingBalance", out pp) || root.TryGetProperty("pending", out pp))
+                        {
+                            if (pp.ValueKind == JsonValueKind.Number) pp.TryGetInt64(out pending);
+                            else if (pp.ValueKind == JsonValueKind.String) long.TryParse(pp.GetString(), out pending);
+                        }
+
+                        return new StardustBalanceInfo
+                        {
+                            ContributorId = contributorId,
+                            ConfirmedPoints = confirmed,
+                            PendingPoints = pending,
+                            LastUpdated = DateTimeOffset.UtcNow
+                        };
+                    }
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to query Stardust balance from Hub ledger for {ContributorId}", contributorId);
+            }
+        }
+
+        // Return verified confirmed ledger total; strictly avoid fabricating random points
+        return new StardustBalanceInfo
+        {
+            ContributorId = contributorId,
+            ConfirmedPoints = Interlocked.Read(ref _totalStardustCredited),
+            PendingPoints = 0,
+            LastUpdated = DateTimeOffset.UtcNow
+        };
     }
 }

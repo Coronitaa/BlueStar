@@ -150,6 +150,38 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _steamTooltipText = "Steam client status";
 
+    private readonly IStardustService? _stardustService;
+    private readonly EventHandler<StardustBalanceInfo>? _stardustBalanceChangedHandler;
+
+    // ── Stardust Live Ledger Balance ──
+    [ObservableProperty]
+    private string _stardustBalanceText = "0";
+
+    [ObservableProperty]
+    private string _stardustPendingText = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasPendingStardust;
+
+    [ObservableProperty]
+    private string _stardustTooltipText = "Stardust Balance: 0 confirmed points\nClick to open Manifest Hub settings";
+
+    private void UpdateStardustBalance(StardustBalanceInfo bal)
+    {
+        StardustBalanceText = bal.ConfirmedPoints.ToString("N0");
+        HasPendingStardust = bal.PendingPoints > 0;
+        StardustPendingText = bal.PendingPoints > 0 ? $"(+{bal.PendingPoints:N0} pending)" : string.Empty;
+        StardustTooltipText = bal.PendingPoints > 0
+            ? $"Stardust Balance: {bal.ConfirmedPoints:N0} confirmed points ({bal.PendingPoints:N0} pending confirmation)\nClick to open Manifest Hub settings"
+            : $"Stardust Balance: {bal.ConfirmedPoints:N0} confirmed points\nClick to open Manifest Hub settings";
+    }
+
+    [RelayCommand]
+    public void OpenStardustSettings()
+    {
+        Navigate("Settings");
+    }
+
     private readonly IMetadataProvider? _metadataProvider;
     private readonly IPrerequisiteService? _prerequisiteService;
     private readonly BlueStar.Infrastructure.Storage.AppSettingsService? _appSettings;
@@ -199,7 +231,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         IMetadataProvider? metadataProvider = null,
         IPrerequisiteService? prerequisiteService = null,
         BlueStar.Infrastructure.Storage.AppSettingsService? appSettings = null,
-        ICommunityStatsService? statsService = null)
+        ICommunityStatsService? statsService = null,
+        IStardustService? stardustService = null)
     {
         _downloadQueueManager = downloadQueueManager;
         _steamStatusService = steamStatusService;
@@ -213,6 +246,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _prerequisiteService = prerequisiteService;
         _appSettings = appSettings;
         _statsService = statsService;
+        _stardustService = stardustService;
         _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
         if (_appSettings != null)
@@ -236,6 +270,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             _runningStateChangedHandler = (_, _) => _ = RefreshRecentShortcutsAsync();
             _gameLauncher.RunningStateChanged += _runningStateChangedHandler;
+        }
+
+        if (_stardustService != null)
+        {
+            _stardustBalanceChangedHandler = (_, bal) => _uiContext.Post(_ => UpdateStardustBalance(bal), null);
+            _stardustService.BalanceChanged += _stardustBalanceChangedHandler;
+            UpdateStardustBalance(_stardustService.CurrentBalance);
+            _ = _stardustService.RefreshBalanceAsync(CancellationToken.None);
         }
 
         // Initialize state
@@ -1282,6 +1324,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (_gameLauncher != null && _runningStateChangedHandler != null)
         {
             _gameLauncher.RunningStateChanged -= _runningStateChangedHandler;
+        }
+
+        if (_stardustService != null && _stardustBalanceChangedHandler != null)
+        {
+            _stardustService.BalanceChanged -= _stardustBalanceChangedHandler;
         }
 
         foreach (var kvp in _subscribedJobs)

@@ -1025,4 +1025,45 @@
     <sys:String x:Key="String_Apply">Aplicar</sys:String>
     <sys:String x:Key="String_Configure">Configurar</sys:String>
     <sys:String x:Key="String_ConfigureReFixTooltip">Configurar Versión de ReFix y Actualizaciones</sys:String>
+
+    <!-- ═══ Manifest Hub & Voluntary Contributions ═══ -->
+    <sys:String x:Key="String_ManifestHubSettingsTitle">Manifest Hub &amp; Contribuciones Comunitarias</sys:String>
+    <sys:String x:Key="String_ManifestHubSettingsDesc">Disponibilidad descentralizada de manifiestos, auditoría de privacidad y libro mayor Stardust</sys:String>
+    <sys:String x:Key="String_PrivacyNoticeTitle">Arquitectura de Privacidad Sin Filtraciones</sys:String>
+    <sys:String x:Key="String_PrivacyNoticeDesc">El análisis local examina los archivos binarios de depot en disco (DepotId, ManifestId, tamaño y hash criptográfico SHA-256). Las transmisiones al Hub excluyen estrictamente todo SteamID, nombres de usuario, contraseñas, tokens de autenticación, cookies de sesión e inventario de licencias. Tu ID de contribuyente es un UUID v4 completamente anónimo y aleatorio.</sys:String>
+    <sys:String x:Key="String_OptInManifestAnalysis">Activar Análisis de Manifiestos</sys:String>
+    <sys:String x:Key="String_OptInManifestAnalysisDesc">Analiza los manifiestos locales en disco para verificar la cobertura frente a los repositorios comunitarios.</sys:String>
+    <sys:String x:Key="String_OptInVoluntaryContributions">Activar Contribuciones Voluntarias</sys:String>
+    <sys:String x:Key="String_OptInVoluntaryContributionsDesc">Acepta voluntariamente enviar archivos binarios de manifiestos faltantes al Hub descentralizado.</sys:String>
+    <sys:String x:Key="String_AnalysisScopeLabel">Alcance del Análisis de Manifiestos</sys:String>
+    <sys:String x:Key="String_ManifestAnalysisStatusLabel">Estado:</sys:String>
+    <sys:String x:Key="String_ManifestAnalysisLastRunLabel">Última Ejecución:</sys:String>
+    <sys:String x:Key="String_AnalyzeNowBtn">Analizar Ahora</sys:String>
+    <sys:String x:Key="String_HubServerUrlLabel">URL del Servidor Manifest Hub</sys:String>
+    <sys:String x:Key="String_StardustSectionTitle">Puntos Comunitarios Stardust &amp; Libro Mayor</sys:String>
+    <sys:String x:Key="String_RefreshBalanceBtn">Actualizar Saldo</sys:String>
+    <sys:String x:Key="String_StardustConfirmedPoints">Saldo Confirmado</sys:String>
+    <sys:String x:Key="String_StardustPendingPoints">Pendiente de Confirmación</sys:String>
+    <sys:String x:Key="String_AnonymousContributorIdLabel">UUID de Contribuyente Anónimo (v4)</sys:String>
+    <sys:String x:Key="String_AnonymousContributorUuid">UUID de Contribuyente Anónimo (v4)</sys:String>
+    <sys:String x:Key="String_CopyUuidBtn">Copiar UUID</sys:String>
+
+    <!-- Contribution Consent Modal -->
+    <sys:String x:Key="String_ContributionConsentTitle">Consentimiento de Contribución de Manifiesto</sys:String>
+    <sys:String x:Key="String_ContributionConsentSubtitle">Revisa los metadatos sanitizados antes de la transmisión voluntaria.</sys:String>
+    <sys:String x:Key="String_ContributionMetadataTitle">Auditoría del Paquete Sanitizado</sys:String>
+    <sys:String x:Key="String_PrivacyGuaranteedTitle">Garantía Sin Filtraciones Verificada</sys:String>
+    <sys:String x:Key="String_PrivacyGuaranteedDesc">No se transmite ningún SteamID, nombre de usuario, tokens de autorización, cookies ni lista de licencias. Solo se envía el archivo de manifiesto público y su hash SHA-256 bajo tu UUID anónimo.</sys:String>
+    <sys:String x:Key="String_ExplicitConsentCheckboxLabel">Doy mi consentimiento explícito para contribuir este archivo de manifiesto y sus metadatos públicos al Manifest Hub comunitario.</sys:String>
+    <sys:String x:Key="String_TransmitContributionBtn">Transmitir Contribución</sys:String>
+
+    <!-- Version Mode Hub -->
+    <sys:String x:Key="String_VersionModeHub">Hub</sys:String>
+    <sys:String x:Key="String_VersionModeHubDesc">Revisiones comunitarias del Manifest Hub con procedencia auténtica</sys:String>
+    <sys:String x:Key="String_HubRevisionsTitle">Revisiones Comunitarias del Manifest Hub</sys:String>
+    <sys:String x:Key="String_HubRevisionsDesc">Explora versiones publicadas para este juego desde archivos comunitarios con verificación de fecha auténtica.</sys:String>
+    <sys:String x:Key="String_AuthenticDateLabel">Publicado:</sys:String>
+    <sys:String x:Key="String_UnknownDateBadge">Fecha desconocida</sys:String>
+    <sys:String x:Key="String_IngestedDateLabel">Ingerido:</sys:String>
+    <sys:String x:Key="String_ApplyRevisionBtn">Aplicar Revisión</sys:String>
 </ResourceDictionary>

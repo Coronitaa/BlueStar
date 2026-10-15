@@ -1044,6 +1044,21 @@
                                            TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0"/>
                             </StackPanel>
                         </RadioButton>
+
+                        <RadioButton Style="{StaticResource VersionModeCard}"
+                                     GroupName="VersionModes"
+                                     IsChecked="{Binding IsVersionModeHub, Mode=OneWay}"
+                                     Command="{Binding SelectVersionModeCommand}" CommandParameter="Hub">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                    <Path Data="{StaticResource IconLayers}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"
+                                          Width="13" Height="13" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                                    <TextBlock Text="{DynamicResource String_VersionModeHub}" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock Text="{DynamicResource String_VersionModeHubDesc}" Style="{StaticResource Caption}"
+                                           TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </RadioButton>
                     </UniformGrid>
 
                     <!-- ═══════════ MODE 1 · LATEST ═══════════ -->
@@ -1613,6 +1628,114 @@
                                         IsEnabled="{Binding IsCustomBuildValid}"/>
                             </Grid>
                         </Border>
+                    </StackPanel>
+
+                    <!-- ═══════════ MODE 5 · MANIFEST HUB REVISIONS ═══════════ -->
+                    <StackPanel Visibility="{Binding IsVersionModeHub, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <!-- Top Header Card -->
+                        <Border Style="{StaticResource Card}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" Margin="0,0,0,12">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="{DynamicResource String_HubRevisionsTitle}" Style="{StaticResource H3}"/>
+                                    <TextBlock Text="{DynamicResource String_HubRevisionsDesc}"
+                                               Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"
+                                               TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="{DynamicResource String_Refresh}"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Padding="14,8"
+                                        VerticalAlignment="Center"
+                                        Command="{Binding LoadHubRevisionsCommand}"
+                                        IsEnabled="{Binding IsLoadingHubRevisions, Converter={StaticResource InverseBoolConverter}}"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Loading Indicator -->
+                        <ProgressBar IsIndeterminate="True" Height="4" Margin="0,0,0,12"
+                                     Visibility="{Binding IsLoadingHubRevisions, Converter={StaticResource BoolToVisibilityConverter}}"
+                                     Foreground="{StaticResource AccentBrush}"/>
+
+                        <!-- Error or Notice if present -->
+                        <Border Background="{StaticResource SurfaceCardBrush}"
+                                BorderBrush="{StaticResource SubtleBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource RadiusSm}"
+                                Padding="16,12" Margin="0,0,0,12"
+                                Visibility="{Binding HubRevisionsError, Converter={StaticResource NullToVisibilityConverter}}">
+                            <TextBlock Text="{Binding HubRevisionsError}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                        </Border>
+
+                        <!-- Revisions List -->
+                        <ItemsControl ItemsSource="{Binding HubRevisions}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource Card}" Margin="0,0,0,8" Padding="14,12">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Left Info -->
+                                            <StackPanel Grid.Column="0">
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                    <!-- Provenance Badge -->
+                                                    <Border Background="#1A3B82F6" BorderBrush="#403B82F6" BorderThickness="1"
+                                                            CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="0,0,8,0">
+                                                        <TextBlock Text="{Binding Provenance}" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
+                                                    </Border>
+
+                                                    <!-- Depot Identifier -->
+                                                    <TextBlock Text="Depot: " Style="{StaticResource CaptionBold}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                    <TextBlock Text="{Binding DepotId}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,12,0"/>
+
+                                                    <!-- Manifest Identifier -->
+                                                    <TextBlock Text="Manifest: " Style="{StaticResource CaptionBold}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                    <TextBlock Text="{Binding ManifestId}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,12,0"/>
+
+                                                    <!-- Size -->
+                                                    <TextBlock Text="{Binding SizeFormatted}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}"/>
+                                                </StackPanel>
+
+                                                <!-- Dates: Authentic Publication Date vs Ingestion Date vs Unknown Badge -->
+                                                <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                                    <!-- Authentic Date -->
+                                                    <StackPanel Orientation="Horizontal"
+                                                                Visibility="{Binding HasAuthenticDate, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                        <TextBlock Text="{DynamicResource String_AuthenticDateLabel}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,4,0"/>
+                                                        <TextBlock Text="{Binding AuthenticDateDisplay}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,12,0"/>
+                                                    </StackPanel>
+
+                                                    <!-- Unknown Authentic Date Badge -->
+                                                    <Border Background="#16F59E0B" BorderBrush="#35F59E0B" BorderThickness="1"
+                                                            CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="0,0,12,0"
+                                                            Visibility="{Binding HasAuthenticDate, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                                                        <TextBlock Text="{DynamicResource String_UnknownDateBadge}" FontSize="10" FontWeight="SemiBold" Foreground="#F59E0B"/>
+                                                    </Border>
+
+                                                    <!-- Ingestion Date -->
+                                                    <TextBlock Text="{DynamicResource String_IngestedDateLabel}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,4,0"/>
+                                                    <TextBlock Text="{Binding IngestionDateDisplay}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}"/>
+                                                </StackPanel>
+                                            </StackPanel>
+
+                                            <!-- Right Apply Action -->
+                                            <Button Grid.Column="1"
+                                                    Content="{DynamicResource String_ApplyRevisionBtn}"
+                                                    Style="{StaticResource PrimaryButton}"
+                                                    Padding="16,8"
+                                                    VerticalAlignment="Center"
+                                                    Command="{Binding DataContext.ApplyHubRevisionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
 
                     <!-- ═══ IMPORT / BUILD SOURCES (shared across modes) ═══ -->
@@ -4830,6 +4953,150 @@
                         </StackPanel>
                     </Border>
                 </Grid>
+            </Border>
+        </controls:ModalOverlay>
+
+        <!-- ═══ VOLUNTARY CONTRIBUTION CONSENT MODAL ═══ -->
+        <controls:ModalOverlay IsOpen="{Binding IsContributionConsentModalOpen}"
+                               CloseCommand="{Binding CloseContributionConsentModalCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="1002">
+            <Border Background="{StaticResource SurfaceCardElevatedBrush}"
+                    BorderBrush="{StaticResource SubtleBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="28" Width="520"
+                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                <StackPanel>
+                    <!-- Modal Header -->
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Width="36" Height="36" CornerRadius="18"
+                                Background="{StaticResource AccentTranslucentBrush}"
+                                BorderBrush="{StaticResource AccentBrush}" BorderThickness="1"
+                                Margin="0,0,12,0" VerticalAlignment="Center">
+                            <TextBlock Text="★" FontSize="18" Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="{DynamicResource String_ContributionConsentTitle}" Style="{StaticResource H2}"/>
+                            <TextBlock Text="{DynamicResource String_ContributionConsentSubtitle}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="2" Content="✕" Style="{StaticResource GhostButton}" Width="24" Height="24" Padding="0"
+                                Command="{Binding CloseContributionConsentModalCommand}"/>
+                    </Grid>
+
+                    <!-- Metadata Summary Box -->
+                    <Border Background="{StaticResource SurfaceInputBrush}"
+                            BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusSm}"
+                            Padding="14,12" Margin="0,0,0,14">
+                        <StackPanel>
+                            <TextBlock Text="{DynamicResource String_ContributionMetadataTitle}" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,8" Foreground="{StaticResource PrimaryTextBrush}"/>
+                            
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="App ID:" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                <TextBlock Grid.Column="1" Text="{Binding ActiveContributionPreview.AppId}" Style="{StaticResource CaptionBold}"/>
+                            </Grid>
+
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Depot ID:" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                <TextBlock Grid.Column="1" Text="{Binding ActiveContributionPreview.DepotId}" Style="{StaticResource CaptionBold}"/>
+                            </Grid>
+
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Manifest ID:" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                <TextBlock Grid.Column="1" Text="{Binding ActiveContributionPreview.ManifestId}" Style="{StaticResource CaptionBold}"/>
+                            </Grid>
+
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Size:" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                <TextBlock Grid.Column="1" Text="{Binding ActiveContributionPreview.ManifestSizeBytes, StringFormat='{}{0:N0} bytes'}" Style="{StaticResource CaptionBold}"/>
+                            </Grid>
+
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="SHA-256 Hash:" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                <TextBlock Grid.Column="1" Text="{Binding ActiveContributionPreview.ManifestHashSha256}" Style="{StaticResource CaptionBold}" TextTrimming="CharacterEllipsis"/>
+                            </Grid>
+
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Anonymous UUID:" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                <TextBlock Grid.Column="1" Text="{Binding ActiveContributionPreview.AnonymousContributorId}" Style="{StaticResource CaptionBold}" TextTrimming="CharacterEllipsis"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Privacy Guarantee Banner -->
+                    <Border Background="#1610B981" BorderBrush="#3510B981" BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusSm}" Padding="12,10" Margin="0,0,0,16">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                <TextBlock Text="🛡 " FontSize="12" VerticalAlignment="Center"/>
+                                <TextBlock Text="{DynamicResource String_PrivacyGuaranteedTitle}" FontWeight="SemiBold" FontSize="11" Foreground="#10B981"/>
+                            </StackPanel>
+                            <TextBlock Text="{DynamicResource String_PrivacyGuaranteedDesc}"
+                                       Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Explicit Consent Checkbox -->
+                    <CheckBox IsChecked="{Binding ContributionConsentGranted, Mode=TwoWay}"
+                              Style="{StaticResource DarkCheckBox}"
+                              Margin="0,0,0,20">
+                        <TextBlock Text="{DynamicResource String_ExplicitConsentCheckboxLabel}"
+                                   Style="{StaticResource BodyMedium}" TextWrapping="Wrap"/>
+                    </CheckBox>
+
+                    <!-- Action Buttons -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0" Content="{DynamicResource String_Cancel}"
+                                Style="{StaticResource SecondaryButton}"
+                                Padding="16,10"
+                                Command="{Binding CloseContributionConsentModalCommand}"/>
+
+                        <Button Grid.Column="2" Content="{DynamicResource String_TransmitContributionBtn}"
+                                Style="{StaticResource PrimaryButton}"
+                                Padding="16,10"
+                                IsEnabled="{Binding ContributionConsentGranted}"
+                                Command="{Binding TransmitActiveContributionCommand}"/>
+                    </Grid>
+                </StackPanel>
             </Border>
         </controls:ModalOverlay>
     </Grid>

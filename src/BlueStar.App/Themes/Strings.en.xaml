@@ -1026,4 +1026,45 @@
     <sys:String x:Key="String_Apply">Apply</sys:String>
     <sys:String x:Key="String_Configure">Configure</sys:String>
     <sys:String x:Key="String_ConfigureReFixTooltip">Configure ReFix Version and Update Settings</sys:String>
+
+    <!-- ═══ Manifest Hub & Voluntary Contributions ═══ -->
+    <sys:String x:Key="String_ManifestHubSettingsTitle">Manifest Hub &amp; Community Contributions</sys:String>
+    <sys:String x:Key="String_ManifestHubSettingsDesc">Decentralized depot manifest availability, privacy audit, and voluntary Stardust ledger</sys:String>
+    <sys:String x:Key="String_PrivacyNoticeTitle">Zero-Leak Privacy Architecture</sys:String>
+    <sys:String x:Key="String_PrivacyNoticeDesc">Local analysis inspects depot binaries on disk (DepotId, ManifestId, Size, and cryptographic SHA-256 hash). Transmissions to the Hub strictly exclude all SteamIDs, usernames, passwords, auth tokens, session cookies, and license lists. Your contributor ID is a purely random anonymous UUID v4.</sys:String>
+    <sys:String x:Key="String_OptInManifestAnalysis">Enable Manifest Analysis</sys:String>
+    <sys:String x:Key="String_OptInManifestAnalysisDesc">Analyze local manifest files on disk to inspect coverage against community repositories.</sys:String>
+    <sys:String x:Key="String_OptInVoluntaryContributions">Enable Voluntary Contributions</sys:String>
+    <sys:String x:Key="String_OptInVoluntaryContributionsDesc">Opt-in to voluntarily contribute missing manifest binaries to the decentralized Hub.</sys:String>
+    <sys:String x:Key="String_AnalysisScopeLabel">Manifest Analysis Scope</sys:String>
+    <sys:String x:Key="String_ManifestAnalysisStatusLabel">Status:</sys:String>
+    <sys:String x:Key="String_ManifestAnalysisLastRunLabel">Last Execution:</sys:String>
+    <sys:String x:Key="String_AnalyzeNowBtn">Analyze Now</sys:String>
+    <sys:String x:Key="String_HubServerUrlLabel">Hub Server Endpoint URL</sys:String>
+    <sys:String x:Key="String_StardustSectionTitle">Stardust Community Points &amp; Ledger</sys:String>
+    <sys:String x:Key="String_RefreshBalanceBtn">Refresh Ledger</sys:String>
+    <sys:String x:Key="String_StardustConfirmedPoints">Confirmed Balance</sys:String>
+    <sys:String x:Key="String_StardustPendingPoints">Pending Confirmation</sys:String>
+    <sys:String x:Key="String_AnonymousContributorIdLabel">Anonymous Contributor UUID (v4)</sys:String>
+    <sys:String x:Key="String_AnonymousContributorUuid">Anonymous Contributor UUID (v4)</sys:String>
+    <sys:String x:Key="String_CopyUuidBtn">Copy UUID</sys:String>
+
+    <!-- Contribution Consent Modal -->
+    <sys:String x:Key="String_ContributionConsentTitle">Manifest Contribution Consent</sys:String>
+    <sys:String x:Key="String_ContributionConsentSubtitle">Review the sanitized payload metadata prior to voluntary transmission.</sys:String>
+    <sys:String x:Key="String_ContributionMetadataTitle">Sanitized Payload Audit</sys:String>
+    <sys:String x:Key="String_PrivacyGuaranteedTitle">Zero-Leak Guarantee Verified</sys:String>
+    <sys:String x:Key="String_PrivacyGuaranteedDesc">No SteamID, username, auth tokens, cookies, or license inventories are transmitted. Only the public depot manifest binary and SHA-256 hash are submitted under your anonymous UUID.</sys:String>
+    <sys:String x:Key="String_ExplicitConsentCheckboxLabel">I explicitly consent to contribute this manifest binary and public metadata to the community Manifest Hub.</sys:String>
+    <sys:String x:Key="String_TransmitContributionBtn">Transmit Contribution</sys:String>
+
+    <!-- Version Mode Hub -->
+    <sys:String x:Key="String_VersionModeHub">Hub</sys:String>
+    <sys:String x:Key="String_VersionModeHubDesc">Manifest Hub community revisions with authentic provenance</sys:String>
+    <sys:String x:Key="String_HubRevisionsTitle">Manifest Hub Community Revisions</sys:String>
+    <sys:String x:Key="String_HubRevisionsDesc">Browse published manifest versions for this game from community archives with authentic date verification.</sys:String>
+    <sys:String x:Key="String_AuthenticDateLabel">Published:</sys:String>
+    <sys:String x:Key="String_UnknownDateBadge">Unknown date</sys:String>
+    <sys:String x:Key="String_IngestedDateLabel">Ingested:</sys:String>
+    <sys:String x:Key="String_ApplyRevisionBtn">Apply Revision</sys:String>
 </ResourceDictionary>

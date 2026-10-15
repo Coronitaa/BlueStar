@@ -301,11 +301,12 @@ public partial class App : Application
         services.AddHttpClient<IContributionTransportService, BlueStar.Infrastructure.Services.ContributionTransportService>((sp, client) =>
         {
             var settings = sp.GetService<BlueStar.Infrastructure.Storage.AppSettingsService>();
-            var baseUrl = settings?.DefaultApiUrl ?? "https://depotbox.org";
-            client.BaseAddress = new Uri(baseUrl);
+            var baseUrl = settings?.HubServerUrl ?? "http://localhost:5088";
+            try { client.BaseAddress = new Uri(baseUrl); } catch { }
             client.Timeout = TimeSpan.FromSeconds(60);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar/1.3");
         });
+        services.AddSingleton<IStardustService, BlueStar.Infrastructure.Services.StardustService>();
         services.AddHttpClient<BlueStar.Infrastructure.Providers.Fixes.OnlineFixProvider>();
         services.AddSingleton<IFixProvider>(sp => sp.GetRequiredService<BlueStar.Infrastructure.Providers.Fixes.OnlineFixProvider>());
 
