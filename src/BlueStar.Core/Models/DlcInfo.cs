@@ -43,6 +43,16 @@ public record DlcInfo
     public long TotalSizeBytes => System.Linq.Enumerable.Sum(Depots, d => d.SizeBytes);
 
     /// <summary>
+    /// Gets or sets a value indicating whether this DLC's metadata has been enriched via store or manifest inspection.
+    /// </summary>
+    public bool IsMetadataEnriched { get; init; } = false;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether explicit verified evidence exists that this DLC requires no download.
+    /// </summary>
+    public bool HasEntitlementEvidence { get; init; } = false;
+
+    /// <summary>
     /// Gets the Steam store header banner image URL for this DLC.
     /// </summary>
     public string HeaderImageUrl => $"https://cdn.cloudflare.steamstatic.com/steam/apps/{AppId}/header.jpg";

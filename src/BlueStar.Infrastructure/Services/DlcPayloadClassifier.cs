@@ -23,7 +23,13 @@ public sealed class DlcPayloadClassifier : IDlcPayloadClassifier
     }
 
     /// <inheritdoc />
-    public DlcClassification Classify(uint dlcAppId, uint parentAppId, string dlcName, IEnumerable<DepotInfo>? depots)
+    public DlcClassification Classify(
+        uint dlcAppId,
+        uint parentAppId,
+        string dlcName,
+        IEnumerable<DepotInfo>? depots,
+        bool isMetadataEnriched = false,
+        bool hasEntitlementEvidence = false)
     {
         if (depots == null)
         {
@@ -61,10 +67,32 @@ public sealed class DlcPayloadClassifier : IDlcPayloadClassifier
             };
         }
 
-        // EntitlementOnly case 1: No depots exist for this DLC (e.g. Tabletop Simulator DLCs, activation unlock keys)
+        // When Depots is empty:
+        // PRIVACY & AUDIT RULE: NEVER classify Depots=[] as EntitlementOnly without verified enriched metadata or evidence!
         if (depotList.Count == 0)
         {
-            _logger.LogInformation("DLC {DlcAppId} ('{DlcName}') classified as EntitlementOnly (0 depots)", dlcAppId, dlcName);
+            if (!isMetadataEnriched && !hasEntitlementEvidence)
+            {
+                _logger.LogInformation(
+                    "DLC {DlcAppId} ('{DlcName}') has 0 depots but metadata is unenriched; classifying as Unknown",
+                    dlcAppId, dlcName);
+
+                return new DlcClassification
+                {
+                    DlcAppId = dlcAppId,
+                    ParentAppId = parentAppId,
+                    Name = dlcName,
+                    PayloadType = DlcPayloadType.Unknown,
+                    DepotIds = [],
+                    TotalSizeBytes = 0,
+                    Reason = "Depot list is empty and metadata has not been enriched or verified; insufficient evidence to classify as EntitlementOnly."
+                };
+            }
+
+            _logger.LogInformation(
+                "DLC {DlcAppId} ('{DlcName}') classified as EntitlementOnly (verified with enriched metadata or entitlement evidence)",
+                dlcAppId, dlcName);
+
             return new DlcClassification
             {
                 DlcAppId = dlcAppId,
@@ -73,16 +101,17 @@ public sealed class DlcPayloadClassifier : IDlcPayloadClassifier
                 PayloadType = DlcPayloadType.EntitlementOnly,
                 DepotIds = [],
                 TotalSizeBytes = 0,
-                Reason = "DLC has no separate depots; files are pre-shipped in the base game or unlocked via client entitlement (e.g. Tabletop Simulator DLCs)."
+                Reason = "Verified via enriched metadata: DLC contains no separate downloadable depots and is unlocked via entitlement (e.g. Tabletop Simulator DLCs)."
             };
         }
 
         // DownloadablePayload: Has depots with non-zero byte size or valid non-zero manifest revision
-        // (e.g. Poppy Playtime Ch 2, 3, 4 which have distinct multi-gigabyte downloadable assets)
+        // (e.g. Poppy Playtime Ch 2, 3, 4 which have distinct downloadable assets)
         var hasContent = totalSize > 0 || depotList.Any(d => d.ManifestId > 0);
         if (hasContent)
         {
-            _logger.LogInformation("DLC {DlcAppId} ('{DlcName}') classified as DownloadablePayload ({DepotCount} depots, {TotalSize} bytes)",
+            _logger.LogInformation(
+                "DLC {DlcAppId} ('{DlcName}') classified as DownloadablePayload ({DepotCount} depots, {TotalSize} bytes)",
                 dlcAppId, dlcName, depotList.Count, totalSize);
 
             return new DlcClassification
@@ -112,10 +141,16 @@ public sealed class DlcPayloadClassifier : IDlcPayloadClassifier
     }
 
     /// <inheritdoc />
+    public DlcClassification Classify(uint dlcAppId, uint parentAppId, string dlcName, IEnumerable<DepotInfo>? depots)
+    {
+        return Classify(dlcAppId, parentAppId, dlcName, depots, isMetadataEnriched: false, hasEntitlementEvidence: false);
+    }
+
+    /// <inheritdoc />
     public DlcClassification Classify(uint parentAppId, DlcInfo dlcInfo)
     {
         ArgumentNullException.ThrowIfNull(dlcInfo);
-        return Classify(dlcInfo.AppId, parentAppId, dlcInfo.Name, dlcInfo.Depots);
+        return Classify(dlcInfo.AppId, parentAppId, dlcInfo.Name, dlcInfo.Depots, dlcInfo.IsMetadataEnriched, dlcInfo.HasEntitlementEvidence);
     }
 
     /// <inheritdoc />

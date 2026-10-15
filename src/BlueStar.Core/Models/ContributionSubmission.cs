@@ -35,9 +35,18 @@ public record ContributionSubmission
     public long ManifestSizeBytes { get; init; }
 
     /// <summary>
-    /// One-way pseudonymous contributor ID (SHA-256 hashed with salt).
+    /// Cryptographic anonymous contributor ID (random UUID v4 with zero link to SteamID or user account).
     /// </summary>
-    public string PseudonymousContributorId { get; init; } = string.Empty;
+    public string AnonymousContributorId { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Legacy compatibility alias for <see cref="AnonymousContributorId"/>.
+    /// </summary>
+    public string PseudonymousContributorId
+    {
+        get => AnonymousContributorId;
+        init => AnonymousContributorId = value;
+    }
 
     /// <summary>
     /// Binary content of the manifest payload (Steam protobuf format).
@@ -50,7 +59,7 @@ public record ContributionSubmission
     public bool UserConsentGranted { get; init; }
 
     /// <summary>
-    /// Cryptographic audit hash linking contributor pseudonym and manifest hash for ledger immutability.
+    /// Cryptographic audit hash linking anonymous contributor ID and manifest hash for ledger immutability.
     /// </summary>
     public string SanitizationAuditHash { get; init; } = string.Empty;
 
@@ -64,7 +73,7 @@ public record ContributionSubmission
     /// </summary>
     public bool IsSafeForTransmission =>
         UserConsentGranted &&
-        !string.IsNullOrWhiteSpace(PseudonymousContributorId) &&
+        !string.IsNullOrWhiteSpace(AnonymousContributorId) &&
         !string.IsNullOrWhiteSpace(ManifestHashSha256) &&
         ManifestPayload.Length > 0 &&
         ManifestPayload.Length == ManifestSizeBytes;

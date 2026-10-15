@@ -13,38 +13,143 @@ namespace BlueStar.Infrastructure.Services;
 
 /// <summary>
 /// Implements <see cref="IVoluntaryContributionService"/>, managing transparent, consent-driven
-/// community manifest contributions with cryptographic pseudonymity and privacy guarantees.
+/// community manifest contributions with complete anonymity and cryptographic privacy guarantees.
 /// 
 /// PRIVACY INVARIANTS:
-/// - Real SteamID64 and account names are NEVER exposed or transmitted.
-/// - Cryptographic salted one-way hashing (SHA-256) is used for contributor attribution in the Stardust ledger.
+/// - Real SteamID64, account names, and license lists are NEVER exposed or transmitted.
+/// - Contributor attribution uses a purely random, local UUID v4 (AnonymousContributorId)
+///   with ZERO derivation or connection to user credentials.
 /// - No credentials, tokens, session cookies, or game library lists are ever packaged.
 /// - Explicit user consent is mandatory prior to generating any submission payload.
 /// </summary>
 public sealed class VoluntaryContributionService : IVoluntaryContributionService
 {
-    public const string DefaultSalt = "bluestar-stardust-ledger-v1";
+    private const string SecureStorageKey = "bluestar_anonymous_contributor_id";
+    private readonly ISecureStorage? _secureStorage;
     private readonly ILogger<VoluntaryContributionService> _logger;
+    private readonly string _fallbackFilePath;
+    private string? _cachedContributorId;
+    private readonly SemaphoreSlim _lock = new(1, 1);
 
-    public VoluntaryContributionService(ILogger<VoluntaryContributionService>? logger = null)
+    public VoluntaryContributionService(
+        ISecureStorage? secureStorage = null,
+        ILogger<VoluntaryContributionService>? logger = null)
     {
+        _secureStorage = secureStorage;
         _logger = logger ?? NullLogger<VoluntaryContributionService>.Instance;
+
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        _fallbackFilePath = Path.Combine(localAppData, "BlueStar", "contributor_id.txt");
     }
 
     /// <inheritdoc />
-    public string GeneratePseudonym(string rawUserIdentifier, string? salt = null)
+    public async Task<string> GetOrCreateAnonymousContributorIdAsync(CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(rawUserIdentifier))
+        if (!string.IsNullOrWhiteSpace(_cachedContributorId))
         {
-            throw new ArgumentException("Raw user identifier cannot be null or empty", nameof(rawUserIdentifier));
+            return _cachedContributorId;
         }
 
-        var effectiveSalt = !string.IsNullOrWhiteSpace(salt) ? salt : DefaultSalt;
-        var compositeInput = $"bluestar-stardust:{effectiveSalt}:{rawUserIdentifier.Trim()}";
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(_cachedContributorId))
+            {
+                return _cachedContributorId;
+            }
 
-        using var sha256 = SHA256.Create();
-        var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(compositeInput));
-        return Convert.ToHexString(hashBytes).ToLowerInvariant();
+            // 1. Try retrieving from ISecureStorage if available
+            if (_secureStorage != null)
+            {
+                try
+                {
+                    var storedId = await _secureStorage.GetAsync(SecureStorageKey, ct).ConfigureAwait(false);
+                    if (!string.IsNullOrWhiteSpace(storedId) && Guid.TryParse(storedId, out _))
+                    {
+                        _cachedContributorId = storedId.Trim().ToLowerInvariant();
+                        return _cachedContributorId;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Could not retrieve anonymous contributor ID from secure storage; checking local fallback");
+                }
+            }
+
+            // 2. Try retrieving from local fallback file
+            try
+            {
+                if (File.Exists(_fallbackFilePath))
+                {
+                    var fileId = (await File.ReadAllTextAsync(_fallbackFilePath, ct).ConfigureAwait(false)).Trim();
+                    if (!string.IsNullOrWhiteSpace(fileId) && Guid.TryParse(fileId, out _))
+                    {
+                        _cachedContributorId = fileId.ToLowerInvariant();
+
+                        // Sync back to secure storage if available
+                        if (_secureStorage != null)
+                        {
+                            try { await _secureStorage.SetAsync(SecureStorageKey, _cachedContributorId, ct).ConfigureAwait(false); } catch { }
+                        }
+
+                        return _cachedContributorId;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Could not retrieve anonymous contributor ID from local file");
+            }
+
+            // 3. Generate a brand-new, purely random cryptographic UUID v4
+            // Guaranteed to have zero algorithmic or mathematical connection to SteamID or user identity
+            var newAnonymousId = Guid.NewGuid().ToString("D").ToLowerInvariant();
+            _cachedContributorId = newAnonymousId;
+
+            // Persist securely
+            if (_secureStorage != null)
+            {
+                try
+                {
+                    await _secureStorage.SetAsync(SecureStorageKey, newAnonymousId, ct).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Could not persist anonymous contributor ID to secure storage");
+                }
+            }
+
+            try
+            {
+                var dir = Path.GetDirectoryName(_fallbackFilePath);
+                if (!string.IsNullOrEmpty(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+                await File.WriteAllTextAsync(_fallbackFilePath, newAnonymousId, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Could not persist anonymous contributor ID to local file fallback");
+            }
+
+            return _cachedContributorId;
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    /// <inheritdoc />
+    public string GetOrCreateAnonymousContributorId()
+    {
+        if (!string.IsNullOrWhiteSpace(_cachedContributorId))
+        {
+            return _cachedContributorId;
+        }
+
+        return GetOrCreateAnonymousContributorIdAsync(CancellationToken.None).GetAwaiter().GetResult();
     }
 
     /// <inheritdoc />
@@ -53,11 +158,10 @@ public sealed class VoluntaryContributionService : IVoluntaryContributionService
         uint depotId,
         ulong manifestId,
         string manifestFilePath,
-        string rawUserIdentifier,
+        string? anonymousContributorId = null,
         CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(manifestFilePath);
-        ArgumentException.ThrowIfNullOrWhiteSpace(rawUserIdentifier);
 
         if (!File.Exists(manifestFilePath))
         {
@@ -77,11 +181,14 @@ public sealed class VoluntaryContributionService : IVoluntaryContributionService
             hashHex = Convert.ToHexString(hashBytes).ToLowerInvariant();
         }
 
-        var pseudonym = GeneratePseudonym(rawUserIdentifier);
+        var contributorId = !string.IsNullOrWhiteSpace(anonymousContributorId)
+            ? anonymousContributorId
+            : await GetOrCreateAnonymousContributorIdAsync(ct).ConfigureAwait(false);
 
+        // PRIVACY GUARANTEE: Never log contributor ID, pseudonym, credentials, or licenses
         _logger.LogInformation(
-            "Created voluntary contribution preview for App {AppId}, Depot {DepotId}, Manifest {ManifestId}. Pseudonym: {Pseudonym}",
-            appId, depotId, manifestId, pseudonym);
+            "Created voluntary contribution preview for App {AppId}, Depot {DepotId}, Manifest {ManifestId}",
+            appId, depotId, manifestId);
 
         return new ContributionPreview
         {
@@ -90,7 +197,7 @@ public sealed class VoluntaryContributionService : IVoluntaryContributionService
             ManifestId = manifestId,
             ManifestHashSha256 = hashHex,
             ManifestSizeBytes = bytes.Length,
-            PseudonymousContributorId = pseudonym,
+            AnonymousContributorId = contributorId,
             LocalSourcePath = manifestFilePath,
             PrivacyDisclosures = ContributionPreview.StandardDisclosures,
             IsSanitized = true,
@@ -133,11 +240,11 @@ public sealed class VoluntaryContributionService : IVoluntaryContributionService
                 $"Manifest checksum mismatch. Expected {preview.ManifestHashSha256}, but found {currentHash}. Potential file tampering detected.");
         }
 
-        // Generate Sanitization Audit Hash (links contributor pseudonym + manifest hash for Stardust ledger integrity)
+        // Generate Sanitization Audit Hash linking anonymous contributor ID + manifest hash for ledger immutability
         string auditHash;
         using (var sha256 = SHA256.Create())
         {
-            var auditInput = $"audit:{preview.PseudonymousContributorId}:{preview.ManifestHashSha256}:{payload.Length}";
+            var auditInput = $"audit:{preview.AnonymousContributorId}:{preview.ManifestHashSha256}:{payload.Length}";
             auditHash = Convert.ToHexString(sha256.ComputeHash(Encoding.UTF8.GetBytes(auditInput))).ToLowerInvariant();
         }
 
@@ -148,7 +255,7 @@ public sealed class VoluntaryContributionService : IVoluntaryContributionService
             ManifestId = preview.ManifestId,
             ManifestHashSha256 = preview.ManifestHashSha256,
             ManifestSizeBytes = payload.Length,
-            PseudonymousContributorId = preview.PseudonymousContributorId,
+            AnonymousContributorId = preview.AnonymousContributorId,
             ManifestPayload = payload,
             UserConsentGranted = true,
             SanitizationAuditHash = auditHash,
@@ -160,9 +267,10 @@ public sealed class VoluntaryContributionService : IVoluntaryContributionService
             throw new InvalidOperationException("Submission failed final safety validation.");
         }
 
+        // PRIVACY GUARANTEE: Never log contributor ID, pseudonym, or credentials
         _logger.LogInformation(
-            "Packaged sanitized voluntary submission for Depot {DepotId}, Manifest {ManifestId}. Audit: {AuditHash}",
-            submission.DepotId, submission.ManifestId, submission.SanitizationAuditHash);
+            "Packaged sanitized voluntary submission for Depot {DepotId}, Manifest {ManifestId}",
+            submission.DepotId, submission.ManifestId);
 
         return submission;
     }

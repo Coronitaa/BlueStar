@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace BlueStar.Infrastructure.Services;
 
@@ -17,17 +18,20 @@ namespace BlueStar.Infrastructure.Services;
 public sealed class InstallationPlanner : IInstallationPlanner
 {
     private readonly IManifestCacheService _manifestCache;
+    private readonly IDifferentialUpdateResolver _differentialResolver;
     private readonly IDepotKeyRepository? _keyRepository;
     private readonly ILogger<InstallationPlanner> _logger;
 
     public InstallationPlanner(
         IManifestCacheService manifestCache,
         ILogger<InstallationPlanner> logger,
-        IDepotKeyRepository? keyRepository = null)
+        IDepotKeyRepository? keyRepository = null,
+        IDifferentialUpdateResolver? differentialResolver = null)
     {
         _manifestCache = manifestCache ?? throw new ArgumentNullException(nameof(manifestCache));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _keyRepository = keyRepository;
+        _differentialResolver = differentialResolver ?? new DifferentialUpdateResolver(NullLogger<DifferentialUpdateResolver>.Instance);
     }
 
     /// <inheritdoc />
@@ -114,6 +118,13 @@ public sealed class InstallationPlanner : IInstallationPlanner
                 .ToDictionary(d => d.DepotId, d => d.ManifestId);
         }
 
+        // Use IDifferentialUpdateResolver to actively resolve identical vs updated/new depots
+        var diffPlan = _differentialResolver.ResolvePlan(
+            instance.AppId,
+            installedManifests,
+            targetVersion.Depots,
+            targetVersion.BuildId);
+
         var toDownload = new List<PlanDepotItem>();
         var reused = new List<PlanDepotItem>();
         var requiredManifests = new List<ManifestArtifact>();
@@ -123,58 +134,61 @@ public sealed class InstallationPlanner : IInstallationPlanner
             ? await _keyRepository.GetKeysAsync(depotIds, ct).ConfigureAwait(false)
             : new Dictionary<uint, string>();
 
-        foreach (var depot in targetVersion.Depots)
+        // 1. Process Unchanged Depots (filtered out from download; reused from local disk)
+        foreach (var depot in diffPlan.UnchangedDepots)
         {
             keys.TryGetValue(depot.DepotId, out var key);
             var effectiveKey = key ?? depot.DepotKey;
-
             var localManifestPath = _manifestCache.GetManifestPath(depot.DepotId, depot.ManifestId);
 
-            // Check if this depot is already installed with the exact same ManifestId
-            if (installedManifests.TryGetValue(depot.DepotId, out var installedManifestId) &&
-                installedManifestId == depot.ManifestId)
-            {
-                // Unchanged depot — reuse existing local files without downloading!
-                reused.Add(new PlanDepotItem
-                {
-                    DepotId = depot.DepotId,
-                    ManifestId = depot.ManifestId,
-                    PreviousManifestId = installedManifestId,
-                    Name = depot.Name,
-                    SizeBytes = depot.SizeBytes,
-                    DepotKey = effectiveKey,
-                    ManifestFilePath = localManifestPath,
-                    IsReused = true
-                });
-            }
-            else
-            {
-                // New or updated depot — schedule download
-                toDownload.Add(new PlanDepotItem
-                {
-                    DepotId = depot.DepotId,
-                    ManifestId = depot.ManifestId,
-                    PreviousManifestId = installedManifests.TryGetValue(depot.DepotId, out var prev) ? prev : null,
-                    Name = depot.Name,
-                    SizeBytes = depot.SizeBytes,
-                    DepotKey = effectiveKey,
-                    ManifestFilePath = localManifestPath,
-                    IsReused = false
-                });
+            installedManifests.TryGetValue(depot.DepotId, out var prevManifest);
 
-                requiredManifests.Add(new ManifestArtifact
-                {
-                    DepotId = depot.DepotId,
-                    ManifestId = depot.ManifestId,
-                    SizeBytes = depot.SizeBytes,
-                    LocalCachePath = localManifestPath
-                });
-            }
+            reused.Add(new PlanDepotItem
+            {
+                DepotId = depot.DepotId,
+                ManifestId = depot.ManifestId,
+                PreviousManifestId = prevManifest != 0 ? prevManifest : depot.ManifestId,
+                Name = depot.Name,
+                SizeBytes = depot.SizeBytes,
+                DepotKey = effectiveKey,
+                ManifestFilePath = localManifestPath,
+                IsReused = true
+            });
+        }
+
+        // 2. Process Updated and Newly Added Depots (scheduled for active download)
+        foreach (var depot in diffPlan.UpdatedDepots.Concat(diffPlan.NewDepots))
+        {
+            keys.TryGetValue(depot.DepotId, out var key);
+            var effectiveKey = key ?? depot.DepotKey;
+            var localManifestPath = _manifestCache.GetManifestPath(depot.DepotId, depot.ManifestId);
+
+            installedManifests.TryGetValue(depot.DepotId, out var prevManifest);
+
+            toDownload.Add(new PlanDepotItem
+            {
+                DepotId = depot.DepotId,
+                ManifestId = depot.ManifestId,
+                PreviousManifestId = prevManifest != 0 ? prevManifest : null,
+                Name = depot.Name,
+                SizeBytes = depot.SizeBytes,
+                DepotKey = effectiveKey,
+                ManifestFilePath = localManifestPath,
+                IsReused = false
+            });
+
+            requiredManifests.Add(new ManifestArtifact
+            {
+                DepotId = depot.DepotId,
+                ManifestId = depot.ManifestId,
+                SizeBytes = depot.SizeBytes,
+                LocalCachePath = localManifestPath
+            });
         }
 
         _logger.LogInformation(
-            "Differential plan calculated for {Name}: {ToDownloadCount} depots to download ({Size} bytes), {ReusedCount} depots reused",
-            instance.Name, toDownload.Count, toDownload.Sum(d => d.SizeBytes), reused.Count);
+            "Differential plan calculated via IDifferentialUpdateResolver for {Name}: {ToDownloadCount} depots to download ({DownloadSize} bytes), {ReusedCount} depots reused ({SavedSize} bytes saved)",
+            instance.Name, toDownload.Count, toDownload.Sum(d => d.SizeBytes), reused.Count, diffPlan.TotalSavedSizeBytes);
 
         return new InstallationPlan
         {

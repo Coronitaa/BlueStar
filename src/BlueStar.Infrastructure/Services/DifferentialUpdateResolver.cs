@@ -126,4 +126,26 @@ public sealed class DifferentialUpdateResolver : IDifferentialUpdateResolver
 
         return ResolvePlan(appId, currentDepots, targetDepots, targetBuildId);
     }
+
+    /// <inheritdoc />
+    public DifferentialUpdatePlan ResolvePlan(
+        uint appId,
+        IReadOnlyDictionary<uint, ulong> currentManifestMap,
+        IEnumerable<DepotVersion> targetDepots,
+        string targetBuildId = "")
+    {
+        ArgumentNullException.ThrowIfNull(targetDepots);
+        return ResolvePlan(appId, currentManifestMap, targetDepots.Select(d => d.ToDepotInfo()), targetBuildId);
+    }
+
+    /// <inheritdoc />
+    public DifferentialUpdatePlan ResolvePlan(
+        uint appId,
+        IEnumerable<DepotInfo> currentDepots,
+        IEnumerable<DepotVersion> targetDepots,
+        string targetBuildId = "")
+    {
+        ArgumentNullException.ThrowIfNull(targetDepots);
+        return ResolvePlan(appId, currentDepots, targetDepots.Select(d => d.ToDepotInfo()), targetBuildId);
+    }
 }

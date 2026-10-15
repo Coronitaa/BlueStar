@@ -35,10 +35,19 @@ public record ContributionPreview
     public long ManifestSizeBytes { get; init; }
 
     /// <summary>
-    /// Irreversible pseudonymous contributor identifier (SHA-256 hash of salt + user ID).
+    /// Cryptographic anonymous contributor identifier (random UUID v4 with zero link to SteamID or user account).
     /// The real SteamID or username is NEVER stored or transmitted.
     /// </summary>
-    public string PseudonymousContributorId { get; init; } = string.Empty;
+    public string AnonymousContributorId { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Legacy compatibility alias for <see cref="AnonymousContributorId"/>.
+    /// </summary>
+    public string PseudonymousContributorId
+    {
+        get => AnonymousContributorId;
+        init => AnonymousContributorId = value;
+    }
 
     /// <summary>
     /// Absolute local path of the manifest file on disk (remains purely local; never transmitted).
@@ -67,7 +76,7 @@ public record ContributionPreview
     [
         "1. No Steam credentials, passwords, or Steam Guard authentication codes are collected or transmitted.",
         "2. No session tokens, access tokens, refresh tokens, API keys, or cookies are collected or transmitted.",
-        "3. No SteamID, real name, email, or account username is transmitted; a cryptographic one-way pseudonym is used.",
+        "3. No SteamID, real name, email, or account username is transmitted; a purely random anonymous UUID is used.",
         "4. No game library list, license inventory, or gameplay history is collected or transmitted to external servers.",
         "5. The contribution consists solely of the public depot manifest binary and its cryptographic SHA-256 checksum.",
         "6. Contribution is 100% voluntary, opt-in, and revocable prior to dispatch."

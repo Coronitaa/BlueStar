@@ -293,11 +293,19 @@ public partial class App : Application
             var cache = sp.GetService<ICacheService>();
             return new BlueStar.Infrastructure.Services.BuildResolver(steamClient, registry, logger, curation, keys, coordinator, cache);
         });
+        services.AddSingleton<IDifferentialUpdateResolver, BlueStar.Infrastructure.Services.DifferentialUpdateResolver>();
         services.AddSingleton<IInstallationPlanner, BlueStar.Infrastructure.Services.InstallationPlanner>();
         services.AddSingleton<IDlcPayloadClassifier, BlueStar.Infrastructure.Services.DlcPayloadClassifier>();
-        services.AddSingleton<IDifferentialUpdateResolver, BlueStar.Infrastructure.Services.DifferentialUpdateResolver>();
         services.AddSingleton<ILocalCoverageComparator, BlueStar.Infrastructure.Services.LocalCoverageComparator>();
         services.AddSingleton<IVoluntaryContributionService, BlueStar.Infrastructure.Services.VoluntaryContributionService>();
+        services.AddHttpClient<IContributionTransportService, BlueStar.Infrastructure.Services.ContributionTransportService>((sp, client) =>
+        {
+            var settings = sp.GetService<BlueStar.Infrastructure.Storage.AppSettingsService>();
+            var baseUrl = settings?.DefaultApiUrl ?? "https://depotbox.org";
+            client.BaseAddress = new Uri(baseUrl);
+            client.Timeout = TimeSpan.FromSeconds(60);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar/1.3");
+        });
         services.AddHttpClient<BlueStar.Infrastructure.Providers.Fixes.OnlineFixProvider>();
         services.AddSingleton<IFixProvider>(sp => sp.GetRequiredService<BlueStar.Infrastructure.Providers.Fixes.OnlineFixProvider>());
 

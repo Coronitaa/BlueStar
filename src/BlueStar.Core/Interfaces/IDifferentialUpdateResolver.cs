@@ -12,11 +12,6 @@ public interface IDifferentialUpdateResolver
     /// <summary>
     /// Computes a differential update plan between current installed depots and the target version depots.
     /// </summary>
-    /// <param name="appId">The Steam App ID.</param>
-    /// <param name="currentDepots">Depots currently installed locally.</param>
-    /// <param name="targetDepots">Depots required by the target version.</param>
-    /// <param name="targetBuildId">Target build identifier (optional).</param>
-    /// <returns>A plan detailing unchanged, updated, new, and removed depots with calculated bandwidth savings.</returns>
     DifferentialUpdatePlan ResolvePlan(
         uint appId,
         IEnumerable<DepotInfo> currentDepots,
@@ -26,14 +21,27 @@ public interface IDifferentialUpdateResolver
     /// <summary>
     /// Computes a differential update plan using an existing depot manifest mapping.
     /// </summary>
-    /// <param name="appId">The Steam App ID.</param>
-    /// <param name="currentManifestMap">Dictionary mapping DepotId to currently installed ManifestId.</param>
-    /// <param name="targetDepots">Depots required by the target version.</param>
-    /// <param name="targetBuildId">Target build identifier (optional).</param>
-    /// <returns>A plan detailing unchanged, updated, new, and removed depots with calculated bandwidth savings.</returns>
     DifferentialUpdatePlan ResolvePlan(
         uint appId,
         IReadOnlyDictionary<uint, ulong> currentManifestMap,
         IEnumerable<DepotInfo> targetDepots,
+        string targetBuildId = "");
+
+    /// <summary>
+    /// Computes a differential update plan using an existing depot manifest mapping and target <see cref="DepotVersion"/> collection.
+    /// </summary>
+    DifferentialUpdatePlan ResolvePlan(
+        uint appId,
+        IReadOnlyDictionary<uint, ulong> currentManifestMap,
+        IEnumerable<DepotVersion> targetDepots,
+        string targetBuildId = "");
+
+    /// <summary>
+    /// Computes a differential update plan between current installed depots and target <see cref="DepotVersion"/> collection.
+    /// </summary>
+    DifferentialUpdatePlan ResolvePlan(
+        uint appId,
+        IEnumerable<DepotInfo> currentDepots,
+        IEnumerable<DepotVersion> targetDepots,
         string targetBuildId = "");
 }

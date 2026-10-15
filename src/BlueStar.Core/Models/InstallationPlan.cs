@@ -123,4 +123,21 @@ public record InstallationPlan
     public string FormattedDownloadSize => TotalDownloadSizeBytes > 0
         ? $"{TotalDownloadSizeBytes / (1024.0 * 1024.0 * 1024.0):F2} GB"
         : "0 B";
+
+    /// <summary>
+    /// Gets the total bytes saved by reusing existing unchanged depots.
+    /// </summary>
+    public long TotalSavedSizeBytes => ReusedDepots.Sum(d => d.SizeBytes);
+
+    /// <summary>
+    /// Gets the percentage of total game data saved by reusing depots.
+    /// </summary>
+    public double SavingsPercentage => (TotalSavedSizeBytes + TotalDownloadSizeBytes) > 0
+        ? Math.Round((double)TotalSavedSizeBytes / (TotalSavedSizeBytes + TotalDownloadSizeBytes) * 100.0, 1)
+        : 0.0;
+
+    /// <summary>
+    /// Gets a value indicating whether this plan saved any bandwidth through differential reuse.
+    /// </summary>
+    public bool HasSavings => TotalSavedSizeBytes > 0;
 }
