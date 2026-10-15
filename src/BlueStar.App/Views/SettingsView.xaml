@@ -346,6 +346,105 @@
                                     </StackPanel>
                                 </Border>
 
+                                <!-- Manifest Analysis & Audit Results Display -->
+                                <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}"
+                                        BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="14,12" Margin="0,0,0,10"
+                                        Visibility="{Binding HasAnalysisResults, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <StackPanel>
+                                        <TextBlock Text="{DynamicResource String_ManifestAnalysisCardTitle}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{DynamicResource String_ManifestAnalysisExplanation}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                                        <!-- Summary Text -->
+                                        <Border Background="{StaticResource SurfaceCardBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="10,8" Margin="0,0,0,12">
+                                            <TextBlock Text="{Binding CoverageSummaryText}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource PrimaryTextBrush}" TextWrapping="Wrap"/>
+                                        </Border>
+
+                                        <!-- Metric Badges Grid (4 columns) -->
+                                        <Grid Margin="0,0,0,12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Audited Count -->
+                                            <Border Grid.Column="0" Background="{StaticResource SurfaceCardBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="8,8" Margin="0,0,4,0">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Text="{DynamicResource String_CoverageAuditedLabel}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding CoverageAuditedCount}" FontWeight="Bold" FontSize="16" Foreground="{StaticResource PrimaryTextBrush}" HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <!-- Matched Count -->
+                                            <Border Grid.Column="1" Background="{StaticResource SurfaceCardBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="8,8" Margin="2,0,2,0">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Text="{DynamicResource String_CoverageMatchedLabel}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding CoverageMatchedCount}" FontWeight="Bold" FontSize="16" Foreground="{StaticResource SuccessBrush}" HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <!-- Missing Locally (Available in Hub) -->
+                                            <Border Grid.Column="2" Background="{StaticResource SurfaceCardBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="8,8" Margin="2,0,2,0">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Text="{DynamicResource String_CoverageMissingLabel}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" HorizontalAlignment="Center" TextAlignment="Center"/>
+                                                    <TextBlock Text="{Binding CoverageMissingCount}" FontWeight="Bold" FontSize="16" Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <!-- Local-only (Contribution candidates) -->
+                                            <Border Grid.Column="3" Background="{StaticResource SurfaceCardBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="8,8" Margin="4,0,0,0">
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Text="{DynamicResource String_CoverageLocalOnlyLabel}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" HorizontalAlignment="Center" TextAlignment="Center"/>
+                                                    <TextBlock Text="{Binding CoverageLocalOnlyCount}" FontWeight="Bold" FontSize="16" Foreground="#F59E0B" HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+
+                                        <!-- Available in Hub to Download List (if any) -->
+                                        <StackPanel Visibility="{Binding CoverageMissingCount, Converter={StaticResource NullToVisibilityConverter}}" Margin="0,0,0,8">
+                                            <TextBlock Text="{DynamicResource String_MissingManifestsTitle}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}" Margin="0,0,0,4"/>
+                                            <Border Background="{StaticResource SurfaceCardBrush}" CornerRadius="{StaticResource RadiusSm}" MaxHeight="100" Padding="8,4">
+                                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                    <ItemsControl ItemsSource="{Binding MissingManifestsList}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <TextBlock Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,2">
+                                                                    <Run Text="Depot "/>
+                                                                    <Run Text="{Binding DepotId}" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}"/>
+                                                                    <Run Text=" · Manifest "/>
+                                                                    <Run Text="{Binding ManifestId}" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}"/>
+                                                                </TextBlock>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </ScrollViewer>
+                                            </Border>
+                                        </StackPanel>
+
+                                        <!-- Local-Only Candidates (if any) -->
+                                        <StackPanel Visibility="{Binding CoverageLocalOnlyCount, Converter={StaticResource NullToVisibilityConverter}}">
+                                            <TextBlock Text="{DynamicResource String_LocalOnlyManifestsTitle}" Style="{StaticResource CaptionBold}" Foreground="#F59E0B" Margin="0,0,0,4"/>
+                                            <Border Background="{StaticResource SurfaceCardBrush}" CornerRadius="{StaticResource RadiusSm}" MaxHeight="100" Padding="8,4">
+                                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                    <ItemsControl ItemsSource="{Binding LocalOnlyManifestsList}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <TextBlock Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,2">
+                                                                    <Run Text="Depot "/>
+                                                                    <Run Text="{Binding DepotId}" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}"/>
+                                                                    <Run Text=" · Manifest "/>
+                                                                    <Run Text="{Binding ManifestId}" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}"/>
+                                                                </TextBlock>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </ScrollViewer>
+                                            </Border>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
                                 <!-- Hub Server URL -->
                                 <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,10" Margin="0,0,0,10">
                                     <StackPanel>

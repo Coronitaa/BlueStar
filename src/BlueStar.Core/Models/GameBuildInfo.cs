@@ -61,9 +61,16 @@ public record GameBuildInfo
         : string.Empty;
 
     /// <summary>
+    /// Gets whether the build date is an authentic timestamp (not null, MinValue, or UnixEpoch).
+    /// </summary>
+    public bool HasAuthenticDate => UpdatedAt.HasValue &&
+                                    UpdatedAt.Value > DateTimeOffset.UnixEpoch &&
+                                    UpdatedAt.Value > DateTimeOffset.MinValue;
+
+    /// <summary>
     /// Formatted date string for display.
     /// </summary>
-    public string FormattedDate => UpdatedAt.HasValue
-        ? UpdatedAt.Value.ToString("d MMM yyyy")
-        : "Unknown Date";
+    public string FormattedDate => HasAuthenticDate
+        ? UpdatedAt!.Value.ToString("d MMM yyyy")
+        : "Unknown date";
 }

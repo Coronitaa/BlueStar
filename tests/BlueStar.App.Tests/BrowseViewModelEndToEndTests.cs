@@ -101,6 +101,7 @@ public class BrowseViewModelEndToEndTests : IDisposable
         var vm = CreateViewModel();
         vm.SearchQuery = "";
         vm.SelectedStoreList = vm.StoreListOptions.FirstOrDefault(o => o.Value == "") ?? vm.StoreListOptions[0];
+        await Task.Delay(50);
 
         await vm.RunSearchAsync(reset: true);
 

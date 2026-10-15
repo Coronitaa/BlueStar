@@ -1032,13 +1032,28 @@
     <sys:String x:Key="String_PrivacyNoticeTitle">Arquitectura de Privacidad Sin Filtraciones</sys:String>
     <sys:String x:Key="String_PrivacyNoticeDesc">El análisis local examina los archivos binarios de depot en disco (DepotId, ManifestId, tamaño y hash criptográfico SHA-256). Las transmisiones al Hub excluyen estrictamente todo SteamID, nombres de usuario, contraseñas, tokens de autenticación, cookies de sesión e inventario de licencias. Tu ID de contribuyente es un UUID v4 completamente anónimo y aleatorio.</sys:String>
     <sys:String x:Key="String_OptInManifestAnalysis">Activar Análisis de Manifiestos</sys:String>
-    <sys:String x:Key="String_OptInManifestAnalysisDesc">Analiza los manifiestos locales en disco para verificar la cobertura frente a los repositorios comunitarios.</sys:String>
+    <sys:String x:Key="String_OptInManifestAnalysisDesc">Analiza las instancias instaladas localmente y la caché en disco contra el catálogo de Manifest Hub sin transmitir datos personales ni de biblioteca. No se consulta la biblioteca con licencia de Steam.</sys:String>
     <sys:String x:Key="String_OptInVoluntaryContributions">Activar Contribuciones Voluntarias</sys:String>
     <sys:String x:Key="String_OptInVoluntaryContributionsDesc">Acepta voluntariamente enviar archivos binarios de manifiestos faltantes al Hub descentralizado.</sys:String>
     <sys:String x:Key="String_AnalysisScopeLabel">Alcance del Análisis de Manifiestos</sys:String>
     <sys:String x:Key="String_ManifestAnalysisStatusLabel">Estado:</sys:String>
     <sys:String x:Key="String_ManifestAnalysisLastRunLabel">Última Ejecución:</sys:String>
     <sys:String x:Key="String_AnalyzeNowBtn">Analizar Ahora</sys:String>
+
+    <!-- Manifest Analysis & Audit Details -->
+    <sys:String x:Key="String_ManifestAnalysisCardTitle">Resultados de Auditoría y Análisis de Manifiestos</sys:String>
+    <sys:String x:Key="String_ManifestAnalysisExplanation">BlueStar diferencia entre tres operaciones: (1) Análisis y Auditoría examina instancias y caché local contra la cobertura remota del Hub; (2) Descarga de Manifiestos obtiene manifiestos faltantes desde el Hub; (3) Contribución Voluntaria envía manifiestos locales con consentimiento explícito.</sys:String>
+    <sys:String x:Key="String_CoverageAuditedLabel">Locales Auditados</sys:String>
+    <sys:String x:Key="String_CoverageMatchedLabel">Coincidentes en Hub</sys:String>
+    <sys:String x:Key="String_CoverageMissingLabel">Disponibles en Hub (Faltantes Localmente)</sys:String>
+    <sys:String x:Key="String_CoverageLocalOnlyLabel">Solo Locales (Candidatos a Contribuir)</sys:String>
+    <sys:String x:Key="String_CoveragePercentageLabel">Cobertura</sys:String>
+    <sys:String x:Key="String_MissingManifestsTitle">Disponibles en Hub para Descargar</sys:String>
+    <sys:String x:Key="String_LocalOnlyManifestsTitle">Manifiestos Locales (Elegibles para Contribuir)</sys:String>
+    <sys:String x:Key="String_ContributeManifestTooltip">Contribuir este archivo de manifiesto al Manifest Hub comunitario</sys:String>
+    <sys:String x:Key="String_HubSnapshotsTitle">Instantáneas Completas de Compilación de Manifest Hub</sys:String>
+    <sys:String x:Key="String_HubSnapshotsDesc">Instantáneas completas del estado de la aplicación. Aplicar una instantánea fija y configura todos los depots a la vez.</sys:String>
+    <sys:String x:Key="String_ApplySnapshotBtn">Aplicar Instantánea</sys:String>
     <sys:String x:Key="String_HubServerUrlLabel">URL del Servidor Manifest Hub</sys:String>
     <sys:String x:Key="String_StardustSectionTitle">Puntos Comunitarios Stardust &amp; Libro Mayor</sys:String>
     <sys:String x:Key="String_RefreshBalanceBtn">Actualizar Saldo</sys:String>

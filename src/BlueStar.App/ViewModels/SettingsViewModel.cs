@@ -37,6 +37,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly IStardustService? _stardustService;
     private readonly ILocalCoverageComparator? _coverageComparator;
     private readonly IManifestCacheService? _manifestCacheService;
+    private readonly IManifestHubProvider? _manifestHubProvider;
 
     [ObservableProperty]
     private bool _isCheckingForUpdates;
@@ -329,6 +330,34 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool _isTransmittingContribution;
 
+    [ObservableProperty]
+    private CoverageComparisonResult? _lastCoverageResult;
+
+    [ObservableProperty]
+    private bool _hasAnalysisResults;
+
+    [ObservableProperty]
+    private int _coverageAuditedCount;
+
+    [ObservableProperty]
+    private int _coverageMatchedCount;
+
+    [ObservableProperty]
+    private int _coverageLocalOnlyCount;
+
+    [ObservableProperty]
+    private int _coverageMissingCount;
+
+    [ObservableProperty]
+    private double _coveragePercentage;
+
+    [ObservableProperty]
+    private string _coverageSummaryText = string.Empty;
+
+    public ObservableCollection<ManifestArtifact> MissingManifestsList { get; } = [];
+
+    public ObservableCollection<ManifestArtifact> LocalOnlyManifestsList { get; } = [];
+
     [RelayCommand]
     public async Task SaveHubServerUrlAsync()
     {
@@ -479,9 +508,53 @@ public partial class SettingsViewModel : ObservableObject
                     }
                 }
 
-                progress.Report(new BackgroundTaskProgress(75, "Performing in-memory coverage comparison against Hub..."));
+                var distinctLocalManifests = localManifests
+                    .GroupBy(m => (m.DepotId, m.ManifestId))
+                    .Select(g => g.First())
+                    .ToList();
+
+                var appIdsToQuery = new HashSet<uint>();
+                if (_instanceManager != null)
+                {
+                    try
+                    {
+                        var allInsts = await _instanceManager.GetAllAsync(ct).ConfigureAwait(false);
+                        foreach (var inst in allInsts)
+                        {
+                            if (inst.AppId > 0) appIdsToQuery.Add(inst.AppId);
+                        }
+                    }
+                    catch { }
+                }
+
+                progress.Report(new BackgroundTaskProgress(75, "Querying remote coverage from Manifest Hub..."));
                 var hubKnown = new List<ManifestArtifact>();
-                _coverageComparator?.CompareManifestCoverage(localManifests, hubKnown);
+                var hubProvider = _manifestHubProvider ?? (IManifestHubProvider?)App.Services?.GetService(typeof(IManifestHubProvider));
+                if (hubProvider != null && appIdsToQuery.Count > 0)
+                {
+                    var remoteCoverage = await hubProvider.GetCoverageAsync(appIdsToQuery, ct).ConfigureAwait(false);
+                    if (remoteCoverage != null)
+                    {
+                        hubKnown.AddRange(remoteCoverage);
+                    }
+                }
+
+                progress.Report(new BackgroundTaskProgress(85, "Performing in-memory coverage comparison against Hub..."));
+                var comparisonResult = _coverageComparator?.CompareManifestCoverage(distinctLocalManifests, hubKnown)
+                    ?? new CoverageComparisonResult
+                    {
+                        CoveredManifests = distinctLocalManifests.Where(l => hubKnown.Any(h => h.DepotId == l.DepotId && h.ManifestId == l.ManifestId)).ToList(),
+                        MissingInHubManifests = distinctLocalManifests.Where(l => !hubKnown.Any(h => h.DepotId == l.DepotId && h.ManifestId == l.ManifestId)).ToList(),
+                        TotalPrivacyGuaranteed = true
+                    };
+
+                var localKeySet = new HashSet<(uint DepotId, ulong ManifestId)>(
+                    distinctLocalManifests.Select(m => (m.DepotId, m.ManifestId)));
+                var missingInLocal = hubKnown
+                    .Where(h => !localKeySet.Contains((h.DepotId, h.ManifestId)))
+                    .GroupBy(h => (h.DepotId, h.ManifestId))
+                    .Select(g => g.First())
+                    .ToList();
 
                 progress.Report(new BackgroundTaskProgress(90, "Finalizing inspection results and audit trail..."));
 
@@ -489,19 +562,48 @@ public partial class SettingsViewModel : ObservableObject
                 await _appSettings.SetManifestAnalysisLastRunAsync(now).ConfigureAwait(false);
                 await _appSettings.SetManifestAnalysisStatusAsync("Completed").ConfigureAwait(false);
 
-                App.Current?.Dispatcher?.Invoke(() =>
+                var auditedCount = distinctLocalManifests.Count;
+                var matchedCount = comparisonResult.CoveredManifests.Count;
+                var localOnlyCount = comparisonResult.MissingInHubManifests.Count;
+                var missingInLocalCount = missingInLocal.Count;
+                var coveragePct = comparisonResult.CoveragePercentage;
+
+                var summary = $"Audited {auditedCount} local manifests: {matchedCount} matched in Hub ({coveragePct}%), {localOnlyCount} local-only (candidates for contribution), {missingInLocalCount} available in Hub to download.";
+
+                RunOnUIThread(() =>
                 {
                     ManifestAnalysisStatus = "Completed";
                     ManifestAnalysisLastRunText = now.LocalDateTime.ToString("g");
                     IsAnalyzingManifests = false;
+
+                    LastCoverageResult = comparisonResult;
+                    CoverageAuditedCount = auditedCount;
+                    CoverageMatchedCount = matchedCount;
+                    CoverageLocalOnlyCount = localOnlyCount;
+                    CoverageMissingCount = missingInLocalCount;
+                    CoveragePercentage = coveragePct;
+                    CoverageSummaryText = summary;
+                    HasAnalysisResults = true;
+
+                    MissingManifestsList.Clear();
+                    foreach (var m in missingInLocal)
+                    {
+                        MissingManifestsList.Add(m);
+                    }
+
+                    LocalOnlyManifestsList.Clear();
+                    foreach (var m in comparisonResult.MissingInHubManifests)
+                    {
+                        LocalOnlyManifestsList.Add(m);
+                    }
                 });
 
-                progress.Report(new BackgroundTaskProgress(100, $"Manifest analysis completed! Audited {localManifests.Count} manifests locally."));
-                _notificationService?.ShowSuccess("Manifest Analysis", $"Audited {localManifests.Count} manifests locally with zero privacy leaks.");
+                progress.Report(new BackgroundTaskProgress(100, $"Manifest analysis completed! {summary}"));
+                _notificationService?.ShowSuccess("Manifest Analysis", $"Audited {auditedCount} local manifests against Manifest Hub remote coverage with zero privacy leaks.");
             }
             catch (OperationCanceledException)
             {
-                App.Current?.Dispatcher?.Invoke(() =>
+                RunOnUIThread(() =>
                 {
                     ManifestAnalysisStatus = "Idle";
                     IsAnalyzingManifests = false;
@@ -512,7 +614,7 @@ public partial class SettingsViewModel : ObservableObject
             {
                 _logger.LogError(ex, "Manifest analysis failed");
                 await _appSettings.SetManifestAnalysisStatusAsync("Error").ConfigureAwait(false);
-                App.Current?.Dispatcher?.Invoke(() =>
+                RunOnUIThread(() =>
                 {
                     ManifestAnalysisStatus = "Error";
                     IsAnalyzingManifests = false;
@@ -521,6 +623,19 @@ public partial class SettingsViewModel : ObservableObject
                 _notificationService?.ShowError("Manifest Analysis Failed", ex.Message);
             }
         });
+    }
+
+    private static void RunOnUIThread(Action action)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher != null && !dispatcher.CheckAccess())
+        {
+            dispatcher.Invoke(action);
+        }
+        else
+        {
+            action();
+        }
     }
 
     [RelayCommand]
@@ -534,6 +649,12 @@ public partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     public void TransmitActiveContribution()
     {
+        if (!EnableVoluntaryContributions || !_appSettings.EnableVoluntaryContributions)
+        {
+            _notificationService?.ShowWarning("Contributions Disabled", "Voluntary contributions must be enabled in Settings before transmitting.");
+            return;
+        }
+
         if (ActiveContributionPreview == null || !ContributionConsentGranted)
         {
             _notificationService?.ShowWarning("Consent Required", "You must explicitly check consent before transmitting.");
@@ -566,7 +687,7 @@ public partial class SettingsViewModel : ObservableObject
                     _stardustService?.NotifyRewardConfirmed(receipt.StardustCredited);
                     _ = RefreshStardustBalanceAsync();
 
-                    App.Current?.Dispatcher?.Invoke(() =>
+                    RunOnUIThread(() =>
                     {
                         LastContributionReceiptId = receipt.ReceiptId;
                     });
@@ -588,7 +709,7 @@ public partial class SettingsViewModel : ObservableObject
             }
             finally
             {
-                App.Current?.Dispatcher?.Invoke(() =>
+                RunOnUIThread(() =>
                 {
                     IsTransmittingContribution = false;
                 });
@@ -682,7 +803,8 @@ public partial class SettingsViewModel : ObservableObject
         IContributionTransportService? contributionTransportService = null,
         IStardustService? stardustService = null,
         ILocalCoverageComparator? coverageComparator = null,
-        IManifestCacheService? manifestCacheService = null)
+        IManifestCacheService? manifestCacheService = null,
+        IManifestHubProvider? manifestHubProvider = null)
     {
         _authService = authService ?? throw new ArgumentNullException(nameof(authService));
         _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
@@ -702,6 +824,7 @@ public partial class SettingsViewModel : ObservableObject
         _stardustService = stardustService;
         _coverageComparator = coverageComparator;
         _manifestCacheService = manifestCacheService;
+        _manifestHubProvider = manifestHubProvider;
 
         _selectedLanguageOption = _localizationService.CurrentLanguage == "es" ? "Español (Latinoamérica)" : "English";
         _updateButtonText = _localizationService.CurrentLanguage == "es" ? "Buscar actualizaciones" : "Check for updates";

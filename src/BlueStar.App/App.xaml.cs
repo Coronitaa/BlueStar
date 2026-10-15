@@ -261,6 +261,7 @@ public partial class App : Application
         services.AddSingleton<BlueStar.Infrastructure.Providers.Manifest.LocalCacheManifestProvider>();
         services.AddSingleton<BlueStar.Infrastructure.Providers.Manifest.DepotBoxManifestProvider>();
         services.AddSingleton<BlueStar.Infrastructure.Providers.Manifest.ManifestHubProvider>();
+        services.AddSingleton<IManifestHubProvider>(sp => sp.GetRequiredService<BlueStar.Infrastructure.Providers.Manifest.ManifestHubProvider>());
 
         // Multi-Provider Manifest Registry
         services.AddSingleton<IManifestRegistry>(sp =>

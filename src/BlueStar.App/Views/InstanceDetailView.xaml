@@ -1564,6 +1564,10 @@
                                                         <Button Content="{Binding LockIcon}" Style="{StaticResource GhostButton}" Padding="7,3" Height="28" FontSize="11"
                                                                 Margin="3,0,0,0" ToolTip="{Binding LockTooltip}"
                                                                 Command="{Binding ToggleManifestLockCommand}"/>
+                                                        <Button Content="☁" Style="{StaticResource GhostButton}" Padding="7,3" Height="28" FontSize="11"
+                                                                Margin="3,0,0,0" ToolTip="{DynamicResource String_ContributeManifestTooltip}"
+                                                                Command="{Binding DataContext.RequestContributeManifestCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                CommandParameter="{Binding}"/>
                                                     </StackPanel>
                                                 </Grid>
                                             </Border>
@@ -1668,6 +1672,80 @@
                                 Visibility="{Binding HubRevisionsError, Converter={StaticResource NullToVisibilityConverter}}">
                             <TextBlock Text="{Binding HubRevisionsError}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
                         </Border>
+
+                        <!-- Complete Build Snapshots Section -->
+                        <StackPanel Visibility="{Binding HasHubSnapshots, Converter={StaticResource BoolToVisibilityConverter}}" Margin="0,0,0,16">
+                            <TextBlock Text="{DynamicResource String_HubSnapshotsTitle}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}" Margin="0,0,0,2"/>
+                            <TextBlock Text="{DynamicResource String_HubSnapshotsDesc}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                            <ItemsControl ItemsSource="{Binding HubSnapshots}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource Card}" Margin="0,0,0,8" Padding="14,12" Background="{StaticResource SurfaceCardBrush}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <!-- Left Snapshot Info -->
+                                                <StackPanel Grid.Column="0">
+                                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                        <!-- Provenance Badge -->
+                                                        <Border Background="#1A3B82F6" BorderBrush="#403B82F6" BorderThickness="1"
+                                                                CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="0,0,8,0">
+                                                            <TextBlock Text="{Binding Provenance}" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
+                                                        </Border>
+
+                                                        <!-- Build ID -->
+                                                        <TextBlock Text="Build: " Style="{StaticResource CaptionBold}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                        <TextBlock Text="{Binding BuildId}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,12,0"/>
+
+                                                        <!-- Branch -->
+                                                        <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="0,0,12,0">
+                                                            <TextBlock Text="{Binding BranchName}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                        </Border>
+
+                                                        <!-- Depot Count -->
+                                                        <TextBlock Text="{Binding DepotCount, StringFormat='{}{0} depots'}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}"/>
+                                                    </StackPanel>
+
+                                                    <!-- Authentic Date vs Unknown Badge -->
+                                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                                        <StackPanel Orientation="Horizontal"
+                                                                    Visibility="{Binding HasAuthenticDate, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                            <TextBlock Text="{DynamicResource String_AuthenticDateLabel}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,4,0"/>
+                                                            <TextBlock Text="{Binding AuthenticDateDisplay}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,12,0"/>
+                                                        </StackPanel>
+
+                                                        <!-- Unknown Authentic Date Badge -->
+                                                        <Border Background="#16F59E0B" BorderBrush="#35F59E0B" BorderThickness="1"
+                                                                CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="0,0,12,0"
+                                                                Visibility="{Binding HasAuthenticDate, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                                                            <TextBlock Text="{DynamicResource String_UnknownDateBadge}" FontSize="10" FontWeight="SemiBold" Foreground="#F59E0B"/>
+                                                        </Border>
+
+                                                        <!-- Ingestion Date if present -->
+                                                        <StackPanel Orientation="Horizontal" Visibility="{Binding HasIngestionDate, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                            <TextBlock Text="{DynamicResource String_IngestedDateLabel}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,4,0"/>
+                                                            <TextBlock Text="{Binding IngestionDateDisplay}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </StackPanel>
+
+                                                <!-- Right Apply Snapshot Action -->
+                                                <Button Grid.Column="1"
+                                                        Content="{DynamicResource String_ApplySnapshotBtn}"
+                                                        Style="{StaticResource PrimaryButton}"
+                                                        Padding="16,8"
+                                                        VerticalAlignment="Center"
+                                                        Command="{Binding DataContext.ApplyHubSnapshotCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
 
                         <!-- Revisions List -->
                         <ItemsControl ItemsSource="{Binding HubRevisions}">
@@ -4252,6 +4330,7 @@
                                                                     <ColumnDefinition Width="1.1*" MinWidth="90"/>
                                                                     <ColumnDefinition Width="1.5*" MinWidth="120"/>
                                                                     <ColumnDefinition Width="Auto"/>
+                                                                    <ColumnDefinition Width="Auto"/>
                                                                 </Grid.ColumnDefinitions>
 
                                                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
@@ -4277,6 +4356,11 @@
                                                                     <TextBlock Text="{Binding AvailabilityStatus}" FontSize="10" FontWeight="SemiBold"
                                                                                Foreground="{Binding AvailabilityBadgeColor}"/>
                                                                 </Border>
+
+                                                                <Button Grid.Column="3" Content="☁" Style="{StaticResource GhostButton}" Padding="6,2" Height="26" FontSize="10"
+                                                                        Margin="4,0,0,0" ToolTip="{DynamicResource String_ContributeManifestTooltip}"
+                                                                        Command="{Binding DataContext.RequestContributeManifestCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                        CommandParameter="{Binding}"/>
                                                             </Grid>
                                                         </Border>
                                                     </DataTemplate>

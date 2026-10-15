@@ -40,7 +40,9 @@ public sealed record HubRevisionItem
     public DateTimeOffset? AuthenticPublicationDate { get; init; }
 
     [JsonIgnore]
-    public bool HasAuthenticDate => AuthenticPublicationDate.HasValue && AuthenticPublicationDate.Value > DateTimeOffset.MinValue;
+    public bool HasAuthenticDate => AuthenticPublicationDate.HasValue &&
+                                    AuthenticPublicationDate.Value > DateTimeOffset.UnixEpoch &&
+                                    AuthenticPublicationDate.Value > DateTimeOffset.MinValue;
 
     [JsonIgnore]
     public string AuthenticDateDisplay => HasAuthenticDate

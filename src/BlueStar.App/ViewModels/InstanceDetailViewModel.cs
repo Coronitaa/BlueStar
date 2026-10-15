@@ -531,7 +531,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     private readonly EventHandler _settingsChangedHandler;
     private readonly ILocalizationService? _localizationService;
     private readonly EventHandler? _languageChangedHandler;
-    private readonly BlueStar.Infrastructure.Providers.Manifest.ManifestHubProvider? _manifestHubProvider;
+    private readonly IManifestHubProvider? _manifestHubProvider;
     private readonly IVoluntaryContributionService? _voluntaryContributionService;
     private readonly IContributionTransportService? _contributionTransportService;
     private readonly IStardustService? _stardustService;
@@ -2472,7 +2472,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         ILocalizationService? localizationService = null,
         ICacheService? cacheService = null,
         IRecommendationProvider? recommendationProvider = null,
-        BlueStar.Infrastructure.Providers.Manifest.ManifestHubProvider? manifestHubProvider = null,
+        IManifestHubProvider? manifestHubProvider = null,
         IVoluntaryContributionService? voluntaryContributionService = null,
         IContributionTransportService? contributionTransportService = null,
         IStardustService? stardustService = null)
@@ -5003,6 +5003,14 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     // ── Mode 5: Manifest Hub Revisions ────────────────────────────────────────
 
     [ObservableProperty]
+    private ObservableCollection<HubSnapshotItem> _hubSnapshots = [];
+
+    [ObservableProperty]
+    private HubSnapshotItem? _selectedHubSnapshot;
+
+    public bool HasHubSnapshots => HubSnapshots.Count > 0;
+
+    [ObservableProperty]
     private ObservableCollection<HubRevisionItem> _hubRevisions = [];
 
     [ObservableProperty]
@@ -5025,26 +5033,40 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
         try
         {
-            var provider = _manifestHubProvider ?? (BlueStar.Infrastructure.Providers.Manifest.ManifestHubProvider?)App.Services?.GetService(typeof(BlueStar.Infrastructure.Providers.Manifest.ManifestHubProvider));
+            var provider = _manifestHubProvider ?? (IManifestHubProvider?)App.Services?.GetService(typeof(IManifestHubProvider));
             if (provider == null)
             {
                 HubRevisionsError = "Manifest Hub provider is not available.";
                 return;
             }
 
-            var revisions = await provider.GetRevisionsForAppAsync(Instance.AppId, CancellationToken.None).ConfigureAwait(false);
+            var snapshotsTask = provider.GetAppSnapshotsAsync(Instance.AppId, CancellationToken.None);
+            var revisionsTask = provider.GetRevisionsForAppAsync(Instance.AppId, CancellationToken.None);
+
+            await Task.WhenAll(snapshotsTask, revisionsTask).ConfigureAwait(false);
+
+            var snapshots = snapshotsTask.Result;
+            var revisions = revisionsTask.Result;
 
             await (App.Current?.Dispatcher?.InvokeAsync(() =>
             {
+                HubSnapshots.Clear();
+                foreach (var s in snapshots)
+                {
+                    HubSnapshots.Add(new HubSnapshotItem { Snapshot = s });
+                }
+                OnPropertyChanged(nameof(HasHubSnapshots));
+
                 HubRevisions.Clear();
                 foreach (var rev in revisions)
                 {
                     HubRevisions.Add(rev);
                 }
                 OnPropertyChanged(nameof(HasHubRevisions));
-                if (HubRevisions.Count == 0)
+
+                if (HubSnapshots.Count == 0 && HubRevisions.Count == 0)
                 {
-                    HubRevisionsError = "No revisions found for this App ID in Manifest Hub.";
+                    HubRevisionsError = "No snapshots or revisions found for this App ID in Manifest Hub.";
                 }
             })?.Task ?? Task.CompletedTask);
         }
@@ -5056,6 +5078,66 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         finally
         {
             IsLoadingHubRevisions = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task ApplyHubSnapshotAsync(HubSnapshotItem? item)
+    {
+        item ??= SelectedHubSnapshot;
+        if (Instance == null || item == null || item.Snapshot.DepotManifests == null || item.Snapshot.DepotManifests.Count == 0)
+            return;
+
+        try
+        {
+            var map = new Dictionary<uint, ulong>(Instance.InstalledManifestMap);
+            var updatedDepots = Instance.Depots.ToList();
+
+            foreach (var (depotId, manifestId) in item.Snapshot.DepotManifests)
+            {
+                map[depotId] = manifestId;
+                var existingIndex = updatedDepots.FindIndex(d => d.DepotId == depotId);
+                if (existingIndex >= 0)
+                {
+                    updatedDepots[existingIndex] = updatedDepots[existingIndex] with
+                    {
+                        ManifestId = manifestId,
+                        IsDownloaded = false
+                    };
+                }
+                else
+                {
+                    updatedDepots.Add(new DepotInfo
+                    {
+                        DepotId = depotId,
+                        ManifestId = manifestId,
+                        SizeBytes = 0,
+                        IsDownloaded = false
+                    });
+                }
+            }
+
+            Instance = Instance with
+            {
+                Depots = updatedDepots.AsReadOnly(),
+                InstalledManifestMap = map,
+                IsBuildPinned = true,
+                ActiveBranch = item.BranchName
+            };
+
+            await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+            await LoadInstanceAsync(Instance).ConfigureAwait(true);
+
+            StatusMessage = $"✅ Applied snapshot {item.BuildId} ({item.Snapshot.DepotManifests.Count} depots).";
+            _notificationService?.ShowSuccess(
+                "Build Snapshot Applied",
+                $"Snapshot {item.BuildId} applied with {item.Snapshot.DepotManifests.Count} depot manifests.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to apply Hub snapshot {BuildId}", item.BuildId);
+            StatusMessage = $"❌ {ex.Message}";
+            _notificationService?.ShowError("Failed to Apply Snapshot", ex.Message);
         }
     }
 
@@ -5128,7 +5210,17 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public async Task RequestContributeManifestAsync(SelectableDepotItem? item)
     {
-        if (Instance == null || item == null || item.ManifestId == 0) return;
+        if (Instance == null) return;
+        item ??= Depots.FirstOrDefault(d => d.ManifestId > 0);
+        if (item == null || item.ManifestId == 0) return;
+
+        if (!_appSettings.EnableVoluntaryContributions)
+        {
+            _notificationService?.ShowWarning(
+                "Voluntary Contributions Disabled",
+                "Voluntary contributions are disabled. Please enable 'Enable Voluntary Contributions' in Settings before contributing.");
+            return;
+        }
 
         if (_voluntaryContributionService == null)
         {
@@ -5181,6 +5273,14 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public void TransmitActiveContribution()
     {
+        if (!_appSettings.EnableVoluntaryContributions)
+        {
+            _notificationService?.ShowWarning(
+                "Voluntary Contributions Disabled",
+                "Voluntary contributions are disabled in Settings.");
+            return;
+        }
+
         if (ActiveContributionPreview == null || !ContributionConsentGranted)
         {
             _notificationService?.ShowWarning("Consent Required", "Please review the data and grant explicit consent.");
@@ -5211,6 +5311,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 if (receipt.IsSuccess)
                 {
                     _stardustService?.NotifyRewardConfirmed(receipt.StardustCredited);
+                    _ = _stardustService?.RefreshBalanceAsync(CancellationToken.None);
 
                     progress.Report(new BackgroundTaskProgress(100, $"Published! Receipt ID: {receipt.ReceiptId} (+{receipt.StardustCredited} Stardust)"));
                     _notificationService?.ShowSuccess("Contribution Published", $"Receipt: {receipt.ReceiptId} (+{receipt.StardustCredited} Stardust)");
@@ -5229,10 +5330,15 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             }
             finally
             {
-                App.Current?.Dispatcher?.Invoke(() =>
+                var disp = System.Windows.Application.Current?.Dispatcher;
+                if (disp != null && !disp.CheckAccess())
+                {
+                    disp.Invoke(() => IsTransmittingContribution = false);
+                }
+                else
                 {
                     IsTransmittingContribution = false;
-                });
+                }
             }
         });
     }

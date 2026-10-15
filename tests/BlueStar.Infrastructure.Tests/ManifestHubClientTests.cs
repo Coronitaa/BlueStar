@@ -603,4 +603,135 @@ public sealed class ManifestHubClientTests : IDisposable
         balance.ConfirmedPoints.Should().Be(transport.GetTotalStardustCredited());
         balance.PendingPoints.Should().Be(0);
     }
+
+    [Fact]
+    public async Task ManifestHubProvider_GetCoverageAsync_DiscoversAndAggregatesManifestsAcrossAppIds()
+    {
+        var cacheService = new ManifestCacheService(NullLogger<ManifestCacheService>.Instance, Path.Combine(_testDir, "cache_coverage"));
+
+        var json730 = """
+        [
+          {
+            "schemaVersion": "v1",
+            "appId": 730,
+            "buildId": 999111,
+            "depotManifests": {
+              "731": 10001
+            }
+          }
+        ]
+        """;
+
+        var json440 = """
+        [
+          {
+            "schemaVersion": "v1",
+            "appId": 440,
+            "buildId": 888222,
+            "depotManifests": {
+              "441": 20002
+            }
+          }
+        ]
+        """;
+
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync((HttpRequestMessage req, CancellationToken _) =>
+            {
+                var uri = req.RequestUri?.ToString() ?? string.Empty;
+                if (uri == $"{ManifestHubProvider.PrimaryBuildsBaseUrl}/730.json")
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(json730, Encoding.UTF8, "application/json")
+                    };
+                }
+                if (uri == $"{ManifestHubProvider.PrimaryBuildsBaseUrl}/440.json")
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(json440, Encoding.UTF8, "application/json")
+                    };
+                }
+                return new HttpResponseMessage(HttpStatusCode.NotFound);
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object);
+        var provider = new ManifestHubProvider(
+            httpClient,
+            cacheService,
+            NullLogger<ManifestHubProvider>.Instance);
+
+        var coverage = await provider.GetCoverageAsync([730, 440]);
+
+        coverage.Should().HaveCount(2);
+        coverage.Should().Contain(m => m.DepotId == 731 && m.ManifestId == 10001);
+        coverage.Should().Contain(m => m.DepotId == 441 && m.ManifestId == 20002);
+    }
+
+    [Fact]
+    public async Task ManifestHubProvider_GetAppSnapshotsAsync_ParsesSnapshotsWithDepotsAndDates()
+    {
+        var cacheService = new ManifestCacheService(NullLogger<ManifestCacheService>.Instance, Path.Combine(_testDir, "cache_snapshots"));
+
+        var snapshotsJson = """
+        [
+          {
+            "schemaVersion": "v1",
+            "appId": 730,
+            "buildId": 123456,
+            "timestamp": "2026-10-15T12:00:00Z",
+            "creationTime": "2026-10-14T08:30:00Z",
+            "branch": "public",
+            "description": "Counter-Strike Release",
+            "depotManifests": {
+              "731": 555001,
+              "732": 555002
+            }
+          }
+        ]
+        """;
+
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync((HttpRequestMessage req, CancellationToken _) =>
+            {
+                var uri = req.RequestUri?.ToString() ?? string.Empty;
+                if (uri == $"{ManifestHubProvider.PrimaryBuildsBaseUrl}/730.json")
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(snapshotsJson, Encoding.UTF8, "application/json")
+                    };
+                }
+                return new HttpResponseMessage(HttpStatusCode.NotFound);
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object);
+        var provider = new ManifestHubProvider(
+            httpClient,
+            cacheService,
+            NullLogger<ManifestHubProvider>.Instance);
+
+        var snapshots = await provider.GetAppSnapshotsAsync(730);
+
+        snapshots.Should().HaveCount(1);
+        var snap = snapshots[0];
+        snap.AppId.Should().Be(730);
+        snap.BuildId.Should().Be(123456);
+        snap.CreationTime.Should().Be(DateTimeOffset.Parse("2026-10-14T08:30:00Z"));
+        snap.DepotManifests.Should().ContainKey(731);
+        snap.DepotManifests[731].Should().Be(555001);
+        snap.DepotManifests.Should().ContainKey(732);
+        snap.DepotManifests[732].Should().Be(555002);
+    }
 }

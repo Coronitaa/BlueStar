@@ -1033,13 +1033,28 @@
     <sys:String x:Key="String_PrivacyNoticeTitle">Zero-Leak Privacy Architecture</sys:String>
     <sys:String x:Key="String_PrivacyNoticeDesc">Local analysis inspects depot binaries on disk (DepotId, ManifestId, Size, and cryptographic SHA-256 hash). Transmissions to the Hub strictly exclude all SteamIDs, usernames, passwords, auth tokens, session cookies, and license lists. Your contributor ID is a purely random anonymous UUID v4.</sys:String>
     <sys:String x:Key="String_OptInManifestAnalysis">Enable Manifest Analysis</sys:String>
-    <sys:String x:Key="String_OptInManifestAnalysisDesc">Analyze local manifest files on disk to inspect coverage against community repositories.</sys:String>
+    <sys:String x:Key="String_OptInManifestAnalysisDesc">Analyze local installed instances and cache on disk against the Manifest Hub catalog without transmitting library or personal data. Licensed Steam library is not queried.</sys:String>
     <sys:String x:Key="String_OptInVoluntaryContributions">Enable Voluntary Contributions</sys:String>
     <sys:String x:Key="String_OptInVoluntaryContributionsDesc">Opt-in to voluntarily contribute missing manifest binaries to the decentralized Hub.</sys:String>
     <sys:String x:Key="String_AnalysisScopeLabel">Manifest Analysis Scope</sys:String>
     <sys:String x:Key="String_ManifestAnalysisStatusLabel">Status:</sys:String>
     <sys:String x:Key="String_ManifestAnalysisLastRunLabel">Last Execution:</sys:String>
     <sys:String x:Key="String_AnalyzeNowBtn">Analyze Now</sys:String>
+
+    <!-- Manifest Analysis & Audit Details -->
+    <sys:String x:Key="String_ManifestAnalysisCardTitle">Manifest Analysis &amp; Audit Results</sys:String>
+    <sys:String x:Key="String_ManifestAnalysisExplanation">BlueStar differentiates between three operations: (1) Analysis &amp; Audit inspects local installed instances and disk cache locally against Hub remote coverage; (2) Manifest Download fetches missing manifests from the Hub; (3) Voluntary Contribution uploads local manifests with explicit consent.</sys:String>
+    <sys:String x:Key="String_CoverageAuditedLabel">Audited Local</sys:String>
+    <sys:String x:Key="String_CoverageMatchedLabel">Matched in Hub</sys:String>
+    <sys:String x:Key="String_CoverageMissingLabel">Available in Hub (Missing Locally)</sys:String>
+    <sys:String x:Key="String_CoverageLocalOnlyLabel">Local Only (Contribution Candidates)</sys:String>
+    <sys:String x:Key="String_CoveragePercentageLabel">Coverage</sys:String>
+    <sys:String x:Key="String_MissingManifestsTitle">Available in Hub to Download</sys:String>
+    <sys:String x:Key="String_LocalOnlyManifestsTitle">Local Manifests (Eligible for Contribution)</sys:String>
+    <sys:String x:Key="String_ContributeManifestTooltip">Contribute this manifest binary to the community Manifest Hub</sys:String>
+    <sys:String x:Key="String_HubSnapshotsTitle">Manifest Hub Complete Build Snapshots</sys:String>
+    <sys:String x:Key="String_HubSnapshotsDesc">Full point-in-time application snapshots. Applying a snapshot pins and configures all depots together.</sys:String>
+    <sys:String x:Key="String_ApplySnapshotBtn">Apply Snapshot</sys:String>
     <sys:String x:Key="String_HubServerUrlLabel">Hub Server Endpoint URL</sys:String>
     <sys:String x:Key="String_StardustSectionTitle">Stardust Community Points &amp; Ledger</sys:String>
     <sys:String x:Key="String_RefreshBalanceBtn">Refresh Ledger</sys:String>

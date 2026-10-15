@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace BlueStar.Core.Models;
@@ -59,9 +59,20 @@ public record InstalledBuildSnapshot
         : "—";
 
     /// <summary>
-    /// Gets the build date formatted for display, falling back to the install date.
+    /// Gets whether the build date is an authentic timestamp (not null, MinValue, or UnixEpoch).
     /// </summary>
-    public string FormattedDate => (BuildDate ?? InstalledAt).ToString("d MMM yyyy");
+    public bool HasAuthenticDate => BuildDate.HasValue &&
+                                    BuildDate.Value > DateTimeOffset.UnixEpoch &&
+                                    BuildDate.Value > DateTimeOffset.MinValue;
+
+    /// <summary>
+    /// Gets the build date formatted for display, falling back to the install date if valid.
+    /// </summary>
+    public string FormattedDate => HasAuthenticDate
+        ? BuildDate!.Value.ToString("d MMM yyyy")
+        : (InstalledAt > DateTimeOffset.UnixEpoch && InstalledAt > DateTimeOffset.MinValue
+            ? InstalledAt.ToString("d MMM yyyy")
+            : "Unknown date");
 
     /// <summary>Gets the headline shown on a saved-build chip.</summary>
     public string PresetTitle => !string.IsNullOrWhiteSpace(DisplayName) ? DisplayName! : $"Build {BuildId}";

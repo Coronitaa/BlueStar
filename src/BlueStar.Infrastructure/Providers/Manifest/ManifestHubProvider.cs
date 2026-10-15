@@ -22,7 +22,7 @@ namespace BlueStar.Infrastructure.Providers.Manifest;
 /// Secondary fallback: SSMGAlt/ManifestHub2 and qwe213312/k25FCdfEOoEJ42S6.
 /// Extracts manifests, branch build snapshots, and depot AES decryption keys.
 /// </summary>
-public sealed class ManifestHubProvider : IManifestProvider
+public sealed class ManifestHubProvider : IManifestHubProvider
 {
     public const string PrimaryBuildsBaseUrl = "https://raw.githubusercontent.com/Coronitaa/BlueStar-ManifestHub/main/builds";
     public const string PrimaryManifestsBaseUrl = "https://raw.githubusercontent.com/Coronitaa/BlueStar-ManifestHub/main/manifests";
@@ -705,6 +705,106 @@ public sealed class ManifestHubProvider : IManifestProvider
             });
         }
         return list.AsReadOnly();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ManifestArtifact>> GetCoverageAsync(IEnumerable<uint> appIds, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(appIds);
+        var distinctAppIds = appIds.Where(id => id > 0).Distinct().ToList();
+        if (distinctAppIds.Count == 0) return [];
+
+        var results = new List<ManifestArtifact>();
+        var seen = new HashSet<(uint DepotId, ulong ManifestId)>();
+
+        foreach (var appId in distinctAppIds)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                var manifests = await DiscoverManifestsAsync(appId, ct).ConfigureAwait(false);
+                foreach (var m in manifests)
+                {
+                    if (seen.Add((m.DepotId, m.ManifestId)))
+                    {
+                        results.Add(m);
+                    }
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to discover manifests during GetCoverageAsync for AppId {AppId}", appId);
+            }
+        }
+
+        return results.AsReadOnly();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<BuildSnapshot>> GetAppSnapshotsAsync(uint appId, CancellationToken ct = default)
+    {
+        if (appId == 0) return [];
+
+        var primaryUrl = GetPrimaryBuildsUrl(appId);
+        try
+        {
+            _metrics?.OnProviderRequest("ManifestHub", primaryUrl);
+            using var resp = await _http.GetAsync(primaryUrl, ct).ConfigureAwait(false);
+            if (resp.IsSuccessStatusCode)
+            {
+                var json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.ValueKind == JsonValueKind.Array)
+                {
+                    var list = JsonSerializer.Deserialize<List<BuildSnapshot>>(json, SnapshotSerializerOptions);
+                    if (list != null && list.Count > 0) return list.AsReadOnly();
+                }
+                else if (doc.RootElement.ValueKind == JsonValueKind.Object)
+                {
+                    var single = JsonSerializer.Deserialize<BuildSnapshot>(json, SnapshotSerializerOptions);
+                    if (single != null) return new[] { single };
+                }
+            }
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to load primary build snapshots for AppId {AppId}", appId);
+        }
+
+        var secondaryUrl = $"{SecondaryManifestHub2BaseUrl}/{appId}/{appId}.json";
+        try
+        {
+            _metrics?.OnProviderRequest("ManifestHub2", secondaryUrl);
+            using var resp = await _http.GetAsync(secondaryUrl, ct).ConfigureAwait(false);
+            if (resp.IsSuccessStatusCode)
+            {
+                var json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                var artifacts = ParseHubBuildSnapshots(json, appId);
+                if (artifacts.Count > 0)
+                {
+                    var map = artifacts.ToDictionary(a => a.DepotId, a => a.ManifestId);
+                    return new[]
+                    {
+                        new BuildSnapshot
+                        {
+                            AppId = appId,
+                            Branch = "public",
+                            Description = "ManifestHub2 fallback snapshot",
+                            DepotManifests = map
+                        }
+                    };
+                }
+            }
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to load secondary build snapshots for AppId {AppId}", appId);
+        }
+
+        return [];
     }
 
     /// <summary>
