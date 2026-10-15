@@ -1089,7 +1089,7 @@ public class NetworkEfficiencyAndAuditTests : IDisposable
                     Content = new StringContent(@"[{""id"":""1"",""title"":""Fix 730"",""appId"":730}]", Encoding.UTF8, "application/json")
                 };
             }
-            if (uri.Contains("raw.githubusercontent.com/SSMGAlt/ManifestHub2"))
+            if (uri.Contains("raw.githubusercontent.com/SSMGAlt/ManifestHub2") || uri.Contains("raw.githubusercontent.com/Coronitaa/BlueStar-ManifestHub"))
             {
                 Interlocked.Increment(ref manifestHubHttpCalls);
                 return new HttpResponseMessage(HttpStatusCode.OK)
@@ -1233,14 +1233,14 @@ public class NetworkEfficiencyAndAuditTests : IDisposable
             }
 
             // 7. ManifestHub Manifests & Download
-            if (uri.Contains("raw.githubusercontent.com/SSMGAlt/ManifestHub2") && uri.EndsWith(".json"))
+            if ((uri.Contains("raw.githubusercontent.com/SSMGAlt/ManifestHub2") || uri.Contains("raw.githubusercontent.com/Coronitaa/BlueStar-ManifestHub")) && uri.EndsWith(".json"))
             {
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new StringContent(@"{""depot"":{""731"":{""manifests"":{""public"":{""gid"":""999888""}}}}}", Encoding.UTF8, "application/json")
                 };
             }
-            if (uri.Contains("raw.githubusercontent.com/SSMGAlt/ManifestHub2") && uri.EndsWith(".manifest"))
+            if ((uri.Contains("raw.githubusercontent.com/SSMGAlt/ManifestHub2") || uri.Contains("raw.githubusercontent.com/Coronitaa/BlueStar-ManifestHub")) && uri.EndsWith(".manifest"))
             {
                 var proto = CreateValidProtobufManifest(731, 999888);
                 return new HttpResponseMessage(HttpStatusCode.OK)

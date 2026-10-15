@@ -47,6 +47,15 @@ public record ManifestSourceRoute
     public string? DownloadUrl { get; init; }
 
     /// <summary>
+    /// Gets or sets an alias for <see cref="DownloadUrl"/>.
+    /// </summary>
+    public string? Url
+    {
+        get => DownloadUrl;
+        init => DownloadUrl = value;
+    }
+
+    /// <summary>
     /// Gets the type of route.
     /// </summary>
     public ManifestSourceType RouteType { get; init; } = ManifestSourceType.DirectHttp;

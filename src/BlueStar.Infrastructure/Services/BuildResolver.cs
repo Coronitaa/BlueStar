@@ -85,7 +85,6 @@ public sealed class BuildResolver : IBuildResolver
 
                 // 2. Discover manifests across all registered providers
                 var discoveredManifests = await _manifestRegistry.DiscoverManifestsAsync(appId, innerCt).ConfigureAwait(false);
-                var manifestMap = discoveredManifests.ToDictionary(m => m.DepotId, m => m.ManifestId);
 
                 // 3. Resolve depot keys if key repository is available
                 var allDepotIds = steamBuilds.SelectMany(b => b.DepotManifests.Keys)
@@ -130,7 +129,13 @@ public sealed class BuildResolver : IBuildResolver
                 // 5. If no formal builds returned from SteamCMD, synthesize an inferred version from discovered provider manifests
                 if (versions.Count == 0 && discoveredManifests.Count > 0)
                 {
-                    var inferredDepots = discoveredManifests.Select(m =>
+                    // Group by DepotId and pick the latest revision per depot to prevent duplicate DepotVersion entries
+                    var latestManifestsPerDepot = discoveredManifests
+                        .GroupBy(m => m.DepotId)
+                        .Select(g => g.OrderByDescending(m => m.ManifestId).First())
+                        .ToList();
+
+                    var inferredDepots = latestManifestsPerDepot.Select(m =>
                     {
                         knownKeys.TryGetValue(m.DepotId, out var key);
                         return new DepotVersion
@@ -144,13 +149,27 @@ public sealed class BuildResolver : IBuildResolver
                         };
                     }).ToList();
 
+                    // Determine authentic creation timestamp from available cached manifests rather than faking UtcNow
+                    DateTimeOffset? authenticDate = null;
+                    foreach (var m in latestManifestsPerDepot)
+                    {
+                        if (!string.IsNullOrWhiteSpace(m.LocalCachePath))
+                        {
+                            var d = Downloader.SteamManifestDateHelper.GetManifestCreationDate(m.LocalCachePath);
+                            if (d.HasValue && (!authenticDate.HasValue || d.Value > authenticDate.Value))
+                            {
+                                authenticDate = d.Value;
+                            }
+                        }
+                    }
+
                     versions.Add(new GameVersion
                     {
                         BuildId = "Discovered",
                         BranchName = "public",
                         DisplayName = "Latest Discovered Provider Build",
-                        UpdatedAt = DateTimeOffset.UtcNow,
-                        Description = $"{discoveredManifests.Count} verified manifests discovered across providers",
+                        UpdatedAt = authenticDate,
+                        Description = $"{discoveredManifests.Count} verified manifests discovered across providers ({latestManifestsPerDepot.Count} unique depots)",
                         Source = "MultiProvider",
                         IsInferred = true,
                         Depots = inferredDepots.AsReadOnly()

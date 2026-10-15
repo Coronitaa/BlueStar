@@ -521,6 +521,118 @@ addappid(228981, 0, ""bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
         failingProviderMock.Verify(p => p.DownloadManifestAsync(1001, 77777, It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<CancellationToken>()), Times.Once);
         successProviderMock.Verify(p => p.DownloadManifestAsync(1001, 77777, It.IsAny<string>(), It.IsAny<uint>(), It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Fact]
+    public async Task BuildResolver_WithMultipleManifestsForSameDepot_ResolvesSuccessfullyWithoutCrash()
+    {
+        // Scenario: Multi-provider or historical discovery returns multiple manifests/GIDs for the same DepotId.
+        // Previously, BuildResolver called .ToDictionary(m => m.DepotId, ...) which threw an ArgumentException,
+        // returning an empty version list and breaking game resolution.
+        uint appId = 999480;
+        uint testDepotId = 999481;
+
+        // Mock SteamStoreApiClient returning no formal SteamCMD builds so that provider discovery is exercised
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent("{\"data\":{}}", Encoding.UTF8, "application/json")
+            });
+        var httpClient = new HttpClient(handlerMock.Object);
+        var testCoordinator = new RequestCoordinator();
+        var steamClient = new SteamStoreApiClient(httpClient, NullLogger<SteamStoreApiClient>.Instance, coordinator: testCoordinator);
+
+        // Discovered manifests have TWO different ManifestId revisions for the SAME DepotId (e.g. historical revisions)
+        var manifestList = new List<ManifestArtifact>
+        {
+            new() { DepotId = testDepotId, ManifestId = 1111111111111111111UL, SizeBytes = 500000 },
+            new() { DepotId = testDepotId, ManifestId = 2222222222222222222UL, SizeBytes = 600000 },
+            new() { DepotId = 999482, ManifestId = 3333333333333333333UL, SizeBytes = 200000 }
+        };
+
+        var manifestRegistryMock = new Mock<IManifestRegistry>();
+        manifestRegistryMock.Setup(r => r.DiscoverManifestsAsync(appId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(manifestList.AsReadOnly());
+
+        var resolver = new BuildResolver(
+            steamClient,
+            manifestRegistryMock.Object,
+            NullLogger<BuildResolver>.Instance,
+            coordinator: testCoordinator);
+
+        // Act: Must NOT throw System.ArgumentException: An item with the same key has already been added
+        var versions = await resolver.GetAvailableVersionsAsync(appId);
+
+        // Assert: Versions must resolve successfully
+        versions.Should().NotBeNull();
+        versions.Should().HaveCount(1, "Inferred version should be synthesized from discovered provider manifests");
+
+        var inferredVersion = versions[0];
+        inferredVersion.IsInferred.Should().BeTrue();
+        inferredVersion.Depots.Should().HaveCount(2, "Each unique depot should appear exactly once in the inferred version");
+
+        // The depot with multiple revisions must have the latest revision selected (2222222222222222222UL > 1111111111111111111UL)
+        var depot481 = inferredVersion.Depots.FirstOrDefault(d => d.DepotId == testDepotId);
+        depot481.Should().NotBeNull();
+        depot481!.ManifestId.Should().Be(2222222222222222222UL, "BuildResolver must choose the latest revision per depot when inferring versions");
+
+        // When manifests do not have a cached local path with creation date, FormattedDate must be "Unknown Date", NOT "1 Jan 0001"
+        inferredVersion.UpdatedAt.Should().BeNull();
+        inferredVersion.FormattedDate.Should().Be("Unknown Date");
+    }
+
+    [Fact]
+    public async Task ManifestCacheService_StoreManifestFileAsync_StoresAtomicallyAndOverwritesExisting()
+    {
+        var cacheDir = Path.Combine(_testDir, "file_cache");
+        var service = new ManifestCacheService(NullLogger<ManifestCacheService>.Instance, cacheDir);
+        var sourceFile = Path.Combine(_testDir, "source_480.manifest");
+        await File.WriteAllBytesAsync(sourceFile, CreateValidSteamProtobufManifest());
+
+        var cachedPath = await service.StoreManifestFileAsync(480, 10001, sourceFile);
+
+        File.Exists(cachedPath).Should().BeTrue();
+        service.HasManifest(480, 10001).Should().BeTrue();
+        service.ValidateManifest(cachedPath).Should().BeTrue();
+
+        // Idempotent overwrite with same source file
+        var overwritten = await service.StoreManifestFileAsync(480, 10001, sourceFile);
+        overwritten.Should().Be(cachedPath);
+        service.HasManifest(480, 10001).Should().BeTrue();
+    }
+
+    [Fact]
+    public void ManifestBinary_SteamKit2Format_HasOfficialMagicAndGeneratesShaChecksum()
+    {
+        // Act: Generate official Steam Protobuf manifest format
+        var manifestBytes = CreateValidSteamProtobufManifest();
+        var tempFile = Path.Combine(_testDir, "test_magic.manifest");
+        File.WriteAllBytes(tempFile, manifestBytes);
+
+        // Assert 1: Steam Protobuf magic number 0x71F617D0 (in little endian: D0 17 F6 71)
+        uint magic = BitConverter.ToUInt32(manifestBytes, 0);
+        magic.Should().Be(0x71F617D0, "Binary manifests must start with Steam Protobuf magic 0x71F617D0");
+
+        // Assert 2: Checksum generation (SHA-1 sidecar as used by DepotDownloader .manifest.sha)
+        using var sha1 = System.Security.Cryptography.SHA1.Create();
+        var shaBytes = sha1.ComputeHash(manifestBytes);
+        shaBytes.Should().NotBeNull();
+        shaBytes.Length.Should().Be(20, "SHA-1 hash sidecar must be 20 bytes");
+
+        // Assert 3: SHA-256 for public hub immutability
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        var sha256Bytes = sha256.ComputeHash(manifestBytes);
+        sha256Bytes.Length.Should().Be(32, "SHA-256 hash must be 32 bytes");
+
+        // Assert 4: Production ManifestCacheService.ValidateManifest approves this binary format
+        var cacheService = new ManifestCacheService(NullLogger<ManifestCacheService>.Instance, _testDir);
+        cacheService.ValidateManifest(tempFile).Should().BeTrue("Production ManifestCacheService must recognize and validate SteamKit2 Protobuf binary manifests");
+    }
 }
 
 

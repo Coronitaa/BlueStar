@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using BlueStar.Core.Interfaces;
@@ -16,11 +17,17 @@ namespace BlueStar.Infrastructure.Providers.Manifest;
 
 /// <summary>
 /// Implements <see cref="IManifestProvider"/> for community ManifestHub repositories.
-/// Validated against live sources (SSMGAlt/ManifestHub2 branches and qwe213312/k25FCdfEOoEJ42S6).
-/// Extracts manifests, branch build IDs, and depot AES decryption keys.
+/// Primary source: Coronitaa/BlueStar-ManifestHub.
+/// Secondary fallback: SSMGAlt/ManifestHub2 and qwe213312/k25FCdfEOoEJ42S6.
+/// Extracts manifests, branch build snapshots, and depot AES decryption keys.
 /// </summary>
 public sealed class ManifestHubProvider : IManifestProvider
 {
+    public const string PrimaryBuildsBaseUrl = "https://raw.githubusercontent.com/Coronitaa/BlueStar-ManifestHub/main/builds";
+    public const string PrimaryManifestsBaseUrl = "https://raw.githubusercontent.com/Coronitaa/BlueStar-ManifestHub/main/manifests";
+    public const string SecondaryManifestHub2BaseUrl = "https://raw.githubusercontent.com/SSMGAlt/ManifestHub2";
+    public const string TertiaryK25BaseUrl = "https://raw.githubusercontent.com/qwe213312/k25FCdfEOoEJ42S6/main";
+
     private readonly HttpClient _http;
     private readonly IManifestCacheService _cacheService;
     private readonly IDepotKeyRepository? _keyRepository;
@@ -40,6 +47,12 @@ public sealed class ManifestHubProvider : IManifestProvider
         ProviderCapabilities.BuildDiscovery;
 
     private readonly ConcurrentDictionary<uint, bool> _availabilityCache = new();
+
+    private static readonly JsonSerializerOptions SnapshotSerializerOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        NumberHandling = JsonNumberHandling.AllowReadingFromString
+    };
 
     public ManifestHubProvider(
         HttpClient http,
@@ -68,13 +81,46 @@ public sealed class ManifestHubProvider : IManifestProvider
 
         try
         {
-            var url = $"https://raw.githubusercontent.com/SSMGAlt/ManifestHub2/{appId}/{appId}.json";
-            using var req = new HttpRequestMessage(HttpMethod.Head, url);
-            using var resp = await _http.SendAsync(req, ct).ConfigureAwait(false);
+            // 1. Try Primary: Coronitaa/BlueStar-ManifestHub
+            try
+            {
+                var primaryUrl = $"{PrimaryBuildsBaseUrl}/{appId}.json";
+                using var reqPrimary = new HttpRequestMessage(HttpMethod.Head, primaryUrl);
+                using var respPrimary = await _http.SendAsync(reqPrimary, ct).ConfigureAwait(false);
+                if (respPrimary.IsSuccessStatusCode)
+                {
+                    _availabilityCache[appId] = true;
+                    return true;
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Primary ManifestHub availability check failed for AppId {AppId}", appId);
+            }
 
-            var available = resp.IsSuccessStatusCode;
-            _availabilityCache[appId] = available;
-            return available;
+            // 2. Fallback secondary: SSMGAlt/ManifestHub2
+            try
+            {
+                var secondaryUrl = $"{SecondaryManifestHub2BaseUrl}/{appId}/{appId}.json";
+                using var reqSecondary = new HttpRequestMessage(HttpMethod.Head, secondaryUrl);
+                using var respSecondary = await _http.SendAsync(reqSecondary, ct).ConfigureAwait(false);
+                var available = respSecondary.IsSuccessStatusCode;
+                _availabilityCache[appId] = available;
+                return available;
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Secondary ManifestHub availability check failed for AppId {AppId}", appId);
+            }
+
+            _availabilityCache[appId] = false;
+            return false;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -119,119 +165,396 @@ public sealed class ManifestHubProvider : IManifestProvider
                 catch { }
             }
 
+            List<ManifestArtifact> results = [];
+            bool primaryDiscovered = false;
+
+            // 1. Primary: Coronitaa/BlueStar-ManifestHub
+            var primaryUrl = $"{PrimaryBuildsBaseUrl}/{appId}.json";
             try
             {
-                _metrics?.OnProviderRequest("ManifestHub", $"https://raw.githubusercontent.com/SSMGAlt/ManifestHub2/{appId}/{appId}.json");
-                var url = $"https://raw.githubusercontent.com/SSMGAlt/ManifestHub2/{appId}/{appId}.json";
-                using var resp = await _http.GetAsync(url, innerCt).ConfigureAwait(false);
-                if (!resp.IsSuccessStatusCode)
+                _metrics?.OnProviderRequest("ManifestHub", primaryUrl);
+                using var resp = await _http.GetAsync(primaryUrl, innerCt).ConfigureAwait(false);
+                if (resp.IsSuccessStatusCode)
                 {
-                    if (_generalCache != null)
+                    var json = await resp.Content.ReadAsStringAsync(innerCt).ConfigureAwait(false);
+                    var artifacts = ParseHubBuildSnapshots(json, appId);
+                    if (artifacts.Count > 0)
                     {
-                        try { await _generalCache.SetAsync(cacheKey, new List<ManifestArtifact>(), TimeSpan.FromDays(1), innerCt).ConfigureAwait(false); } catch { }
+                        results.AddRange(artifacts);
+                        primaryDiscovered = true;
                     }
-                    return [];
                 }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Primary ManifestHub discovery failed for AppId {AppId}", appId);
+            }
 
-                var json = await resp.Content.ReadAsStringAsync(innerCt).ConfigureAwait(false);
-                using var doc = JsonDocument.Parse(json);
-                if (!doc.RootElement.TryGetProperty("depot", out var depotEl) || depotEl.ValueKind != JsonValueKind.Object)
+            // 2. Fallback secondary: SSMGAlt/ManifestHub2
+            if (!primaryDiscovered)
+            {
+                var secondaryUrl = $"{SecondaryManifestHub2BaseUrl}/{appId}/{appId}.json";
+                try
                 {
-                    return [];
-                }
-
-                var results = new List<ManifestArtifact>();
-                var keysToRegister = new List<KeyValuePair<uint, string>>();
-
-                foreach (var depotProp in depotEl.EnumerateObject())
-                {
-                    if (!uint.TryParse(depotProp.Name, out var depotId)) continue;
-
-                    var depotObj = depotProp.Value;
-
-                    // Extract decryption key if present
-                    if (depotObj.TryGetProperty("decryptionkey", out var dkProp) && dkProp.ValueKind == JsonValueKind.String)
+                    _metrics?.OnProviderRequest("ManifestHub", secondaryUrl);
+                    using var resp = await _http.GetAsync(secondaryUrl, innerCt).ConfigureAwait(false);
+                    if (resp.IsSuccessStatusCode)
                     {
-                        var key = dkProp.GetString();
-                        if (!string.IsNullOrWhiteSpace(key))
-                        {
-                            keysToRegister.Add(new KeyValuePair<uint, string>(depotId, key));
-                        }
-                    }
+                        var json = await resp.Content.ReadAsStringAsync(innerCt).ConfigureAwait(false);
+                        var (secondaryArtifacts, keysToRegister) = ParseCommunityManifestHub2Json(json, appId);
+                        results.AddRange(secondaryArtifacts);
 
-                    // Enumerate manifests per branch
-                    if (depotObj.TryGetProperty("manifests", out var manifestsEl) && manifestsEl.ValueKind == JsonValueKind.Object)
-                    {
-                        foreach (var branchProp in manifestsEl.EnumerateObject())
+                        // Register discovered keys from SSMGAlt JSON
+                        if (_keyRepository != null && keysToRegister.Count > 0)
                         {
-                            if (branchProp.Value.TryGetProperty("gid", out var gidProp))
-                            {
-                                var gidStr = gidProp.GetString();
-                                if (ulong.TryParse(gidStr, out var manifestId) && manifestId > 0)
-                                {
-                                    long size = 0;
-                                    if (branchProp.Value.TryGetProperty("size", out var sProp))
-                                    {
-                                        if (sProp.ValueKind == JsonValueKind.Number) sProp.TryGetInt64(out size);
-                                        else if (sProp.ValueKind == JsonValueKind.String) long.TryParse(sProp.GetString(), out size);
-                                    }
-
-                                    var cachedPath = _cacheService.GetManifestPath(depotId, manifestId);
-                                    results.Add(new ManifestArtifact
-                                    {
-                                        DepotId = depotId,
-                                        ManifestId = manifestId,
-                                        SizeBytes = size,
-                                        LocalCachePath = cachedPath
-                                    });
-                                }
-                            }
+                            await _keyRepository.RegisterKeysAsync(keysToRegister, "ManifestHub JSON", innerCt).ConfigureAwait(false);
                         }
                     }
                 }
-
-                // Register discovered keys
-                if (_keyRepository != null)
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
                 {
-                    if (keysToRegister.Count > 0)
-                    {
-                        await _keyRepository.RegisterKeysAsync(keysToRegister, "ManifestHub JSON", innerCt).ConfigureAwait(false);
-                    }
+                    _logger.LogWarning(ex, "Secondary ManifestHub discovery failed for AppId {AppId}", appId);
+                }
+            }
 
-                    // Only fetch lua if any discovered depot is still missing its key
+            // 3. For any missing AES depot keys, attempt community Lua import if needed
+            if (_keyRepository != null && results.Count > 0)
+            {
+                try
+                {
                     var depotIds = results.Select(r => r.DepotId).Distinct().ToList();
                     var existingKeys = await _keyRepository.GetKeysAsync(depotIds, innerCt).ConfigureAwait(false);
                     var missingKey = depotIds.Any(id => !existingKeys.ContainsKey(id));
                     if (missingKey)
                     {
-                        try
+                        var luaUrl = $"{SecondaryManifestHub2BaseUrl}/{appId}/{appId}.lua";
+                        _metrics?.OnProviderRequest("ManifestHub", luaUrl);
+                        using var luaResp = await _http.GetAsync(luaUrl, innerCt).ConfigureAwait(false);
+                        if (luaResp.IsSuccessStatusCode)
                         {
-                            _metrics?.OnProviderRequest("ManifestHub", $"https://raw.githubusercontent.com/SSMGAlt/ManifestHub2/{appId}/{appId}.lua");
-                            var luaUrl = $"https://raw.githubusercontent.com/SSMGAlt/ManifestHub2/{appId}/{appId}.lua";
-                            using var luaResp = await _http.GetAsync(luaUrl, innerCt).ConfigureAwait(false);
-                            if (luaResp.IsSuccessStatusCode)
-                            {
-                                var lua = await luaResp.Content.ReadAsStringAsync(innerCt).ConfigureAwait(false);
-                                await _keyRepository.ImportFromLuaAsync(lua, innerCt).ConfigureAwait(false);
-                            }
+                            var lua = await luaResp.Content.ReadAsStringAsync(innerCt).ConfigureAwait(false);
+                            await _keyRepository.ImportFromLuaAsync(lua, innerCt).ConfigureAwait(false);
                         }
-                        catch { }
                     }
                 }
-
-                if (_generalCache != null)
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
                 {
-                    try { await _generalCache.SetAsync(cacheKey, results, TimeSpan.FromDays(7), innerCt).ConfigureAwait(false); } catch { }
+                    _logger.LogDebug(ex, "Failed to import keys from community Lua for AppId {AppId}", appId);
                 }
+            }
 
-                return results;
-            }
-            catch (Exception ex)
+            // 4. Cache results (even if empty to prevent repeated requests)
+            if (_generalCache != null)
             {
-                _logger.LogWarning(ex, "Failed to discover manifests from ManifestHub for AppId {AppId}", appId);
-                return [];
+                var ttl = results.Count > 0 ? TimeSpan.FromDays(7) : TimeSpan.FromDays(1);
+                try { await _generalCache.SetAsync(cacheKey, results, ttl, innerCt).ConfigureAwait(false); } catch { }
             }
+
+            return results;
         }, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Parses builds snapshots from JSON payload supporting List of BuildSnapshot, single BuildSnapshot,
+    /// or Hub v1 format with depotManifests.
+    /// </summary>
+    public IReadOnlyList<ManifestArtifact> ParseHubBuildSnapshots(string json, uint appId = 0)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return [];
+
+        var results = new List<ManifestArtifact>();
+        var seen = new HashSet<(uint, ulong)>();
+
+        void AddArtifact(uint depotId, ulong manifestId, long size = 0)
+        {
+            if (depotId == 0 || manifestId == 0) return;
+            if (!seen.Add((depotId, manifestId))) return;
+
+            var cachedPath = _cacheService.GetManifestPath(depotId, manifestId);
+            results.Add(new ManifestArtifact
+            {
+                DepotId = depotId,
+                ManifestId = manifestId,
+                SizeBytes = size,
+                LocalCachePath = cachedPath,
+                Routes = [
+                    new ManifestSourceRoute
+                    {
+                        ProviderId = ProviderId,
+                        ProviderName = DisplayName,
+                        RouteType = ManifestSourceType.GitHubRaw,
+                        Url = $"{PrimaryManifestsBaseUrl}/{depotId}/{manifestId}.manifest",
+                        Priority = Priority
+                    }
+                ]
+            });
+        }
+
+        // Try direct strongly-typed deserialization first
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (root.ValueKind == JsonValueKind.Array)
+            {
+                var snapshots = JsonSerializer.Deserialize<List<BuildSnapshot>>(json, SnapshotSerializerOptions);
+                if (snapshots != null)
+                {
+                    foreach (var s in snapshots)
+                    {
+                        if (s.DepotManifests == null) continue;
+                        foreach (var (dId, mId) in s.DepotManifests)
+                        {
+                            AddArtifact(dId, mId);
+                        }
+                    }
+                }
+            }
+            else if (root.ValueKind == JsonValueKind.Object)
+            {
+                // Could be single BuildSnapshot or Hub v1 with depotManifests
+                var single = JsonSerializer.Deserialize<BuildSnapshot>(json, SnapshotSerializerOptions);
+                if (single?.DepotManifests != null && single.DepotManifests.Count > 0)
+                {
+                    foreach (var (dId, mId) in single.DepotManifests)
+                    {
+                        AddArtifact(dId, mId);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Strongly-typed snapshot deserialization failed, falling back to JsonDocument inspection");
+        }
+
+        if (results.Count > 0)
+            return results;
+
+        // Fallback / tolerant JsonDocument parsing for Hub v1 variations
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (root.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in root.EnumerateArray())
+                {
+                    ExtractFromSnapshotElement(item, AddArtifact);
+                }
+            }
+            else if (root.ValueKind == JsonValueKind.Object)
+            {
+                ExtractFromSnapshotElement(root, AddArtifact);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to parse build snapshots JSON for AppId {AppId}", appId);
+        }
+
+        return results;
+    }
+
+    private static void ExtractFromSnapshotElement(JsonElement element, Action<uint, ulong, long> addArtifact)
+    {
+        // 1. Check for depotManifests / depot_manifests
+        JsonProperty dmProp = default;
+        bool foundDm = false;
+        foreach (var prop in element.EnumerateObject())
+        {
+            if (prop.NameEquals("depotManifests") ||
+                prop.NameEquals("depot_manifests") ||
+                string.Equals(prop.Name, "depotManifests", StringComparison.OrdinalIgnoreCase))
+            {
+                dmProp = prop;
+                foundDm = true;
+                break;
+            }
+        }
+
+        if (foundDm)
+        {
+            var dmVal = dmProp.Value;
+            if (dmVal.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var depotProp in dmVal.EnumerateObject())
+                {
+                    if (uint.TryParse(depotProp.Name, out var depotId))
+                    {
+                        ulong manifestId = 0;
+                        if (depotProp.Value.ValueKind == JsonValueKind.Number)
+                        {
+                            depotProp.Value.TryGetUInt64(out manifestId);
+                        }
+                        else if (depotProp.Value.ValueKind == JsonValueKind.String)
+                        {
+                            ulong.TryParse(depotProp.Value.GetString(), out manifestId);
+                        }
+
+                        if (manifestId > 0)
+                        {
+                            addArtifact(depotId, manifestId, 0);
+                        }
+                    }
+                }
+                return;
+            }
+            else if (dmVal.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in dmVal.EnumerateArray())
+                {
+                    uint depotId = 0;
+                    ulong manifestId = 0;
+                    if (item.TryGetProperty("depotId", out var dProp) || item.TryGetProperty("depot_id", out dProp))
+                    {
+                        if (dProp.ValueKind == JsonValueKind.Number) dProp.TryGetUInt32(out depotId);
+                        else if (dProp.ValueKind == JsonValueKind.String) uint.TryParse(dProp.GetString(), out depotId);
+                    }
+                    if (item.TryGetProperty("manifestId", out var mProp) || item.TryGetProperty("manifest_id", out mProp))
+                    {
+                        if (mProp.ValueKind == JsonValueKind.Number) mProp.TryGetUInt64(out manifestId);
+                        else if (mProp.ValueKind == JsonValueKind.String) ulong.TryParse(mProp.GetString(), out manifestId);
+                    }
+                    if (depotId > 0 && manifestId > 0)
+                    {
+                        addArtifact(depotId, manifestId, 0);
+                    }
+                }
+                return;
+            }
+        }
+
+        // 2. Check for "depots" property
+        if (element.TryGetProperty("depots", out var depotsEl) && depotsEl.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var depotProp in depotsEl.EnumerateObject())
+            {
+                if (uint.TryParse(depotProp.Name, out var depotId))
+                {
+                    ulong manifestId = 0;
+                    if (depotProp.Value.ValueKind == JsonValueKind.Number)
+                    {
+                        depotProp.Value.TryGetUInt64(out manifestId);
+                    }
+                    else if (depotProp.Value.ValueKind == JsonValueKind.String)
+                    {
+                        ulong.TryParse(depotProp.Value.GetString(), out manifestId);
+                    }
+                    if (manifestId > 0)
+                    {
+                        addArtifact(depotId, manifestId, 0);
+                    }
+                }
+            }
+            return;
+        }
+
+        // 3. Check for "depot" property (SSMGAlt / community format)
+        if (element.TryGetProperty("depot", out var depotEl) && depotEl.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var depotProp in depotEl.EnumerateObject())
+            {
+                if (!uint.TryParse(depotProp.Name, out var depotId)) continue;
+                var depotObj = depotProp.Value;
+                if (depotObj.TryGetProperty("manifests", out var manifestsEl) && manifestsEl.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var branchProp in manifestsEl.EnumerateObject())
+                    {
+                        if (branchProp.Value.TryGetProperty("gid", out var gidProp))
+                        {
+                            var gidStr = gidProp.GetString();
+                            if (ulong.TryParse(gidStr, out var manifestId) && manifestId > 0)
+                            {
+                                long size = 0;
+                                if (branchProp.Value.TryGetProperty("size", out var sProp))
+                                {
+                                    if (sProp.ValueKind == JsonValueKind.Number) sProp.TryGetInt64(out size);
+                                    else if (sProp.ValueKind == JsonValueKind.String) long.TryParse(sProp.GetString(), out size);
+                                }
+                                addArtifact(depotId, manifestId, size);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private (List<ManifestArtifact> Artifacts, List<KeyValuePair<uint, string>> Keys) ParseCommunityManifestHub2Json(string json, uint appId)
+    {
+        var artifacts = new List<ManifestArtifact>();
+        var keysToRegister = new List<KeyValuePair<uint, string>>();
+
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("depot", out var depotEl) || depotEl.ValueKind != JsonValueKind.Object)
+        {
+            return (artifacts, keysToRegister);
+        }
+
+        foreach (var depotProp in depotEl.EnumerateObject())
+        {
+            if (!uint.TryParse(depotProp.Name, out var depotId)) continue;
+
+            var depotObj = depotProp.Value;
+
+            // Extract decryption key if present
+            if (depotObj.TryGetProperty("decryptionkey", out var dkProp) && dkProp.ValueKind == JsonValueKind.String)
+            {
+                var key = dkProp.GetString();
+                if (!string.IsNullOrWhiteSpace(key))
+                {
+                    keysToRegister.Add(new KeyValuePair<uint, string>(depotId, key));
+                }
+            }
+
+            // Enumerate manifests per branch
+            if (depotObj.TryGetProperty("manifests", out var manifestsEl) && manifestsEl.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var branchProp in manifestsEl.EnumerateObject())
+                {
+                    if (branchProp.Value.TryGetProperty("gid", out var gidProp))
+                    {
+                        var gidStr = gidProp.GetString();
+                        if (ulong.TryParse(gidStr, out var manifestId) && manifestId > 0)
+                        {
+                            long size = 0;
+                            if (branchProp.Value.TryGetProperty("size", out var sProp))
+                            {
+                                if (sProp.ValueKind == JsonValueKind.Number) sProp.TryGetInt64(out size);
+                                else if (sProp.ValueKind == JsonValueKind.String) long.TryParse(sProp.GetString(), out size);
+                            }
+
+                            var cachedPath = _cacheService.GetManifestPath(depotId, manifestId);
+                            artifacts.Add(new ManifestArtifact
+                            {
+                                DepotId = depotId,
+                                ManifestId = manifestId,
+                                SizeBytes = size,
+                                LocalCachePath = cachedPath,
+                                Routes = [
+                                    new ManifestSourceRoute
+                                    {
+                                        ProviderId = ProviderId,
+                                        ProviderName = DisplayName,
+                                        RouteType = ManifestSourceType.GitHubRaw,
+                                        Url = $"{SecondaryManifestHub2BaseUrl}/{appId}/{depotId}_{manifestId}.manifest",
+                                        Priority = Priority
+                                    }
+                                ]
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        return (artifacts, keysToRegister);
     }
 
     /// <inheritdoc />
@@ -266,17 +589,24 @@ public sealed class ManifestHubProvider : IManifestProvider
                 return dest;
             }
 
-            // 2. Build candidate URLs in order of specificity
-            var candidateUrls = new List<string>();
+            // 2. Build candidate URLs in order of specificity and priority
+            // Ruta 1 (Primaria): Coronitaa/BlueStar-ManifestHub
+            var candidateUrls = new List<string>
+            {
+                $"{PrimaryManifestsBaseUrl}/{depotId}/{manifestId}.manifest"
+            };
 
+            // Ruta 2 (Secundaria comunitaria): SSMGAlt/ManifestHub2
             if (appId > 0)
             {
-                candidateUrls.Add($"https://raw.githubusercontent.com/SSMGAlt/ManifestHub2/{appId}/{depotId}_{manifestId}.manifest");
+                candidateUrls.Add($"{SecondaryManifestHub2BaseUrl}/{appId}/{depotId}_{manifestId}.manifest");
             }
 
-            candidateUrls.Add($"https://raw.githubusercontent.com/qwe213312/k25FCdfEOoEJ42S6/main/{depotId}_{manifestId}.manifest");
+            // Ruta 3 (Fallback terciario K25 - formato canónico y plano):
+            candidateUrls.Add($"{TertiaryK25BaseUrl}/manifests/{depotId}/{manifestId}.manifest");
+            candidateUrls.Add($"{TertiaryK25BaseUrl}/{depotId}_{manifestId}.manifest");
 
-            // 3. Try each candidate URL
+            // 3. Try each candidate URL in strict priority order
             foreach (var url in candidateUrls)
             {
                 innerCt.ThrowIfCancellationRequested();
@@ -292,9 +622,20 @@ public sealed class ManifestHubProvider : IManifestProvider
 
                         Directory.CreateDirectory(targetDirectory);
                         var targetFile = Path.Combine(targetDirectory, $"{depotId}_{manifestId}.manifest");
-                        File.Copy(cachedPath, targetFile, overwrite: true);
+                        if (!string.Equals(Path.GetFullPath(cachedPath), Path.GetFullPath(targetFile), StringComparison.OrdinalIgnoreCase))
+                        {
+                            File.Copy(cachedPath, targetFile, overwrite: true);
+                        }
                         return targetFile;
                     }
+                    else
+                    {
+                        _logger.LogDebug("ManifestHub candidate URL {Url} returned status code {StatusCode}", url, response.StatusCode);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {

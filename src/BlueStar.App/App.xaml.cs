@@ -294,6 +294,10 @@ public partial class App : Application
             return new BlueStar.Infrastructure.Services.BuildResolver(steamClient, registry, logger, curation, keys, coordinator, cache);
         });
         services.AddSingleton<IInstallationPlanner, BlueStar.Infrastructure.Services.InstallationPlanner>();
+        services.AddSingleton<IDlcPayloadClassifier, BlueStar.Infrastructure.Services.DlcPayloadClassifier>();
+        services.AddSingleton<IDifferentialUpdateResolver, BlueStar.Infrastructure.Services.DifferentialUpdateResolver>();
+        services.AddSingleton<ILocalCoverageComparator, BlueStar.Infrastructure.Services.LocalCoverageComparator>();
+        services.AddSingleton<IVoluntaryContributionService, BlueStar.Infrastructure.Services.VoluntaryContributionService>();
         services.AddHttpClient<BlueStar.Infrastructure.Providers.Fixes.OnlineFixProvider>();
         services.AddSingleton<IFixProvider>(sp => sp.GetRequiredService<BlueStar.Infrastructure.Providers.Fixes.OnlineFixProvider>());
 

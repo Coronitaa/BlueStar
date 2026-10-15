@@ -142,13 +142,26 @@ public sealed class ManifestCacheService : IManifestCacheService
             return targetFile;
         }
 
-        await using (var sourceStream = new FileStream(sourceFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, 8192, useAsync: true))
-        await using (var destStream = new FileStream(targetFile, FileMode.Create, FileAccess.Write, FileShare.None, 8192, useAsync: true))
+        var tempFile = Path.Combine(depotDir, $"{depotId}_{manifestId}.tmp_{Guid.NewGuid():N}");
+        try
         {
-            await sourceStream.CopyToAsync(destStream, ct).ConfigureAwait(false);
-        }
+            await using (var sourceStream = new FileStream(sourceFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, 8192, useAsync: true))
+            await using (var destStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, 8192, useAsync: true))
+            {
+                await sourceStream.CopyToAsync(destStream, ct).ConfigureAwait(false);
+            }
 
-        return targetFile;
+            File.Move(tempFile, targetFile, overwrite: true);
+            return targetFile;
+        }
+        catch
+        {
+            if (File.Exists(tempFile))
+            {
+                try { File.Delete(tempFile); } catch { }
+            }
+            throw;
+        }
     }
 
     /// <inheritdoc />
