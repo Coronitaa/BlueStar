@@ -17,6 +17,16 @@ public class BackgroundTaskServiceTests
     {
         var service = new BackgroundTaskService(NullLogger<BackgroundTaskService>.Instance);
         var executed = false;
+        BackgroundTaskItem? completedTask = null;
+
+        service.TasksChanged += (_, _) =>
+        {
+            var current = service.Tasks.FirstOrDefault(t => t.Status == BackgroundTaskStatus.Completed);
+            if (current != null)
+            {
+                completedTask = current;
+            }
+        };
 
         var taskId = service.QueueTask("Test Task", "Testing background runner", async (reporter, ct) =>
         {
@@ -29,13 +39,18 @@ public class BackgroundTaskServiceTests
         taskId.Should().NotBeEmpty();
 
         // Wait for task completion
-        for (int i = 0; i < 100 && (!executed || service.Tasks.FirstOrDefault(t => t.Id == taskId)?.Status != BackgroundTaskStatus.Completed || service.Tasks.FirstOrDefault(t => t.Id == taskId)?.ProgressPercentage < 100); i++)
+        for (int i = 0; i < 100 && (!executed || completedTask == null); i++)
         {
+            if (completedTask == null)
+            {
+                var candidate = service.Tasks.FirstOrDefault(t => t.Id == taskId && t.Status == BackgroundTaskStatus.Completed);
+                if (candidate != null) completedTask = candidate;
+            }
             await Task.Delay(20);
         }
 
         executed.Should().BeTrue();
-        var task = service.Tasks.FirstOrDefault(t => t.Id == taskId);
+        var task = completedTask ?? service.Tasks.FirstOrDefault(t => t.Id == taskId);
         task.Should().NotBeNull();
         task!.Status.Should().Be(BackgroundTaskStatus.Completed);
         task.ProgressPercentage.Should().Be(100);
