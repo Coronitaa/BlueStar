@@ -274,4 +274,30 @@ public sealed class VoluntaryContributionService : IVoluntaryContributionService
 
         return submission;
     }
+
+    /// <inheritdoc />
+    public IReadOnlyList<DemandRecord> MatchDemandWithLicenses(
+        IEnumerable<uint> ownedAppIds,
+        DemandIndex demandIndex)
+    {
+        ArgumentNullException.ThrowIfNull(ownedAppIds);
+        ArgumentNullException.ThrowIfNull(demandIndex);
+
+        var ownedSet = new HashSet<uint>(ownedAppIds);
+        var matched = new List<DemandRecord>();
+        var seen = new HashSet<(uint DepotId, ulong ManifestId)>();
+
+        foreach (var record in demandIndex.Records)
+        {
+            if (ownedSet.Contains(record.AppId))
+            {
+                if (seen.Add((record.DepotId, record.ManifestId)))
+                {
+                    matched.Add(record);
+                }
+            }
+        }
+
+        return matched.AsReadOnly();
+    }
 }

@@ -23,6 +23,7 @@ public sealed class BuildResolver : IBuildResolver
     private readonly ILogger<BuildResolver> _logger;
     private readonly IRequestCoordinator _coordinator;
     private readonly ICacheService? _cache;
+    private readonly IManifestHubProvider? _hubProvider;
 
     public BuildResolver(
         SteamStoreApiClient steamClient,
@@ -31,7 +32,8 @@ public sealed class BuildResolver : IBuildResolver
         IRecommendationProvider? curationProvider = null,
         IDepotKeyRepository? keyRepository = null,
         IRequestCoordinator? coordinator = null,
-        ICacheService? cache = null)
+        ICacheService? cache = null,
+        IManifestHubProvider? hubProvider = null)
     {
         _steamClient = steamClient ?? throw new ArgumentNullException(nameof(steamClient));
         _manifestRegistry = manifestRegistry ?? throw new ArgumentNullException(nameof(manifestRegistry));
@@ -40,6 +42,7 @@ public sealed class BuildResolver : IBuildResolver
         _keyRepository = keyRepository;
         _coordinator = coordinator ?? RequestCoordinator.Instance;
         _cache = cache;
+        _hubProvider = hubProvider;
     }
 
     /// <inheritdoc />
@@ -126,7 +129,59 @@ public sealed class BuildResolver : IBuildResolver
                     });
                 }
 
-                // 5. If no formal builds returned from SteamCMD, synthesize an inferred version from discovered provider manifests
+                // 4b. Query and map ManifestHub community build snapshots (including PatchDate and ChangedDepots) if _hubProvider is injected
+                var hub = _hubProvider;
+                if (hub != null)
+                {
+                    try
+                    {
+                        var snapshots = await hub.GetAppSnapshotsAsync(appId, innerCt).ConfigureAwait(false);
+                        foreach (var snap in snapshots)
+                        {
+                            var depots = new List<DepotVersion>();
+                            foreach (var (depotId, manifestId) in snap.DepotManifests)
+                            {
+                                knownKeys.TryGetValue(depotId, out var key);
+                                depots.Add(new DepotVersion
+                                {
+                                    DepotId = depotId,
+                                    ManifestId = manifestId,
+                                    Name = $"Depot {depotId}",
+                                    DepotKey = key,
+                                    IsRecommended = true
+                                });
+                            }
+
+                            var patchDate = !string.IsNullOrWhiteSpace(snap.PatchDate)
+                                ? snap.PatchDate
+                                : (snap.CreationTime?.ToString("yyyy-MM-dd") ?? snap.Timestamp.ToString("yyyy-MM-dd"));
+
+                            var buildIdStr = snap.BuildId.ToString();
+                            if (!versions.Any(v => v.BuildId == buildIdStr))
+                            {
+                                versions.Add(new GameVersion
+                                {
+                                    BuildId = buildIdStr,
+                                    BranchName = snap.Branch,
+                                    DisplayName = !string.IsNullOrWhiteSpace(snap.Description) ? snap.Description : $"Build {snap.BuildId} ({patchDate})",
+                                    UpdatedAt = snap.CreationTime ?? snap.Timestamp,
+                                    PatchDate = patchDate,
+                                    ChangedDepots = snap.ChangedDepots,
+                                    Description = snap.Description,
+                                    Source = "ManifestHub",
+                                    IsInferred = false,
+                                    Depots = depots.AsReadOnly()
+                                });
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Failed to retrieve snapshots from ManifestHub for AppId {AppId}", appId);
+                    }
+                }
+
+                // 5. If no formal builds returned from SteamCMD or ManifestHub, synthesize an inferred version from discovered provider manifests
                 if (versions.Count == 0 && discoveredManifests.Count > 0)
                 {
                     // Group by DepotId and pick the latest revision per depot to prevent duplicate DepotVersion entries
@@ -250,6 +305,71 @@ public sealed class BuildResolver : IBuildResolver
         var allVersions = await GetAvailableVersionsAsync(appId, ct).ConfigureAwait(false);
         return allVersions.FirstOrDefault(v =>
             string.Equals(v.BuildId, buildIdOrBranch, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(v.BranchName, buildIdOrBranch, StringComparison.OrdinalIgnoreCase));
+            string.Equals(v.BranchName, buildIdOrBranch, StringComparison.OrdinalIgnoreCase) ||
+            (!string.IsNullOrEmpty(v.PatchDate) && string.Equals(v.PatchDate, buildIdOrBranch, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    /// <inheritdoc />
+    public async Task<GameVersion?> ResolveVersionByPatchDateAsync(uint appId, string patchDate, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(patchDate)) return null;
+        var allVersions = await GetAvailableVersionsAsync(appId, ct).ConfigureAwait(false);
+        var existing = allVersions.FirstOrDefault(v =>
+            !string.IsNullOrEmpty(v.PatchDate) && string.Equals(v.PatchDate, patchDate, StringComparison.OrdinalIgnoreCase));
+        if (existing != null) return existing;
+
+        var hub = _hubProvider ?? _manifestRegistry.Providers?.OfType<IManifestHubProvider>().FirstOrDefault();
+        if (hub != null)
+        {
+            try
+            {
+                var snapshots = await hub.GetAppSnapshotsAsync(appId, ct).ConfigureAwait(false);
+                var snap = snapshots.FirstOrDefault(s =>
+                    string.Equals(s.PatchDate, patchDate, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(s.CreationTime?.ToString("yyyy-MM-dd"), patchDate, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(s.Timestamp.ToString("yyyy-MM-dd"), patchDate, StringComparison.OrdinalIgnoreCase));
+
+                if (snap != null)
+                {
+                    var allDepotIds = snap.DepotManifests.Keys.ToList();
+                    IReadOnlyDictionary<uint, string> knownKeys = _keyRepository != null
+                        ? await _keyRepository.GetKeysAsync(allDepotIds, ct).ConfigureAwait(false)
+                        : new Dictionary<uint, string>();
+
+                    var depots = snap.DepotManifests.Select(kvp =>
+                    {
+                        knownKeys.TryGetValue(kvp.Key, out var key);
+                        return new DepotVersion
+                        {
+                            DepotId = kvp.Key,
+                            ManifestId = kvp.Value,
+                            Name = $"Depot {kvp.Key}",
+                            DepotKey = key,
+                            IsRecommended = true
+                        };
+                    }).ToList();
+
+                    return new GameVersion
+                    {
+                        BuildId = snap.BuildId.ToString(),
+                        BranchName = snap.Branch,
+                        DisplayName = !string.IsNullOrWhiteSpace(snap.Description) ? snap.Description : $"Build {snap.BuildId} ({patchDate})",
+                        UpdatedAt = snap.CreationTime ?? snap.Timestamp,
+                        PatchDate = patchDate,
+                        ChangedDepots = snap.ChangedDepots,
+                        Description = snap.Description,
+                        Source = "ManifestHub",
+                        IsInferred = false,
+                        Depots = depots.AsReadOnly()
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to resolve patch date {PatchDate} from ManifestHub for AppId {AppId}", patchDate, appId);
+            }
+        }
+
+        return null;
     }
 }

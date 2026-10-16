@@ -25,4 +25,9 @@ public interface IManifestHubProvider : IManifestProvider
     /// Fetches historical revisions for the specified Steam Application ID.
     /// </summary>
     Task<IReadOnlyList<HubRevisionItem>> GetRevisionsForAppAsync(uint appId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Fetches the active community manifest demand index (indices/demand.json).
+    /// </summary>
+    Task<DemandIndex?> GetDemandAsync(CancellationToken ct = default);
 }

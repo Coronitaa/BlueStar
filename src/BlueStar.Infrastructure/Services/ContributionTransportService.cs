@@ -151,7 +151,7 @@ public sealed class ContributionTransportService : IContributionTransportService
             };
 
             using var content = new StringContent(JsonSerializer.Serialize(transportPayload), Encoding.UTF8, "application/json");
-            var response = await _httpClient.PostAsync(publishUrl, content, ct).ConfigureAwait(false);
+            using var response = await _httpClient.PostAsync(publishUrl, content, ct).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
 
             var responseBody = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);

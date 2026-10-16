@@ -29,4 +29,13 @@ public interface IInstallationPlanner
         GameInstance instance,
         GameVersion targetVersion,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Creates a differential update plan for an existing instance based on a <see cref="BuildSnapshot"/>,
+    /// ensuring only changed depots (or those differing from installed manifests) are scheduled for download.
+    /// </summary>
+    Task<InstallationPlan> CreateUpdatePlanAsync(
+        GameInstance instance,
+        BuildSnapshot snapshot,
+        CancellationToken ct = default);
 }

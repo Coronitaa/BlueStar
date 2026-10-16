@@ -338,7 +338,13 @@ public sealed class UninstalledLicensedGameContributionE2ETests : IDisposable
         // -------------------------------------------------------------------------
         // STEP 1: DISCOVER UNINSTALLED GAME VIA STEAM LICENSES (NOT INSTALLED!)
         // -------------------------------------------------------------------------
-        var licenseResult = await licenseService.DiscoverLicensesAsync(CancellationToken.None);
+        var licenseOptions = new SteamLicenseDiscoveryOptions
+        {
+            IncludeLocalClientCache = false,
+            IncludeWebSession = true,
+            EnrichMetadata = true
+        };
+        var licenseResult = await licenseService.DiscoverLicensesAsync(licenseOptions, CancellationToken.None);
         licenseResult.IsSuccess.Should().BeTrue();
         licenseResult.BlockageReason.Should().Be(SteamLicenseBlockageReason.None);
         licenseResult.LicensedApps.Should().Contain(a => a.AppId == uninstalledAppId);

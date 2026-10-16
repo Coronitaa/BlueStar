@@ -320,6 +320,19 @@ public partial class App : Application
         services.AddHttpClient<IHistoricalRevisionDiscoveryService, BlueStar.Infrastructure.Services.HistoricalRevisionDiscoveryService>();
         services.AddHttpClient<ISteamLicenseDiscoveryService, BlueStar.Infrastructure.Services.SteamLicenseDiscoveryService>();
 
+        // Manifest Harvesters & Voluntary Contribution Coordinator
+        services.AddSingleton<BlueStar.Infrastructure.Services.SteamClientManifestHarvesterProvider>();
+        services.AddSingleton<BlueStar.Infrastructure.Services.DepotDownloaderManifestHarvesterProvider>();
+        services.AddSingleton<BlueStar.Infrastructure.Services.SteamManifestDownloaderAdapter>();
+        services.AddSingleton<IManifestHarvestCoordinator>(sp =>
+        {
+            var p1 = sp.GetRequiredService<BlueStar.Infrastructure.Services.SteamClientManifestHarvesterProvider>();
+            var p2 = sp.GetRequiredService<BlueStar.Infrastructure.Services.DepotDownloaderManifestHarvesterProvider>();
+            var p3 = sp.GetRequiredService<BlueStar.Infrastructure.Services.SteamManifestDownloaderAdapter>();
+            return new BlueStar.Infrastructure.Services.CompositeManifestHarvester([p1, p2, p3]);
+        });
+        services.AddSingleton<IVoluntaryManifestContributionCoordinator, BlueStar.Infrastructure.Services.VoluntaryManifestContributionCoordinator>();
+
         // ViewModels
         services.AddSingleton<DownloadQueueManager>();
 

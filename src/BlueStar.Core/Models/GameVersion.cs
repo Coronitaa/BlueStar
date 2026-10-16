@@ -36,6 +36,16 @@ public record GameVersion
     public string? Description { get; init; }
 
     /// <summary>
+    /// Gets the patch date (YYYY-MM-DD) for this build version when available.
+    /// </summary>
+    public string? PatchDate { get; init; }
+
+    /// <summary>
+    /// Gets the list of depot IDs that changed in this build version when available.
+    /// </summary>
+    public IReadOnlyList<uint> ChangedDepots { get; init; } = Array.Empty<uint>();
+
+    /// <summary>
     /// Gets a value indicating whether this build identity is non-canonical or inferred from an external source.
     /// </summary>
     public bool IsInferred { get; init; }

@@ -458,7 +458,107 @@ public sealed class SteamLicenseDiscoveryService : ISteamLicenseDiscoveryService
             catch { }
         }
 
+        // 3. appcache/packageinfo.vdf and appcache/appinfo.vdf
+        var appcache = Path.Combine(steamPath, "appcache");
+        if (Directory.Exists(appcache))
+        {
+            ParseAppCacheVdf(Path.Combine(appcache, "packageinfo.vdf"), appIds);
+            ParseAppCacheVdf(Path.Combine(appcache, "appinfo.vdf"), appIds);
+        }
+
         return appIds.ToList();
+    }
+
+    internal static void ParseAppCacheVdf(string filePath, HashSet<uint> appIds)
+    {
+        if (!File.Exists(filePath)) return;
+
+        // Try reading as text first (supports mock VDF test fixtures)
+        try
+        {
+            var text = File.ReadAllText(filePath);
+            if (!string.IsNullOrWhiteSpace(text) &&
+                (text.Contains('{') || text.Contains("\"apps\"") || text.Contains("\"appinfo\"") || text.Contains("\"packageinfo\"") || text.Contains("\"appid\"")))
+            {
+                ExtractAppIdsFromVdf(text, appIds);
+            }
+        }
+        catch { }
+
+        // Also parse binary Steam VDF structure
+        try
+        {
+            var bytes = File.ReadAllBytes(filePath);
+            if (bytes.Length >= 8)
+            {
+                ParseBinaryAppCache(bytes, appIds);
+            }
+        }
+        catch { }
+    }
+
+    internal static void ParseBinaryAppCache(byte[] bytes, HashSet<uint> appIds)
+    {
+        if (bytes == null || bytes.Length < 8) return;
+
+        var magic = BitConverter.ToUInt32(bytes, 0);
+
+        // Canonical Valve appinfo.vdf headers (0x07564427, 0x07564428, 0x07564429)
+        if (magic == 0x07564427 || magic == 0x07564428 || magic == 0x07564429)
+        {
+            int offset = 8;
+            while (offset + 8 <= bytes.Length)
+            {
+                var appId = BitConverter.ToUInt32(bytes, offset);
+                if (appId == 0) break;
+                var entrySize = BitConverter.ToUInt32(bytes, offset + 4);
+
+                if (appId > 0 && appId < 50_000_000)
+                {
+                    appIds.Add(appId);
+                }
+
+                if (entrySize == 0 || entrySize > int.MaxValue || (long)offset + 8 + entrySize > bytes.Length) break;
+                offset += 8 + (int)entrySize;
+            }
+        }
+
+        // Canonical Valve packageinfo.vdf headers (0x275C4406, 0x285C4406)
+        if (magic == 0x275C4406 || magic == 0x285C4406)
+        {
+            int offset = 8;
+            while (offset + 4 <= bytes.Length)
+            {
+                var pkgId = BitConverter.ToUInt32(bytes, offset);
+                if (pkgId == 0xFFFFFFFF) break;
+                offset += 4;
+                if (offset + 24 <= bytes.Length)
+                {
+                    // Skip hash (20 bytes) + changeNumber (4 bytes)
+                    offset += 24;
+                }
+                else break;
+            }
+        }
+
+        // Generic pattern scan for "appids" or "appid" binary KeyValues in appcache
+        byte[] appidKey = [0x61, 0x70, 0x70, 0x69, 0x64, 0x00]; // "appid\0"
+        for (int i = 0; i <= bytes.Length - 10; i++)
+        {
+            if (bytes[i] == appidKey[0] &&
+                bytes[i + 1] == appidKey[1] &&
+                bytes[i + 2] == appidKey[2] &&
+                bytes[i + 3] == appidKey[3] &&
+                bytes[i + 4] == appidKey[4] &&
+                bytes[i + 5] == appidKey[5])
+            {
+                var candidate = BitConverter.ToUInt32(bytes, i + 6);
+                if (candidate > 0 && candidate < 50_000_000)
+                {
+                    appIds.Add(candidate);
+                }
+            }
+        }
     }
 
     internal static void ExtractAppIdsFromVdf(string content, HashSet<uint> appIds)

@@ -273,7 +273,7 @@ public sealed class SteamPackageResolver
     private static string ReadNullTerminatedString(BinaryReader br)
     {
         var bytes = new List<byte>();
-        while (br.BaseStream.Position < br.BaseStream.Length)
+        while (br.BaseStream.Position < br.BaseStream.Length && bytes.Count < 65536)
         {
             var b = br.ReadByte();
             if (b == 0) break;

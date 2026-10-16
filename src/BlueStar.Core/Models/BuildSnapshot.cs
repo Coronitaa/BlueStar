@@ -40,4 +40,16 @@ public sealed class BuildSnapshot
     /// </summary>
     [JsonPropertyName("depotManifests")]
     public IReadOnlyDictionary<uint, ulong> DepotManifests { get; init; } = new Dictionary<uint, ulong>();
+
+    /// <summary>
+    /// Patch date in YYYY-MM-DD format when available.
+    /// </summary>
+    [JsonPropertyName("patchDate")]
+    public string PatchDate { get; init; } = string.Empty;
+
+    /// <summary>
+    /// List of Depot IDs that changed in this build snapshot.
+    /// </summary>
+    [JsonPropertyName("changedDepots")]
+    public IReadOnlyList<uint> ChangedDepots { get; init; } = Array.Empty<uint>();
 }

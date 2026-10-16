@@ -31,4 +31,9 @@ public interface IBuildResolver
     /// Resolves a specific version by its Build ID or branch name.
     /// </summary>
     Task<GameVersion?> ResolveVersionAsync(uint appId, string buildIdOrBranch, CancellationToken ct = default);
+
+    /// <summary>
+    /// Resolves a specific version by its patch date (YYYY-MM-DD).
+    /// </summary>
+    Task<GameVersion?> ResolveVersionByPatchDateAsync(uint appId, string patchDate, CancellationToken ct = default);
 }

@@ -28,6 +28,7 @@ public sealed class ManifestHubProvider : IManifestHubProvider
     public const string PrimaryManifestsBaseUrl = "https://raw.githubusercontent.com/Coronitaa/BlueStar-ManifestHub/main/manifests";
     public const string SecondaryManifestHub2BaseUrl = "https://raw.githubusercontent.com/SSMGAlt/ManifestHub2";
     public const string TertiaryK25BaseUrl = "https://raw.githubusercontent.com/qwe213312/k25FCdfEOoEJ42S6/main";
+    public const string PrimaryIndicesBaseUrl = "https://raw.githubusercontent.com/Coronitaa/BlueStar-ManifestHub/main/indices";
 
     private readonly HttpClient _http;
     private readonly IManifestCacheService _cacheService;
@@ -114,6 +115,16 @@ public sealed class ManifestHubProvider : IManifestHubProvider
             return $"{effective}/manifests/{depotId}/{manifestId}.manifest";
         }
         return $"{PrimaryManifestsBaseUrl}/{depotId}/{manifestId}.manifest";
+    }
+
+    private string GetPrimaryDemandUrl()
+    {
+        var effective = GetEffectiveHubBaseUrl();
+        if (!string.IsNullOrEmpty(effective))
+        {
+            return $"{effective}/indices/demand.json";
+        }
+        return $"{PrimaryIndicesBaseUrl}/demand.json";
     }
 
     /// <inheritdoc />
@@ -1199,5 +1210,163 @@ public sealed class ManifestHubProvider : IManifestHubProvider
                 });
             }
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<DemandIndex?> GetDemandAsync(CancellationToken ct = default)
+    {
+        const string CacheKey = "manifesthub_demand_index";
+        if (_generalCache != null)
+        {
+            try
+            {
+                var cached = await _generalCache.GetAsync<DemandIndex>(CacheKey, ct).ConfigureAwait(false);
+                if (cached != null)
+                {
+                    return cached;
+                }
+            }
+            catch { }
+        }
+
+        var urlsToTry = new List<string> { GetPrimaryDemandUrl() };
+        var secondaryUrl = $"{SecondaryManifestHub2BaseUrl}/indices/demand.json";
+        if (!urlsToTry.Contains(secondaryUrl))
+        {
+            urlsToTry.Add(secondaryUrl);
+        }
+
+        foreach (var url in urlsToTry)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                _metrics?.OnProviderRequest("ManifestHub", url);
+                using var resp = await _http.GetAsync(url, ct).ConfigureAwait(false);
+                if (!resp.IsSuccessStatusCode)
+                {
+                    continue;
+                }
+
+                var json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(json)) continue;
+
+                using var doc = JsonDocument.Parse(json);
+                DemandIndex? result = null;
+
+                if (doc.RootElement.ValueKind == JsonValueKind.Array)
+                {
+                    var records = JsonSerializer.Deserialize<List<DemandRecord>>(json, SnapshotSerializerOptions);
+                    if (records != null)
+                    {
+                        result = new DemandIndex
+                        {
+                            Records = records.AsReadOnly()
+                        };
+                    }
+                }
+                else if (doc.RootElement.ValueKind == JsonValueKind.Object)
+                {
+                    if (doc.RootElement.TryGetProperty("records", out var recordsProp) && recordsProp.ValueKind == JsonValueKind.Array)
+                    {
+                        result = JsonSerializer.Deserialize<DemandIndex>(json, SnapshotSerializerOptions);
+                    }
+                    else
+                    {
+                        var parsedRecords = new List<DemandRecord>();
+                        foreach (var prop in doc.RootElement.EnumerateObject())
+                        {
+                            var parts = prop.Name.Split(':');
+                            uint appId = 0;
+                            uint depotId = 0;
+                            if (parts.Length == 2)
+                            {
+                                uint.TryParse(parts[0], out appId);
+                                uint.TryParse(parts[1], out depotId);
+                            }
+                            else if (parts.Length == 1)
+                            {
+                                uint.TryParse(parts[0], out depotId);
+                            }
+
+                            var obj = prop.Value;
+                            ulong manifestId = 0;
+                            if (obj.ValueKind == JsonValueKind.Object)
+                            {
+                                if (obj.TryGetProperty("manifestId", out var mProp))
+                                {
+                                    if (mProp.ValueKind == JsonValueKind.Number) mProp.TryGetUInt64(out manifestId);
+                                    else if (mProp.ValueKind == JsonValueKind.String) ulong.TryParse(mProp.GetString(), out manifestId);
+                                }
+                                else if (obj.TryGetProperty("latestAvailableManifestId", out var lProp))
+                                {
+                                    if (lProp.ValueKind == JsonValueKind.Number) lProp.TryGetUInt64(out manifestId);
+                                    else if (lProp.ValueKind == JsonValueKind.String) ulong.TryParse(lProp.GetString(), out manifestId);
+                                }
+
+                                if (appId == 0 && obj.TryGetProperty("appId", out var aProp))
+                                {
+                                    if (aProp.ValueKind == JsonValueKind.Number) aProp.TryGetUInt32(out appId);
+                                    else if (aProp.ValueKind == JsonValueKind.String) uint.TryParse(aProp.GetString(), out appId);
+                                }
+
+                                string appName = string.Empty;
+                                if (obj.TryGetProperty("appName", out var nameProp))
+                                {
+                                    appName = nameProp.GetString() ?? string.Empty;
+                                }
+
+                                int priority = 0;
+                                if (obj.TryGetProperty("priority", out var pProp) && pProp.ValueKind == JsonValueKind.Number)
+                                {
+                                    pProp.TryGetInt32(out priority);
+                                }
+
+                                if (depotId > 0 && manifestId > 0)
+                                {
+                                    parsedRecords.Add(new DemandRecord
+                                    {
+                                        AppId = appId,
+                                        DepotId = depotId,
+                                        ManifestId = manifestId,
+                                        AppName = appName,
+                                        Priority = priority
+                                    });
+                                }
+                            }
+                        }
+
+                        if (parsedRecords.Count > 0)
+                        {
+                            result = new DemandIndex
+                            {
+                                Records = parsedRecords.AsReadOnly()
+                            };
+                        }
+                    }
+                }
+
+                if (result != null)
+                {
+                    if (_generalCache != null)
+                    {
+                        try
+                        {
+                            await _generalCache.SetAsync(CacheKey, result, TimeSpan.FromMinutes(10), ct).ConfigureAwait(false);
+                        }
+                        catch { }
+                    }
+
+                    return result;
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to download demand index from {Url}", url);
+            }
+        }
+
+        return null;
     }
 }

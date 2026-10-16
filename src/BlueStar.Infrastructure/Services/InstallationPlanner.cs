@@ -157,6 +157,10 @@ public sealed class InstallationPlanner : IInstallationPlanner
         }
 
         // 2. Process Updated and Newly Added Depots (scheduled for active download)
+        var changedDepotFilter = (targetVersion.ChangedDepots != null && targetVersion.ChangedDepots.Count > 0)
+            ? new HashSet<uint>(targetVersion.ChangedDepots)
+            : null;
+
         foreach (var depot in diffPlan.UpdatedDepots.Concat(diffPlan.NewDepots))
         {
             keys.TryGetValue(depot.DepotId, out var key);
@@ -164,6 +168,23 @@ public sealed class InstallationPlanner : IInstallationPlanner
             var localManifestPath = _manifestCache.GetManifestPath(depot.DepotId, depot.ManifestId);
 
             installedManifests.TryGetValue(depot.DepotId, out var prevManifest);
+
+            // If ChangedDepots was explicitly specified, non-changed depots already installed are reused
+            if (changedDepotFilter != null && !changedDepotFilter.Contains(depot.DepotId) && prevManifest != 0)
+            {
+                reused.Add(new PlanDepotItem
+                {
+                    DepotId = depot.DepotId,
+                    ManifestId = depot.ManifestId,
+                    PreviousManifestId = prevManifest,
+                    Name = depot.Name,
+                    SizeBytes = depot.SizeBytes,
+                    DepotKey = effectiveKey,
+                    ManifestFilePath = localManifestPath,
+                    IsReused = true
+                });
+                continue;
+            }
 
             toDownload.Add(new PlanDepotItem
             {
@@ -201,5 +222,41 @@ public sealed class InstallationPlanner : IInstallationPlanner
             ReusedDepots = reused.AsReadOnly(),
             RequiredManifests = requiredManifests.AsReadOnly()
         };
+    }
+
+    /// <inheritdoc />
+    public async Task<InstallationPlan> CreateUpdatePlanAsync(
+        GameInstance instance,
+        BuildSnapshot snapshot,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        var targetDepots = snapshot.DepotManifests.Select(kvp => new DepotVersion
+        {
+            DepotId = kvp.Key,
+            ManifestId = kvp.Value,
+            Name = $"Depot {kvp.Key}",
+            IsRecommended = true
+        }).ToList();
+
+        var patchDate = !string.IsNullOrWhiteSpace(snapshot.PatchDate)
+            ? snapshot.PatchDate
+            : (snapshot.CreationTime?.ToString("yyyy-MM-dd") ?? snapshot.Timestamp.ToString("yyyy-MM-dd"));
+
+        var targetVersion = new GameVersion
+        {
+            BuildId = snapshot.BuildId.ToString(),
+            BranchName = snapshot.Branch,
+            DisplayName = !string.IsNullOrWhiteSpace(snapshot.Description) ? snapshot.Description : $"Build {snapshot.BuildId}",
+            PatchDate = patchDate,
+            ChangedDepots = snapshot.ChangedDepots,
+            UpdatedAt = snapshot.CreationTime ?? snapshot.Timestamp,
+            Source = "ManifestHub",
+            Depots = targetDepots.AsReadOnly()
+        };
+
+        return await CreateUpdatePlanAsync(instance, targetVersion, ct).ConfigureAwait(false);
     }
 }

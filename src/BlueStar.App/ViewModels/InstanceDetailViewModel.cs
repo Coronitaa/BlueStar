@@ -5045,8 +5045,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
             await Task.WhenAll(snapshotsTask, revisionsTask).ConfigureAwait(false);
 
-            var snapshots = snapshotsTask.Result;
-            var revisions = revisionsTask.Result;
+            var snapshots = await snapshotsTask;
+            var revisions = await revisionsTask;
 
             await (App.Current?.Dispatcher?.InvokeAsync(() =>
             {

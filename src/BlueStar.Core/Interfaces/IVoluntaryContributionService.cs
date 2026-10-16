@@ -54,4 +54,12 @@ public interface IVoluntaryContributionService
         ContributionPreview preview,
         bool userConsentGranted,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Matches the user's legitimately owned Steam App IDs against community demand records,
+    /// identifying manifests that the user is authorized to contribute.
+    /// </summary>
+    IReadOnlyList<DemandRecord> MatchDemandWithLicenses(
+        IEnumerable<uint> ownedAppIds,
+        DemandIndex demandIndex);
 }
