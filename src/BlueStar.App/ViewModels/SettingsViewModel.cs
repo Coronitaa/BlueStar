@@ -38,6 +38,9 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ILocalCoverageComparator? _coverageComparator;
     private readonly IManifestCacheService? _manifestCacheService;
     private readonly IManifestHubProvider? _manifestHubProvider;
+    private readonly ISteamLicenseDiscoveryService? _steamLicenseDiscoveryService;
+    private readonly IHistoricalRevisionDiscoveryService? _historicalRevisionDiscoveryService;
+    private readonly ISecureStorage? _secureStorage;
 
     [ObservableProperty]
     private bool _isCheckingForUpdates;
@@ -269,21 +272,21 @@ public partial class SettingsViewModel : ObservableObject
 
     public ObservableCollection<string> ManifestAnalysisScopes { get; } =
     [
+        "Licensed Steam Library (All)",
         "Installed Instances",
-        "Local Cache",
-        "All (Instances and Cache)"
+        "Local Cache"
     ];
 
     [ObservableProperty]
-    private string _selectedManifestAnalysisScope = "Installed Instances";
+    private string _selectedManifestAnalysisScope = "Licensed Steam Library (All)";
 
     partial void OnSelectedManifestAnalysisScopeChanged(string value)
     {
         var scopeKey = value switch
         {
+            "Installed Instances" => "InstalledInstances",
             "Local Cache" => "Cache",
-            "All (Instances and Cache)" => "All",
-            _ => "InstalledInstances"
+            _ => "SteamLibrary"
         };
         _ = _appSettings.SetManifestAnalysisScopeAsync(scopeKey);
     }
@@ -357,6 +360,39 @@ public partial class SettingsViewModel : ObservableObject
     public ObservableCollection<ManifestArtifact> MissingManifestsList { get; } = [];
 
     public ObservableCollection<ManifestArtifact> LocalOnlyManifestsList { get; } = [];
+
+    public ObservableCollection<ContributionBatchItem> ContributionBatchPreview { get; } = [];
+
+    [ObservableProperty]
+    private bool _isBatchPreviewModalOpen;
+
+    [ObservableProperty]
+    private bool _isBatchSubmitting;
+
+    [ObservableProperty]
+    private string _batchSubmissionStatusMessage = string.Empty;
+
+    [ObservableProperty]
+    private int _batchConfirmedCount;
+
+    [ObservableProperty]
+    private int _batchDuplicateCount;
+
+    [ObservableProperty]
+    private int _batchRejectedCount;
+
+    [ObservableProperty]
+    private int _batchFailedCount;
+
+    [ObservableProperty]
+    private int _missingRevisionsCount;
+
+    [ObservableProperty]
+    private int _missingGamesCount;
+
+    public ObservableCollection<KeyValuePair<string, int>> MissingRevisionsBySource { get; } = [];
+
+    public ObservableCollection<KeyValuePair<string, int>> MissingRevisionsByGame { get; } = [];
 
     [RelayCommand]
     public async Task SaveHubServerUrlAsync()
@@ -436,67 +472,111 @@ public partial class SettingsViewModel : ObservableObject
 
         var scope = SelectedManifestAnalysisScope switch
         {
+            "Installed Instances" => "InstalledInstances",
             "Local Cache" => "Cache",
-            "All (Instances and Cache)" => "All",
-            _ => "InstalledInstances"
+            _ => "SteamLibrary"
         };
 
-        _backgroundTaskService.QueueTask("Manifest Analysis & Audit", "System", async (progress, ct) =>
+        _backgroundTaskService.QueueTask("License Discovery & Contribution", "System", async (progress, ct) =>
         {
             try
             {
-                progress.Report(new BackgroundTaskProgress(5, "Initializing local manifest analysis..."));
+                ct.ThrowIfCancellationRequested();
 
-                var localManifests = new List<ManifestArtifact>();
+                var targetApps = new List<(uint AppId, string Name)>();
+                var localArtifacts = new List<ManifestArtifact>();
 
-                if (scope is "InstalledInstances" or "All" && _instanceManager != null)
+                // STAGE 1: Discover licensed games / target applications
+                if (scope == "SteamLibrary")
                 {
-                    progress.Report(new BackgroundTaskProgress(15, "Enumerating installed instance manifests..."));
-                    var instances = await _instanceManager.GetAllAsync(ct).ConfigureAwait(false);
-                    int count = 0;
-                    foreach (var inst in instances)
+                    progress.Report(new BackgroundTaskProgress(10, "Stage 1/7: Discovering licensed Steam games..."));
+                    var licenseService = _steamLicenseDiscoveryService ?? (ISteamLicenseDiscoveryService?)App.Services?.GetService(typeof(ISteamLicenseDiscoveryService));
+                    if (licenseService == null)
                     {
-                        ct.ThrowIfCancellationRequested();
-                        count++;
-                        var pct = 15.0 + (35.0 * count / Math.Max(1, instances.Count));
-                        progress.Report(new BackgroundTaskProgress(pct, $"Auditing instance '{inst.Name}' ({count}/{instances.Count})..."));
+                        throw new InvalidOperationException("Steam license discovery service is unavailable.");
+                    }
 
-                        foreach (var depot in inst.Depots)
+                    var licenseResult = await licenseService.DiscoverLicensesAsync(ct).ConfigureAwait(false);
+                    if (!licenseResult.IsSuccess)
+                    {
+                        // CRITICAL PRIVACY & INTEGRITY INVARIANT:
+                        // Report the real blockage cause and NEVER silently substitute installed instances!
+                        var blockageMsg = licenseResult.BlockageReason switch
                         {
-                            if (depot.ManifestId > 0)
+                            SteamLicenseBlockageReason.NoSteamSession => "Steam account not authenticated: No active Steam session found",
+                            SteamLicenseBlockageReason.Unauthenticated => "Steam account not authenticated: Active session is unauthenticated or expired",
+                            SteamLicenseBlockageReason.NetworkError => "Steam network error: Unable to retrieve licenses",
+                            SteamLicenseBlockageReason.LocalCacheUnavailable => "Steam local cache unavailable",
+                            SteamLicenseBlockageReason.NoLicensesFound => "No Steam licenses found for this account",
+                            _ => $"Steam license discovery blocked: {licenseResult.BlockageDetails ?? licenseResult.BlockageReason.ToString()}"
+                        };
+
+                        _logger.LogWarning("Steam license discovery blocked: {Reason}", blockageMsg);
+                        await _appSettings.SetManifestAnalysisStatusAsync(blockageMsg).ConfigureAwait(false);
+                        RunOnUIThread(() =>
+                        {
+                            ManifestAnalysisStatus = blockageMsg;
+                            IsAnalyzingManifests = false;
+                        });
+                        progress.Report(new BackgroundTaskProgress(100, blockageMsg));
+                        _notificationService?.ShowWarning("Steam License Discovery", blockageMsg);
+                        return;
+                    }
+
+                    var eligibleApps = licenseResult.LicensedApps.Where(a => a.IsEligibleForContribution).ToList();
+                    foreach (var a in eligibleApps)
+                    {
+                        targetApps.Add((a.AppId, a.Name));
+                    }
+
+                    progress.Report(new BackgroundTaskProgress(25, $"Stage 1/7: Licensed games discovered: {targetApps.Count}"));
+                }
+                else if (scope == "InstalledInstances")
+                {
+                    progress.Report(new BackgroundTaskProgress(10, "Stage 1/7: Enumerating installed game instances..."));
+                    if (_instanceManager != null)
+                    {
+                        var instances = await _instanceManager.GetAllAsync(ct).ConfigureAwait(false);
+                        foreach (var inst in instances)
+                        {
+                            if (inst.AppId > 0)
                             {
-                                var cachePath = _manifestCacheService?.GetManifestPath(depot.DepotId, depot.ManifestId);
-                                localManifests.Add(new ManifestArtifact
+                                targetApps.Add((inst.AppId, inst.Name));
+                            }
+                            foreach (var depot in inst.Depots)
+                            {
+                                if (depot.ManifestId > 0)
                                 {
-                                    DepotId = depot.DepotId,
-                                    ManifestId = depot.ManifestId,
-                                    SizeBytes = depot.SizeBytes,
-                                    LocalCachePath = cachePath
-                                });
+                                    localArtifacts.Add(new ManifestArtifact
+                                    {
+                                        DepotId = depot.DepotId,
+                                        ManifestId = depot.ManifestId,
+                                        SizeBytes = depot.SizeBytes,
+                                        LocalCachePath = _manifestCacheService?.GetManifestPath(depot.DepotId, depot.ManifestId)
+                                    });
+                                }
                             }
                         }
                     }
+                    progress.Report(new BackgroundTaskProgress(25, $"Stage 1/7: Installed instances discovered: {targetApps.Count}"));
                 }
-
-                if (scope is "Cache" or "All" && _manifestCacheService != null)
+                else if (scope == "Cache")
                 {
-                    progress.Report(new BackgroundTaskProgress(55, "Scanning local manifest cache folder..."));
+                    progress.Report(new BackgroundTaskProgress(10, "Stage 1/7: Scanning local manifest cache..."));
                     var cacheDir = Path.Combine(
                         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                         "BlueStar", "cache", "manifests");
                     if (Directory.Exists(cacheDir))
                     {
                         var files = Directory.GetFiles(cacheDir, "*.manifest", SearchOption.AllDirectories);
-                        int fIdx = 0;
                         foreach (var f in files)
                         {
                             ct.ThrowIfCancellationRequested();
-                            fIdx++;
                             var fname = Path.GetFileNameWithoutExtension(f);
                             var parts = fname.Split('_');
                             if (parts.Length == 2 && uint.TryParse(parts[0], out var dId) && ulong.TryParse(parts[1], out var mId))
                             {
-                                localManifests.Add(new ManifestArtifact
+                                localArtifacts.Add(new ManifestArtifact
                                 {
                                     DepotId = dId,
                                     ManifestId = mId,
@@ -506,100 +586,253 @@ public partial class SettingsViewModel : ObservableObject
                             }
                         }
                     }
-                }
-
-                var distinctLocalManifests = localManifests
-                    .GroupBy(m => (m.DepotId, m.ManifestId))
-                    .Select(g => g.First())
-                    .ToList();
-
-                var appIdsToQuery = new HashSet<uint>();
-                if (_instanceManager != null)
-                {
-                    try
+                    if (_instanceManager != null)
                     {
-                        var allInsts = await _instanceManager.GetAllAsync(ct).ConfigureAwait(false);
-                        foreach (var inst in allInsts)
+                        var instances = await _instanceManager.GetAllAsync(ct).ConfigureAwait(false);
+                        foreach (var inst in instances)
                         {
-                            if (inst.AppId > 0) appIdsToQuery.Add(inst.AppId);
+                            if (inst.AppId > 0) targetApps.Add((inst.AppId, inst.Name));
                         }
                     }
-                    catch { }
+                    progress.Report(new BackgroundTaskProgress(25, $"Stage 1/7: Local cache scanned: {localArtifacts.Count} manifests"));
                 }
 
-                progress.Report(new BackgroundTaskProgress(75, "Querying remote coverage from Manifest Hub..."));
-                var hubKnown = new List<ManifestArtifact>();
-                var hubProvider = _manifestHubProvider ?? (IManifestHubProvider?)App.Services?.GetService(typeof(IManifestHubProvider));
-                if (hubProvider != null && appIdsToQuery.Count > 0)
+                ct.ThrowIfCancellationRequested();
+
+                // STAGE 2: Enumerate depots and historical revisions across sources
+                var knownRevisions = new List<HubRevisionItem>();
+                var revDiscovery = _historicalRevisionDiscoveryService ?? (IHistoricalRevisionDiscoveryService?)App.Services?.GetService(typeof(IHistoricalRevisionDiscoveryService));
+
+                int reviewedGames = 0;
+                int totalGames = targetApps.Count;
+
+                if (revDiscovery != null && targetApps.Count > 0)
                 {
-                    var remoteCoverage = await hubProvider.GetCoverageAsync(appIdsToQuery, ct).ConfigureAwait(false);
-                    if (remoteCoverage != null)
+                    progress.Report(new BackgroundTaskProgress(30, "Stage 2/7: Enumerating historical revisions across community sources..."));
+                    var distinctAppIds = targetApps.Select(t => t.AppId).Distinct().ToList();
+                    var revDict = await revDiscovery.DiscoverRevisionsForAppsAsync(distinctAppIds, ct).ConfigureAwait(false);
+                    if (revDict != null)
                     {
-                        hubKnown.AddRange(remoteCoverage);
+                        foreach (var kvp in revDict)
+                        {
+                            reviewedGames++;
+                            if (kvp.Value != null)
+                            {
+                                knownRevisions.AddRange(kvp.Value);
+                            }
+                        }
+                    }
+                }
+                else if (targetApps.Count > 0)
+                {
+                    reviewedGames = targetApps.Count;
+                }
+
+                // Include local artifacts if present
+                if (localArtifacts.Count > 0)
+                {
+                    var defaultAppId = targetApps.FirstOrDefault().AppId;
+                    foreach (var la in localArtifacts)
+                    {
+                        if (!knownRevisions.Any(r => r.DepotId == la.DepotId && r.ManifestId == la.ManifestId))
+                        {
+                            knownRevisions.Add(new HubRevisionItem
+                            {
+                                AppId = defaultAppId,
+                                DepotId = la.DepotId,
+                                ManifestId = la.ManifestId,
+                                DepotName = $"Depot {la.DepotId}",
+                                Provenance = "LocalCache",
+                                SizeOriginal = la.SizeBytes,
+                                Status = "Available"
+                            });
+                        }
                     }
                 }
 
-                progress.Report(new BackgroundTaskProgress(85, "Performing in-memory coverage comparison against Hub..."));
-                var comparisonResult = _coverageComparator?.CompareManifestCoverage(distinctLocalManifests, hubKnown)
-                    ?? new CoverageComparisonResult
-                    {
-                        CoveredManifests = distinctLocalManifests.Where(l => hubKnown.Any(h => h.DepotId == l.DepotId && h.ManifestId == l.ManifestId)).ToList(),
-                        MissingInHubManifests = distinctLocalManifests.Where(l => !hubKnown.Any(h => h.DepotId == l.DepotId && h.ManifestId == l.ManifestId)).ToList(),
-                        TotalPrivacyGuaranteed = true
-                    };
-
-                var localKeySet = new HashSet<(uint DepotId, ulong ManifestId)>(
-                    distinctLocalManifests.Select(m => (m.DepotId, m.ManifestId)));
-                var missingInLocal = hubKnown
-                    .Where(h => !localKeySet.Contains((h.DepotId, h.ManifestId)))
-                    .GroupBy(h => (h.DepotId, h.ManifestId))
+                var distinctRevisions = knownRevisions
+                    .GroupBy(r => (r.DepotId, r.ManifestId))
                     .Select(g => g.First())
                     .ToList();
 
-                progress.Report(new BackgroundTaskProgress(90, "Finalizing inspection results and audit trail..."));
+                progress.Report(new BackgroundTaskProgress(45,
+                    $"Stage 2/7: Games reviewed: {reviewedGames}/{totalGames}, Depots/revisions known by sources: {distinctRevisions.Count}"));
+
+                ct.ThrowIfCancellationRequested();
+
+                // STAGE 3: Query central Hub coverage
+                progress.Report(new BackgroundTaskProgress(55, "Stage 3/7: Querying central Hub coverage..."));
+                var existingInHub = new HashSet<(uint DepotId, ulong ManifestId)>();
+                var appIdsQuery = targetApps.Select(t => t.AppId).Distinct().ToList();
+                var depotIdsQuery = distinctRevisions.Select(r => r.DepotId).Distinct().ToList();
+
+                try
+                {
+                    var transport = _contributionTransportService ?? (IContributionTransportService?)App.Services?.GetService(typeof(IContributionTransportService));
+                    var hubProvider = _manifestHubProvider ?? (IManifestHubProvider?)App.Services?.GetService(typeof(IManifestHubProvider));
+
+                    if (transport != null)
+                    {
+                        var existing = await transport.QueryExistingManifestsAsync(appIdsQuery, depotIdsQuery, ct).ConfigureAwait(false);
+                        if (existing != null)
+                        {
+                            foreach (var p in existing) existingInHub.Add(p);
+                        }
+                    }
+                    else if (hubProvider != null && appIdsQuery.Count > 0)
+                    {
+                        var coverage = await hubProvider.GetCoverageAsync(appIdsQuery, ct).ConfigureAwait(false);
+                        if (coverage != null)
+                        {
+                            foreach (var c in coverage) existingInHub.Add((c.DepotId, c.ManifestId));
+                        }
+                    }
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    // CRITICAL INVARIANT:
+                    // Differentiate connection error vs 0 candidates vs 100% complete coverage; never report "Completed" on failed Hub connection!
+                    _logger.LogError(ex, "Failed to connect to Manifest Hub during coverage query");
+                    const string connErrorStatus = "Connection Error";
+                    await _appSettings.SetManifestAnalysisStatusAsync(connErrorStatus).ConfigureAwait(false);
+                    RunOnUIThread(() =>
+                    {
+                        ManifestAnalysisStatus = connErrorStatus;
+                        IsAnalyzingManifests = false;
+                    });
+                    progress.Report(new BackgroundTaskProgress(100, "Connection Error: Central Manifest Hub unavailable."));
+                    _notificationService?.ShowError("Manifest Hub Connection Error", "Central Manifest Hub unavailable: " + ex.Message);
+                    return;
+                }
+
+                ct.ThrowIfCancellationRequested();
+
+                // STAGE 4: Compare revisions against Hub coverage to determine missing revisions
+                progress.Report(new BackgroundTaskProgress(70, "Stage 4/7: Comparing revisions against Hub coverage..."));
+
+                var missingRevisions = distinctRevisions
+                    .Where(r => !existingInHub.Contains((r.DepotId, r.ManifestId)))
+                    .ToList();
+
+                var auditedCount = distinctRevisions.Count;
+                var matchedCount = auditedCount - missingRevisions.Count;
+                var missingCount = missingRevisions.Count;
+
+                var appNameMap = targetApps.GroupBy(t => t.AppId).ToDictionary(g => g.Key, g => g.First().Name);
+
+                var countsBySource = missingRevisions
+                    .GroupBy(r => string.IsNullOrWhiteSpace(r.Provenance) ? "Community" : r.Provenance)
+                    .ToDictionary(g => g.Key, g => g.Count());
+
+                var countsByGame = missingRevisions
+                    .GroupBy(r => appNameMap.TryGetValue(r.AppId, out var name) && !string.IsNullOrWhiteSpace(name) ? name : $"App {r.AppId}")
+                    .ToDictionary(g => g.Key, g => g.Count());
+
+                double coveragePct = auditedCount > 0
+                    ? Math.Round((double)matchedCount / auditedCount * 100.0, 1)
+                    : 100.0;
 
                 var now = DateTimeOffset.UtcNow;
                 await _appSettings.SetManifestAnalysisLastRunAsync(now).ConfigureAwait(false);
-                await _appSettings.SetManifestAnalysisStatusAsync("Completed").ConfigureAwait(false);
 
-                var auditedCount = distinctLocalManifests.Count;
-                var matchedCount = comparisonResult.CoveredManifests.Count;
-                var localOnlyCount = comparisonResult.MissingInHubManifests.Count;
-                var missingInLocalCount = missingInLocal.Count;
-                var coveragePct = comparisonResult.CoveragePercentage;
+                string finalStatus;
+                if (auditedCount == 0)
+                {
+                    finalStatus = "0 Candidates";
+                }
+                else if (missingCount == 0)
+                {
+                    finalStatus = "100% Complete Coverage";
+                }
+                else
+                {
+                    finalStatus = "Completed";
+                }
 
-                var summary = $"Audited {auditedCount} local manifests: {matchedCount} matched in Hub ({coveragePct}%), {localOnlyCount} local-only (candidates for contribution), {missingInLocalCount} available in Hub to download.";
+                await _appSettings.SetManifestAnalysisStatusAsync(finalStatus).ConfigureAwait(false);
+
+                var summary = $"Audited {auditedCount} manifests: {matchedCount} in Hub ({coveragePct}%), {missingCount} missing (candidates for contribution).";
+
+                var batchCandidates = missingRevisions.Select(r => new ContributionBatchItem
+                {
+                    AppName = appNameMap.TryGetValue(r.AppId, out var n) && !string.IsNullOrWhiteSpace(n)
+                        ? n
+                        : (string.IsNullOrWhiteSpace(r.DepotName) ? $"App {r.AppId}" : r.DepotName),
+                    AppId = r.AppId,
+                    DepotId = r.DepotId,
+                    ManifestId = r.ManifestId,
+                    Provenance = r.Provenance,
+                    SizeBytes = r.SizeOriginal
+                }).ToList();
 
                 RunOnUIThread(() =>
                 {
-                    ManifestAnalysisStatus = "Completed";
+                    ManifestAnalysisStatus = finalStatus;
                     ManifestAnalysisLastRunText = now.LocalDateTime.ToString("g");
                     IsAnalyzingManifests = false;
 
-                    LastCoverageResult = comparisonResult;
                     CoverageAuditedCount = auditedCount;
                     CoverageMatchedCount = matchedCount;
-                    CoverageLocalOnlyCount = localOnlyCount;
-                    CoverageMissingCount = missingInLocalCount;
+                    CoverageLocalOnlyCount = missingCount;
+                    CoverageMissingCount = missingCount;
                     CoveragePercentage = coveragePct;
                     CoverageSummaryText = summary;
                     HasAnalysisResults = true;
 
+                    MissingRevisionsCount = missingCount;
+                    MissingGamesCount = countsByGame.Count;
+
+                    MissingRevisionsBySource.Clear();
+                    foreach (var kvp in countsBySource) MissingRevisionsBySource.Add(kvp);
+
+                    MissingRevisionsByGame.Clear();
+                    foreach (var kvp in countsByGame) MissingRevisionsByGame.Add(kvp);
+
+                    ContributionBatchPreview.Clear();
+                    foreach (var b in batchCandidates) ContributionBatchPreview.Add(b);
+
                     MissingManifestsList.Clear();
-                    foreach (var m in missingInLocal)
+                    foreach (var m in missingRevisions)
                     {
-                        MissingManifestsList.Add(m);
+                        MissingManifestsList.Add(new ManifestArtifact
+                        {
+                            DepotId = m.DepotId,
+                            ManifestId = m.ManifestId,
+                            SizeBytes = m.SizeOriginal
+                        });
                     }
 
                     LocalOnlyManifestsList.Clear();
-                    foreach (var m in comparisonResult.MissingInHubManifests)
+                    foreach (var m in missingRevisions)
                     {
-                        LocalOnlyManifestsList.Add(m);
+                        LocalOnlyManifestsList.Add(new ManifestArtifact
+                        {
+                            DepotId = m.DepotId,
+                            ManifestId = m.ManifestId,
+                            SizeBytes = m.SizeOriginal
+                        });
+                    }
+
+                    if (EnableVoluntaryContributions && batchCandidates.Count > 0)
+                    {
+                        IsBatchPreviewModalOpen = true;
                     }
                 });
 
-                progress.Report(new BackgroundTaskProgress(100, $"Manifest analysis completed! {summary}"));
-                _notificationService?.ShowSuccess("Manifest Analysis", $"Audited {auditedCount} local manifests against Manifest Hub remote coverage with zero privacy leaks.");
+                progress.Report(new BackgroundTaskProgress(85,
+                    $"Stage 4/7: Manifests existing in Hub: {matchedCount}, Missing manifests identified: {missingCount}"));
+
+                if (EnableVoluntaryContributions && batchCandidates.Count > 0)
+                {
+                    progress.Report(new BackgroundTaskProgress(90,
+                        $"Stage 5/7: Batch contribution preview presented for {batchCandidates.Count} candidate manifests. Explicit consent required."));
+                }
+                else
+                {
+                    progress.Report(new BackgroundTaskProgress(100, $"Manifest analysis completed! {summary}"));
+                    _notificationService?.ShowSuccess("Manifest Analysis", summary);
+                }
             }
             catch (OperationCanceledException)
             {
@@ -623,6 +856,220 @@ public partial class SettingsViewModel : ObservableObject
                 _notificationService?.ShowError("Manifest Analysis Failed", ex.Message);
             }
         });
+    }
+
+    [RelayCommand]
+    public void CloseBatchPreviewModal()
+    {
+        IsBatchPreviewModalOpen = false;
+    }
+
+    [RelayCommand]
+    public async Task AuthorizeAndSubmitBatchAsync()
+    {
+        if (!EnableVoluntaryContributions || !_appSettings.EnableVoluntaryContributions)
+        {
+            _notificationService?.ShowWarning("Contributions Disabled", "Voluntary contributions must be enabled in Settings before transmitting.");
+            return;
+        }
+
+        if (ContributionBatchPreview.Count == 0)
+        {
+            IsBatchPreviewModalOpen = false;
+            return;
+        }
+
+        IsBatchPreviewModalOpen = false;
+        IsBatchSubmitting = true;
+
+        var itemsToSubmit = ContributionBatchPreview.ToList();
+        var transport = _contributionTransportService ?? (IContributionTransportService?)App.Services?.GetService(typeof(IContributionTransportService));
+        var revDiscovery = _historicalRevisionDiscoveryService ?? (IHistoricalRevisionDiscoveryService?)App.Services?.GetService(typeof(IHistoricalRevisionDiscoveryService));
+        var voluntaryService = _voluntaryContributionService ?? (IVoluntaryContributionService?)App.Services?.GetService(typeof(IVoluntaryContributionService));
+
+        if (transport == null || revDiscovery == null)
+        {
+            _notificationService?.ShowError("Contribution Error", "Required contribution services are unavailable.");
+            IsBatchSubmitting = false;
+            return;
+        }
+
+        string anonId = !string.IsNullOrWhiteSpace(AnonymousContributorId)
+            ? AnonymousContributorId
+            : (voluntaryService != null ? voluntaryService.GetOrCreateAnonymousContributorId() : Guid.NewGuid().ToString("D"));
+
+        AnonymousContributorId = anonId;
+
+        if (_backgroundTaskService == null)
+        {
+            await ExecuteBatchContributionSubmissionAsync(itemsToSubmit, anonId, transport, revDiscovery, null, CancellationToken.None).ConfigureAwait(false);
+            IsBatchSubmitting = false;
+            return;
+        }
+
+        _backgroundTaskService.QueueTask("Batch Manifest Contribution", "System", async (progress, ct) =>
+        {
+            try
+            {
+                await ExecuteBatchContributionSubmissionAsync(itemsToSubmit, anonId, transport, revDiscovery, progress, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                RunOnUIThread(() => IsBatchSubmitting = false);
+            }
+        });
+    }
+
+    private async Task ExecuteBatchContributionSubmissionAsync(
+        IReadOnlyList<ContributionBatchItem> items,
+        string anonId,
+        IContributionTransportService transport,
+        IHistoricalRevisionDiscoveryService revDiscovery,
+        IProgress<BackgroundTaskProgress>? progress,
+        CancellationToken ct)
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "BlueStarBatchContributions", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+
+        int confirmedCount = 0;
+        int duplicateCount = 0;
+        int rejectedCount = 0;
+        int failedCount = 0;
+        int totalStardustAdded = 0;
+        int downloadedCount = 0;
+        int totalItems = items.Count;
+
+        try
+        {
+            for (int i = 0; i < totalItems; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+                var item = items[i];
+                var pct = 10.0 + (80.0 * (i + 1) / totalItems);
+
+                try
+                {
+                    // STAGE 6: Download missing manifest binary via FetchManifestBinaryAsync
+                    var manifestPath = await revDiscovery.FetchManifestBinaryAsync(item.AppId, item.DepotId, item.ManifestId, tempDir, ct).ConfigureAwait(false);
+
+                    if (!File.Exists(manifestPath))
+                    {
+                        failedCount++;
+                        continue;
+                    }
+
+                    var payloadBytes = await File.ReadAllBytesAsync(manifestPath, ct).ConfigureAwait(false);
+
+                    // Validate Steam Protobuf Header [0xD0, 0x17, 0xF6, 0x71] (0x71F617D0)
+                    if (payloadBytes.Length < 4 ||
+                        payloadBytes[0] != 0xD0 || payloadBytes[1] != 0x17 ||
+                        payloadBytes[2] != 0xF6 || payloadBytes[3] != 0x71)
+                    {
+                        _logger.LogWarning("Manifest {DepotId}_{ManifestId} failed Protobuf header validation", item.DepotId, item.ManifestId);
+                        failedCount++;
+                        continue;
+                    }
+
+                    // Validate and compute SHA-256
+                    string sha256Hex;
+                    using (var sha = System.Security.Cryptography.SHA256.Create())
+                    {
+                        sha256Hex = Convert.ToHexString(sha.ComputeHash(payloadBytes)).ToLowerInvariant();
+                    }
+
+                    downloadedCount++;
+
+                    // Prepare sanitized submission
+                    string auditHash;
+                    using (var sha = System.Security.Cryptography.SHA256.Create())
+                    {
+                        var auditInput = $"audit:{anonId}:{sha256Hex}:{payloadBytes.Length}";
+                        auditHash = Convert.ToHexString(sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(auditInput))).ToLowerInvariant();
+                    }
+
+                    var submission = new ContributionSubmission
+                    {
+                        AppId = item.AppId,
+                        DepotId = item.DepotId,
+                        ManifestId = item.ManifestId,
+                        ManifestHashSha256 = sha256Hex,
+                        ManifestSizeBytes = payloadBytes.Length,
+                        AnonymousContributorId = anonId,
+                        ManifestPayload = payloadBytes,
+                        UserConsentGranted = true,
+                        SanitizationAuditHash = auditHash,
+                        SubmittedAtUtc = DateTimeOffset.UtcNow
+                    };
+
+                    // Transmit to central Hub
+                    var receipt = await transport.TransmitContributionAsync(submission, ct).ConfigureAwait(false);
+
+                    // STAGE 7: Update results from real receipt
+                    if (receipt.IsDuplicate)
+                    {
+                        duplicateCount++;
+                    }
+                    else if (string.Equals(receipt.Status, "Rejected", StringComparison.OrdinalIgnoreCase))
+                    {
+                        rejectedCount++;
+                    }
+                    else if (receipt.IsSuccess)
+                    {
+                        confirmedCount++;
+                        if (receipt.StardustCredited > 0)
+                        {
+                            totalStardustAdded += receipt.StardustCredited;
+                        }
+                    }
+                    else
+                    {
+                        failedCount++;
+                    }
+
+                    LastContributionReceiptId = receipt.ReceiptId;
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to submit contribution for Depot {DepotId}, Manifest {ManifestId}", item.DepotId, item.ManifestId);
+                    failedCount++;
+                }
+
+                progress?.Report(new BackgroundTaskProgress(pct,
+                    $"Manifests downloaded & validated: {downloadedCount}/{totalItems}, Publications confirmed: {confirmedCount}, duplicate: {duplicateCount}, rejected: {rejectedCount}, failed: {failedCount}"));
+            }
+
+            // STAGE 7: Reconcile Stardust balance
+            if (totalStardustAdded > 0 && _stardustService != null)
+            {
+                _stardustService.NotifyRewardConfirmed(totalStardustAdded);
+            }
+            await RefreshStardustBalanceAsync().ConfigureAwait(false);
+
+            RunOnUIThread(() =>
+            {
+                BatchConfirmedCount = confirmedCount;
+                BatchDuplicateCount = duplicateCount;
+                BatchRejectedCount = rejectedCount;
+                BatchFailedCount = failedCount;
+                BatchSubmissionStatusMessage = $"Batch submitted: {confirmedCount} confirmed, {duplicateCount} duplicate, {rejectedCount} rejected, {failedCount} failed.";
+                ContributionBatchPreview.Clear();
+            });
+
+            progress?.Report(new BackgroundTaskProgress(100,
+                $"Batch contribution finished! Confirmed: {confirmedCount}, Duplicate: {duplicateCount}, Rejected: {rejectedCount}, Failed: {failedCount}"));
+
+            _notificationService?.ShowSuccess("Manifest Contribution",
+                $"Batch complete: {confirmedCount} confirmed, {duplicateCount} duplicate, {rejectedCount} rejected, {failedCount} failed.");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+            }
+            catch { }
+        }
     }
 
     private static void RunOnUIThread(Action action)
@@ -804,7 +1251,10 @@ public partial class SettingsViewModel : ObservableObject
         IStardustService? stardustService = null,
         ILocalCoverageComparator? coverageComparator = null,
         IManifestCacheService? manifestCacheService = null,
-        IManifestHubProvider? manifestHubProvider = null)
+        IManifestHubProvider? manifestHubProvider = null,
+        ISteamLicenseDiscoveryService? steamLicenseDiscoveryService = null,
+        IHistoricalRevisionDiscoveryService? historicalRevisionDiscoveryService = null,
+        ISecureStorage? secureStorage = null)
     {
         _authService = authService ?? throw new ArgumentNullException(nameof(authService));
         _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
@@ -825,6 +1275,9 @@ public partial class SettingsViewModel : ObservableObject
         _coverageComparator = coverageComparator;
         _manifestCacheService = manifestCacheService;
         _manifestHubProvider = manifestHubProvider;
+        _steamLicenseDiscoveryService = steamLicenseDiscoveryService;
+        _historicalRevisionDiscoveryService = historicalRevisionDiscoveryService;
+        _secureStorage = secureStorage;
 
         _selectedLanguageOption = _localizationService.CurrentLanguage == "es" ? "Español (Latinoamérica)" : "English";
         _updateButtonText = _localizationService.CurrentLanguage == "es" ? "Buscar actualizaciones" : "Check for updates";
@@ -849,9 +1302,9 @@ public partial class SettingsViewModel : ObservableObject
         var savedScope = _appSettings.ManifestAnalysisScope;
         _selectedManifestAnalysisScope = savedScope switch
         {
+            "InstalledInstances" => "Installed Instances",
             "Cache" => "Local Cache",
-            "All" => "All (Instances and Cache)",
-            _ => "Installed Instances"
+            _ => "Licensed Steam Library (All)"
         };
 
         if (_voluntaryContributionService != null)

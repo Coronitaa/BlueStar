@@ -43,9 +43,15 @@ public record PublicationReceipt
     public ulong ManifestId { get; init; }
 
     /// <summary>
+    /// Whether this manifest was already published previously (duplicate contribution).
+    /// </summary>
+    public bool IsDuplicate => string.Equals(Status, "Duplicate", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Whether the publication was confirmed and succeeded.
     /// </summary>
     public bool IsSuccess => string.Equals(Status, "Published", StringComparison.OrdinalIgnoreCase) ||
                              string.Equals(Status, "Accepted", StringComparison.OrdinalIgnoreCase) ||
-                             string.Equals(Status, "Success", StringComparison.OrdinalIgnoreCase);
+                             string.Equals(Status, "Success", StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(Status, "Duplicate", StringComparison.OrdinalIgnoreCase);
 }

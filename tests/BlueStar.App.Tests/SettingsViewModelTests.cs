@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using BlueStar.App.ViewModels;
@@ -31,6 +32,9 @@ public class SettingsViewModelTests : IDisposable
     private readonly Mock<IVoluntaryContributionService> _mockContributionService = new();
     private readonly Mock<IContributionTransportService> _mockContributionTransport = new();
     private readonly Mock<IStardustService> _mockStardust = new();
+    private readonly Mock<ISteamLicenseDiscoveryService> _mockSteamLicense = new();
+    private readonly Mock<IHistoricalRevisionDiscoveryService> _mockRevisionDiscovery = new();
+    private readonly Mock<ISecureStorage> _mockSecureStorage = new();
     private readonly BlueStar.Infrastructure.Services.LocalCoverageComparator _coverageComparator = new();
 
     public SettingsViewModelTests()
@@ -58,7 +62,10 @@ public class SettingsViewModelTests : IDisposable
         IVoluntaryContributionService? voluntaryContributionService = null,
         IContributionTransportService? contributionTransportService = null,
         IStardustService? stardustService = null,
-        ILocalCoverageComparator? coverageComparator = null)
+        ILocalCoverageComparator? coverageComparator = null,
+        ISteamLicenseDiscoveryService? steamLicenseDiscoveryService = null,
+        IHistoricalRevisionDiscoveryService? historicalRevisionDiscoveryService = null,
+        ISecureStorage? secureStorage = null)
     {
         return new SettingsViewModel(
             _mockAuth.Object,
@@ -76,7 +83,10 @@ public class SettingsViewModelTests : IDisposable
             voluntaryContributionService: voluntaryContributionService ?? _mockContributionService.Object,
             contributionTransportService: contributionTransportService ?? _mockContributionTransport.Object,
             stardustService: stardustService ?? _mockStardust.Object,
-            coverageComparator: coverageComparator ?? _coverageComparator);
+            coverageComparator: coverageComparator ?? _coverageComparator,
+            steamLicenseDiscoveryService: steamLicenseDiscoveryService ?? _mockSteamLicense.Object,
+            historicalRevisionDiscoveryService: historicalRevisionDiscoveryService ?? _mockRevisionDiscovery.Object,
+            secureStorage: secureStorage ?? _mockSecureStorage.Object);
     }
 
     [Fact]
@@ -195,7 +205,356 @@ public class SettingsViewModelTests : IDisposable
     }
 
     [Fact]
-    public void RunManifestAnalysis_WhenEnabled_QueriesRemoteCoverage_AndPopulatesCoverageStats()
+    public void LicenseDiscovery_DiscoversUninstalledGames_ComputesMissingAndPopulatesBatchPreview()
+    {
+        // Arrange: Sync task runner
+        _mockBackgroundTask
+            .Setup(b => b.QueueTask(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Func<IProgress<BackgroundTaskProgress>, CancellationToken, Task>>(), It.IsAny<Guid?>()))
+            .Callback<string, string?, Func<IProgress<BackgroundTaskProgress>, CancellationToken, Task>, Guid?>((name, desc, work, guid) =>
+            {
+                var mockProgress = new Mock<IProgress<BackgroundTaskProgress>>();
+                work(mockProgress.Object, CancellationToken.None).GetAwaiter().GetResult();
+            });
+
+        // Stage 1: Discovers owned games (e.g. uninstalled App 570 "Dota 2" and App 440 "Team Fortress 2")
+        var licensedApps = new List<SteamLicenseItem>
+        {
+            new SteamLicenseItem { AppId = 440, Name = "Team Fortress 2", IsEligibleForContribution = true },
+            new SteamLicenseItem { AppId = 570, Name = "Dota 2", IsEligibleForContribution = true }
+        };
+        _mockSteamLicense
+            .Setup(s => s.DiscoverLicensesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SteamLicenseDiscoveryResult.Success(licensedApps));
+
+        // Stage 2: Historical revision discovery returns candidate revisions across community sources
+        var revisionsMap = new Dictionary<uint, IReadOnlyList<HubRevisionItem>>
+        {
+            [440] = new List<HubRevisionItem>
+            {
+                new HubRevisionItem { AppId = 440, DepotId = 441, ManifestId = 10001, Provenance = "ManifestHub2", SizeOriginal = 5000000 },
+                new HubRevisionItem { AppId = 440, DepotId = 442, ManifestId = 10002, Provenance = "K25", SizeOriginal = 3000000 }
+            },
+            [570] = new List<HubRevisionItem>
+            {
+                new HubRevisionItem { AppId = 570, DepotId = 571, ManifestId = 20001, Provenance = "DepotBox", SizeOriginal = 8000000 }
+            }
+        };
+        _mockRevisionDiscovery
+            .Setup(r => r.DiscoverRevisionsForAppsAsync(It.IsAny<IEnumerable<uint>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(revisionsMap);
+
+        // Stage 3: Central Hub coverage contains only (441, 10001)
+        _mockContributionTransport
+            .Setup(t => t.QueryExistingManifestsAsync(It.IsAny<IEnumerable<uint>>(), It.IsAny<IEnumerable<uint>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<(uint DepotId, ulong ManifestId)>
+            {
+                (441, 10001)
+            });
+
+        var vm = CreateViewModel();
+        vm.EnableManifestAnalysis = true;
+        vm.EnableVoluntaryContributions = true;
+        vm.SelectedManifestAnalysisScope = "Licensed Steam Library (All)";
+
+        // Act
+        vm.RunManifestAnalysis();
+
+        // Assert
+        vm.HasAnalysisResults.Should().BeTrue();
+        vm.CoverageAuditedCount.Should().Be(3);
+        vm.CoverageMatchedCount.Should().Be(1);
+        vm.CoverageMissingCount.Should().Be(2); // (442, 10002) and (571, 20001) missing
+        vm.CoveragePercentage.Should().Be(33.3);
+        vm.ManifestAnalysisStatus.Should().Be("Completed");
+
+        // Verify Batch Contribution Preview modal is opened
+        vm.IsBatchPreviewModalOpen.Should().BeTrue();
+        vm.ContributionBatchPreview.Should().HaveCount(2);
+        vm.ContributionBatchPreview.Should().Contain(b => b.AppId == 440 && b.DepotId == 442 && b.ManifestId == 10002 && b.Provenance == "K25");
+        vm.ContributionBatchPreview.Should().Contain(b => b.AppId == 570 && b.DepotId == 571 && b.ManifestId == 20001 && b.AppName == "Dota 2");
+    }
+
+    [Fact]
+    public void LicenseDiscovery_WhenUnauthenticated_ReportsRealBlockageAndNeverSubstitutesInstalledInstances()
+    {
+        // Arrange
+        _mockBackgroundTask
+            .Setup(b => b.QueueTask(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Func<IProgress<BackgroundTaskProgress>, CancellationToken, Task>>(), It.IsAny<Guid?>()))
+            .Callback<string, string?, Func<IProgress<BackgroundTaskProgress>, CancellationToken, Task>, Guid?>((name, desc, work, guid) =>
+            {
+                var mockProgress = new Mock<IProgress<BackgroundTaskProgress>>();
+                work(mockProgress.Object, CancellationToken.None).GetAwaiter().GetResult();
+            });
+
+        _mockSteamLicense
+            .Setup(s => s.DiscoverLicensesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SteamLicenseDiscoveryResult.Blocked(
+                SteamLicenseBlockageReason.Unauthenticated,
+                "Steam session is unauthenticated or expired."));
+
+        var vm = CreateViewModel();
+        vm.EnableManifestAnalysis = true;
+        vm.SelectedManifestAnalysisScope = "Licensed Steam Library (All)";
+
+        // Act
+        vm.RunManifestAnalysis();
+
+        // Assert: Real blockage reason reported in UI status
+        vm.ManifestAnalysisStatus.Should().Contain("Steam account not authenticated");
+        vm.HasAnalysisResults.Should().BeFalse();
+
+        // INVARIANT VERIFICATION: NEVER silently fall back to installed instances!
+        _mockInstanceManager.Verify(m => m.GetAllAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _mockRevisionDiscovery.Verify(r => r.DiscoverRevisionsForAppsAsync(It.IsAny<IEnumerable<uint>>(), It.IsAny<CancellationToken>()), Times.Never);
+        _mockContributionTransport.Verify(t => t.QueryExistingManifestsAsync(It.IsAny<IEnumerable<uint>>(), It.IsAny<IEnumerable<uint>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public void LicenseDiscovery_WhenNoSteamSession_ReportsRealBlockageInStatus()
+    {
+        // Arrange
+        _mockBackgroundTask
+            .Setup(b => b.QueueTask(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Func<IProgress<BackgroundTaskProgress>, CancellationToken, Task>>(), It.IsAny<Guid?>()))
+            .Callback<string, string?, Func<IProgress<BackgroundTaskProgress>, CancellationToken, Task>, Guid?>((name, desc, work, guid) =>
+            {
+                var mockProgress = new Mock<IProgress<BackgroundTaskProgress>>();
+                work(mockProgress.Object, CancellationToken.None).GetAwaiter().GetResult();
+            });
+
+        _mockSteamLicense
+            .Setup(s => s.DiscoverLicensesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SteamLicenseDiscoveryResult.Blocked(
+                SteamLicenseBlockageReason.NoSteamSession,
+                "No active Steam session found in Chromium or CEF cache."));
+
+        var vm = CreateViewModel();
+        vm.EnableManifestAnalysis = true;
+        vm.SelectedManifestAnalysisScope = "Licensed Steam Library (All)";
+
+        // Act
+        vm.RunManifestAnalysis();
+
+        // Assert
+        vm.ManifestAnalysisStatus.Should().Be("Steam account not authenticated: No active Steam session found");
+        vm.HasAnalysisResults.Should().BeFalse();
+        _mockInstanceManager.Verify(m => m.GetAllAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public void LicenseDiscovery_WhenHubConnectionFails_SetsStatusToConnectionErrorAndNeverReportsCompleted()
+    {
+        // Arrange
+        _mockBackgroundTask
+            .Setup(b => b.QueueTask(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Func<IProgress<BackgroundTaskProgress>, CancellationToken, Task>>(), It.IsAny<Guid?>()))
+            .Callback<string, string?, Func<IProgress<BackgroundTaskProgress>, CancellationToken, Task>, Guid?>((name, desc, work, guid) =>
+            {
+                var mockProgress = new Mock<IProgress<BackgroundTaskProgress>>();
+                work(mockProgress.Object, CancellationToken.None).GetAwaiter().GetResult();
+            });
+
+        _mockSteamLicense
+            .Setup(s => s.DiscoverLicensesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SteamLicenseDiscoveryResult.Success([
+                new SteamLicenseItem { AppId = 440, Name = "Team Fortress 2" }
+            ]));
+
+        _mockRevisionDiscovery
+            .Setup(r => r.DiscoverRevisionsForAppsAsync(It.IsAny<IEnumerable<uint>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<uint, IReadOnlyList<HubRevisionItem>>
+            {
+                [440] = [new HubRevisionItem { AppId = 440, DepotId = 441, ManifestId = 10001 }]
+            });
+
+        // Hub coverage throws HttpRequestException (network error / offline)
+        _mockContributionTransport
+            .Setup(t => t.QueryExistingManifestsAsync(It.IsAny<IEnumerable<uint>>(), It.IsAny<IEnumerable<uint>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("Central Manifest Hub connection refused"));
+
+        var vm = CreateViewModel();
+        vm.EnableManifestAnalysis = true;
+
+        // Act
+        vm.RunManifestAnalysis();
+
+        // Assert: Accurate state is "Connection Error"; NEVER report "Completed"!
+        vm.ManifestAnalysisStatus.Should().Be("Connection Error");
+        vm.ManifestAnalysisStatus.Should().NotBe("Completed");
+        vm.HasAnalysisResults.Should().BeFalse();
+    }
+
+    [Fact]
+    public void LicenseDiscovery_WhenAllCoveredInHub_Reports100PercentCompleteCoverage()
+    {
+        // Arrange
+        _mockBackgroundTask
+            .Setup(b => b.QueueTask(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Func<IProgress<BackgroundTaskProgress>, CancellationToken, Task>>(), It.IsAny<Guid?>()))
+            .Callback<string, string?, Func<IProgress<BackgroundTaskProgress>, CancellationToken, Task>, Guid?>((name, desc, work, guid) =>
+            {
+                var mockProgress = new Mock<IProgress<BackgroundTaskProgress>>();
+                work(mockProgress.Object, CancellationToken.None).GetAwaiter().GetResult();
+            });
+
+        _mockSteamLicense
+            .Setup(s => s.DiscoverLicensesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SteamLicenseDiscoveryResult.Success([
+                new SteamLicenseItem { AppId = 440, Name = "Team Fortress 2" }
+            ]));
+
+        _mockRevisionDiscovery
+            .Setup(r => r.DiscoverRevisionsForAppsAsync(It.IsAny<IEnumerable<uint>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<uint, IReadOnlyList<HubRevisionItem>>
+            {
+                [440] = [new HubRevisionItem { AppId = 440, DepotId = 441, ManifestId = 10001 }]
+            });
+
+        // Hub coverage matches all candidate revisions
+        _mockContributionTransport
+            .Setup(t => t.QueryExistingManifestsAsync(It.IsAny<IEnumerable<uint>>(), It.IsAny<IEnumerable<uint>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<(uint DepotId, ulong ManifestId)> { (441, 10001) });
+
+        var vm = CreateViewModel();
+        vm.EnableManifestAnalysis = true;
+
+        // Act
+        vm.RunManifestAnalysis();
+
+        // Assert: Accurately reports 100% Complete Coverage
+        vm.ManifestAnalysisStatus.Should().Be("100% Complete Coverage");
+        vm.CoveragePercentage.Should().Be(100);
+        vm.CoverageMissingCount.Should().Be(0);
+        vm.IsBatchPreviewModalOpen.Should().BeFalse();
+    }
+
+    [Fact]
+    public void LicenseDiscovery_WhenZeroCandidates_Reports0Candidates()
+    {
+        // Arrange
+        _mockBackgroundTask
+            .Setup(b => b.QueueTask(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Func<IProgress<BackgroundTaskProgress>, CancellationToken, Task>>(), It.IsAny<Guid?>()))
+            .Callback<string, string?, Func<IProgress<BackgroundTaskProgress>, CancellationToken, Task>, Guid?>((name, desc, work, guid) =>
+            {
+                var mockProgress = new Mock<IProgress<BackgroundTaskProgress>>();
+                work(mockProgress.Object, CancellationToken.None).GetAwaiter().GetResult();
+            });
+
+        _mockSteamLicense
+            .Setup(s => s.DiscoverLicensesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SteamLicenseDiscoveryResult.Success([])); // 0 licenses
+
+        var vm = CreateViewModel();
+        vm.EnableManifestAnalysis = true;
+
+        // Act
+        vm.RunManifestAnalysis();
+
+        // Assert
+        vm.ManifestAnalysisStatus.Should().Be("0 Candidates");
+        vm.CoverageAuditedCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task BatchContribution_WhenAuthorized_DownloadsValidatesSubmitsAndReconcilesStardust()
+    {
+        // Arrange
+        await _appSettings.SetEnableVoluntaryContributionsAsync(true);
+
+        _mockBackgroundTask
+            .Setup(b => b.QueueTask(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Func<IProgress<BackgroundTaskProgress>, CancellationToken, Task>>(), It.IsAny<Guid?>()))
+            .Callback<string, string?, Func<IProgress<BackgroundTaskProgress>, CancellationToken, Task>, Guid?>((name, desc, work, guid) =>
+            {
+                var mockProgress = new Mock<IProgress<BackgroundTaskProgress>>();
+                work(mockProgress.Object, CancellationToken.None).GetAwaiter().GetResult();
+            });
+
+        // Create temporary manifest file with valid Steam Protobuf magic header [0xD0, 0x17, 0xF6, 0x71]
+        var tempManifestDir = Path.Combine(Path.GetTempPath(), "SettingsTestManifests_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempManifestDir);
+        var manifestFile = Path.Combine(tempManifestDir, "441_10001.manifest");
+        byte[] validProtobufPayload = [0xD0, 0x17, 0xF6, 0x71, 0xAA, 0xBB, 0xCC, 0xDD];
+        await File.WriteAllBytesAsync(manifestFile, validProtobufPayload);
+
+        _mockRevisionDiscovery
+            .Setup(r => r.FetchManifestBinaryAsync(440, 441, 10001, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(manifestFile);
+
+        _mockContributionTransport
+            .Setup(t => t.TransmitContributionAsync(It.IsAny<ContributionSubmission>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PublicationReceipt
+            {
+                ReceiptId = "RCPT-BATCH-440",
+                Status = "Published",
+                StardustCredited = 150,
+                AppId = 440,
+                DepotId = 441,
+                ManifestId = 10001
+            });
+
+        var vm = CreateViewModel();
+        vm.EnableVoluntaryContributions = true;
+        vm.IsBatchPreviewModalOpen = true;
+        vm.ContributionBatchPreview.Add(new ContributionBatchItem
+        {
+            AppName = "Team Fortress 2",
+            AppId = 440,
+            DepotId = 441,
+            ManifestId = 10001,
+            Provenance = "ManifestHub2",
+            SizeBytes = validProtobufPayload.Length
+        });
+
+        // Act: User authorizes batch submission via single click without per-file prompts
+        await vm.AuthorizeAndSubmitBatchAsync();
+
+        // Assert
+        vm.IsBatchPreviewModalOpen.Should().BeFalse();
+        _mockRevisionDiscovery.Verify(r => r.FetchManifestBinaryAsync(440, 441, 10001, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _mockContributionTransport.Verify(t => t.TransmitContributionAsync(
+            It.Is<ContributionSubmission>(s => s.AppId == 440 && s.DepotId == 441 && s.ManifestId == 10001 && s.UserConsentGranted),
+            It.IsAny<CancellationToken>()), Times.Once);
+
+        // Verify Stardust balance reconciliation
+        _mockStardust.Verify(s => s.NotifyRewardConfirmed(150), Times.Once);
+        vm.BatchConfirmedCount.Should().Be(1);
+        vm.LastContributionReceiptId.Should().Be("RCPT-BATCH-440");
+        vm.ContributionBatchPreview.Should().BeEmpty();
+
+        try { Directory.Delete(tempManifestDir, true); } catch { }
+    }
+
+    [Fact]
+    public async Task BatchContribution_WhenVoluntaryContributionsDisabled_AbortsWithWarning()
+    {
+        // Arrange
+        await _appSettings.SetEnableVoluntaryContributionsAsync(false);
+        var vm = CreateViewModel();
+        vm.EnableVoluntaryContributions = false;
+        vm.ContributionBatchPreview.Add(new ContributionBatchItem
+        {
+            AppId = 440,
+            DepotId = 441,
+            ManifestId = 10001
+        });
+
+        // Act
+        await vm.AuthorizeAndSubmitBatchAsync();
+
+        // Assert
+        _mockNotification.Verify(n => n.ShowWarning(
+            "Contributions Disabled",
+            It.Is<string>(s => s.Contains("Voluntary contributions")),
+            It.IsAny<TimeSpan?>(),
+            It.IsAny<string?>(),
+            It.IsAny<Action?>()),
+            Times.Once);
+
+        _mockContributionTransport.Verify(t => t.TransmitContributionAsync(
+            It.IsAny<ContributionSubmission>(),
+            It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public void DiagnosticScope_InstalledInstances_AuditsLocalGameInstances()
     {
         // Arrange
         _mockBackgroundTask
@@ -209,9 +568,9 @@ public class SettingsViewModelTests : IDisposable
         var instance = new GameInstance
         {
             Id = Guid.NewGuid(),
-            Name = "Audited Game",
+            Name = "Local Game",
             AppId = 440,
-            InstallPath = @"C:\Games\AuditedGame",
+            InstallPath = @"C:\Games\LocalGame",
             Depots = new List<DepotInfo>
             {
                 new DepotInfo { DepotId = 441, ManifestId = 10001, IsDownloaded = true },
@@ -223,30 +582,23 @@ public class SettingsViewModelTests : IDisposable
             .Setup(m => m.GetAllAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<GameInstance> { instance });
 
-        _mockManifestHub
-            .Setup(h => h.GetCoverageAsync(It.IsAny<IEnumerable<uint>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<ManifestArtifact>
-            {
-                new ManifestArtifact { DepotId = 441, ManifestId = 10001 },
-                new ManifestArtifact { DepotId = 443, ManifestId = 10003 }
-            });
+        _mockContributionTransport
+            .Setup(t => t.QueryExistingManifestsAsync(It.IsAny<IEnumerable<uint>>(), It.IsAny<IEnumerable<uint>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<(uint DepotId, ulong ManifestId)> { (441, 10001) });
 
         var vm = CreateViewModel();
         vm.EnableManifestAnalysis = true;
+        vm.SelectedManifestAnalysisScope = "Installed Instances";
 
         // Act
         vm.RunManifestAnalysis();
 
         // Assert
+        _mockInstanceManager.Verify(m => m.GetAllAsync(It.IsAny<CancellationToken>()), Times.Once);
         vm.HasAnalysisResults.Should().BeTrue();
         vm.CoverageAuditedCount.Should().Be(2);
         vm.CoverageMatchedCount.Should().Be(1);
-        vm.CoverageLocalOnlyCount.Should().Be(1);
         vm.CoverageMissingCount.Should().Be(1);
-        vm.CoveragePercentage.Should().Be(50);
-        vm.CoverageSummaryText.Should().Contain("Audited 2 local manifests: 1 matched in Hub (50%), 1 local-only (candidates for contribution), 1 available in Hub to download.");
-        vm.MissingManifestsList.Should().ContainSingle(m => m.DepotId == 443 && m.ManifestId == 10003);
-        vm.LocalOnlyManifestsList.Should().ContainSingle(m => m.DepotId == 442 && m.ManifestId == 10002);
     }
 
     [Fact]

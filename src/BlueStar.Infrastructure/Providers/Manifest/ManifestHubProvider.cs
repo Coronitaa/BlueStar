@@ -57,6 +57,8 @@ public sealed class ManifestHubProvider : IManifestHubProvider
         NumberHandling = JsonNumberHandling.AllowReadingFromString
     };
 
+    private readonly IHistoricalRevisionDiscoveryService? _revisionDiscoveryService;
+
     public ManifestHubProvider(
         HttpClient http,
         IManifestCacheService cacheService,
@@ -66,7 +68,8 @@ public sealed class ManifestHubProvider : IManifestHubProvider
         IRequestCoordinator? coordinator = null,
         INetworkMetricsObserver? metrics = null,
         AppSettingsService? appSettings = null,
-        string? hubBaseUrl = null)
+        string? hubBaseUrl = null,
+        IHistoricalRevisionDiscoveryService? revisionDiscoveryService = null)
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _cacheService = cacheService ?? throw new ArgumentNullException(nameof(cacheService));
@@ -77,6 +80,7 @@ public sealed class ManifestHubProvider : IManifestHubProvider
         _metrics = metrics;
         _appSettings = appSettings;
         _hubBaseUrl = hubBaseUrl;
+        _revisionDiscoveryService = revisionDiscoveryService;
     }
 
     private string GetEffectiveHubBaseUrl()
@@ -714,8 +718,131 @@ public sealed class ManifestHubProvider : IManifestHubProvider
         var distinctAppIds = appIds.Where(id => id > 0).Distinct().ToList();
         if (distinctAppIds.Count == 0) return [];
 
-        var results = new List<ManifestArtifact>();
-        var seen = new HashSet<(uint DepotId, ulong ManifestId)>();
+        var effectiveBase = GetEffectiveHubBaseUrl();
+        if (!string.IsNullOrEmpty(effectiveBase) || _http.BaseAddress != null)
+        {
+            // 1. Try POST /api/v1/coverage/query
+            try
+            {
+                var queryUrl = !string.IsNullOrEmpty(effectiveBase)
+                    ? $"{effectiveBase}/api/v1/coverage/query"
+                    : "/api/v1/coverage/query";
+
+                var reqBody = new { appIds = distinctAppIds };
+                using var content = new StringContent(JsonSerializer.Serialize(reqBody), System.Text.Encoding.UTF8, "application/json");
+                _metrics?.OnProviderRequest("ManifestHub", queryUrl);
+                using var response = await _http.PostAsync(queryUrl, content, ct).ConfigureAwait(false);
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseJson = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    using var doc = JsonDocument.Parse(responseJson);
+                    var root = doc.RootElement;
+                    var results = new List<ManifestArtifact>();
+                    var seen = new HashSet<(uint DepotId, ulong ManifestId)>();
+
+                    if (root.TryGetProperty("existingManifests", out var emEl) && emEl.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var item in emEl.EnumerateArray())
+                        {
+                            uint dId = 0;
+                            ulong mId = 0;
+                            if (item.TryGetProperty("depotId", out var dProp)) dProp.TryGetUInt32(out dId);
+                            if (item.TryGetProperty("manifestId", out var mProp)) mProp.TryGetUInt64(out mId);
+                            if (dId > 0 && mId > 0 && seen.Add((dId, mId)))
+                            {
+                                results.Add(new ManifestArtifact
+                                {
+                                    DepotId = dId,
+                                    ManifestId = mId,
+                                    LocalCachePath = _cacheService.GetManifestPath(dId, mId),
+                                    Routes = [
+                                        new ManifestSourceRoute
+                                        {
+                                            ProviderId = ProviderId,
+                                            ProviderName = DisplayName,
+                                            RouteType = ManifestSourceType.GitHubRaw,
+                                            Url = GetPrimaryManifestUrl(dId, mId),
+                                            Priority = Priority
+                                        }
+                                    ]
+                                });
+                            }
+                        }
+                    }
+
+                    return results.AsReadOnly();
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "POST /api/v1/coverage/query failed during GetCoverageAsync");
+            }
+
+            // 2. Try GET /indices/coverage.json
+            try
+            {
+                var covUrl = !string.IsNullOrEmpty(effectiveBase)
+                    ? $"{effectiveBase}/indices/coverage.json"
+                    : "/indices/coverage.json";
+
+                _metrics?.OnProviderRequest("ManifestHub", covUrl);
+                using var covResp = await _http.GetAsync(covUrl, ct).ConfigureAwait(false);
+                if (covResp.IsSuccessStatusCode)
+                {
+                    var covJson = await covResp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    using var doc = JsonDocument.Parse(covJson);
+                    var results = new List<ManifestArtifact>();
+                    var seen = new HashSet<(uint DepotId, ulong ManifestId)>();
+                    var requestedSet = new HashSet<uint>(distinctAppIds);
+
+                    foreach (var prop in doc.RootElement.EnumerateObject())
+                    {
+                        var parts = prop.Name.Split(':');
+                        if (parts.Length == 2 && uint.TryParse(parts[0], out var aId) && requestedSet.Contains(aId) && uint.TryParse(parts[1], out var dId))
+                        {
+                            var covObj = prop.Value;
+                            if (covObj.TryGetProperty("latestAvailableManifestId", out var lProp) && lProp.TryGetUInt64(out var mId) && mId > 0)
+                            {
+                                if (seen.Add((dId, mId)))
+                                {
+                                    results.Add(new ManifestArtifact
+                                    {
+                                        DepotId = dId,
+                                        ManifestId = mId,
+                                        LocalCachePath = _cacheService.GetManifestPath(dId, mId),
+                                        Routes = [
+                                            new ManifestSourceRoute
+                                            {
+                                                ProviderId = ProviderId,
+                                                ProviderName = DisplayName,
+                                                RouteType = ManifestSourceType.GitHubRaw,
+                                                Url = GetPrimaryManifestUrl(dId, mId),
+                                                Priority = Priority
+                                            }
+                                        ]
+                                    });
+                                }
+                            }
+                        }
+                    }
+
+                    if (results.Count > 0)
+                    {
+                        return results.AsReadOnly();
+                    }
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "GET /indices/coverage.json failed during GetCoverageAsync");
+            }
+        }
+
+        // 3. Fallback: discover manifests per app ID
+        var fallbackResults = new List<ManifestArtifact>();
+        var fallbackSeen = new HashSet<(uint DepotId, ulong ManifestId)>();
 
         foreach (var appId in distinctAppIds)
         {
@@ -725,9 +852,9 @@ public sealed class ManifestHubProvider : IManifestHubProvider
                 var manifests = await DiscoverManifestsAsync(appId, ct).ConfigureAwait(false);
                 foreach (var m in manifests)
                 {
-                    if (seen.Add((m.DepotId, m.ManifestId)))
+                    if (fallbackSeen.Add((m.DepotId, m.ManifestId)))
                     {
-                        results.Add(m);
+                        fallbackResults.Add(m);
                     }
                 }
             }
@@ -738,7 +865,7 @@ public sealed class ManifestHubProvider : IManifestHubProvider
             }
         }
 
-        return results.AsReadOnly();
+        return fallbackResults.AsReadOnly();
     }
 
     /// <inheritdoc />
@@ -814,6 +941,11 @@ public sealed class ManifestHubProvider : IManifestHubProvider
     public async Task<IReadOnlyList<HubRevisionItem>> GetRevisionsForAppAsync(uint appId, CancellationToken ct = default)
     {
         if (appId == 0) return [];
+
+        if (_revisionDiscoveryService != null)
+        {
+            return await _revisionDiscoveryService.DiscoverRevisionsAsync(appId, ct).ConfigureAwait(false);
+        }
 
         var list = new List<HubRevisionItem>();
         var seen = new HashSet<(uint DepotId, ulong ManifestId)>();

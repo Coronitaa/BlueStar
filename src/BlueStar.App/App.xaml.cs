@@ -311,6 +311,12 @@ public partial class App : Application
         services.AddHttpClient<BlueStar.Infrastructure.Providers.Fixes.OnlineFixProvider>();
         services.AddSingleton<IFixProvider>(sp => sp.GetRequiredService<BlueStar.Infrastructure.Providers.Fixes.OnlineFixProvider>());
 
+        // Steam License Discovery & Multi-Source Historical Revision Discovery
+        services.AddSingleton<ISteamSessionCookieProvider, BlueStar.Infrastructure.Steam.SteamSessionCookieProvider>();
+        services.AddSingleton<BlueStar.Infrastructure.Steam.SteamPackageResolver>();
+        services.AddHttpClient<IHistoricalRevisionDiscoveryService, BlueStar.Infrastructure.Services.HistoricalRevisionDiscoveryService>();
+        services.AddHttpClient<ISteamLicenseDiscoveryService, BlueStar.Infrastructure.Services.SteamLicenseDiscoveryService>();
+
         // ViewModels
         services.AddSingleton<DownloadQueueManager>();
 

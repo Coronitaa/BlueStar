@@ -1031,8 +1031,8 @@
     <sys:String x:Key="String_ManifestHubSettingsDesc">Disponibilidad descentralizada de manifiestos, auditoría de privacidad y libro mayor Stardust</sys:String>
     <sys:String x:Key="String_PrivacyNoticeTitle">Arquitectura de Privacidad Sin Filtraciones</sys:String>
     <sys:String x:Key="String_PrivacyNoticeDesc">El análisis local examina los archivos binarios de depot en disco (DepotId, ManifestId, tamaño y hash criptográfico SHA-256). Las transmisiones al Hub excluyen estrictamente todo SteamID, nombres de usuario, contraseñas, tokens de autenticación, cookies de sesión e inventario de licencias. Tu ID de contribuyente es un UUID v4 completamente anónimo y aleatorio.</sys:String>
-    <sys:String x:Key="String_OptInManifestAnalysis">Activar Análisis de Manifiestos</sys:String>
-    <sys:String x:Key="String_OptInManifestAnalysisDesc">Analiza las instancias instaladas localmente y la caché en disco contra el catálogo de Manifest Hub sin transmitir datos personales ni de biblioteca. No se consulta la biblioteca con licencia de Steam.</sys:String>
+    <sys:String x:Key="String_OptInManifestAnalysis">Activar Descubrimiento de Licencias y Análisis</sys:String>
+    <sys:String x:Key="String_OptInManifestAnalysisDesc">Descubre juegos con licencia de Steam y audita revisiones de depots contra el Manifest Hub sin filtraciones de credenciales.</sys:String>
     <sys:String x:Key="String_OptInVoluntaryContributions">Activar Contribuciones Voluntarias</sys:String>
     <sys:String x:Key="String_OptInVoluntaryContributionsDesc">Acepta voluntariamente enviar archivos binarios de manifiestos faltantes al Hub descentralizado.</sys:String>
     <sys:String x:Key="String_AnalysisScopeLabel">Alcance del Análisis de Manifiestos</sys:String>
@@ -1081,4 +1081,36 @@
     <sys:String x:Key="String_UnknownDateBadge">Fecha desconocida</sys:String>
     <sys:String x:Key="String_IngestedDateLabel">Ingerido:</sys:String>
     <sys:String x:Key="String_ApplyRevisionBtn">Aplicar Revisión</sys:String>
+
+    <!-- Batch Contribution Preview Modal -->
+    <sys:String x:Key="String_BatchContributionModalTitle">Contribución Voluntaria de Manifiestos por Lotes</sys:String>
+    <sys:String x:Key="String_BatchContributionModalSubtitle">Revisa las revisiones de manifiestos faltantes identificadas en fuentes comunitarias antes de su publicación voluntaria.</sys:String>
+    <sys:String x:Key="String_BatchContributionDesc">Las siguientes revisiones de manifiestos candidatas fueron descubiertas en tu biblioteca de Steam y faltan en el Manifest Hub comunitario. Al autorizar, se enviará el lote completo sin solicitar confirmación repetida por archivo.</sys:String>
+    <sys:String x:Key="String_AuthorizeBatchBtn">Autorizar y Enviar Lote</sys:String>
+    <sys:String x:Key="String_CloseModalBtn">Cerrar</sys:String>
+    <sys:String x:Key="String_BatchColGame">Título del Juego</sys:String>
+    <sys:String x:Key="String_BatchColDepot">Depot ID</sys:String>
+    <sys:String x:Key="String_BatchColManifest">Manifiesto (GID)</sys:String>
+    <sys:String x:Key="String_BatchColProvenance">Procedencia</sys:String>
+    <sys:String x:Key="String_BatchColSize">Tamaño</sys:String>
+    <sys:String x:Key="String_BatchCandidatesSummary">Candidatos listos para contribuir</sys:String>
+    <sys:String x:Key="String_BatchSubmittingStatus">Enviando lote de contribución al Manifest Hub...</sys:String>
+
+    <!-- License Discovery & Contribution Stages -->
+    <sys:String x:Key="String_Stage1DiscoverLicenses">Etapa 1/7: Descubriendo juegos con licencia de Steam...</sys:String>
+    <sys:String x:Key="String_Stage2EnumerateRevisions">Etapa 2/7: Enumerando revisiones históricas en fuentes comunitarias...</sys:String>
+    <sys:String x:Key="String_Stage3QueryHubCoverage">Etapa 3/7: Consultando cobertura central del Manifest Hub...</sys:String>
+    <sys:String x:Key="String_Stage4ComputeMissing">Etapa 4/7: Comparando revisiones contra la cobertura del Hub...</sys:String>
+    <sys:String x:Key="String_Stage5BatchPreview">Etapa 5/7: Preparando vista previa del lote...</sys:String>
+    <sys:String x:Key="String_Stage6DownloadValidate">Etapa 6/7: Descargando y validando archivos binarios de manifiestos...</sys:String>
+    <sys:String x:Key="String_Stage7PublishReceipts">Etapa 7/7: Enviando contribuciones y actualizando libro mayor Stardust...</sys:String>
+
+    <!-- Blockage and Error Statuses -->
+    <sys:String x:Key="String_BlockageNoSession">Cuenta de Steam no autenticada: No se encontró sesión activa de Steam</sys:String>
+    <sys:String x:Key="String_BlockageUnauthenticated">Cuenta de Steam no autenticada: La sesión activa está vencida o desautenticada</sys:String>
+    <sys:String x:Key="String_BlockageNetwork">Error de red de Steam: No se pudieron obtener las licencias</sys:String>
+    <sys:String x:Key="String_BlockageNoLicenses">No se encontraron licencias de Steam para esta cuenta</sys:String>
+    <sys:String x:Key="String_StatusHubConnectionError">Error de Conexión: Manifest Hub central no disponible</sys:String>
+    <sys:String x:Key="String_StatusCompleteCoverage">Cobertura Completa 100% (0 Faltantes)</sys:String>
+    <sys:String x:Key="String_StatusNoCandidates">0 Candidatos Encontrados</sys:String>
 </ResourceDictionary>

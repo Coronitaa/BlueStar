@@ -41,4 +41,13 @@ public interface IContributionTransportService
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The verified Stardust balance information.</returns>
     Task<StardustBalanceInfo> GetStardustBalanceAsync(string contributorId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Queries the Hub coverage endpoint (POST /api/v1/coverage/query or GET /indices/coverage.json)
+    /// to determine which (DepotId, ManifestId) pairs already exist in the Hub.
+    /// </summary>
+    Task<System.Collections.Generic.IReadOnlyList<(uint DepotId, ulong ManifestId)>> QueryExistingManifestsAsync(
+        System.Collections.Generic.IEnumerable<uint>? appIds = null,
+        System.Collections.Generic.IEnumerable<uint>? depotIds = null,
+        CancellationToken ct = default) => Task.FromResult<System.Collections.Generic.IReadOnlyList<(uint DepotId, ulong ManifestId)>>(System.Array.Empty<(uint DepotId, ulong ManifestId)>());
 }

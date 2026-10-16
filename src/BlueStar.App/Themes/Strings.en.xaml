@@ -1032,8 +1032,8 @@
     <sys:String x:Key="String_ManifestHubSettingsDesc">Decentralized depot manifest availability, privacy audit, and voluntary Stardust ledger</sys:String>
     <sys:String x:Key="String_PrivacyNoticeTitle">Zero-Leak Privacy Architecture</sys:String>
     <sys:String x:Key="String_PrivacyNoticeDesc">Local analysis inspects depot binaries on disk (DepotId, ManifestId, Size, and cryptographic SHA-256 hash). Transmissions to the Hub strictly exclude all SteamIDs, usernames, passwords, auth tokens, session cookies, and license lists. Your contributor ID is a purely random anonymous UUID v4.</sys:String>
-    <sys:String x:Key="String_OptInManifestAnalysis">Enable Manifest Analysis</sys:String>
-    <sys:String x:Key="String_OptInManifestAnalysisDesc">Analyze local installed instances and cache on disk against the Manifest Hub catalog without transmitting library or personal data. Licensed Steam library is not queried.</sys:String>
+    <sys:String x:Key="String_OptInManifestAnalysis">Enable License Discovery &amp; Manifest Analysis</sys:String>
+    <sys:String x:Key="String_OptInManifestAnalysisDesc">Discover owned Steam licenses and audit depot revisions across sources against Manifest Hub with zero credential leaks.</sys:String>
     <sys:String x:Key="String_OptInVoluntaryContributions">Enable Voluntary Contributions</sys:String>
     <sys:String x:Key="String_OptInVoluntaryContributionsDesc">Opt-in to voluntarily contribute missing manifest binaries to the decentralized Hub.</sys:String>
     <sys:String x:Key="String_AnalysisScopeLabel">Manifest Analysis Scope</sys:String>
@@ -1082,4 +1082,36 @@
     <sys:String x:Key="String_UnknownDateBadge">Unknown date</sys:String>
     <sys:String x:Key="String_IngestedDateLabel">Ingested:</sys:String>
     <sys:String x:Key="String_ApplyRevisionBtn">Apply Revision</sys:String>
+
+    <!-- Batch Contribution Preview Modal -->
+    <sys:String x:Key="String_BatchContributionModalTitle">Voluntary Batch Manifest Contribution</sys:String>
+    <sys:String x:Key="String_BatchContributionModalSubtitle">Review missing depot manifest revisions identified across community sources before voluntary publication.</sys:String>
+    <sys:String x:Key="String_BatchContributionDesc">The following candidate manifest revisions were discovered from your licensed Steam library and are missing in the community Manifest Hub. Authorizing will submit all candidates as a single batch without repeated confirmation prompts.</sys:String>
+    <sys:String x:Key="String_AuthorizeBatchBtn">Authorize &amp; Submit Batch</sys:String>
+    <sys:String x:Key="String_CloseModalBtn">Close</sys:String>
+    <sys:String x:Key="String_BatchColGame">Game Title</sys:String>
+    <sys:String x:Key="String_BatchColDepot">Depot ID</sys:String>
+    <sys:String x:Key="String_BatchColManifest">Manifest (GID)</sys:String>
+    <sys:String x:Key="String_BatchColProvenance">Provenance</sys:String>
+    <sys:String x:Key="String_BatchColSize">Size</sys:String>
+    <sys:String x:Key="String_BatchCandidatesSummary">Batch candidates ready for contribution</sys:String>
+    <sys:String x:Key="String_BatchSubmittingStatus">Submitting contribution batch to Manifest Hub...</sys:String>
+
+    <!-- License Discovery & Contribution Stages -->
+    <sys:String x:Key="String_Stage1DiscoverLicenses">Stage 1/7: Discovering licensed Steam games...</sys:String>
+    <sys:String x:Key="String_Stage2EnumerateRevisions">Stage 2/7: Enumerating historical revisions across community sources...</sys:String>
+    <sys:String x:Key="String_Stage3QueryHubCoverage">Stage 3/7: Querying central Manifest Hub coverage...</sys:String>
+    <sys:String x:Key="String_Stage4ComputeMissing">Stage 4/7: Comparing revisions against Hub coverage...</sys:String>
+    <sys:String x:Key="String_Stage5BatchPreview">Stage 5/7: Preparing batch preview modal...</sys:String>
+    <sys:String x:Key="String_Stage6DownloadValidate">Stage 6/7: Downloading and validating manifest binaries...</sys:String>
+    <sys:String x:Key="String_Stage7PublishReceipts">Stage 7/7: Submitting contributions and updating Stardust ledger...</sys:String>
+
+    <!-- Blockage and Error Statuses -->
+    <sys:String x:Key="String_BlockageNoSession">Steam account not authenticated: No active Steam session found</sys:String>
+    <sys:String x:Key="String_BlockageUnauthenticated">Steam account not authenticated: Active session is unauthenticated or expired</sys:String>
+    <sys:String x:Key="String_BlockageNetwork">Steam network error: Unable to retrieve licenses</sys:String>
+    <sys:String x:Key="String_BlockageNoLicenses">No Steam licenses found for this account</sys:String>
+    <sys:String x:Key="String_StatusHubConnectionError">Connection Error: Central Manifest Hub unavailable</sys:String>
+    <sys:String x:Key="String_StatusCompleteCoverage">100% Complete Coverage (0 Missing)</sys:String>
+    <sys:String x:Key="String_StatusNoCandidates">0 Candidates Found</sys:String>
 </ResourceDictionary>

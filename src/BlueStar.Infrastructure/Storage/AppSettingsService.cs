@@ -334,13 +334,13 @@ public sealed class AppSettingsService
         await SaveAsync().ConfigureAwait(false);
     }
 
-    /// <summary>Scope of manifest coverage analysis ("InstalledInstances", "Cache", "All").</summary>
-    public string ManifestAnalysisScope => string.IsNullOrWhiteSpace(_current.ManifestAnalysisScope) ? "InstalledInstances" : _current.ManifestAnalysisScope;
+    /// <summary>Scope of manifest coverage analysis ("SteamLibrary", "InstalledInstances", "Cache").</summary>
+    public string ManifestAnalysisScope => string.IsNullOrWhiteSpace(_current.ManifestAnalysisScope) ? "SteamLibrary" : _current.ManifestAnalysisScope;
 
     /// <summary>Persists the manifest analysis scope setting.</summary>
     public async Task SetManifestAnalysisScopeAsync(string scope)
     {
-        _current = _current with { ManifestAnalysisScope = string.IsNullOrWhiteSpace(scope) ? "InstalledInstances" : scope };
+        _current = _current with { ManifestAnalysisScope = string.IsNullOrWhiteSpace(scope) ? "SteamLibrary" : scope };
         await SaveAsync().ConfigureAwait(false);
     }
 
@@ -413,7 +413,7 @@ public sealed class AppSettingsService
 
         public bool EnableManifestAnalysis { get; init; } = false;
         public bool EnableVoluntaryContributions { get; init; } = false;
-        public string? ManifestAnalysisScope { get; init; } = "InstalledInstances";
+        public string? ManifestAnalysisScope { get; init; } = "SteamLibrary";
         public string? ManifestAnalysisStatus { get; init; } = "Idle";
         public DateTimeOffset? ManifestAnalysisLastRun { get; init; }
         public string? HubServerUrl { get; init; } = "http://localhost:5088";

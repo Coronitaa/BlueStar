@@ -121,14 +121,14 @@ public sealed class ContributionTransportService : IContributionTransportService
             }
         }
 
-        // 4. Strict Idempotency Check: if this manifest was already published and credited, return existing receipt
+        // 4. Strict Idempotency Check: if this manifest was already published and credited, return duplicate receipt with 0 Stardust
         var idempotencyKey = (submission.DepotId, submission.ManifestId);
         if (_creditedReceipts.TryGetValue(idempotencyKey, out var existingReceipt))
         {
             _logger.LogInformation(
-                "Contribution for Depot {DepotId}, Manifest {ManifestId} has already been published. Returning existing receipt.",
+                "Contribution for Depot {DepotId}, Manifest {ManifestId} has already been published. Returning duplicate receipt.",
                 submission.DepotId, submission.ManifestId);
-            return existingReceipt;
+            return existingReceipt with { Status = "Duplicate", StardustCredited = 0 };
         }
 
         // 5. Remote transport to authorized Hub service
@@ -184,16 +184,24 @@ public sealed class ContributionTransportService : IContributionTransportService
         }
 
         // 6. Connect Stardust accreditation EXCLUSIVELY to confirmed successful publication
-        if (receipt.IsSuccess && receipt.StardustCredited > 0)
+        if (receipt.IsSuccess)
         {
-            // Idempotent record
-            if (_creditedReceipts.TryAdd(idempotencyKey, receipt))
+            // Record receipt idempotently
+            _creditedReceipts.TryAdd(idempotencyKey, receipt);
+
+            if (!receipt.IsDuplicate && receipt.StardustCredited > 0)
             {
                 Interlocked.Add(ref _totalStardustCredited, receipt.StardustCredited);
 
                 _logger.LogInformation(
                     "Stardust reward credited: +{Stardust} units for confirmed publication of Depot {DepotId}, Manifest {ManifestId}. Total: {Total}",
                     receipt.StardustCredited, submission.DepotId, submission.ManifestId, _totalStardustCredited);
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "Publication for Depot {DepotId}, Manifest {ManifestId} confirmed (Status: {Status}). 0 Stardust credited.",
+                    submission.DepotId, submission.ManifestId, receipt.Status);
             }
         }
         else
@@ -306,5 +314,133 @@ public sealed class ContributionTransportService : IContributionTransportService
             PendingPoints = 0,
             LastUpdated = DateTimeOffset.UtcNow
         };
+    }
+
+    /// <inheritdoc />
+    public async Task<System.Collections.Generic.IReadOnlyList<(uint DepotId, ulong ManifestId)>> QueryExistingManifestsAsync(
+        System.Collections.Generic.IEnumerable<uint>? appIds = null,
+        System.Collections.Generic.IEnumerable<uint>? depotIds = null,
+        CancellationToken ct = default)
+    {
+        var effectiveBase = GetEffectiveHubBaseUrl();
+        var client = _httpClient;
+        if (client == null) return Array.Empty<(uint DepotId, ulong ManifestId)>();
+
+        var results = new List<(uint DepotId, ulong ManifestId)>();
+        var seen = new HashSet<(uint DepotId, ulong ManifestId)>();
+
+        // 1. Try POST /api/v1/coverage/query
+        try
+        {
+            string queryUrl = !string.IsNullOrEmpty(effectiveBase)
+                ? $"{effectiveBase}/api/v1/coverage/query"
+                : (client.BaseAddress != null ? "/api/v1/coverage/query" : string.Empty);
+
+            if (!string.IsNullOrEmpty(queryUrl))
+            {
+                var payload = new
+                {
+                    appIds = appIds != null ? new List<uint>(appIds) : null,
+                    depotIds = depotIds != null ? new List<uint>(depotIds) : null
+                };
+
+                using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+                using var response = await client.PostAsync(queryUrl, content, ct).ConfigureAwait(false);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    using var doc = JsonDocument.Parse(body);
+                    var root = doc.RootElement;
+
+                    if (root.TryGetProperty("existingManifests", out var emProp) && emProp.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var item in emProp.EnumerateArray())
+                        {
+                            uint dId = 0;
+                            ulong mId = 0;
+                            if (item.TryGetProperty("depotId", out var dEl)) dEl.TryGetUInt32(out dId);
+                            if (item.TryGetProperty("manifestId", out var mEl)) mEl.TryGetUInt64(out mId);
+
+                            if (dId > 0 && mId > 0 && seen.Add((dId, mId)))
+                            {
+                                results.Add((dId, mId));
+                                _creditedReceipts.TryAdd((dId, mId), new PublicationReceipt
+                                {
+                                    AppId = 0,
+                                    DepotId = dId,
+                                    ManifestId = mId,
+                                    Status = "Duplicate",
+                                    StardustCredited = 0
+                                });
+                            }
+                        }
+                    }
+
+                    return results.AsReadOnly();
+                }
+            }
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "POST /api/v1/coverage/query failed, falling back to /indices/coverage.json");
+        }
+
+        // 2. Fallback to GET /indices/coverage.json
+        try
+        {
+            string covUrl = !string.IsNullOrEmpty(effectiveBase)
+                ? $"{effectiveBase}/indices/coverage.json"
+                : (client.BaseAddress != null ? "/indices/coverage.json" : string.Empty);
+
+            if (!string.IsNullOrEmpty(covUrl))
+            {
+                using var covResp = await client.GetAsync(covUrl, ct).ConfigureAwait(false);
+                if (covResp.IsSuccessStatusCode)
+                {
+                    var covBody = await covResp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    using var doc = JsonDocument.Parse(covBody);
+                    var appSet = appIds != null ? new HashSet<uint>(appIds) : null;
+                    var depotSet = depotIds != null ? new HashSet<uint>(depotIds) : null;
+
+                    foreach (var prop in doc.RootElement.EnumerateObject())
+                    {
+                        var parts = prop.Name.Split(':');
+                        if (parts.Length == 2 && uint.TryParse(parts[0], out var aId) && uint.TryParse(parts[1], out var dId))
+                        {
+                            if ((appSet == null || appSet.Contains(aId)) && (depotSet == null || depotSet.Contains(dId)))
+                            {
+                                var covObj = prop.Value;
+                                if (covObj.TryGetProperty("latestAvailableManifestId", out var lProp) && lProp.TryGetUInt64(out var mId) && mId > 0)
+                                {
+                                    if (seen.Add((dId, mId)))
+                                    {
+                                        results.Add((dId, mId));
+                                        _creditedReceipts.TryAdd((dId, mId), new PublicationReceipt
+                                        {
+                                            AppId = aId,
+                                            DepotId = dId,
+                                            ManifestId = mId,
+                                            Status = "Duplicate",
+                                            StardustCredited = 0
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    return results.AsReadOnly();
+                }
+            }
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "GET /indices/coverage.json failed during QueryExistingManifestsAsync");
+        }
+
+        return results.AsReadOnly();
     }
 }

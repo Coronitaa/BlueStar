@@ -1715,5 +1715,142 @@
             </StackPanel>
         </Border>
     </ctrl:ModalOverlay>
+
+    <!-- ═══ VOLUNTARY BATCH CONTRIBUTION PREVIEW MODAL ═══ -->
+    <ctrl:ModalOverlay IsOpen="{Binding IsBatchPreviewModalOpen}"
+                       CloseCommand="{Binding CloseBatchPreviewModalCommand}"
+                       CloseOnEscape="True"
+                       Panel.ZIndex="1005">
+        <Border Background="{StaticResource SurfaceCardElevatedBrush}"
+                BorderBrush="{StaticResource SubtleBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource RadiusLg}"
+                Padding="24" Width="680" MaxHeight="600"
+                HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Header -->
+                <Grid Grid.Row="0" Margin="0,0,0,14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Width="36" Height="36" CornerRadius="18"
+                            Background="{StaticResource AccentTranslucentBrush}"
+                            BorderBrush="{StaticResource AccentBrush}" BorderThickness="1"
+                            Margin="0,0,12,0" VerticalAlignment="Center">
+                        <TextBlock Text="★" FontSize="18" Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="{DynamicResource String_BatchContributionModalTitle}" Style="{StaticResource H2}"/>
+                        <TextBlock Text="{DynamicResource String_BatchContributionModalSubtitle}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                    </StackPanel>
+
+                    <Button Grid.Column="2" Content="✕" Style="{StaticResource GhostButton}" Width="24" Height="24" Padding="0"
+                            IsEnabled="{Binding IsBatchSubmitting, Converter={StaticResource InverseBoolConverter}}"
+                            Command="{Binding CloseBatchPreviewModalCommand}"/>
+                </Grid>
+
+                <!-- Description & Privacy Guarantee -->
+                <Border Grid.Row="1" Background="{StaticResource SurfaceInputBrush}"
+                        BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                        CornerRadius="{StaticResource RadiusSm}" Padding="12,10" Margin="0,0,0,12">
+                    <TextBlock Text="{DynamicResource String_BatchContributionDesc}"
+                               Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"/>
+                </Border>
+
+                <!-- Candidates Table -->
+                <Border Grid.Row="2" Background="{StaticResource SurfaceInputBrush}"
+                        BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                        CornerRadius="{StaticResource RadiusSm}" Padding="8" Margin="0,0,0,14">
+                    <ScrollViewer MaxHeight="240" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding ContributionBatchPreview}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{StaticResource SurfaceCardBrush}" CornerRadius="{StaticResource RadiusSm}"
+                                            Padding="10,8" Margin="0,0,0,6">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="2*"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="1.5*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Game & AppID -->
+                                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                                <TextBlock Text="{Binding AppName}" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource PrimaryTextBrush}" TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{Binding AppId, StringFormat='{}AppID: {0}'}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}"/>
+                                            </StackPanel>
+
+                                            <!-- Depot -->
+                                            <StackPanel Grid.Column="1" Margin="0,0,8,0" VerticalAlignment="Center">
+                                                <TextBlock Text="Depot" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                <TextBlock Text="{Binding DepotId}" FontWeight="SemiBold" FontSize="11" Foreground="{StaticResource PrimaryTextBrush}"/>
+                                            </StackPanel>
+
+                                            <!-- Manifest GID -->
+                                            <StackPanel Grid.Column="2" Margin="0,0,8,0" VerticalAlignment="Center">
+                                                <TextBlock Text="Manifest" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                <TextBlock Text="{Binding ManifestId}" FontWeight="SemiBold" FontSize="11" Foreground="{StaticResource PrimaryTextBrush}" TextTrimming="CharacterEllipsis"/>
+                                            </StackPanel>
+
+                                            <!-- Provenance Badge -->
+                                            <Border Grid.Column="3" Background="#163B82F6" BorderBrush="#303B82F6" BorderThickness="1"
+                                                    CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="0,0,10,0" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Provenance}" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
+                                            </Border>
+
+                                            <!-- Size -->
+                                            <TextBlock Grid.Column="4" Text="{Binding SizeFormatted}" Style="{StaticResource Caption}"
+                                                       Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Border>
+
+                <!-- Batch Progress / Status -->
+                <StackPanel Grid.Row="3" Margin="0,0,0,14" Visibility="{Binding IsBatchSubmitting, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <ProgressBar IsIndeterminate="True" Height="4" Margin="0,0,0,6" Foreground="{StaticResource AccentBrush}"/>
+                    <TextBlock Text="{DynamicResource String_BatchSubmittingStatus}" Style="{StaticResource Caption}" Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Action Buttons -->
+                <Grid Grid.Row="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button Grid.Column="0" Content="{DynamicResource String_Cancel}"
+                            Style="{StaticResource SecondaryButton}"
+                            Padding="16,10"
+                            IsEnabled="{Binding IsBatchSubmitting, Converter={StaticResource InverseBoolConverter}}"
+                            Command="{Binding CloseBatchPreviewModalCommand}"/>
+
+                    <Button Grid.Column="2" Content="{DynamicResource String_AuthorizeBatchBtn}"
+                            Style="{StaticResource PrimaryButton}"
+                            Padding="16,10"
+                            IsEnabled="{Binding IsBatchSubmitting, Converter={StaticResource InverseBoolConverter}}"
+                            Command="{Binding AuthorizeAndSubmitBatchCommand}"/>
+                </Grid>
+            </Grid>
+        </Border>
+    </ctrl:ModalOverlay>
 </Grid>
 </UserControl>

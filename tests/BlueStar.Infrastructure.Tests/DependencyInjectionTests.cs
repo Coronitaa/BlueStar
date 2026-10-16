@@ -3,7 +3,9 @@ using BlueStar.Core.Interfaces;
 using BlueStar.Infrastructure.Downloader;
 using BlueStar.Infrastructure.Emulators;
 using BlueStar.Infrastructure.Engine;
+using BlueStar.Infrastructure.Metadata;
 using BlueStar.Infrastructure.Mods;
+using BlueStar.Infrastructure.Services;
 using BlueStar.Infrastructure.Steam;
 using BlueStar.Infrastructure.Storage;
 using BlueStar.Infrastructure.Workshop;
@@ -47,6 +49,15 @@ public class DependencyInjectionTests
         services.AddSingleton<IEmulatorRatingService, EmulatorRatingService>();
         services.AddSingleton<IGameLauncher>(new Mock<IGameLauncher>().Object);
 
+        // Steam License & Historical Discovery
+        services.AddSingleton<ISteamSessionCookieProvider, SteamSessionCookieProvider>();
+        services.AddSingleton<SteamPackageResolver>();
+        services.AddSingleton<IDlcPayloadClassifier, DlcPayloadClassifier>();
+        services.AddSingleton<SteamStoreApiClient>();
+        services.AddSingleton<IManifestCacheService>(new Mock<IManifestCacheService>().Object);
+        services.AddHttpClient<IHistoricalRevisionDiscoveryService, HistoricalRevisionDiscoveryService>();
+        services.AddHttpClient<ISteamLicenseDiscoveryService, SteamLicenseDiscoveryService>();
+
         var provider = services.BuildServiceProvider();
 
         // Act & Assert
@@ -55,6 +66,9 @@ public class DependencyInjectionTests
         provider.GetRequiredService<IEmulatorRatingService>().Should().NotBeNull();
         provider.GetRequiredService<IEngineDetector>().Should().NotBeNull();
         provider.GetRequiredService<IEmulatorRegistry>().Should().NotBeNull();
+        provider.GetRequiredService<ISteamSessionCookieProvider>().Should().NotBeNull();
+        provider.GetRequiredService<ISteamLicenseDiscoveryService>().Should().NotBeNull();
+        provider.GetRequiredService<IHistoricalRevisionDiscoveryService>().Should().NotBeNull();
     }
 
     [Fact]

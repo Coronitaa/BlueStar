@@ -734,4 +734,201 @@ public sealed class ManifestHubClientTests : IDisposable
         snap.DepotManifests.Should().ContainKey(732);
         snap.DepotManifests[732].Should().Be(555002);
     }
+
+    [Fact]
+    public async Task ManifestHubProvider_GetCoverageAsync_QueriesCoverageQueryEndpoint_WhenHubConfigured()
+    {
+        var appSettings = new AppSettingsService(NullLogger<AppSettingsService>.Instance, Path.Combine(_testDir, "settings_cov.json"));
+        await appSettings.SetHubServerUrlAsync("http://127.0.0.1:5088");
+
+        var cacheService = new ManifestCacheService(NullLogger<ManifestCacheService>.Instance, Path.Combine(_testDir, "cache_cov_query"));
+
+        var coverageResponseJson = """
+        {
+          "isSuccess": true,
+          "existingManifests": [
+            { "depotId": 731, "manifestId": 500001 },
+            { "depotId": 732, "manifestId": 500002 }
+          ],
+          "depotManifests": {
+            "731": [ 500001 ],
+            "732": [ 500002 ]
+          },
+          "totalFound": 2
+        }
+        """;
+
+        var requestedUrls = new List<string>();
+        string? requestBody = null;
+
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync((HttpRequestMessage req, CancellationToken _) =>
+            {
+                var uri = req.RequestUri?.ToString() ?? string.Empty;
+                requestedUrls.Add(uri);
+                if (req.Content != null)
+                {
+                    requestBody = req.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                }
+
+                if (uri == "http://127.0.0.1:5088/api/v1/coverage/query")
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(coverageResponseJson, Encoding.UTF8, "application/json")
+                    };
+                }
+
+                return new HttpResponseMessage(HttpStatusCode.NotFound);
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object);
+        var provider = new ManifestHubProvider(
+            httpClient,
+            cacheService,
+            NullLogger<ManifestHubProvider>.Instance,
+            appSettings: appSettings);
+
+        var coverage = await provider.GetCoverageAsync([730]);
+
+        requestedUrls.Should().Contain("http://127.0.0.1:5088/api/v1/coverage/query");
+        requestBody.Should().Contain("730");
+        coverage.Should().HaveCount(2);
+        coverage.Should().Contain(a => a.DepotId == 731 && a.ManifestId == 500001);
+        coverage.Should().Contain(a => a.DepotId == 732 && a.ManifestId == 500002);
+    }
+
+    [Fact]
+    public async Task ContributionTransportService_QueryExistingManifestsAsync_QueriesCoverageQueryEndpoint()
+    {
+        var appSettings = new AppSettingsService(NullLogger<AppSettingsService>.Instance, Path.Combine(_testDir, "settings_ts_cov.json"));
+        await appSettings.SetHubServerUrlAsync("http://127.0.0.1:5088");
+
+        string? requestedUrl = null;
+        var coverageResponseJson = """
+        {
+          "isSuccess": true,
+          "existingManifests": [
+            { "depotId": 441, "manifestId": 123456789 }
+          ]
+        }
+        """;
+
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync((HttpRequestMessage req, CancellationToken _) =>
+            {
+                requestedUrl = req.RequestUri?.ToString();
+                if (requestedUrl == "http://127.0.0.1:5088/api/v1/coverage/query")
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(coverageResponseJson, Encoding.UTF8, "application/json")
+                    };
+                }
+
+                return new HttpResponseMessage(HttpStatusCode.NotFound);
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object);
+        var transport = new ContributionTransportService(
+            httpClient,
+            null,
+            NullLogger<ContributionTransportService>.Instance,
+            null,
+            appSettings);
+
+        var existing = await transport.QueryExistingManifestsAsync(appIds: [440], depotIds: [441]);
+
+        requestedUrl.Should().Be("http://127.0.0.1:5088/api/v1/coverage/query");
+        existing.Should().HaveCount(1);
+        existing[0].DepotId.Should().Be(441);
+        existing[0].ManifestId.Should().Be(123456789UL);
+
+        // Pre-seeded: IsAlreadyCredited must now be true for this manifest!
+        transport.IsAlreadyCredited(441, 123456789UL).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ContributionTransportService_TransmitContributionAsync_DuplicateReceipt_CreditsZeroStardustAndMarksAlreadyCredited()
+    {
+        var appSettings = new AppSettingsService(NullLogger<AppSettingsService>.Instance, Path.Combine(_testDir, "settings_dup.json"));
+        await appSettings.SetHubServerUrlAsync("http://127.0.0.1:5088");
+
+        var duplicateReceiptJson = """
+        {
+          "receiptId": "rcpt_dup_123",
+          "status": "Duplicate",
+          "isSuccess": true,
+          "stardustCredited": 0,
+          "isDuplicate": true,
+          "appId": 730,
+          "depotId": 731,
+          "manifestId": 9999999
+        }
+        """;
+
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync((HttpRequestMessage _, CancellationToken _) =>
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(duplicateReceiptJson, Encoding.UTF8, "application/json")
+                };
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object);
+        var transport = new ContributionTransportService(
+            httpClient,
+            null,
+            NullLogger<ContributionTransportService>.Instance,
+            null,
+            appSettings);
+
+        var manifestBytes = CreateValidSteamProtobufManifest();
+        string sha256;
+        using (var sha = System.Security.Cryptography.SHA256.Create())
+        {
+            sha256 = Convert.ToHexString(sha.ComputeHash(manifestBytes)).ToLowerInvariant();
+        }
+
+        var submission = new ContributionSubmission
+        {
+            AppId = 730,
+            DepotId = 731,
+            ManifestId = 9999999UL,
+            AnonymousContributorId = Guid.NewGuid().ToString(),
+            ManifestPayload = manifestBytes,
+            ManifestSizeBytes = manifestBytes.Length,
+            ManifestHashSha256 = sha256,
+            UserConsentGranted = true,
+            SanitizationAuditHash = "audit_dup"
+        };
+
+        var receipt = await transport.TransmitContributionAsync(submission);
+
+        receipt.IsSuccess.Should().BeTrue();
+        receipt.IsDuplicate.Should().BeTrue();
+        receipt.StardustCredited.Should().Be(0);
+
+        // 0 points credited to Stardust balance
+        transport.GetTotalStardustCredited().Should().Be(0);
+
+        // Idempotently recorded: IsAlreadyCredited is true
+        transport.IsAlreadyCredited(731, 9999999UL).Should().BeTrue();
+    }
 }
