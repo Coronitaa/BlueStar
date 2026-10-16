@@ -1042,12 +1042,12 @@
     <sys:String x:Key="String_AnalyzeNowBtn">Analyze Now</sys:String>
 
     <!-- Manifest Analysis & Audit Details -->
-    <sys:String x:Key="String_ManifestAnalysisCardTitle">Manifest Analysis &amp; Audit Results</sys:String>
-    <sys:String x:Key="String_ManifestAnalysisExplanation">BlueStar differentiates between three operations: (1) Analysis &amp; Audit inspects local installed instances and disk cache locally against Hub remote coverage; (2) Manifest Download fetches missing manifests from the Hub; (3) Voluntary Contribution uploads local manifests with explicit consent.</sys:String>
-    <sys:String x:Key="String_CoverageAuditedLabel">Audited Local</sys:String>
-    <sys:String x:Key="String_CoverageMatchedLabel">Matched in Hub</sys:String>
-    <sys:String x:Key="String_CoverageMissingLabel">Available in Hub (Missing Locally)</sys:String>
-    <sys:String x:Key="String_CoverageLocalOnlyLabel">Local Only (Contribution Candidates)</sys:String>
+    <sys:String x:Key="String_ManifestAnalysisCardTitle">License Discovery &amp; Hub Manifest Coverage</sys:String>
+    <sys:String x:Key="String_ManifestAnalysisExplanation">BlueStar identifies licensed Steam games, discovers historical revisions across allowed community sources, compares central Manifest Hub coverage, and contributes missing revisions with explicit user consent.</sys:String>
+    <sys:String x:Key="String_CoverageAuditedLabel">Discovered Revisions</sys:String>
+    <sys:String x:Key="String_CoverageMatchedLabel">Already in Hub</sys:String>
+    <sys:String x:Key="String_CoverageMissingLabel">Missing in Hub</sys:String>
+    <sys:String x:Key="String_CoverageLocalOnlyLabel">Contribution Candidates</sys:String>
     <sys:String x:Key="String_CoveragePercentageLabel">Coverage</sys:String>
     <sys:String x:Key="String_MissingManifestsTitle">Available in Hub to Download</sys:String>
     <sys:String x:Key="String_LocalOnlyManifestsTitle">Local Manifests (Eligible for Contribution)</sys:String>

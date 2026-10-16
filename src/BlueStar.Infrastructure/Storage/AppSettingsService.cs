@@ -376,14 +376,14 @@ public sealed class AppSettingsService
                 return envUrl.Trim().TrimEnd('/');
             }
 
-            return string.IsNullOrWhiteSpace(_current.HubServerUrl) ? "http://localhost:5088" : _current.HubServerUrl.Trim().TrimEnd('/');
+            return string.IsNullOrWhiteSpace(_current.HubServerUrl) ? string.Empty : _current.HubServerUrl.Trim().TrimEnd('/');
         }
     }
 
     /// <summary>Persists the Manifest Hub server URL.</summary>
     public async Task SetHubServerUrlAsync(string url)
     {
-        _current = _current with { HubServerUrl = string.IsNullOrWhiteSpace(url) ? "http://localhost:5088" : url.Trim().TrimEnd('/') };
+        _current = _current with { HubServerUrl = string.IsNullOrWhiteSpace(url) ? string.Empty : url.Trim().TrimEnd('/') };
         await SaveAsync().ConfigureAwait(false);
     }
 
@@ -416,7 +416,7 @@ public sealed class AppSettingsService
         public string? ManifestAnalysisScope { get; init; } = "SteamLibrary";
         public string? ManifestAnalysisStatus { get; init; } = "Idle";
         public DateTimeOffset? ManifestAnalysisLastRun { get; init; }
-        public string? HubServerUrl { get; init; } = "http://localhost:5088";
+        public string? HubServerUrl { get; init; } = string.Empty;
     }
 }
 

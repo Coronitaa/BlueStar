@@ -301,7 +301,7 @@ public partial class SettingsViewModel : ObservableObject
     private bool _isAnalyzingManifests;
 
     [ObservableProperty]
-    private string _hubServerUrl = "http://localhost:5088";
+    private string _hubServerUrl = string.Empty;
 
     [ObservableProperty]
     private string? _hubServerUrlStatusMessage;

@@ -417,40 +417,101 @@ public sealed class SteamLicenseDiscoveryService : ISteamLicenseDiscoveryService
         return (ownedApps.Count > 0 || ownedPackages.Count > 0, ownedApps, ownedPackages);
     }
 
-    private static List<uint> InspectLocalSteamClientLicenses(string steamPath)
+    internal static List<uint> InspectLocalSteamClientLicenses(string steamPath)
     {
         var appIds = new HashSet<uint>();
         var userdata = Path.Combine(steamPath, "userdata");
-        if (!Directory.Exists(userdata)) return [];
-
-        var userDirs = Directory.GetDirectories(userdata);
-        foreach (var userDir in userDirs)
+        if (Directory.Exists(userdata))
         {
-            var localConfig = Path.Combine(userDir, "config", "localconfig.vdf");
-            if (File.Exists(localConfig))
+            var userDirs = Directory.GetDirectories(userdata);
+            foreach (var userDir in userDirs)
             {
-                try
+                var localConfig = Path.Combine(userDir, "config", "localconfig.vdf");
+                if (File.Exists(localConfig))
                 {
-                    var text = File.ReadAllText(localConfig);
-                    // Match app definitions under "apps" section
-                    var matches = Regex.Matches(text, @"""apps""\s*\{(?<appsContent>[^}]*)\}", RegexOptions.Singleline | RegexOptions.IgnoreCase);
-                    foreach (Match m in matches)
+                    try
                     {
-                        var inner = m.Groups["appsContent"].Value;
-                        var appMatches = Regex.Matches(inner, @"""(\d+)""", RegexOptions.IgnoreCase);
-                        foreach (Match appM in appMatches)
-                        {
-                            if (uint.TryParse(appM.Groups[1].Value, out var appId) && appId > 0)
-                            {
-                                appIds.Add(appId);
-                            }
-                        }
+                        ExtractAppIdsFromVdf(File.ReadAllText(localConfig), appIds);
                     }
+                    catch { }
                 }
-                catch { }
+
+                var sharedConfig = Path.Combine(userDir, "7", "remote", "sharedconfig.vdf");
+                if (File.Exists(sharedConfig))
+                {
+                    try
+                    {
+                        ExtractAppIdsFromVdf(File.ReadAllText(sharedConfig), appIds);
+                    }
+                    catch { }
+                }
             }
         }
 
+        var mainConfig = Path.Combine(steamPath, "config", "config.vdf");
+        if (File.Exists(mainConfig))
+        {
+            try
+            {
+                ExtractAppIdsFromVdf(File.ReadAllText(mainConfig), appIds);
+            }
+            catch { }
+        }
+
         return appIds.ToList();
+    }
+
+    internal static void ExtractAppIdsFromVdf(string content, HashSet<uint> appIds)
+    {
+        if (string.IsNullOrWhiteSpace(content)) return;
+
+        // Balanced brace depth scanner for "apps" blocks
+        var appsIndex = 0;
+        while ((appsIndex = content.IndexOf("\"apps\"", appsIndex, StringComparison.OrdinalIgnoreCase)) >= 0)
+        {
+            var openBrace = content.IndexOf('{', appsIndex);
+            if (openBrace < 0) break;
+
+            int depth = 1;
+            int pos = openBrace + 1;
+            while (pos < content.Length && depth > 0)
+            {
+                char c = content[pos];
+                if (c == '{')
+                {
+                    depth++;
+                }
+                else if (c == '}')
+                {
+                    depth--;
+                }
+                else if (depth == 1 && c == '"')
+                {
+                    int endQuote = content.IndexOf('"', pos + 1);
+                    if (endQuote > pos)
+                    {
+                        var key = content.Substring(pos + 1, endQuote - pos - 1);
+                        if (uint.TryParse(key, out var appId) && appId > 0)
+                        {
+                            appIds.Add(appId);
+                        }
+                        pos = endQuote;
+                    }
+                }
+                pos++;
+            }
+
+            appsIndex = openBrace + 1;
+        }
+
+        // Also match any direct appid entries
+        var directMatches = Regex.Matches(content, @"""(?:appid|app)""\s+""(\d+)""", RegexOptions.IgnoreCase);
+        foreach (Match m in directMatches)
+        {
+            if (uint.TryParse(m.Groups[1].Value, out var aId) && aId > 0)
+            {
+                appIds.Add(aId);
+            }
+        }
     }
 }

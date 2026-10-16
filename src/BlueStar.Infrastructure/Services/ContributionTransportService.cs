@@ -387,39 +387,95 @@ public sealed class ContributionTransportService : IContributionTransportService
             _logger.LogDebug(ex, "POST /api/v1/coverage/query failed, falling back to /indices/coverage.json");
         }
 
-        // 2. Fallback to GET /indices/coverage.json
-        try
-        {
-            string covUrl = !string.IsNullOrEmpty(effectiveBase)
-                ? $"{effectiveBase}/indices/coverage.json"
-                : (client.BaseAddress != null ? "/indices/coverage.json" : string.Empty);
+        // 2. Fallback to GET indices (coverage.json and depots.json)
+        var appSet = appIds != null ? new HashSet<uint>(appIds) : null;
+        var depotSet = depotIds != null ? new HashSet<uint>(depotIds) : null;
 
-            if (!string.IsNullOrEmpty(covUrl))
+        var candidateUrls = new List<string>();
+        if (!string.IsNullOrEmpty(effectiveBase))
+        {
+            candidateUrls.Add($"{effectiveBase}/indices/coverage.json");
+            candidateUrls.Add($"{effectiveBase}/indices/depots.json");
+        }
+        else if (client.BaseAddress != null)
+        {
+            candidateUrls.Add("/indices/coverage.json");
+            candidateUrls.Add("/indices/depots.json");
+        }
+
+        // Always fallback to public GitHub Manifest Hub repository indices
+        candidateUrls.Add("https://raw.githubusercontent.com/Coronitaa/BlueStar-ManifestHub/main/indices/coverage.json");
+        candidateUrls.Add("https://raw.githubusercontent.com/Coronitaa/BlueStar-ManifestHub/main/indices/depots.json");
+
+        foreach (var url in candidateUrls)
+        {
+            try
             {
-                using var covResp = await client.GetAsync(covUrl, ct).ConfigureAwait(false);
+                using var covResp = await client.GetAsync(url, ct).ConfigureAwait(false);
                 if (covResp.IsSuccessStatusCode)
                 {
                     var covBody = await covResp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
                     using var doc = JsonDocument.Parse(covBody);
-                    var appSet = appIds != null ? new HashSet<uint>(appIds) : null;
-                    var depotSet = depotIds != null ? new HashSet<uint>(depotIds) : null;
 
                     foreach (var prop in doc.RootElement.EnumerateObject())
                     {
-                        var parts = prop.Name.Split(':');
-                        if (parts.Length == 2 && uint.TryParse(parts[0], out var aId) && uint.TryParse(parts[1], out var dId))
+                        if (prop.Name.Contains(':'))
                         {
-                            if ((appSet == null || appSet.Contains(aId)) && (depotSet == null || depotSet.Contains(dId)))
+                            var parts = prop.Name.Split(':');
+                            if (parts.Length == 2 && uint.TryParse(parts[0], out var aId) && uint.TryParse(parts[1], out var dId))
                             {
-                                var covObj = prop.Value;
-                                if (covObj.TryGetProperty("latestAvailableManifestId", out var lProp) && lProp.TryGetUInt64(out var mId) && mId > 0)
+                                if ((appSet == null || appSet.Contains(aId)) && (depotSet == null || depotSet.Contains(dId)))
+                                {
+                                    var covObj = prop.Value;
+                                    if (covObj.TryGetProperty("latestAvailableManifestId", out var lProp) && lProp.TryGetUInt64(out var mId) && mId > 0)
+                                    {
+                                        if (seen.Add((dId, mId)))
+                                        {
+                                            results.Add((dId, mId));
+                                            _creditedReceipts.TryAdd((dId, mId), new PublicationReceipt
+                                            {
+                                                AppId = aId,
+                                                DepotId = dId,
+                                                ManifestId = mId,
+                                                Status = "Duplicate",
+                                                StardustCredited = 0
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        else if (uint.TryParse(prop.Name, out var dId))
+                        {
+                            if (depotSet == null || depotSet.Contains(dId))
+                            {
+                                var depotObj = prop.Value;
+                                if (depotObj.TryGetProperty("manifestIds", out var mIdsProp) && mIdsProp.ValueKind == JsonValueKind.Array)
+                                {
+                                    foreach (var mEl in mIdsProp.EnumerateArray())
+                                    {
+                                        if (mEl.TryGetUInt64(out var mId) && mId > 0 && seen.Add((dId, mId)))
+                                        {
+                                            results.Add((dId, mId));
+                                            _creditedReceipts.TryAdd((dId, mId), new PublicationReceipt
+                                            {
+                                                AppId = 0,
+                                                DepotId = dId,
+                                                ManifestId = mId,
+                                                Status = "Duplicate",
+                                                StardustCredited = 0
+                                            });
+                                        }
+                                    }
+                                }
+                                else if (depotObj.TryGetProperty("latestManifestId", out var lmProp) && lmProp.TryGetUInt64(out var mId) && mId > 0)
                                 {
                                     if (seen.Add((dId, mId)))
                                     {
                                         results.Add((dId, mId));
                                         _creditedReceipts.TryAdd((dId, mId), new PublicationReceipt
                                         {
-                                            AppId = aId,
+                                            AppId = 0,
                                             DepotId = dId,
                                             ManifestId = mId,
                                             Status = "Duplicate",
@@ -431,14 +487,17 @@ public sealed class ContributionTransportService : IContributionTransportService
                         }
                     }
 
-                    return results.AsReadOnly();
+                    if (results.Count > 0)
+                    {
+                        return results.AsReadOnly();
+                    }
                 }
             }
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "GET /indices/coverage.json failed during QueryExistingManifestsAsync");
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to query manifest index from {Url}", url);
+            }
         }
 
         return results.AsReadOnly();

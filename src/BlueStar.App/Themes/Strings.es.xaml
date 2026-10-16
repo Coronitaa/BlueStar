@@ -1041,12 +1041,12 @@
     <sys:String x:Key="String_AnalyzeNowBtn">Analizar Ahora</sys:String>
 
     <!-- Manifest Analysis & Audit Details -->
-    <sys:String x:Key="String_ManifestAnalysisCardTitle">Resultados de Auditoría y Análisis de Manifiestos</sys:String>
-    <sys:String x:Key="String_ManifestAnalysisExplanation">BlueStar diferencia entre tres operaciones: (1) Análisis y Auditoría examina instancias y caché local contra la cobertura remota del Hub; (2) Descarga de Manifiestos obtiene manifiestos faltantes desde el Hub; (3) Contribución Voluntaria envía manifiestos locales con consentimiento explícito.</sys:String>
-    <sys:String x:Key="String_CoverageAuditedLabel">Locales Auditados</sys:String>
-    <sys:String x:Key="String_CoverageMatchedLabel">Coincidentes en Hub</sys:String>
-    <sys:String x:Key="String_CoverageMissingLabel">Disponibles en Hub (Faltantes Localmente)</sys:String>
-    <sys:String x:Key="String_CoverageLocalOnlyLabel">Solo Locales (Candidatos a Contribuir)</sys:String>
+    <sys:String x:Key="String_ManifestAnalysisCardTitle">Descubrimiento por Licencias y Cobertura de Manifiestos</sys:String>
+    <sys:String x:Key="String_ManifestAnalysisExplanation">BlueStar identifica los juegos de tu biblioteca licenciada de Steam, descubre las revisiones históricas en las fuentes permitidas, compara la cobertura con el Manifest Hub y recupera únicamente las revisiones faltantes para contribuir con tu consentimiento.</sys:String>
+    <sys:String x:Key="String_CoverageAuditedLabel">Revisiones Descubiertas</sys:String>
+    <sys:String x:Key="String_CoverageMatchedLabel">Ya en el Hub</sys:String>
+    <sys:String x:Key="String_CoverageMissingLabel">Faltantes en el Hub</sys:String>
+    <sys:String x:Key="String_CoverageLocalOnlyLabel">Candidatos a Contribuir</sys:String>
     <sys:String x:Key="String_CoveragePercentageLabel">Cobertura</sys:String>
     <sys:String x:Key="String_MissingManifestsTitle">Disponibles en Hub para Descargar</sys:String>
     <sys:String x:Key="String_LocalOnlyManifestsTitle">Manifiestos Locales (Elegibles para Contribuir)</sys:String>
