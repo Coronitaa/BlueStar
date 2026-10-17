@@ -114,6 +114,13 @@ public sealed class SteamClientManifestHarvesterProvider : IManifestHarvesterPro
             }
             else
             {
+                // Ensure Steam Console tab is open via protocol URI
+                try
+                {
+                    Process.Start(new ProcessStartInfo("steam://nav/console") { UseShellExecute = true });
+                }
+                catch { }
+
                 var steamExe = Path.Combine(steamPath, "steam.exe");
                 if (File.Exists(steamExe))
                 {
@@ -126,12 +133,29 @@ public sealed class SteamClientManifestHarvesterProvider : IManifestHarvesterPro
                     };
                     Process.Start(psi);
                 }
-                else
+
+                // Copy download_manifest command to clipboard for seamless user convenience
+                try
                 {
-                    // Fallback to steam:// protocol URL
-                    var uri = $"steam://nav/console";
-                    Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true });
+                    var consoleCmd = $"download_manifest {appId} {depotId} {manifestId}";
+                    if (OperatingSystem.IsWindows())
+                    {
+                        using var p = new Process
+                        {
+                            StartInfo = new ProcessStartInfo("clip.exe")
+                            {
+                                UseShellExecute = false,
+                                RedirectStandardInput = true,
+                                CreateNoWindow = true
+                            }
+                        };
+                        p.Start();
+                        p.StandardInput.Write(consoleCmd);
+                        p.StandardInput.Close();
+                        p.WaitForExit(500);
+                    }
                 }
+                catch { }
             }
         }
         catch (Exception ex)

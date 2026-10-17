@@ -741,6 +741,50 @@ public partial class SettingsViewModel : ObservableObject
                             }
                         }
                     }
+
+                    // Also scan Steam client's authentic depotcache when inspecting cache
+                    var steamPathForCache = ShortcutHelper.GetSteamPath();
+                    if (!string.IsNullOrWhiteSpace(steamPathForCache))
+                    {
+                        var steamDepotCache = Path.Combine(steamPathForCache, "depotcache");
+                        if (Directory.Exists(steamDepotCache))
+                        {
+                            var depotFiles = Directory.GetFiles(steamDepotCache, "*.manifest");
+                            foreach (var f in depotFiles)
+                            {
+                                ct.ThrowIfCancellationRequested();
+                                var fname = Path.GetFileNameWithoutExtension(f);
+                                var parts = fname.Split('_');
+                                if (parts.Length == 2 && uint.TryParse(parts[0], out var dId) && ulong.TryParse(parts[1], out var mId))
+                                {
+                                    if (!localArtifacts.Any(a => a.DepotId == dId && a.ManifestId == mId))
+                                    {
+                                        try
+                                        {
+                                            var fi = new FileInfo(f);
+                                            if (fi.Length >= 4)
+                                            {
+                                                using var fs = new FileStream(f, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                                                var magic = new byte[4];
+                                                if (fs.Read(magic, 0, 4) == 4 && magic[0] == 0xD0 && magic[1] == 0x17 && magic[2] == 0xF6 && magic[3] == 0x71)
+                                                {
+                                                    localArtifacts.Add(new ManifestArtifact
+                                                    {
+                                                        DepotId = dId,
+                                                        ManifestId = mId,
+                                                        SizeBytes = fi.Length,
+                                                        LocalCachePath = f
+                                                    });
+                                                }
+                                            }
+                                        }
+                                        catch { }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     if (_instanceManager != null)
                     {
                         var instances = await _instanceManager.GetAllAsync(ct).ConfigureAwait(false);
@@ -866,16 +910,53 @@ public partial class SettingsViewModel : ObservableObject
                     {
                         if (!knownRevisions.Any(r => r.DepotId == la.DepotId && r.ManifestId == la.ManifestId))
                         {
+                            uint matchedAppId = defaultAppId;
+                            if (targetApps.Any(t => t.AppId == la.DepotId))
+                            {
+                                matchedAppId = la.DepotId;
+                            }
+                            else
+                            {
+                                var existing = knownRevisions.FirstOrDefault(r => r.DepotId == la.DepotId);
+                                if (existing != null && existing.AppId > 0)
+                                {
+                                    matchedAppId = existing.AppId;
+                                }
+                            }
+
+                            string prov = (!string.IsNullOrWhiteSpace(la.LocalCachePath) && la.LocalCachePath.Contains("depotcache", StringComparison.OrdinalIgnoreCase))
+                                ? "Steam DepotCache (Ready to Publish)"
+                                : "LocalCache";
+
                             knownRevisions.Add(new HubRevisionItem
                             {
-                                AppId = defaultAppId,
+                                AppId = matchedAppId,
                                 DepotId = la.DepotId,
                                 ManifestId = la.ManifestId,
                                 DepotName = $"Depot {la.DepotId}",
-                                Provenance = "LocalCache",
+                                Provenance = prov,
                                 SizeOriginal = la.SizeBytes,
                                 Status = "Available"
                             });
+                        }
+                    }
+                }
+
+                // Enrich known revisions with Steam DepotCache provenance if authentic manifest is already on local disk
+                var steamPathForAudit = ShortcutHelper.GetSteamPath();
+                if (!string.IsNullOrWhiteSpace(steamPathForAudit))
+                {
+                    var steamDepotCache = Path.Combine(steamPathForAudit, "depotcache");
+                    if (Directory.Exists(steamDepotCache))
+                    {
+                        for (int i = 0; i < knownRevisions.Count; i++)
+                        {
+                            var rev = knownRevisions[i];
+                            var localDepotFile = Path.Combine(steamDepotCache, $"{rev.DepotId}_{rev.ManifestId}.manifest");
+                            if (File.Exists(localDepotFile))
+                            {
+                                knownRevisions[i] = rev with { Provenance = "Steam DepotCache (Ready to Publish)" };
+                            }
                         }
                     }
                 }
@@ -1174,21 +1255,44 @@ public partial class SettingsViewModel : ObservableObject
 
                 try
                 {
-                    // STAGE 6: Download or recover missing manifest binary
+                    // STAGE 6: Check local Steam depotcache and cache service first (zero-download instant contribution)
                     string? manifestPath = null;
-                    try
+                    var steamPath = ShortcutHelper.GetSteamPath();
+                    if (!string.IsNullOrWhiteSpace(steamPath))
                     {
-                        manifestPath = await revDiscovery.FetchManifestBinaryAsync(item.AppId, item.DepotId, item.ManifestId, tempDir, ct).ConfigureAwait(false);
-                    }
-                    catch (Exception)
-                    {
-                        // Fallback: harvest via multi-mechanism coordinator (Steam client local console / DepotDownloader)
-                        if (_manifestHarvestCoordinator != null)
+                        var localDepotCacheFile = Path.Combine(steamPath, "depotcache", $"{item.DepotId}_{item.ManifestId}.manifest");
+                        if (File.Exists(localDepotCacheFile))
                         {
-                            var harvestResult = await _manifestHarvestCoordinator.HarvestManifestAsync(item.AppId, item.DepotId, item.ManifestId, ct).ConfigureAwait(false);
-                            if (harvestResult.IsSuccess && !string.IsNullOrWhiteSpace(harvestResult.ManifestFilePath) && File.Exists(harvestResult.ManifestFilePath))
+                            manifestPath = localDepotCacheFile;
+                        }
+                    }
+
+                    if (string.IsNullOrWhiteSpace(manifestPath) && _manifestCacheService != null)
+                    {
+                        var cached = _manifestCacheService.GetManifestPath(item.DepotId, item.ManifestId);
+                        if (!string.IsNullOrWhiteSpace(cached) && File.Exists(cached))
+                        {
+                            manifestPath = cached;
+                        }
+                    }
+
+                    // If not found locally on disk, download or harvest
+                    if (string.IsNullOrWhiteSpace(manifestPath) || !File.Exists(manifestPath))
+                    {
+                        try
+                        {
+                            manifestPath = await revDiscovery.FetchManifestBinaryAsync(item.AppId, item.DepotId, item.ManifestId, tempDir, ct).ConfigureAwait(false);
+                        }
+                        catch (Exception)
+                        {
+                            // Fallback: harvest via multi-mechanism coordinator (Steam client local console / DepotDownloader)
+                            if (_manifestHarvestCoordinator != null)
                             {
-                                manifestPath = harvestResult.ManifestFilePath;
+                                var harvestResult = await _manifestHarvestCoordinator.HarvestManifestAsync(item.AppId, item.DepotId, item.ManifestId, ct).ConfigureAwait(false);
+                                if (harvestResult.IsSuccess && !string.IsNullOrWhiteSpace(harvestResult.ManifestFilePath) && File.Exists(harvestResult.ManifestFilePath))
+                                {
+                                    manifestPath = harvestResult.ManifestFilePath;
+                                }
                             }
                         }
                     }
