@@ -1065,6 +1065,18 @@
     <sys:String x:Key="String_AnonymousContributorUuid">Anonymous Contributor UUID (v4)</sys:String>
     <sys:String x:Key="String_CopyUuidBtn">Copy UUID</sys:String>
 
+    <!-- Steam Login & Session Management -->
+    <sys:String x:Key="String_SteamLoginModalTitle">Steam Account Authentication</sys:String>
+    <sys:String x:Key="String_SteamLoginModalSubtitle">Sign in through Valve's official login portal to discover your licensed game library and contribute manifests for Stardust rewards.</sys:String>
+    <sys:String x:Key="String_SteamLoginLoadingText">Loading official Steam login portal...</sys:String>
+    <sys:String x:Key="String_SteamLoginSecurityNotice">Direct and encrypted connection with store.steampowered.com. BlueStar never captures, sees, or stores your password.</sys:String>
+    <sys:String x:Key="String_SteamSessionActiveLabel">Steam Session Active</sys:String>
+    <sys:String x:Key="String_SteamSessionInactiveLabel">Steam Login Required</sys:String>
+    <sys:String x:Key="String_SteamSessionInactiveDesc">To discover licensed games from your library and contribute missing manifests, please sign in with your Steam account.</sys:String>
+    <sys:String x:Key="String_SteamSignInBtn">Sign In with Steam</sys:String>
+    <sys:String x:Key="String_SteamSwitchAccountBtn">Switch Account</sys:String>
+    <sys:String x:Key="String_SteamSignOutBtn">Sign Out</sys:String>
+
     <!-- Contribution Consent Modal -->
     <sys:String x:Key="String_ContributionConsentTitle">Manifest Contribution Consent</sys:String>
     <sys:String x:Key="String_ContributionConsentSubtitle">Review the sanitized payload metadata prior to voluntary transmission.</sys:String>

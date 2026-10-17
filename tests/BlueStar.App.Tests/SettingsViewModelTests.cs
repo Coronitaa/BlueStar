@@ -685,4 +685,95 @@ public class SettingsViewModelTests : IDisposable
         _mockStardust.Verify(s => s.NotifyRewardConfirmed(50), Times.Once);
         vm.LastContributionReceiptId.Should().Be("REC-441-TEST");
     }
+
+    [Fact]
+    public void OpenSteamLoginModalCommand_OpensModalAndSetsLoading()
+    {
+        // Arrange
+        var vm = CreateViewModel();
+
+        // Act
+        vm.OpenSteamLoginModalCommand.Execute(null);
+
+        // Assert
+        vm.IsSteamLoginModalOpen.Should().BeTrue();
+        vm.IsSteamLoginLoading.Should().BeTrue();
+    }
+
+    [Fact]
+    public void CloseSteamLoginModalCommand_ClosesModalAndResetsLoading()
+    {
+        // Arrange
+        var vm = CreateViewModel();
+        vm.OpenSteamLoginModalCommand.Execute(null);
+
+        // Act
+        vm.CloseSteamLoginModalCommand.Execute(null);
+
+        // Assert
+        vm.IsSteamLoginModalOpen.Should().BeFalse();
+        vm.IsSteamLoginLoading.Should().BeFalse();
+    }
+
+    [Fact]
+    public void OnSteamLoginSuccessful_UpdatesSessionStateAndClosesModal()
+    {
+        // Arrange
+        var vm = CreateViewModel();
+        vm.OpenSteamLoginModalCommand.Execute(null);
+
+        // Act
+        vm.OnSteamLoginSuccessful("76561198000000001", "CoronitaTester");
+
+        // Assert
+        vm.IsSteamLoginModalOpen.Should().BeFalse();
+        vm.IsSteamLoginLoading.Should().BeFalse();
+        vm.IsSteamAuthenticated.Should().BeTrue();
+        vm.SteamAuthenticatedSteamId.Should().Be("76561198000000001");
+        vm.SteamAuthenticatedUser.Should().Be("CoronitaTester");
+    }
+
+    [Fact]
+    public async Task LogoutSteamSessionAsync_ClearsSessionState()
+    {
+        // Arrange
+        var vm = CreateViewModel();
+        vm.OnSteamLoginSuccessful("76561198000000001", "CoronitaTester");
+
+        // Act
+        await vm.LogoutSteamSessionCommand.ExecuteAsync(null);
+
+        // Assert
+        vm.IsSteamAuthenticated.Should().BeFalse();
+        vm.SteamAuthenticatedSteamId.Should().BeNull();
+        vm.SteamAuthenticatedUser.Should().BeNull();
+    }
+
+    [Fact]
+    public void AnalyzeManifestCoverage_WhenSteamUnauthenticated_AutoOpensSteamLoginModal()
+    {
+        // Arrange
+        _mockBackgroundTask
+            .Setup(b => b.QueueTask(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Func<IProgress<BackgroundTaskProgress>, CancellationToken, Task>>(), It.IsAny<Guid?>()))
+            .Callback<string, string?, Func<IProgress<BackgroundTaskProgress>, CancellationToken, Task>, Guid?>((name, desc, work, guid) =>
+            {
+                var mockProgress = new Mock<IProgress<BackgroundTaskProgress>>();
+                work(mockProgress.Object, CancellationToken.None).GetAwaiter().GetResult();
+            });
+
+        _mockSteamLicense
+            .Setup(s => s.DiscoverLicensesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SteamLicenseDiscoveryResult.Blocked(SteamLicenseBlockageReason.NoSteamSession, "No active session"));
+
+        var vm = CreateViewModel();
+        vm.EnableManifestAnalysis = true;
+        vm.SelectedManifestAnalysisScope = "Licensed Steam Library (All)";
+
+        // Act
+        vm.RunManifestAnalysis();
+
+        // Assert
+        vm.IsSteamLoginModalOpen.Should().BeTrue();
+        vm.IsAnalyzingManifests.Should().BeFalse();
+    }
 }

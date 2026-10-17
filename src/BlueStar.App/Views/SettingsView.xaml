@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:BlueStar.App.ViewModels"
              xmlns:ctrl="clr-namespace:BlueStar.App.Controls"
+             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
              d:DataContext="{d:DesignInstance vm:SettingsViewModel}"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -284,6 +285,65 @@
                                         <TextBlock Text="{DynamicResource String_PrivacyNoticeDesc}"
                                                    Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"/>
                                     </StackPanel>
+                                </Border>
+
+                                <!-- Steam Authentication & Account Status Card -->
+                                <Border Background="{StaticResource SurfaceInputBrush}"
+                                        BorderBrush="{StaticResource SubtleBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource RadiusSm}"
+                                        Padding="14,12" Margin="0,0,0,14">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Status Icon -->
+                                        <Border Grid.Column="0" Width="36" Height="36" CornerRadius="18"
+                                                Background="#161B90FF"
+                                                BorderBrush="#351B90FF" BorderThickness="1"
+                                                VerticalAlignment="Center" Margin="0,0,12,0">
+                                            <TextBlock Text="🔑" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+
+                                        <!-- Status Details -->
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                <TextBlock Text="{DynamicResource String_SteamSessionActiveLabel}"
+                                                           FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource SuccessBrush}"
+                                                           Visibility="{Binding IsSteamAuthenticated, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                <TextBlock Text="{DynamicResource String_SteamSessionInactiveLabel}"
+                                                           FontWeight="SemiBold" FontSize="13" Foreground="#F59E0B"
+                                                           Visibility="{Binding IsSteamAuthenticated, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                                <TextBlock Text="{Binding SteamAuthenticatedUser, StringFormat='{} · {0}'}"
+                                                           FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}"
+                                                           Visibility="{Binding IsSteamAuthenticated, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding SteamAuthenticatedStatusDetails}"
+                                                       Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+
+                                        <!-- Action Buttons -->
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Button Content="{DynamicResource String_SteamSignInBtn}"
+                                                    Style="{StaticResource PrimaryButton}"
+                                                    Padding="14,6" FontSize="11"
+                                                    Command="{Binding OpenSteamLoginModalCommand}"
+                                                    Visibility="{Binding IsSteamAuthenticated, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                            <Button Content="{DynamicResource String_SteamSwitchAccountBtn}"
+                                                    Style="{StaticResource SecondaryButton}"
+                                                    Padding="10,6" FontSize="11" Margin="0,0,6,0"
+                                                    Command="{Binding OpenSteamLoginModalCommand}"
+                                                    Visibility="{Binding IsSteamAuthenticated, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                            <Button Content="{DynamicResource String_SteamSignOutBtn}"
+                                                    Style="{StaticResource GhostButton}"
+                                                    Padding="8,6" FontSize="11"
+                                                    Command="{Binding LogoutSteamSessionCommand}"
+                                                    Visibility="{Binding IsSteamAuthenticated, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                        </StackPanel>
+                                    </Grid>
                                 </Border>
 
                                 <!-- Opt-In Toggles -->
@@ -1849,6 +1909,82 @@
                             Padding="16,10"
                             IsEnabled="{Binding IsBatchSubmitting, Converter={StaticResource InverseBoolConverter}}"
                             Command="{Binding AuthorizeAndSubmitBatchCommand}"/>
+                </Grid>
+            </Grid>
+        </Border>
+    </ctrl:ModalOverlay>
+
+    <!-- ═══ STEAM LOGIN MODAL (OFFICIAL VALVE WEB LOGIN) ═══ -->
+    <ctrl:ModalOverlay IsOpen="{Binding IsSteamLoginModalOpen}"
+                       CloseCommand="{Binding CloseSteamLoginModalCommand}"
+                       CloseOnEscape="True"
+                       Panel.ZIndex="1005">
+        <Border Background="{StaticResource SurfaceCardElevatedBrush}"
+                BorderBrush="{StaticResource SubtleBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource RadiusLg}"
+                Padding="24" Width="780" Height="640"
+                HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Modal Header -->
+                <Grid Grid.Row="0" Margin="0,0,0,14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Width="36" Height="36" CornerRadius="18"
+                            Background="#161B90FF"
+                            BorderBrush="#351B90FF" BorderThickness="1"
+                            Margin="0,0,12,0" VerticalAlignment="Center">
+                        <TextBlock Text="🔑" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="{DynamicResource String_SteamLoginModalTitle}" Style="{StaticResource H2}"/>
+                        <TextBlock Text="{DynamicResource String_SteamLoginModalSubtitle}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"/>
+                    </StackPanel>
+
+                    <Button Grid.Column="2" Content="✕" Style="{StaticResource GhostButton}" Width="24" Height="24" Padding="0"
+                            Command="{Binding CloseSteamLoginModalCommand}"/>
+                </Grid>
+
+                <!-- WebView2 Host Frame -->
+                <Border Grid.Row="1" Background="#1B2838" CornerRadius="{StaticResource RadiusSm}" ClipToBounds="True" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1">
+                    <Grid>
+                        <wv2:WebView2 x:Name="SteamLoginWebView" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+
+                        <!-- Loading Indicator when initializing or navigating -->
+                        <Grid Background="#CC171A21" Visibility="{Binding IsSteamLoginLoading, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <ProgressBar IsIndeterminate="True" Width="180" Height="4" Margin="0,0,0,12" Foreground="{StaticResource AccentBrush}"/>
+                                <TextBlock Text="{DynamicResource String_SteamLoginLoadingText}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <!-- Modal Footer / Status / Security Notice -->
+                <Grid Grid.Row="2" Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="{DynamicResource String_SteamLoginSecurityNotice}"
+                                   Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"/>
+                    </StackPanel>
+
+                    <Button Grid.Column="1" Content="{DynamicResource String_Cancel}" Style="{StaticResource SecondaryButton}"
+                            Padding="16,6" Command="{Binding CloseSteamLoginModalCommand}"/>
                 </Grid>
             </Grid>
         </Border>

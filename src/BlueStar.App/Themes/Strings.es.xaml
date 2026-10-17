@@ -1064,6 +1064,18 @@
     <sys:String x:Key="String_AnonymousContributorUuid">UUID de Contribuyente Anónimo (v4)</sys:String>
     <sys:String x:Key="String_CopyUuidBtn">Copiar UUID</sys:String>
 
+    <!-- Steam Login & Session Management -->
+    <sys:String x:Key="String_SteamLoginModalTitle">Autenticación con Cuenta de Steam</sys:String>
+    <sys:String x:Key="String_SteamLoginModalSubtitle">Inicia sesión a través del portal oficial de Valve para descubrir los juegos de tu biblioteca y colaborar con manifiestos a cambio de recompensas Stardust.</sys:String>
+    <sys:String x:Key="String_SteamLoginLoadingText">Cargando portal oficial de inicio de sesión de Steam...</sys:String>
+    <sys:String x:Key="String_SteamLoginSecurityNotice">Conexión directa y cifrada con store.steampowered.com. BlueStar nunca captura, lee ni almacena tus contraseñas.</sys:String>
+    <sys:String x:Key="String_SteamSessionActiveLabel">Sesión de Steam Activa</sys:String>
+    <sys:String x:Key="String_SteamSessionInactiveLabel">Inicio de Sesión Requerido</sys:String>
+    <sys:String x:Key="String_SteamSessionInactiveDesc">Para descubrir los juegos de tu biblioteca con licencia y colaborar con manifiestos faltantes, inicia sesión con tu cuenta de Steam.</sys:String>
+    <sys:String x:Key="String_SteamSignInBtn">Iniciar Sesión con Steam</sys:String>
+    <sys:String x:Key="String_SteamSwitchAccountBtn">Cambiar Cuenta</sys:String>
+    <sys:String x:Key="String_SteamSignOutBtn">Cerrar Sesión</sys:String>
+
     <!-- Contribution Consent Modal -->
     <sys:String x:Key="String_ContributionConsentTitle">Consentimiento de Contribución de Manifiesto</sys:String>
     <sys:String x:Key="String_ContributionConsentSubtitle">Revisa los metadatos sanitizados antes de la transmisión voluntaria.</sys:String>

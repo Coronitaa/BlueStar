@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using BlueStar.Core.Helpers;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
+using BlueStar.Infrastructure.Steam;
 using BlueStar.Infrastructure.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -44,6 +45,8 @@ public partial class SettingsViewModel : ObservableObject
     private readonly IHistoricalRevisionDiscoveryService? _historicalRevisionDiscoveryService;
     private readonly IManifestHarvestCoordinator? _manifestHarvestCoordinator;
     private readonly ISecureStorage? _secureStorage;
+    private readonly ISteamSessionCookieProvider? _steamSessionCookieProvider;
+    private readonly ISteamStatusService? _steamStatusService;
 
     [ObservableProperty]
     private bool _isCheckingForUpdates;
@@ -376,6 +379,150 @@ public partial class SettingsViewModel : ObservableObject
     private string _batchSubmissionStatusMessage = string.Empty;
 
     [ObservableProperty]
+    private bool _isSteamLoginModalOpen;
+
+    [ObservableProperty]
+    private bool _isSteamLoginLoading;
+
+    [ObservableProperty]
+    private bool _isSteamAuthenticated;
+
+    [ObservableProperty]
+    private string? _steamAuthenticatedUser;
+
+    [ObservableProperty]
+    private string? _steamAuthenticatedSteamId;
+
+    [ObservableProperty]
+    private string _steamAuthenticatedStatusDetails = string.Empty;
+
+    [RelayCommand]
+    public void OpenSteamLoginModal()
+    {
+        IsSteamLoginModalOpen = true;
+        IsSteamLoginLoading = true;
+    }
+
+    [RelayCommand]
+    public void CloseSteamLoginModal()
+    {
+        IsSteamLoginModalOpen = false;
+        IsSteamLoginLoading = false;
+    }
+
+    [RelayCommand]
+    public async Task LogoutSteamSessionAsync()
+    {
+        SteamSessionCookieProvider.SetInMemorySessionCookies(null);
+        IsSteamAuthenticated = false;
+        SteamAuthenticatedUser = null;
+        SteamAuthenticatedSteamId = null;
+        SteamAuthenticatedStatusDetails = "Sesión de Steam cerrada. Inicia sesión para colaborar.";
+        _notificationService?.ShowInfo("Steam", "Sesión de Steam cerrada.");
+        await Task.CompletedTask;
+    }
+
+    public async Task CheckSteamSessionStateAsync()
+    {
+        try
+        {
+            var cookieProvider = _steamSessionCookieProvider ?? (ISteamSessionCookieProvider?)App.Services?.GetService(typeof(ISteamSessionCookieProvider));
+            var statusService = _steamStatusService ?? (ISteamStatusService?)App.Services?.GetService(typeof(ISteamStatusService));
+
+            IReadOnlyDictionary<string, string>? cookies = null;
+            if (cookieProvider != null)
+            {
+                cookies = await cookieProvider.GetSteamSessionCookiesAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+
+            if (cookies != null &&
+                cookies.TryGetValue("steamLoginSecure", out var loginSecure) &&
+                !string.IsNullOrWhiteSpace(loginSecure) &&
+                !loginSecure.Equals("deleted", StringComparison.OrdinalIgnoreCase))
+            {
+                var steamId64 = ExtractSteamId64FromCookie(loginSecure);
+                var personaName = statusService?.CurrentStatus?.PersonaName ?? statusService?.CurrentStatus?.AccountName;
+
+                RunOnUIThread(() =>
+                {
+                    IsSteamAuthenticated = true;
+                    SteamAuthenticatedSteamId = steamId64;
+                    SteamAuthenticatedUser = !string.IsNullOrWhiteSpace(personaName)
+                        ? personaName
+                        : (!string.IsNullOrWhiteSpace(steamId64) ? $"SteamID: {steamId64}" : "Steam User");
+                    SteamAuthenticatedStatusDetails = !string.IsNullOrWhiteSpace(steamId64)
+                        ? $"SteamID64: {steamId64}"
+                        : "Sesión activa de Steam detectada.";
+                });
+            }
+            else
+            {
+                RunOnUIThread(() =>
+                {
+                    IsSteamAuthenticated = false;
+                    SteamAuthenticatedUser = null;
+                    SteamAuthenticatedSteamId = null;
+                    SteamAuthenticatedStatusDetails = "Inicia sesión con tu cuenta de Steam para descubrir tus juegos y colaborar con manifiestos.";
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Error checking active Steam session state");
+        }
+    }
+
+    private static string? ExtractSteamId64FromCookie(string cookieValue)
+    {
+        if (string.IsNullOrWhiteSpace(cookieValue)) return null;
+        try
+        {
+            var decoded = Uri.UnescapeDataString(cookieValue);
+            var sepIdx = decoded.IndexOf("||", StringComparison.Ordinal);
+            if (sepIdx > 0)
+            {
+                var candidate = decoded.Substring(0, sepIdx).Trim();
+                if (ulong.TryParse(candidate, out var id) && id > 76561197960265728UL)
+                {
+                    return candidate;
+                }
+            }
+            else if (decoded.Length >= 17 && ulong.TryParse(decoded.Substring(0, 17), out var id) && id > 76561197960265728UL)
+            {
+                return id.ToString();
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    public void OnSteamLoginSuccessful(string steamId64, string? personaOrAccount)
+    {
+        RunOnUIThread(() =>
+        {
+            IsSteamLoginModalOpen = false;
+            IsSteamLoginLoading = false;
+            IsSteamAuthenticated = true;
+            SteamAuthenticatedSteamId = steamId64;
+
+            var statusService = _steamStatusService ?? (ISteamStatusService?)App.Services?.GetService(typeof(ISteamStatusService));
+            var persona = !string.IsNullOrWhiteSpace(personaOrAccount)
+                ? personaOrAccount
+                : (statusService?.CurrentStatus?.PersonaName ?? statusService?.CurrentStatus?.AccountName ?? steamId64);
+
+            SteamAuthenticatedUser = persona;
+            SteamAuthenticatedStatusDetails = $"SteamID64: {steamId64}";
+
+            _notificationService?.ShowSuccess("Steam", $"Sesión iniciada exitosamente como {SteamAuthenticatedUser}.");
+
+            if (EnableManifestAnalysis && !IsAnalyzingManifests)
+            {
+                RunManifestAnalysis();
+            }
+        });
+    }
+
+    [ObservableProperty]
     private int _batchConfirmedCount;
 
     [ObservableProperty]
@@ -520,6 +667,11 @@ public partial class SettingsViewModel : ObservableObject
                         {
                             ManifestAnalysisStatus = blockageMsg;
                             IsAnalyzingManifests = false;
+                            if (licenseResult.BlockageReason == SteamLicenseBlockageReason.NoSteamSession ||
+                                licenseResult.BlockageReason == SteamLicenseBlockageReason.Unauthenticated)
+                            {
+                                OpenSteamLoginModal();
+                            }
                         });
                         progress.Report(new BackgroundTaskProgress(100, blockageMsg));
                         _notificationService?.ShowWarning("Steam License Discovery", blockageMsg);
@@ -1344,7 +1496,9 @@ public partial class SettingsViewModel : ObservableObject
         ISteamLicenseDiscoveryService? steamLicenseDiscoveryService = null,
         IHistoricalRevisionDiscoveryService? historicalRevisionDiscoveryService = null,
         IManifestHarvestCoordinator? manifestHarvestCoordinator = null,
-        ISecureStorage? secureStorage = null)
+        ISecureStorage? secureStorage = null,
+        ISteamSessionCookieProvider? steamSessionCookieProvider = null,
+        ISteamStatusService? steamStatusService = null)
     {
         _authService = authService ?? throw new ArgumentNullException(nameof(authService));
         _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
@@ -1369,6 +1523,8 @@ public partial class SettingsViewModel : ObservableObject
         _historicalRevisionDiscoveryService = historicalRevisionDiscoveryService;
         _manifestHarvestCoordinator = manifestHarvestCoordinator;
         _secureStorage = secureStorage;
+        _steamSessionCookieProvider = steamSessionCookieProvider;
+        _steamStatusService = steamStatusService;
 
         _selectedLanguageOption = _localizationService.CurrentLanguage == "es" ? "Español (Latinoamérica)" : "English";
         _updateButtonText = _localizationService.CurrentLanguage == "es" ? "Buscar actualizaciones" : "Check for updates";
@@ -1419,6 +1575,8 @@ public partial class SettingsViewModel : ObservableObject
             };
             _ = RefreshStardustBalanceAsync();
         }
+
+        _ = CheckSteamSessionStateAsync();
 
         DefaultApiUrl = _appSettings.DefaultApiUrl;
         DefaultApiKey = _appSettings.DefaultApiKey ?? string.Empty;

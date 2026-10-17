@@ -31,9 +31,27 @@ public sealed class SteamSessionCookieProvider : ISteamSessionCookieProvider
         _logger = logger ?? NullLogger<SteamSessionCookieProvider>.Instance;
     }
 
+    private static IReadOnlyDictionary<string, string>? _inMemorySessionCookies;
+
+    /// <summary>
+    /// Explicitly updates or overrides the active Steam session cookies in volatile memory (e.g. from WebView2 login).
+    /// </summary>
+    public static void SetInMemorySessionCookies(IReadOnlyDictionary<string, string>? cookies)
+    {
+        _inMemorySessionCookies = cookies;
+    }
+
     /// <inheritdoc />
     public async Task<IReadOnlyDictionary<string, string>?> GetSteamSessionCookiesAsync(CancellationToken ct = default)
     {
+        if (_inMemorySessionCookies != null &&
+            _inMemorySessionCookies.TryGetValue("steamLoginSecure", out var overrideSecure) &&
+            !string.IsNullOrWhiteSpace(overrideSecure) &&
+            !overrideSecure.Equals("deleted", StringComparison.OrdinalIgnoreCase))
+        {
+            return _inMemorySessionCookies;
+        }
+
         return await Task.Run(() =>
         {
             var candidates = GetCookieSearchLocations();
@@ -75,10 +93,15 @@ public sealed class SteamSessionCookieProvider : ISteamSessionCookieProvider
     internal static IEnumerable<(string BaseDir, string CookiesRelPath)> GetCookieSearchLocations()
     {
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
 
         return
         [
+            // BlueStar Embedded WebView2 Profile
+            (Path.Combine(appData, "BlueStar", "webview", "EBWebView"), Path.Combine("Default", "Network", "Cookies")),
+            (Path.Combine(appData, "BlueStar", "webview"), Path.Combine("Default", "Network", "Cookies")),
+
             // Steam Client CEF Cache
             (Path.Combine(localAppData, "Steam", "htmlcache"), Path.Combine("Default", "Network", "Cookies")),
             (Path.Combine(localAppData, "Steam", "htmlcache"), Path.Combine("Network", "Cookies")),
