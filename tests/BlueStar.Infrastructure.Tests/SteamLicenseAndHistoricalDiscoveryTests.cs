@@ -619,4 +619,34 @@ public sealed class SteamLicenseAndHistoricalDiscoveryTests : IDisposable
         result.BlockageDetails.Should().Contain("expired or unauthenticated");
         result.LicensedApps.Should().BeEmpty("must NEVER silently fall back to installed instances");
     }
+
+    [Fact]
+    public void BuildSanitizedCookieHeader_FiltersNonWhitelisted_AndEnsuresStrictAscii()
+    {
+        // Arrange: cookies containing unicode username, arbitrary cookies, and valid steamLoginSecure
+        var cookies = new Dictionary<string, string>
+        {
+            ["steamLoginSecure"] = "76561198000000000%7C%7Cvalid_session_token",
+            ["sessionid"] = "abcdef123456",
+            ["userName"] = "Corønita",
+            ["randomJunk"] = "ñandu_123",
+            ["steamCountry"] = "AR|Español"
+        };
+
+        // Act
+        var header = SteamLicenseDiscoveryService.BuildSanitizedCookieHeader(cookies);
+
+        // Assert
+        header.Should().NotBeNullOrWhiteSpace();
+        header.Should().Contain("steamLoginSecure=76561198000000000%7C%7Cvalid_session_token");
+        header.Should().Contain("sessionid=abcdef123456");
+        header.Should().NotContain("userName=");
+        header.Should().NotContain("randomJunk=");
+
+        // Verify 100% of characters are strictly printable ASCII (code <= 127)
+        foreach (var c in header)
+        {
+            ((int)c).Should().BeInRange(32, 126, "every char in HTTP header must be strict ASCII");
+        }
+    }
 }

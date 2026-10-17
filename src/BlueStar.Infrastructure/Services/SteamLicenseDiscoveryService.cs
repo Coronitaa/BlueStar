@@ -114,10 +114,7 @@ public sealed class SteamLicenseDiscoveryService : ISteamLicenseDiscoveryService
                 catch (OperationCanceledException) { throw; }
                 catch (HttpRequestException ex)
                 {
-                    _logger.LogWarning(ex, "Network error communicating with Steam Web API during license discovery");
-                    return SteamLicenseDiscoveryResult.Blocked(
-                        SteamLicenseBlockageReason.NetworkError,
-                        "Network error communicating with Steam servers: " + ex.Message);
+                    _logger.LogWarning(ex, "Network error communicating with Steam Web API during license discovery. Attempting local client cache fallback.");
                 }
                 catch (Exception ex)
                 {
@@ -321,7 +318,10 @@ public sealed class SteamLicenseDiscoveryService : ISteamLicenseDiscoveryService
         var ownedApps = new List<uint>();
         var ownedPackages = new List<uint>();
 
-        var cookieHeader = string.Join("; ", cookies.Select(kv => $"{kv.Key}={kv.Value}"));
+        var cookieHeader = BuildSanitizedCookieHeader(cookies);
+        if (string.IsNullOrWhiteSpace(cookieHeader))
+            return (false, ownedApps, ownedPackages);
+
         using var req = new HttpRequestMessage(HttpMethod.Get, "https://store.steampowered.com/dynamicstore/userdata/");
         req.Headers.Add("Cookie", cookieHeader);
         req.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
@@ -368,7 +368,10 @@ public sealed class SteamLicenseDiscoveryService : ISteamLicenseDiscoveryService
         var ownedApps = new List<uint>();
         var ownedPackages = new List<uint>();
 
-        var cookieHeader = string.Join("; ", cookies.Select(kv => $"{kv.Key}={kv.Value}"));
+        var cookieHeader = BuildSanitizedCookieHeader(cookies);
+        if (string.IsNullOrWhiteSpace(cookieHeader))
+            return (false, ownedApps, ownedPackages);
+
         using var req = new HttpRequestMessage(HttpMethod.Get, "https://store.steampowered.com/account/licenses/");
         req.Headers.Add("Cookie", cookieHeader);
         req.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
@@ -415,6 +418,44 @@ public sealed class SteamLicenseDiscoveryService : ISteamLicenseDiscoveryService
         }
 
         return (ownedApps.Count > 0 || ownedPackages.Count > 0, ownedApps, ownedPackages);
+    }
+
+    internal static string BuildSanitizedCookieHeader(IReadOnlyDictionary<string, string> cookies)
+    {
+        if (cookies == null || cookies.Count == 0) return string.Empty;
+
+        var allowedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "steamLoginSecure",
+            "sessionid",
+            "steamCountry",
+            "browserid",
+            "timezoneOffset"
+        };
+
+        var validPairs = new List<string>();
+        foreach (var (key, rawValue) in cookies)
+        {
+            if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(rawValue)) continue;
+            if (!allowedKeys.Contains(key)) continue;
+
+            if (!IsStrictAscii(key)) continue;
+
+            var safeValue = IsStrictAscii(rawValue) ? rawValue : Uri.EscapeDataString(rawValue);
+            validPairs.Add($"{key}={safeValue}");
+        }
+
+        return string.Join("; ", validPairs);
+    }
+
+    private static bool IsStrictAscii(string str)
+    {
+        if (string.IsNullOrEmpty(str)) return false;
+        foreach (char c in str)
+        {
+            if (c < 32 || c > 126) return false;
+        }
+        return true;
     }
 
     internal static List<uint> InspectLocalSteamClientLicenses(string steamPath)
