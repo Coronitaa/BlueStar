@@ -1054,7 +1054,8 @@
     <sys:String x:Key="String_HubSnapshotsTitle">Instantáneas Completas de Compilación de Manifest Hub</sys:String>
     <sys:String x:Key="String_HubSnapshotsDesc">Instantáneas completas del estado de la aplicación. Aplicar una instantánea fija y configura todos los depots a la vez.</sys:String>
     <sys:String x:Key="String_ApplySnapshotBtn">Aplicar Instantánea</sys:String>
-    <sys:String x:Key="String_HubServerUrlLabel">URL del Servidor Manifest Hub</sys:String>
+    <sys:String x:Key="String_HubServerUrlLabel">Repositorio Manifest Hub (GitOps / GitHub)</sys:String>
+    <sys:String x:Key="String_HubServerUrlHint">URL base del repositorio GitOps (por defecto raw.githubusercontent.com). No requiere servidor local.</sys:String>
     <sys:String x:Key="String_StardustSectionTitle">Puntos Comunitarios Stardust &amp; Libro Mayor</sys:String>
     <sys:String x:Key="String_RefreshBalanceBtn">Actualizar Saldo</sys:String>
     <sys:String x:Key="String_StardustConfirmedPoints">Saldo Confirmado</sys:String>

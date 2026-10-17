@@ -364,7 +364,9 @@ public sealed class AppSettingsService
         await SaveAsync().ConfigureAwait(false);
     }
 
-    /// <summary>Authorized Manifest Hub server URL.</summary>
+    public const string DefaultGitOpsHubUrl = "https://raw.githubusercontent.com/Coronitaa/BlueStar-ManifestHub/main";
+
+    /// <summary>Authorized Manifest Hub server URL or GitOps repository raw endpoint.</summary>
     public string HubServerUrl
     {
         get
@@ -376,7 +378,12 @@ public sealed class AppSettingsService
                 return envUrl.Trim().TrimEnd('/');
             }
 
-            return string.IsNullOrWhiteSpace(_current.HubServerUrl) ? string.Empty : _current.HubServerUrl.Trim().TrimEnd('/');
+            if (!string.IsNullOrWhiteSpace(_current.HubServerUrl))
+            {
+                return _current.HubServerUrl.Trim().TrimEnd('/');
+            }
+
+            return DefaultGitOpsHubUrl;
         }
     }
 

@@ -4,8 +4,10 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using BlueStar.Core.Helpers;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
 using BlueStar.Infrastructure.Storage;
@@ -40,6 +42,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly IManifestHubProvider? _manifestHubProvider;
     private readonly ISteamLicenseDiscoveryService? _steamLicenseDiscoveryService;
     private readonly IHistoricalRevisionDiscoveryService? _historicalRevisionDiscoveryService;
+    private readonly IManifestHarvestCoordinator? _manifestHarvestCoordinator;
     private readonly ISecureStorage? _secureStorage;
 
     [ObservableProperty]
@@ -599,23 +602,101 @@ public partial class SettingsViewModel : ObservableObject
 
                 ct.ThrowIfCancellationRequested();
 
-                // STAGE 2: Enumerate depots and historical revisions across sources
+                // STAGE 2: Query demand and historical revisions across Manifest Hub
                 var knownRevisions = new List<HubRevisionItem>();
                 var revDiscovery = _historicalRevisionDiscoveryService ?? (IHistoricalRevisionDiscoveryService?)App.Services?.GetService(typeof(IHistoricalRevisionDiscoveryService));
+                var hubProvider = _manifestHubProvider ?? (IManifestHubProvider?)App.Services?.GetService(typeof(IManifestHubProvider));
 
-                int reviewedGames = 0;
+                int reviewedGames = targetApps.Count;
                 int totalGames = targetApps.Count;
+                var appNameMap = targetApps.GroupBy(t => t.AppId).ToDictionary(g => g.Key, g => g.First().Name);
+                var ownedAppSet = new HashSet<uint>(targetApps.Select(t => t.AppId));
+                var steamPath = ShortcutHelper.GetSteamPath();
 
-                if (revDiscovery != null && targetApps.Count > 0)
+                if (targetApps.Count > 0 || scope != "SteamLibrary")
                 {
-                    progress.Report(new BackgroundTaskProgress(30, "Stage 2/7: Enumerating historical revisions across community sources..."));
+                    progress.Report(new BackgroundTaskProgress(30, "Stage 2/7: Loading community demand from Manifest Hub..."));
+
+                // 2a. Load Demand Index from GitOps Hub
+                DemandIndex? demandIndex = null;
+                if (hubProvider != null)
+                {
+                    try
+                    {
+                        demandIndex = await hubProvider.GetDemandAsync(ct).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Failed to load demand index from primary Hub route");
+                    }
+                }
+
+                // Fallback to local clone demand.json if available
+                if (demandIndex == null || demandIndex.Records.Count == 0)
+                {
+                    var localDemandPath = @"D:\BlueStarMANI\indices\demand.json";
+                    if (File.Exists(localDemandPath))
+                    {
+                        try
+                        {
+                            var json = await File.ReadAllTextAsync(localDemandPath, ct).ConfigureAwait(false);
+                            using var doc = JsonDocument.Parse(json);
+                            if ((doc.RootElement.TryGetProperty("records", out var rProp) && rProp.ValueKind == JsonValueKind.Array) ||
+                                (doc.RootElement.TryGetProperty("items", out var iProp) && iProp.ValueKind == JsonValueKind.Array))
+                            {
+                                demandIndex = JsonSerializer.Deserialize<DemandIndex>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                            }
+                        }
+                        catch { }
+                    }
+                }
+
+                if (demandIndex != null && demandIndex.Records.Count > 0)
+                {
+                    foreach (var d in demandIndex.Records)
+                    {
+                        if (d.AppId == 0 || d.DepotId == 0 || d.ManifestId == 0) continue;
+                        if (targetApps.Count > 0 && !ownedAppSet.Contains(d.AppId)) continue;
+
+                        bool inDepotCache = false;
+                        if (!string.IsNullOrWhiteSpace(steamPath))
+                        {
+                            var depotCacheFile = Path.Combine(steamPath, "depotcache", $"{d.DepotId}_{d.ManifestId}.manifest");
+                            inDepotCache = File.Exists(depotCacheFile);
+                        }
+                        bool inLocalCache = _manifestCacheService != null && _manifestCacheService.HasManifest(d.DepotId, d.ManifestId);
+
+                        string prov = inDepotCache
+                            ? "Steam DepotCache (Ready to Publish)"
+                            : (inLocalCache ? "Local Cache" : "Steam Client Demand (Needs Download)");
+
+                        string gameName = appNameMap.TryGetValue(d.AppId, out var gn) && !string.IsNullOrWhiteSpace(gn)
+                            ? gn
+                            : (!string.IsNullOrWhiteSpace(d.AppName) ? d.AppName : $"App {d.AppId}");
+
+                        knownRevisions.Add(new HubRevisionItem
+                        {
+                            AppId = d.AppId,
+                            DepotId = d.DepotId,
+                            ManifestId = d.ManifestId,
+                            DepotName = gameName,
+                            BranchName = "public",
+                            Provenance = prov,
+                            Status = "MissingFromHub"
+                        });
+                    }
+                }
+
+                // If bounded app count (<= 10), also query individual historical revisions across sources
+                if (revDiscovery != null && targetApps.Count > 0 && targetApps.Count <= 10)
+                {
+                    progress.Report(new BackgroundTaskProgress(40, "Stage 2/7: Checking bounded historical revisions for games..."));
                     var distinctAppIds = targetApps.Select(t => t.AppId).Distinct().ToList();
                     var revDict = await revDiscovery.DiscoverRevisionsForAppsAsync(distinctAppIds, ct).ConfigureAwait(false);
                     if (revDict != null)
                     {
                         foreach (var kvp in revDict)
                         {
-                            reviewedGames++;
                             if (kvp.Value != null)
                             {
                                 knownRevisions.AddRange(kvp.Value);
@@ -623,10 +704,7 @@ public partial class SettingsViewModel : ObservableObject
                         }
                     }
                 }
-                else if (targetApps.Count > 0)
-                {
-                    reviewedGames = targetApps.Count;
-                }
+            }
 
                 // Include local artifacts if present
                 if (localArtifacts.Count > 0)
@@ -669,7 +747,6 @@ public partial class SettingsViewModel : ObservableObject
                 try
                 {
                     var transport = _contributionTransportService ?? (IContributionTransportService?)App.Services?.GetService(typeof(IContributionTransportService));
-                    var hubProvider = _manifestHubProvider ?? (IManifestHubProvider?)App.Services?.GetService(typeof(IManifestHubProvider));
 
                     if (transport != null)
                     {
@@ -691,8 +768,6 @@ public partial class SettingsViewModel : ObservableObject
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
                 {
-                    // CRITICAL INVARIANT:
-                    // Differentiate connection error vs 0 candidates vs 100% complete coverage; never report "Completed" on failed Hub connection!
                     _logger.LogError(ex, "Failed to connect to Manifest Hub during coverage query");
                     const string connErrorStatus = "Connection Error";
                     await _appSettings.SetManifestAnalysisStatusAsync(connErrorStatus).ConfigureAwait(false);
@@ -716,10 +791,8 @@ public partial class SettingsViewModel : ObservableObject
                     .ToList();
 
                 var auditedCount = distinctRevisions.Count;
-                var matchedCount = auditedCount - missingRevisions.Count;
                 var missingCount = missingRevisions.Count;
-
-                var appNameMap = targetApps.GroupBy(t => t.AppId).ToDictionary(g => g.Key, g => g.First().Name);
+                var matchedCount = auditedCount - missingCount;
 
                 var countsBySource = missingRevisions
                     .GroupBy(r => string.IsNullOrWhiteSpace(r.Provenance) ? "Community" : r.Provenance)
@@ -804,7 +877,7 @@ public partial class SettingsViewModel : ObservableObject
                     }
 
                     LocalOnlyManifestsList.Clear();
-                    foreach (var m in missingRevisions)
+                    foreach (var m in missingRevisions.Where(r => r.Provenance.Contains("DepotCache") || r.Provenance.Contains("LocalCache") || r.Provenance.Contains("Local Cache")))
                     {
                         LocalOnlyManifestsList.Add(new ManifestArtifact
                         {
@@ -949,10 +1022,26 @@ public partial class SettingsViewModel : ObservableObject
 
                 try
                 {
-                    // STAGE 6: Download missing manifest binary via FetchManifestBinaryAsync
-                    var manifestPath = await revDiscovery.FetchManifestBinaryAsync(item.AppId, item.DepotId, item.ManifestId, tempDir, ct).ConfigureAwait(false);
+                    // STAGE 6: Download or recover missing manifest binary
+                    string? manifestPath = null;
+                    try
+                    {
+                        manifestPath = await revDiscovery.FetchManifestBinaryAsync(item.AppId, item.DepotId, item.ManifestId, tempDir, ct).ConfigureAwait(false);
+                    }
+                    catch (Exception)
+                    {
+                        // Fallback: harvest via multi-mechanism coordinator (Steam client local console / DepotDownloader)
+                        if (_manifestHarvestCoordinator != null)
+                        {
+                            var harvestResult = await _manifestHarvestCoordinator.HarvestManifestAsync(item.AppId, item.DepotId, item.ManifestId, ct).ConfigureAwait(false);
+                            if (harvestResult.IsSuccess && !string.IsNullOrWhiteSpace(harvestResult.ManifestFilePath) && File.Exists(harvestResult.ManifestFilePath))
+                            {
+                                manifestPath = harvestResult.ManifestFilePath;
+                            }
+                        }
+                    }
 
-                    if (!File.Exists(manifestPath))
+                    if (string.IsNullOrWhiteSpace(manifestPath) || !File.Exists(manifestPath))
                     {
                         failedCount++;
                         continue;
@@ -1254,6 +1343,7 @@ public partial class SettingsViewModel : ObservableObject
         IManifestHubProvider? manifestHubProvider = null,
         ISteamLicenseDiscoveryService? steamLicenseDiscoveryService = null,
         IHistoricalRevisionDiscoveryService? historicalRevisionDiscoveryService = null,
+        IManifestHarvestCoordinator? manifestHarvestCoordinator = null,
         ISecureStorage? secureStorage = null)
     {
         _authService = authService ?? throw new ArgumentNullException(nameof(authService));
@@ -1277,6 +1367,7 @@ public partial class SettingsViewModel : ObservableObject
         _manifestHubProvider = manifestHubProvider;
         _steamLicenseDiscoveryService = steamLicenseDiscoveryService;
         _historicalRevisionDiscoveryService = historicalRevisionDiscoveryService;
+        _manifestHarvestCoordinator = manifestHarvestCoordinator;
         _secureStorage = secureStorage;
 
         _selectedLanguageOption = _localizationService.CurrentLanguage == "es" ? "Español (Latinoamérica)" : "English";

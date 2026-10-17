@@ -448,7 +448,8 @@
                                 <!-- Hub Server URL -->
                                 <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="12,10" Margin="0,0,0,10">
                                     <StackPanel>
-                                        <TextBlock Text="{DynamicResource String_HubServerUrlLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
+                                        <TextBlock Text="{DynamicResource String_HubServerUrlLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{DynamicResource String_HubServerUrlHint}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,8" TextWrapping="Wrap"/>
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>

@@ -25,6 +25,12 @@ public sealed class DemandRecord
     [JsonPropertyName("priority")]
     public int Priority { get; init; }
 
+    [JsonPropertyName("stardustReward")]
+    public int StardustReward { get; init; } = 100;
+
+    [JsonPropertyName("detectedAt")]
+    public DateTimeOffset? DetectedAt { get; init; }
+
     [JsonPropertyName("requestedAt")]
     public DateTimeOffset? RequestedAt { get; init; }
 
@@ -43,6 +49,21 @@ public sealed class DemandIndex
     [JsonPropertyName("generatedAt")]
     public DateTimeOffset GeneratedAt { get; init; } = DateTimeOffset.UtcNow;
 
+    [JsonPropertyName("lastUpdated")]
+    public DateTimeOffset? LastUpdated { get; init; }
+
+    [JsonPropertyName("totalMissing")]
+    public int TotalMissing { get; init; }
+
+    [JsonPropertyName("items")]
+    public IReadOnlyList<DemandRecord>? Items { get; init; }
+
+    private IReadOnlyList<DemandRecord>? _records;
+
     [JsonPropertyName("records")]
-    public IReadOnlyList<DemandRecord> Records { get; init; } = Array.Empty<DemandRecord>();
+    public IReadOnlyList<DemandRecord> Records
+    {
+        get => _records ?? Items ?? Array.Empty<DemandRecord>();
+        init => _records = value;
+    }
 }

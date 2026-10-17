@@ -1267,7 +1267,8 @@ public sealed class ManifestHubProvider : IManifestHubProvider
                 }
                 else if (doc.RootElement.ValueKind == JsonValueKind.Object)
                 {
-                    if (doc.RootElement.TryGetProperty("records", out var recordsProp) && recordsProp.ValueKind == JsonValueKind.Array)
+                    if ((doc.RootElement.TryGetProperty("records", out var recordsProp) && recordsProp.ValueKind == JsonValueKind.Array) ||
+                        (doc.RootElement.TryGetProperty("items", out var itemsProp) && itemsProp.ValueKind == JsonValueKind.Array))
                     {
                         result = JsonSerializer.Deserialize<DemandIndex>(json, SnapshotSerializerOptions);
                     }

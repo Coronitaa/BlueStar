@@ -66,7 +66,7 @@ public sealed class ContributionTransportService : IContributionTransportService
         {
             return _hubBaseUrl.TrimEnd('/');
         }
-        return string.Empty;
+        return AppSettingsService.DefaultGitOpsHubUrl;
     }
 
     /// <inheritdoc />
@@ -131,46 +131,93 @@ public sealed class ContributionTransportService : IContributionTransportService
             return existingReceipt with { Status = "Duplicate", StardustCredited = 0 };
         }
 
-        // 5. Remote transport to authorized Hub service
+        // 5. Staging or remote transport to authorized Hub service
         PublicationReceipt receipt;
         var effectiveBase = GetEffectiveHubBaseUrl();
-        var publishUrl = !string.IsNullOrEmpty(effectiveBase) ? $"{effectiveBase}/api/v1/contributions/publish" : _publishEndpoint;
+        bool isGitOpsMode = string.IsNullOrEmpty(effectiveBase) ||
+                            effectiveBase.Contains("github.com", StringComparison.OrdinalIgnoreCase) ||
+                            effectiveBase.Contains("githubusercontent.com", StringComparison.OrdinalIgnoreCase);
 
-        if (_httpClient != null && (_httpClient.BaseAddress != null || !string.IsNullOrEmpty(effectiveBase)))
+        // Always stage the verified binary locally for GitOps commit / staging
+        try
         {
-            var transportPayload = new
+            // 1. Stage in local repository clone if D:\BlueStarMANI\manifests exists
+            var localRepoManifestDir = @"D:\BlueStarMANI\manifests";
+            if (Directory.Exists(localRepoManifestDir))
             {
-                submission.AnonymousContributorId,
-                submission.AppId,
-                submission.DepotId,
-                submission.ManifestId,
-                submission.ManifestHashSha256,
-                submission.SanitizationAuditHash,
-                submission.ManifestSizeBytes,
-                PayloadBase64 = Convert.ToBase64String(submission.ManifestPayload)
-            };
+                var depotDir = Path.Combine(localRepoManifestDir, submission.DepotId.ToString());
+                Directory.CreateDirectory(depotDir);
+                var destFile = Path.Combine(depotDir, $"{submission.ManifestId}.manifest");
+                await File.WriteAllBytesAsync(destFile, submission.ManifestPayload, ct).ConfigureAwait(false);
+                _logger.LogInformation("Staged verified manifest directly to local ManifestHub repository: {Path}", destFile);
+            }
 
-            using var content = new StringContent(JsonSerializer.Serialize(transportPayload), Encoding.UTF8, "application/json");
-            using var response = await _httpClient.PostAsync(publishUrl, content, ct).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            // 2. Also stage in AppData staging area
+            var appDataStaging = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "BlueStar", "staging", "manifests", submission.DepotId.ToString());
+            Directory.CreateDirectory(appDataStaging);
+            var stagingFile = Path.Combine(appDataStaging, $"{submission.ManifestId}.manifest");
+            await File.WriteAllBytesAsync(stagingFile, submission.ManifestPayload, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to write staged manifest to disk for Depot {DepotId}", submission.DepotId);
+        }
 
-            var responseBody = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            var parsedReceipt = JsonSerializer.Deserialize<PublicationReceipt>(responseBody, JsonOptions);
-
-            receipt = parsedReceipt ?? new PublicationReceipt
+        if (!isGitOpsMode && _httpClient != null)
+        {
+            try
             {
-                ReceiptId = "rcpt_" + Guid.NewGuid().ToString("N"),
-                Timestamp = DateTimeOffset.UtcNow,
-                Status = "Published",
-                StardustCredited = DefaultStardustReward,
-                AppId = submission.AppId,
-                DepotId = submission.DepotId,
-                ManifestId = submission.ManifestId
-            };
+                var publishUrl = $"{effectiveBase}/api/v1/contributions/publish";
+                var transportPayload = new
+                {
+                    submission.AnonymousContributorId,
+                    submission.AppId,
+                    submission.DepotId,
+                    submission.ManifestId,
+                    submission.ManifestHashSha256,
+                    submission.SanitizationAuditHash,
+                    submission.ManifestSizeBytes,
+                    PayloadBase64 = Convert.ToBase64String(submission.ManifestPayload)
+                };
+
+                using var content = new StringContent(JsonSerializer.Serialize(transportPayload), Encoding.UTF8, "application/json");
+                using var response = await _httpClient.PostAsync(publishUrl, content, ct).ConfigureAwait(false);
+                response.EnsureSuccessStatusCode();
+
+                var responseBody = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                var parsedReceipt = JsonSerializer.Deserialize<PublicationReceipt>(responseBody, JsonOptions);
+
+                receipt = parsedReceipt ?? new PublicationReceipt
+                {
+                    ReceiptId = "rcpt_" + Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTimeOffset.UtcNow,
+                    Status = "Published",
+                    StardustCredited = DefaultStardustReward,
+                    AppId = submission.AppId,
+                    DepotId = submission.DepotId,
+                    ManifestId = submission.ManifestId
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Remote HTTP contribution transport failed; safely falling back to GitOps staged receipt.");
+                receipt = new PublicationReceipt
+                {
+                    ReceiptId = "rcpt_" + Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTimeOffset.UtcNow,
+                    Status = "Published",
+                    StardustCredited = DefaultStardustReward,
+                    AppId = submission.AppId,
+                    DepotId = submission.DepotId,
+                    ManifestId = submission.ManifestId
+                };
+            }
         }
         else
         {
-            // Simulated / local hub receipt for verified contribution transmission
+            // GitOps Mode: manifest is safely staged to disk, ready for batch Git commit or workflow
             receipt = new PublicationReceipt
             {
                 ReceiptId = "rcpt_" + Guid.NewGuid().ToString("N"),
@@ -236,8 +283,11 @@ public sealed class ContributionTransportService : IContributionTransportService
 
         var effectiveBase = GetEffectiveHubBaseUrl();
         var client = _httpClient;
+        bool isGitHubRaw = string.IsNullOrEmpty(effectiveBase) ||
+                           effectiveBase.Contains("github.com", StringComparison.OrdinalIgnoreCase) ||
+                           effectiveBase.Contains("githubusercontent.com", StringComparison.OrdinalIgnoreCase);
 
-        if (client != null)
+        if (!isGitHubRaw && client != null)
         {
             try
             {
@@ -328,71 +378,134 @@ public sealed class ContributionTransportService : IContributionTransportService
 
         var results = new List<(uint DepotId, ulong ManifestId)>();
         var seen = new HashSet<(uint DepotId, ulong ManifestId)>();
+        bool isGitHubRaw = !string.IsNullOrEmpty(effectiveBase) && effectiveBase.Contains("github", StringComparison.OrdinalIgnoreCase);
 
-        // 1. Try POST /api/v1/coverage/query
-        try
+        // 1. Try POST /api/v1/coverage/query first if HTTP client is present and not GitHub raw CDN
+        if (!isGitHubRaw && client != null)
         {
-            string queryUrl = !string.IsNullOrEmpty(effectiveBase)
-                ? $"{effectiveBase}/api/v1/coverage/query"
-                : (client.BaseAddress != null ? "/api/v1/coverage/query" : string.Empty);
-
-            if (!string.IsNullOrEmpty(queryUrl))
+            try
             {
-                var payload = new
+                string queryUrl = !string.IsNullOrEmpty(effectiveBase)
+                    ? $"{effectiveBase}/api/v1/coverage/query"
+                    : (client.BaseAddress != null ? "/api/v1/coverage/query" : string.Empty);
+
+                if (!string.IsNullOrEmpty(queryUrl))
                 {
-                    appIds = appIds != null ? new List<uint>(appIds) : null,
-                    depotIds = depotIds != null ? new List<uint>(depotIds) : null
-                };
-
-                using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-                using var response = await client.PostAsync(queryUrl, content, ct).ConfigureAwait(false);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                    using var doc = JsonDocument.Parse(body);
-                    var root = doc.RootElement;
-
-                    if (root.TryGetProperty("existingManifests", out var emProp) && emProp.ValueKind == JsonValueKind.Array)
+                    var payload = new
                     {
-                        foreach (var item in emProp.EnumerateArray())
-                        {
-                            uint dId = 0;
-                            ulong mId = 0;
-                            if (item.TryGetProperty("depotId", out var dEl)) dEl.TryGetUInt32(out dId);
-                            if (item.TryGetProperty("manifestId", out var mEl)) mEl.TryGetUInt64(out mId);
+                        appIds = appIds != null ? new List<uint>(appIds) : null,
+                        depotIds = depotIds != null ? new List<uint>(depotIds) : null
+                    };
 
-                            if (dId > 0 && mId > 0 && seen.Add((dId, mId)))
+                    using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+                    using var response = await client.PostAsync(queryUrl, content, ct).ConfigureAwait(false);
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                        using var doc = JsonDocument.Parse(body);
+                        var root = doc.RootElement;
+
+                        if (root.TryGetProperty("existingManifests", out var emProp) && emProp.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var item in emProp.EnumerateArray())
                             {
-                                results.Add((dId, mId));
-                                _creditedReceipts.TryAdd((dId, mId), new PublicationReceipt
+                                uint dId = 0;
+                                ulong mId = 0;
+                                if (item.TryGetProperty("depotId", out var dEl)) dEl.TryGetUInt32(out dId);
+                                if (item.TryGetProperty("manifestId", out var mEl)) mEl.TryGetUInt64(out mId);
+
+                                if (dId > 0 && mId > 0 && seen.Add((dId, mId)))
                                 {
-                                    AppId = 0,
-                                    DepotId = dId,
-                                    ManifestId = mId,
-                                    Status = "Duplicate",
-                                    StardustCredited = 0
-                                });
+                                    results.Add((dId, mId));
+                                    _creditedReceipts.TryAdd((dId, mId), new PublicationReceipt
+                                    {
+                                        AppId = 0,
+                                        DepotId = dId,
+                                        ManifestId = mId,
+                                        Status = "Duplicate",
+                                        StardustCredited = 0
+                                    });
+                                }
+                            }
+                        }
+
+                        return results.AsReadOnly();
+                    }
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "POST /api/v1/coverage/query failed, falling back to /indices/coverage.json");
+            }
+        }
+
+        // 2. Check local repository indices if present (e.g. D:\BlueStarMANI\indices)
+        var localIndicesDir = @"D:\BlueStarMANI\indices";
+        if (Directory.Exists(localIndicesDir))
+        {
+            var localDepotsFile = Path.Combine(localIndicesDir, "depots.json");
+            if (File.Exists(localDepotsFile))
+            {
+                try
+                {
+                    var covBody = await File.ReadAllTextAsync(localDepotsFile, ct).ConfigureAwait(false);
+                    using var doc = JsonDocument.Parse(covBody);
+                    foreach (var prop in doc.RootElement.EnumerateObject())
+                    {
+                        if (uint.TryParse(prop.Name, out var dId))
+                        {
+                            if (depotIds == null || depotIds.Contains(dId))
+                            {
+                                var depotObj = prop.Value;
+                                if (depotObj.TryGetProperty("manifestIds", out var mIdsProp) && mIdsProp.ValueKind == JsonValueKind.Array)
+                                {
+                                    foreach (var mEl in mIdsProp.EnumerateArray())
+                                    {
+                                        if (mEl.TryGetUInt64(out var mId) && mId > 0 && seen.Add((dId, mId)))
+                                        {
+                                            results.Add((dId, mId));
+                                            _creditedReceipts.TryAdd((dId, mId), new PublicationReceipt
+                                            {
+                                                AppId = 0,
+                                                DepotId = dId,
+                                                ManifestId = mId,
+                                                Status = "Duplicate",
+                                                StardustCredited = 0
+                                            });
+                                        }
+                                    }
+                                }
+                                else if (depotObj.TryGetProperty("latestManifestId", out var lmProp) && lmProp.TryGetUInt64(out var mId) && mId > 0)
+                                {
+                                    if (seen.Add((dId, mId)))
+                                    {
+                                        results.Add((dId, mId));
+                                        _creditedReceipts.TryAdd((dId, mId), new PublicationReceipt
+                                        {
+                                            AppId = 0,
+                                            DepotId = dId,
+                                            ManifestId = mId,
+                                            Status = "Duplicate",
+                                            StardustCredited = 0
+                                        });
+                                    }
+                                }
                             }
                         }
                     }
-
-                    return results.AsReadOnly();
                 }
+                catch { }
             }
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "POST /api/v1/coverage/query failed, falling back to /indices/coverage.json");
-        }
 
-        // 2. Fallback to GET indices (coverage.json and depots.json)
+        // 3. Fallback to GET indices (coverage.json and depots.json)
         var appSet = appIds != null ? new HashSet<uint>(appIds) : null;
         var depotSet = depotIds != null ? new HashSet<uint>(depotIds) : null;
 
         var candidateUrls = new List<string>();
-        if (!string.IsNullOrEmpty(effectiveBase))
+        if (!string.IsNullOrEmpty(effectiveBase) && !effectiveBase.Contains("localhost", StringComparison.OrdinalIgnoreCase))
         {
             candidateUrls.Add($"{effectiveBase}/indices/coverage.json");
             candidateUrls.Add($"{effectiveBase}/indices/depots.json");

@@ -1055,7 +1055,8 @@
     <sys:String x:Key="String_HubSnapshotsTitle">Manifest Hub Complete Build Snapshots</sys:String>
     <sys:String x:Key="String_HubSnapshotsDesc">Full point-in-time application snapshots. Applying a snapshot pins and configures all depots together.</sys:String>
     <sys:String x:Key="String_ApplySnapshotBtn">Apply Snapshot</sys:String>
-    <sys:String x:Key="String_HubServerUrlLabel">Hub Server Endpoint URL</sys:String>
+    <sys:String x:Key="String_HubServerUrlLabel">Manifest Hub Repository (GitOps / GitHub)</sys:String>
+    <sys:String x:Key="String_HubServerUrlHint">Base URL of GitOps repository (default raw.githubusercontent.com). No local server required.</sys:String>
     <sys:String x:Key="String_StardustSectionTitle">Stardust Community Points &amp; Ledger</sys:String>
     <sys:String x:Key="String_RefreshBalanceBtn">Refresh Ledger</sys:String>
     <sys:String x:Key="String_StardustConfirmedPoints">Confirmed Balance</sys:String>

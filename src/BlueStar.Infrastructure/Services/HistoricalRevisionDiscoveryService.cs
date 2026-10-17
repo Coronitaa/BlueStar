@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using BlueStar.Core.Helpers;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
 using BlueStar.Infrastructure.Storage;
@@ -66,9 +67,14 @@ public sealed class HistoricalRevisionDiscoveryService : IHistoricalRevisionDisc
     {
         if (_appSettings != null && !string.IsNullOrWhiteSpace(_appSettings.HubServerUrl))
         {
-            return _appSettings.HubServerUrl.TrimEnd('/');
+            var url = _appSettings.HubServerUrl.TrimEnd('/');
+            if (!url.Contains("localhost", StringComparison.OrdinalIgnoreCase) &&
+                !url.Contains("127.0.0.1", StringComparison.OrdinalIgnoreCase))
+            {
+                return url;
+            }
         }
-        return string.Empty;
+        return "https://raw.githubusercontent.com/Coronitaa/BlueStar-ManifestHub/main";
     }
 
     /// <inheritdoc />
@@ -78,7 +84,7 @@ public sealed class HistoricalRevisionDiscoveryService : IHistoricalRevisionDisc
 
         var rawCandidates = new List<HubRevisionItem>();
 
-        // 1. Source 1: BlueStar-ManifestHub (Primary)
+        // 1. Source 1: BlueStar-ManifestHub (Primary GitOps)
         await DiscoverFromPrimaryManifestHubAsync(appId, rawCandidates, ct).ConfigureAwait(false);
 
         // 2. Source 2: SSMGAlt/ManifestHub2
@@ -87,10 +93,7 @@ public sealed class HistoricalRevisionDiscoveryService : IHistoricalRevisionDisc
         // 3. Source 3: K25
         await DiscoverFromK25Async(appId, rawCandidates, ct).ConfigureAwait(false);
 
-        // 4. Source 4: DepotBox (Bounded ops only)
-        await DiscoverFromDepotBoxBoundedAsync(appId, rawCandidates, ct).ConfigureAwait(false);
-
-        // 5. Unify candidates by exact (AppId, DepotId, ManifestGid)
+        // 4. Unify candidates by exact (AppId, DepotId, ManifestGid)
         var unified = UnifyCandidateRevisions(rawCandidates);
 
         _logger.LogInformation(
@@ -149,6 +152,36 @@ public sealed class HistoricalRevisionDiscoveryService : IHistoricalRevisionDisc
             {
                 File.Copy(cached, targetFile, overwrite: true);
             }
+            return targetFile;
+        }
+
+        // 1b. Check local Steam client depotcache directory
+        var steamPath = ShortcutHelper.GetSteamPath();
+        if (!string.IsNullOrWhiteSpace(steamPath))
+        {
+            var steamDepotCacheFile = Path.Combine(steamPath, "depotcache", $"{depotId}_{manifestId}.manifest");
+            if (File.Exists(steamDepotCacheFile) && _cacheService.ValidateManifest(steamDepotCacheFile))
+            {
+                await _cacheService.StoreManifestFileAsync(depotId, manifestId, steamDepotCacheFile, ct).ConfigureAwait(false);
+                if (!string.Equals(Path.GetFullPath(steamDepotCacheFile), Path.GetFullPath(targetFile), StringComparison.OrdinalIgnoreCase))
+                {
+                    File.Copy(steamDepotCacheFile, targetFile, overwrite: true);
+                }
+                _logger.LogInformation("Recovered manifest {DepotId}_{ManifestId} directly from Steam client depotcache", depotId, manifestId);
+                return targetFile;
+            }
+        }
+
+        // 1c. Check local ManifestHub repository clone if present (D:\BlueStarMANI\manifests)
+        var localRepoManifest = Path.Combine(@"D:\BlueStarMANI\manifests", depotId.ToString(), $"{manifestId}.manifest");
+        if (File.Exists(localRepoManifest) && _cacheService.ValidateManifest(localRepoManifest))
+        {
+            await _cacheService.StoreManifestFileAsync(depotId, manifestId, localRepoManifest, ct).ConfigureAwait(false);
+            if (!string.Equals(Path.GetFullPath(localRepoManifest), Path.GetFullPath(targetFile), StringComparison.OrdinalIgnoreCase))
+            {
+                File.Copy(localRepoManifest, targetFile, overwrite: true);
+            }
+            _logger.LogInformation("Recovered manifest {DepotId}_{ManifestId} directly from local ManifestHub repository", depotId, manifestId);
             return targetFile;
         }
 
