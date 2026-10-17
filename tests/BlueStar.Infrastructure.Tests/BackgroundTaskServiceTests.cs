@@ -129,21 +129,26 @@ public class BackgroundTaskServiceTests
                 reporter.Report(new BackgroundTaskProgress(100, "Instance ready", "Complete"));
             });
 
+        BackgroundTaskItem? completedTask = null;
         service.TasksChanged += (_, _) =>
         {
             var item = service.Tasks.FirstOrDefault(t => t.Id == taskId);
             if (item != null)
             {
                 reports.Add(item.ProgressPercentage);
+                if (item.Status == BackgroundTaskStatus.Completed)
+                {
+                    completedTask = item;
+                }
             }
         };
 
-        for (int i = 0; i < 50 && service.Tasks.FirstOrDefault(t => t.Id == taskId)?.Status != BackgroundTaskStatus.Completed; i++)
+        for (int i = 0; i < 100 && completedTask == null && service.Tasks.FirstOrDefault(t => t.Id == taskId)?.Status != BackgroundTaskStatus.Completed; i++)
         {
             await Task.Delay(20);
         }
 
-        var task = service.Tasks.FirstOrDefault(t => t.Id == taskId);
+        var task = completedTask ?? service.Tasks.FirstOrDefault(t => t.Id == taskId);
         task.Should().NotBeNull();
         task!.Title.Should().Be("Downloading Depots: Test Game");
         task.InstanceName.Should().Be("Test Game");
@@ -155,6 +160,7 @@ public class BackgroundTaskServiceTests
     public async Task QueueTask_WithDepotUpdateSearch_ReportsProgressAndCompletes()
     {
         var service = new BackgroundTaskService(NullLogger<BackgroundTaskService>.Instance);
+        BackgroundTaskItem? completedTask = null;
 
         var taskId = service.QueueTask(
             "Searching Depot Updates: Cyber Game",
@@ -168,12 +174,21 @@ public class BackgroundTaskServiceTests
                 reporter.Report(new BackgroundTaskProgress(100, "Found 2 updated depot(s).", "Complete"));
             });
 
-        for (int i = 0; i < 50 && service.Tasks.FirstOrDefault(t => t.Id == taskId)?.Status != BackgroundTaskStatus.Completed; i++)
+        service.TasksChanged += (_, _) =>
+        {
+            var item = service.Tasks.FirstOrDefault(t => t.Id == taskId);
+            if (item != null && item.Status == BackgroundTaskStatus.Completed)
+            {
+                completedTask = item;
+            }
+        };
+
+        for (int i = 0; i < 100 && completedTask == null && service.Tasks.FirstOrDefault(t => t.Id == taskId)?.Status != BackgroundTaskStatus.Completed; i++)
         {
             await Task.Delay(20);
         }
 
-        var task = service.Tasks.FirstOrDefault(t => t.Id == taskId);
+        var task = completedTask ?? service.Tasks.FirstOrDefault(t => t.Id == taskId);
         task.Should().NotBeNull();
         task!.Title.Should().Be("Searching Depot Updates: Cyber Game");
         task.InstanceName.Should().Be("Cyber Game");

@@ -510,7 +510,7 @@ public sealed class ContributionTransportService : IContributionTransportService
             candidateUrls.Add($"{effectiveBase}/indices/coverage.json");
             candidateUrls.Add($"{effectiveBase}/indices/depots.json");
         }
-        else if (client.BaseAddress != null)
+        else if (client?.BaseAddress != null)
         {
             candidateUrls.Add("/indices/coverage.json");
             candidateUrls.Add("/indices/depots.json");
@@ -519,6 +519,8 @@ public sealed class ContributionTransportService : IContributionTransportService
         // Always fallback to public GitHub Manifest Hub repository indices
         candidateUrls.Add("https://raw.githubusercontent.com/Coronitaa/BlueStar-ManifestHub/main/indices/coverage.json");
         candidateUrls.Add("https://raw.githubusercontent.com/Coronitaa/BlueStar-ManifestHub/main/indices/depots.json");
+
+        if (client == null) return results.AsReadOnly();
 
         foreach (var url in candidateUrls)
         {
