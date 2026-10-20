@@ -385,14 +385,8 @@ public sealed class SteamLicenseAndHistoricalDiscoveryTests : IDisposable
                 var uri = req.RequestUri?.ToString() ?? string.Empty;
                 attemptedUrls.Add(uri);
 
-                // Primary ManifestHub returns 404
+                // ManifestHub returns valid manifest binary
                 if (uri.Contains("Coronitaa/BlueStar-ManifestHub"))
-                {
-                    return new HttpResponseMessage(HttpStatusCode.NotFound);
-                }
-
-                // Secondary ManifestHub2 returns valid manifest binary
-                if (uri.Contains("SSMGAlt/ManifestHub2"))
                 {
                     return new HttpResponseMessage(HttpStatusCode.OK)
                     {
@@ -405,12 +399,11 @@ public sealed class SteamLicenseAndHistoricalDiscoveryTests : IDisposable
 
         var httpClient = new HttpClient(httpHandlerMock.Object);
         var service = new HistoricalRevisionDiscoveryService(
-            httpClient,
-            cacheService,
-            depotBoxClient: null,
+            http: httpClient,
+            cacheService: cacheService,
             keyRepository: null,
             appSettings: null,
-            NullLogger<HistoricalRevisionDiscoveryService>.Instance);
+            logger: NullLogger<HistoricalRevisionDiscoveryService>.Instance);
 
         // Act
         var savedFile = await service.FetchManifestBinaryAsync(
@@ -424,7 +417,6 @@ public sealed class SteamLicenseAndHistoricalDiscoveryTests : IDisposable
         File.Exists(savedFile).Should().BeTrue();
         cacheService.HasManifest(731, 55555).Should().BeTrue();
         attemptedUrls.Should().Contain(u => u.Contains("Coronitaa/BlueStar-ManifestHub"));
-        attemptedUrls.Should().Contain(u => u.Contains("SSMGAlt/ManifestHub2"));
     }
 
     // =========================================================================

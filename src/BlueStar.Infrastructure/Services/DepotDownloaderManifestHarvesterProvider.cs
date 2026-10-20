@@ -92,6 +92,34 @@ public sealed class DepotDownloaderManifestHarvesterProvider : IManifestHarveste
             }
         }
 
+        // 1b. Check local Steam client depotcache
+        var steamPath = ShortcutHelper.GetSteamPath();
+        if (!string.IsNullOrWhiteSpace(steamPath))
+        {
+            var steamDepotCacheFile = Path.Combine(steamPath, "depotcache", $"{depotId}_{manifestId}.manifest");
+            if (File.Exists(steamDepotCacheFile) && SteamClientManifestHarvesterProvider.ValidateManifestHeader(steamDepotCacheFile))
+            {
+                if (_manifestCache != null)
+                {
+                    try { await _manifestCache.StoreManifestFileAsync(depotId, manifestId, steamDepotCacheFile, ct).ConfigureAwait(false); } catch { }
+                }
+                _logger.LogInformation("DepotDownloaderMod: Manifest {DepotId}_{ManifestId} recovered directly from Steam client depotcache", depotId, manifestId);
+                return HarvestResult.Success(steamDepotCacheFile, Name);
+            }
+        }
+
+        // 1c. Check local ManifestHub repository clone if present (D:\BlueStarMANI\manifests)
+        var localRepoManifest = Path.Combine(@"D:\BlueStarMANI\manifests", depotId.ToString(), $"{manifestId}.manifest");
+        if (File.Exists(localRepoManifest) && SteamClientManifestHarvesterProvider.ValidateManifestHeader(localRepoManifest))
+        {
+            if (_manifestCache != null)
+            {
+                try { await _manifestCache.StoreManifestFileAsync(depotId, manifestId, localRepoManifest, ct).ConfigureAwait(false); } catch { }
+            }
+            _logger.LogInformation("DepotDownloaderMod: Manifest {DepotId}_{ManifestId} recovered directly from local ManifestHub repository", depotId, manifestId);
+            return HarvestResult.Success(localRepoManifest, Name);
+        }
+
         var tempOutputDir = Path.Combine(Path.GetTempPath(), "BlueStar_DepotDownloader_Harvest", $"{depotId}_{manifestId}");
         Directory.CreateDirectory(tempOutputDir);
 

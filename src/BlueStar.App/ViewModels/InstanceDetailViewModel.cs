@@ -8715,21 +8715,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 }
             }
 
-            // 3. Ask DepotBox for every manifest it knows about for this app. These are listed even
-            //    when nothing has been downloaded yet — the point of the Custom mode is to let the
-            //    user pick a manifest first and then go acquire it.
             IReadOnlyList<ManifestInfo> depotBoxManifests = [];
-            if (_apiClient != null)
-            {
-                try
-                {
-                    depotBoxManifests = await _apiClient.GetManifestsAsync(Instance.AppId, CancellationToken.None).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogDebug(ex, "DepotBox has no manifest list for AppId {AppId}", Instance.AppId);
-                }
-            }
 
             // 4. Scan local instance manifests directory
             var localManifestIds = new Dictionary<uint, HashSet<ulong>>();
@@ -8821,20 +8807,6 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                         }
                     }
 
-                    // Everything DepotBox lists for this depot, backed or not
-                    foreach (var mi in depotBoxManifests.Where(m => m.DepotId == depotId))
-                    {
-                        if (mi.ManifestId > 0 && seen.Add(mi.ManifestId))
-                        {
-                            options.Add(new DepotManifestOption
-                            {
-                                ManifestId = mi.ManifestId,
-                                DisplayText = "DepotBox catalogue",
-                                Source = "DepotBox",
-                                IsBacked = mi.IsDownloaded || IsLocallyAvailable(mi.ManifestId)
-                            });
-                        }
-                    }
 
                     // Builds this instance previously had installed
                     foreach (var snap in Instance.BuildHistory ?? [])
@@ -9215,9 +9187,6 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                     var query = Uri.EscapeDataString($"{Instance.Name} manifest");
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo($"https://cs.rin.ru/forum/search.php?keywords={query}&terms=all&author=&sc=1&sf=all&sk=t&sd=d&sr=topics&st=0&ch=300&t=0&submit=Search") { UseShellExecute = true });
                     break;
-                case "depotbox":
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://depotbox.org") { UseShellExecute = true });
-                    break;
                 case "manifest_dir":
                     var manifestDir = Path.Combine(
                         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -9426,29 +9395,6 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             }
 
 
-            // 2. Fetch DepotBox manifests build (only if no builds resolved yet and instance originated from DepotBox)
-            if (_apiClient != null && list.Count == 0 && Instance.Origin == InstanceOrigin.DepotBox)
-            {
-                try
-                {
-                    var depotBoxManifests = await _apiClient.GetManifestsAsync(Instance.AppId, _cts.Token).ConfigureAwait(true);
-                    if (depotBoxManifests.Count > 0)
-                    {
-                        var map = depotBoxManifests.ToDictionary(m => m.DepotId, m => m.ManifestId);
-                        list.Add(new GameBuildInfo
-                        {
-                            BuildId = "DepotBox",
-                            BranchName = "depotbox",
-                            DisplayName = "DepotBox Archive Build (Verified)",
-                            UpdatedAt = DateTimeOffset.UtcNow,
-                            Description = $"{depotBoxManifests.Count} verified manifests hosted on DepotBox",
-                            Source = "DepotBox",
-                            DepotManifests = map
-                        });
-                    }
-                }
-                catch { }
-            }
 
             // 3. Scan local instance manifests directory
             var instanceManifestDir = Path.Combine(

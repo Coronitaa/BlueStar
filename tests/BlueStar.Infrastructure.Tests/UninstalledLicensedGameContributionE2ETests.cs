@@ -165,28 +165,28 @@ public sealed class UninstalledLicensedGameContributionE2ETests : IDisposable
                     };
                 }
 
-                // C. ManifestHub2 community historical discovery for App 892970
-                if (uri.Contains($"SSMGAlt/ManifestHub2/{uninstalledAppId}/{uninstalledAppId}.json"))
+                // C. BlueStar-ManifestHub historical discovery for App 892970
+                if (uri.Contains($"/builds/{uninstalledAppId}.json") || uri.Contains($"Coronitaa/BlueStar-ManifestHub/main/builds/{uninstalledAppId}.json"))
                 {
                     var json = $$"""
-                    {
-                        "depot": {
-                            "{{depotId}}": {
-                                "manifests": {
-                                    "public": {
-                                        "gid": "{{missingManifestId}}",
-                                        "date": "2026-05-15T12:00:00Z",
-                                        "size": 1048576
-                                    },
-                                    "previous": {
-                                        "gid": "{{existingManifestId}}",
-                                        "date": "2025-11-10T08:30:00Z",
-                                        "size": 1040000
-                                    }
-                                }
+                    [
+                        {
+                            "buildId": "10002",
+                            "branch": "public",
+                            "creationTime": "2026-05-15T12:00:00Z",
+                            "depotManifests": {
+                                "{{depotId}}": "{{missingManifestId}}"
+                            }
+                        },
+                        {
+                            "buildId": "10001",
+                            "branch": "public",
+                            "creationTime": "2025-11-10T08:30:00Z",
+                            "depotManifests": {
+                                "{{depotId}}": "{{existingManifestId}}"
                             }
                         }
-                    }
+                    ]
                     """;
                     return new HttpResponseMessage(HttpStatusCode.OK)
                     {
@@ -194,8 +194,8 @@ public sealed class UninstalledLicensedGameContributionE2ETests : IDisposable
                     };
                 }
 
-                // D. ManifestHub2 manifest binary download for missing revision
-                if (uri.Contains($"SSMGAlt/ManifestHub2/{uninstalledAppId}/{depotId}_{missingManifestId}.manifest"))
+                // D. BlueStar-ManifestHub manifest binary download for missing revision
+                if (uri.Contains($"/manifests/{depotId}/{missingManifestId}.manifest") || uri.Contains($"Coronitaa/BlueStar-ManifestHub/main/manifests/{depotId}/{missingManifestId}.manifest"))
                 {
                     return new HttpResponseMessage(HttpStatusCode.OK)
                     {
@@ -317,8 +317,7 @@ public sealed class UninstalledLicensedGameContributionE2ETests : IDisposable
         var revisionDiscoveryService = new HistoricalRevisionDiscoveryService(
             http: httpClient,
             cacheService: cacheService,
-            depotBoxClient: null,
-            keyRepository: keyRepoMock.Object,
+                        keyRepository: keyRepoMock.Object,
             appSettings: null,
             logger: NullLogger<HistoricalRevisionDiscoveryService>.Instance);
 

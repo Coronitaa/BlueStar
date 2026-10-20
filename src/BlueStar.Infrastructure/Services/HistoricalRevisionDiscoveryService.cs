@@ -31,12 +31,9 @@ public sealed class HistoricalRevisionDiscoveryService : IHistoricalRevisionDisc
 {
     public const string PrimaryBuildsBaseUrl = "https://raw.githubusercontent.com/Coronitaa/BlueStar-ManifestHub/main/builds";
     public const string PrimaryManifestsBaseUrl = "https://raw.githubusercontent.com/Coronitaa/BlueStar-ManifestHub/main/manifests";
-    public const string SecondaryManifestHub2BaseUrl = "https://raw.githubusercontent.com/SSMGAlt/ManifestHub2";
-    public const string TertiaryK25BaseUrl = "https://raw.githubusercontent.com/qwe213312/k25FCdfEOoEJ42S6/main";
 
     private readonly HttpClient _http;
     private readonly IManifestCacheService _cacheService;
-    private readonly IDepotBoxApiClient? _depotBoxClient;
     private readonly IDepotKeyRepository? _keyRepository;
     private readonly AppSettingsService? _appSettings;
     private readonly ILogger<HistoricalRevisionDiscoveryService> _logger;
@@ -50,14 +47,12 @@ public sealed class HistoricalRevisionDiscoveryService : IHistoricalRevisionDisc
     public HistoricalRevisionDiscoveryService(
         HttpClient http,
         IManifestCacheService cacheService,
-        IDepotBoxApiClient? depotBoxClient = null,
         IDepotKeyRepository? keyRepository = null,
         AppSettingsService? appSettings = null,
         ILogger<HistoricalRevisionDiscoveryService>? logger = null)
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _cacheService = cacheService ?? throw new ArgumentNullException(nameof(cacheService));
-        _depotBoxClient = depotBoxClient;
         _keyRepository = keyRepository;
         _appSettings = appSettings;
         _logger = logger ?? NullLogger<HistoricalRevisionDiscoveryService>.Instance;
@@ -84,14 +79,8 @@ public sealed class HistoricalRevisionDiscoveryService : IHistoricalRevisionDisc
 
         var rawCandidates = new List<HubRevisionItem>();
 
-        // 1. Source 1: BlueStar-ManifestHub (Primary GitOps)
+        // 1. Primary Source: BlueStar-ManifestHub (Local repo clone and GitOps)
         await DiscoverFromPrimaryManifestHubAsync(appId, rawCandidates, ct).ConfigureAwait(false);
-
-        // 2. Source 2: SSMGAlt/ManifestHub2
-        await DiscoverFromManifestHub2Async(appId, rawCandidates, ct).ConfigureAwait(false);
-
-        // 3. Source 3: K25
-        await DiscoverFromK25Async(appId, rawCandidates, ct).ConfigureAwait(false);
 
         // 4. Unify candidates by exact (AppId, DepotId, ManifestGid)
         var unified = UnifyCandidateRevisions(rawCandidates);
@@ -196,15 +185,7 @@ public sealed class HistoricalRevisionDiscoveryService : IHistoricalRevisionDisc
         }
         candidateUrls.Add($"{PrimaryManifestsBaseUrl}/{depotId}/{manifestId}.manifest");
 
-        // Route 2 (Secondary): SSMGAlt/ManifestHub2
-        if (appId > 0)
-        {
-            candidateUrls.Add($"{SecondaryManifestHub2BaseUrl}/{appId}/{depotId}_{manifestId}.manifest");
-        }
-
-        // Route 3 (Tertiary): K25
-        candidateUrls.Add($"{TertiaryK25BaseUrl}/manifests/{depotId}/{manifestId}.manifest");
-        candidateUrls.Add($"{TertiaryK25BaseUrl}/{depotId}_{manifestId}.manifest");
+        // Manifest Hub is the authoritative catalog for BlueStar
 
         // 3. Try each candidate URL
         foreach (var url in candidateUrls)
@@ -333,6 +314,31 @@ public sealed class HistoricalRevisionDiscoveryService : IHistoricalRevisionDisc
 
     private async Task DiscoverFromPrimaryManifestHubAsync(uint appId, List<HubRevisionItem> list, CancellationToken ct)
     {
+        // 1. Check local ManifestHub repository clone if present (D:\BlueStarMANI\builds\<appId>.json)
+        var localBuildPath = Path.Combine(@"D:\BlueStarMANI\builds", $"{appId}.json");
+        if (File.Exists(localBuildPath))
+        {
+            try
+            {
+                var json = await File.ReadAllTextAsync(localBuildPath, ct).ConfigureAwait(false);
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                if (root.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in root.EnumerateArray()) ParseManifestHubJsonElement(item, appId, "ManifestHub", list);
+                }
+                else if (root.ValueKind == JsonValueKind.Object)
+                {
+                    ParseManifestHubJsonElement(root, appId, "ManifestHub", list);
+                }
+                if (list.Count > 0) return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to read local ManifestHub build for App {AppId}", appId);
+            }
+        }
+
         var effective = GetEffectiveHubBaseUrl();
         var urls = new List<string>();
         if (!string.IsNullOrEmpty(effective))
@@ -372,185 +378,6 @@ public sealed class HistoricalRevisionDiscoveryService : IHistoricalRevisionDisc
             {
                 _logger.LogDebug(ex, "Primary ManifestHub revision discovery failed for App {AppId} at {Url}", appId, url);
             }
-        }
-    }
-
-    private async Task DiscoverFromManifestHub2Async(uint appId, List<HubRevisionItem> list, CancellationToken ct)
-    {
-        var url = $"{SecondaryManifestHub2BaseUrl}/{appId}/{appId}.json";
-        try
-        {
-            using var resp = await _http.GetAsync(url, ct).ConfigureAwait(false);
-            if (!resp.IsSuccessStatusCode) return;
-
-            var json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            using var doc = JsonDocument.Parse(json);
-
-            if (!doc.RootElement.TryGetProperty("depot", out var depotEl) || depotEl.ValueKind != JsonValueKind.Object)
-                return;
-
-            var keysToRegister = new List<KeyValuePair<uint, string>>();
-
-            foreach (var depotProp in depotEl.EnumerateObject())
-            {
-                if (!uint.TryParse(depotProp.Name, out var depotId)) continue;
-                var depotObj = depotProp.Value;
-
-                // Register decryption key if present
-                if (depotObj.TryGetProperty("decryptionkey", out var dkProp) && dkProp.ValueKind == JsonValueKind.String)
-                {
-                    var key = dkProp.GetString();
-                    if (!string.IsNullOrWhiteSpace(key))
-                    {
-                        keysToRegister.Add(new KeyValuePair<uint, string>(depotId, key));
-                    }
-                }
-
-                if (depotObj.TryGetProperty("manifests", out var manifestsEl) && manifestsEl.ValueKind == JsonValueKind.Object)
-                {
-                    foreach (var branchProp in manifestsEl.EnumerateObject())
-                    {
-                        var branchName = branchProp.Name;
-                        var branchObj = branchProp.Value;
-
-                        ulong manifestId = 0;
-                        if (branchObj.TryGetProperty("gid", out var gidProp))
-                        {
-                            if (gidProp.ValueKind == JsonValueKind.String) ulong.TryParse(gidProp.GetString(), out manifestId);
-                            else if (gidProp.ValueKind == JsonValueKind.Number) gidProp.TryGetUInt64(out manifestId);
-                        }
-
-                        if (manifestId == 0) continue;
-
-                        long size = 0;
-                        if (branchObj.TryGetProperty("size", out var sProp))
-                        {
-                            if (sProp.ValueKind == JsonValueKind.Number) sProp.TryGetInt64(out size);
-                            else if (sProp.ValueKind == JsonValueKind.String) long.TryParse(sProp.GetString(), out size);
-                        }
-
-                        DateTimeOffset? authenticDate = null;
-                        if (branchObj.TryGetProperty("date", out var dProp) && dProp.ValueKind == JsonValueKind.String)
-                        {
-                            if (DateTimeOffset.TryParse(dProp.GetString(), out var parsedDate))
-                                authenticDate = parsedDate;
-                        }
-                        else if (branchObj.TryGetProperty("time", out var tProp) && tProp.ValueKind == JsonValueKind.Number)
-                        {
-                            if (tProp.TryGetInt64(out var unixTime) && unixTime > 0)
-                                authenticDate = DateTimeOffset.FromUnixTimeSeconds(unixTime);
-                        }
-
-                        list.Add(new HubRevisionItem
-                        {
-                            AppId = appId,
-                            DepotId = depotId,
-                            ManifestId = manifestId,
-                            BranchName = branchName,
-                            DepotName = $"Depot {depotId}",
-                            AuthenticPublicationDate = authenticDate,
-                            IngestionDate = DateTimeOffset.UtcNow,
-                            Provenance = "ManifestHub2",
-                            SizeOriginal = size,
-                            Status = "Available"
-                        });
-                    }
-                }
-            }
-
-            if (_keyRepository != null && keysToRegister.Count > 0)
-            {
-                try
-                {
-                    await _keyRepository.RegisterKeysAsync(keysToRegister, "ManifestHub2 JSON", ct).ConfigureAwait(false);
-                }
-                catch { }
-            }
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "ManifestHub2 revision discovery failed for App {AppId}", appId);
-        }
-    }
-
-    private async Task DiscoverFromK25Async(uint appId, List<HubRevisionItem> list, CancellationToken ct)
-    {
-        // Check K25 repository for app/depot JSON mapping
-        var candidateUrls = new[]
-        {
-            $"{TertiaryK25BaseUrl}/{appId}.json",
-            $"{TertiaryK25BaseUrl}/manifests/{appId}.json"
-        };
-
-        foreach (var url in candidateUrls)
-        {
-            ct.ThrowIfCancellationRequested();
-            try
-            {
-                using var resp = await _http.GetAsync(url, ct).ConfigureAwait(false);
-                if (resp.IsSuccessStatusCode)
-                {
-                    var json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                    using var doc = JsonDocument.Parse(json);
-                    var root = doc.RootElement;
-
-                    if (root.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var item in root.EnumerateArray())
-                        {
-                            ParseManifestHubJsonElement(item, appId, "K25", list);
-                        }
-                    }
-                    else if (root.ValueKind == JsonValueKind.Object)
-                    {
-                        ParseManifestHubJsonElement(root, appId, "K25", list);
-                    }
-                    return;
-                }
-            }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "K25 revision discovery failed for App {AppId} at {Url}", appId, url);
-            }
-        }
-    }
-
-    private async Task DiscoverFromDepotBoxBoundedAsync(uint appId, List<HubRevisionItem> list, CancellationToken ct)
-    {
-        if (_depotBoxClient == null) return;
-
-        try
-        {
-            // Strictly bounded metadata check: zero game archive downloads
-            var isAvailable = await _depotBoxClient.CheckAvailabilityAsync(appId, ct).ConfigureAwait(false);
-            if (!isAvailable) return;
-
-            var manifests = await _depotBoxClient.GetManifestsAsync(appId, ct).ConfigureAwait(false);
-            foreach (var m in manifests)
-            {
-                if (m.DepotId == 0 || m.ManifestId == 0) continue;
-
-                list.Add(new HubRevisionItem
-                {
-                    AppId = appId,
-                    DepotId = m.DepotId,
-                    ManifestId = m.ManifestId,
-                    DepotName = $"Depot {m.DepotId}",
-                    BranchName = "public",
-                    AuthenticPublicationDate = null, // Strictly null if absent
-                    IngestionDate = DateTimeOffset.UtcNow,
-                    Provenance = "DepotBox",
-                    SizeOriginal = m.SizeBytes,
-                    Status = "Available"
-                });
-            }
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Bounded DepotBox revision discovery failed for App {AppId}", appId);
         }
     }
 

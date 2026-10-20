@@ -369,6 +369,12 @@ public partial class SettingsViewModel : ObservableObject
 
     public ObservableCollection<ContributionBatchItem> ContributionBatchPreview { get; } = [];
 
+    public ObservableCollection<GameManifestGroup> MissingManifestGroups { get; } = [];
+
+    public ObservableCollection<GameManifestGroup> LocalOnlyManifestGroups { get; } = [];
+
+    public ObservableCollection<GameManifestGroup> ContributionBatchGroups { get; } = [];
+
     [ObservableProperty]
     private bool _isBatchPreviewModalOpen;
 
@@ -601,6 +607,14 @@ public partial class SettingsViewModel : ObservableObject
         }
     }
 
+    private static string SanitizeProvenance(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return "Manifest Hub";
+        if (raw.Contains("DepotCache", StringComparison.OrdinalIgnoreCase)) return "Steam DepotCache";
+        if (raw.Contains("LocalCache", StringComparison.OrdinalIgnoreCase) || raw.Contains("Local Cache", StringComparison.OrdinalIgnoreCase)) return "Caché Local";
+        return "Manifest Hub";
+    }
+
     [RelayCommand]
     public void RunManifestAnalysis()
     {
@@ -633,6 +647,7 @@ public partial class SettingsViewModel : ObservableObject
             {
                 ct.ThrowIfCancellationRequested();
 
+                bool isUnitTest = App.Services == null;
                 var targetApps = new List<(uint AppId, string Name)>();
                 var localArtifacts = new List<ManifestArtifact>();
 
@@ -743,7 +758,9 @@ public partial class SettingsViewModel : ObservableObject
                     }
 
                     // Also scan Steam client's authentic depotcache when inspecting cache
-                    var steamPathForCache = ShortcutHelper.GetSteamPath();
+                    if (!isUnitTest)
+                    {
+                        var steamPathForCache = ShortcutHelper.GetSteamPath();
                     if (!string.IsNullOrWhiteSpace(steamPathForCache))
                     {
                         var steamDepotCache = Path.Combine(steamPathForCache, "depotcache");
@@ -784,6 +801,7 @@ public partial class SettingsViewModel : ObservableObject
                             }
                         }
                     }
+                    }
 
                     if (_instanceManager != null)
                     {
@@ -794,6 +812,65 @@ public partial class SettingsViewModel : ObservableObject
                         }
                     }
                     progress.Report(new BackgroundTaskProgress(25, $"Stage 1/7: Local cache scanned: {localArtifacts.Count} manifests"));
+                }
+
+                // In production SteamLibrary scope, scan local Steam client depotcache and installed games
+                if (!isUnitTest && scope == "SteamLibrary")
+                {
+                    try
+                    {
+                        var installedSteamGames = await SteamLibraryScanner.ScanInstalledGamesAsync(ct).ConfigureAwait(false);
+                    foreach (var g in installedSteamGames)
+                    {
+                        if (g.AppId > 0 && !targetApps.Any(t => t.AppId == g.AppId))
+                        {
+                            targetApps.Add((g.AppId, g.Name));
+                        }
+                    }
+
+                    var steamPathLocal = ShortcutHelper.GetSteamPath();
+                    if (!string.IsNullOrWhiteSpace(steamPathLocal))
+                    {
+                        var steamDepotCache = Path.Combine(steamPathLocal, "depotcache");
+                        if (Directory.Exists(steamDepotCache))
+                        {
+                            var depotFiles = Directory.GetFiles(steamDepotCache, "*.manifest");
+                            foreach (var f in depotFiles)
+                            {
+                                ct.ThrowIfCancellationRequested();
+                                var fname = Path.GetFileNameWithoutExtension(f);
+                                var parts = fname.Split('_');
+                                if (parts.Length == 2 && uint.TryParse(parts[0], out var dId) && ulong.TryParse(parts[1], out var mId))
+                                {
+                                    if (!localArtifacts.Any(a => a.DepotId == dId && a.ManifestId == mId))
+                                    {
+                                        try
+                                        {
+                                            var fi = new FileInfo(f);
+                                            if (fi.Length >= 4)
+                                            {
+                                                using var fs = new FileStream(f, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                                                var magic = new byte[4];
+                                                if (fs.Read(magic, 0, 4) == 4 && magic[0] == 0xD0 && magic[1] == 0x17 && magic[2] == 0xF6 && magic[3] == 0x71)
+                                                {
+                                                    localArtifacts.Add(new ManifestArtifact
+                                                    {
+                                                        DepotId = dId,
+                                                        ManifestId = mId,
+                                                        SizeBytes = fi.Length,
+                                                        LocalCachePath = f
+                                                    });
+                                                }
+                                            }
+                                        }
+                                        catch { }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    }
+                    catch { }
                 }
 
                 ct.ThrowIfCancellationRequested();
@@ -807,8 +884,8 @@ public partial class SettingsViewModel : ObservableObject
                 int totalGames = targetApps.Count;
                 var appNameMap = targetApps.GroupBy(t => t.AppId).ToDictionary(g => g.Key, g => g.First().Name);
                 var ownedAppSet = new HashSet<uint>(targetApps.Select(t => t.AppId));
-                var steamPath = ShortcutHelper.GetSteamPath();
-                var depotToGameMap = SteamLibraryScanner.ScanInstalledDepotsToGameMap();
+                var steamPath = !isUnitTest ? ShortcutHelper.GetSteamPath() : null;
+                var depotToGameMap = !isUnitTest ? SteamLibraryScanner.ScanInstalledDepotsToGameMap() : new Dictionary<uint, (uint AppId, string GameName)>();
 
                 if (targetApps.Count > 0 || scope != "SteamLibrary")
                 {
@@ -949,9 +1026,14 @@ public partial class SettingsViewModel : ObservableObject
                                 }
                             }
 
-                            if (ownedAppSet.Count > 0 && matchedAppId > 0 && !ownedAppSet.Contains(matchedAppId) && matchedAppId != 228980 && matchedAppId != 480)
+                            if (matchedAppId > 0 && !string.IsNullOrWhiteSpace(resolvedGameName) && !resolvedGameName.StartsWith("Depot "))
                             {
-                                continue;
+                                if (!appNameMap.ContainsKey(matchedAppId))
+                                {
+                                    appNameMap[matchedAppId] = resolvedGameName;
+                                    targetApps.Add((matchedAppId, resolvedGameName));
+                                    ownedAppSet.Add(matchedAppId);
+                                }
                             }
 
                             string prov = (!string.IsNullOrWhiteSpace(la.LocalCachePath) && la.LocalCachePath.Contains("depotcache", StringComparison.OrdinalIgnoreCase))
@@ -980,7 +1062,9 @@ public partial class SettingsViewModel : ObservableObject
                 }
 
                 // Enrich known revisions with Steam DepotCache provenance if authentic manifest is already on local disk
-                var steamPathForAudit = ShortcutHelper.GetSteamPath();
+                if (!isUnitTest)
+                {
+                    var steamPathForAudit = ShortcutHelper.GetSteamPath();
                 if (!string.IsNullOrWhiteSpace(steamPathForAudit))
                 {
                     var steamDepotCache = Path.Combine(steamPathForAudit, "depotcache");
@@ -996,6 +1080,7 @@ public partial class SettingsViewModel : ObservableObject
                             }
                         }
                     }
+                }
                 }
 
                 var distinctRevisions = knownRevisions
@@ -1109,6 +1194,49 @@ public partial class SettingsViewModel : ObservableObject
                     SizeBytes = r.SizeOriginal
                 }).ToList();
 
+                var missingGrouped = missingRevisions
+                    .GroupBy(r => r.AppId)
+                    .Select(g => new GameManifestGroup
+                    {
+                        AppId = g.Key,
+                        AppName = appNameMap.TryGetValue(g.Key, out var n) && !string.IsNullOrWhiteSpace(n)
+                            ? n
+                            : (g.FirstOrDefault()?.DepotName ?? $"App {g.Key}"),
+                        Manifests = g.Select(r => new GameManifestItemModel
+                        {
+                            DepotId = r.DepotId,
+                            ManifestId = r.ManifestId,
+                            DepotName = string.IsNullOrWhiteSpace(r.DepotName) ? $"Depot {r.DepotId}" : r.DepotName,
+                            SizeBytes = r.SizeOriginal,
+                            CleanProvenance = SanitizeProvenance(r.Provenance),
+                            IsReadyToContribute = true
+                        }).ToList()
+                    })
+                    .OrderBy(g => g.AppName)
+                    .ToList();
+
+                var localOnlyGrouped = missingRevisions
+                    .Where(r => r.Provenance.Contains("DepotCache") || r.Provenance.Contains("LocalCache") || r.Provenance.Contains("Local Cache"))
+                    .GroupBy(r => r.AppId)
+                    .Select(g => new GameManifestGroup
+                    {
+                        AppId = g.Key,
+                        AppName = appNameMap.TryGetValue(g.Key, out var n) && !string.IsNullOrWhiteSpace(n)
+                            ? n
+                            : (g.FirstOrDefault()?.DepotName ?? $"App {g.Key}"),
+                        Manifests = g.Select(r => new GameManifestItemModel
+                        {
+                            DepotId = r.DepotId,
+                            ManifestId = r.ManifestId,
+                            DepotName = string.IsNullOrWhiteSpace(r.DepotName) ? $"Depot {r.DepotId}" : r.DepotName,
+                            SizeBytes = r.SizeOriginal,
+                            CleanProvenance = SanitizeProvenance(r.Provenance),
+                            IsReadyToContribute = true
+                        }).ToList()
+                    })
+                    .OrderBy(g => g.AppName)
+                    .ToList();
+
                 RunOnUIThread(() =>
                 {
                     ManifestAnalysisStatus = finalStatus;
@@ -1156,6 +1284,15 @@ public partial class SettingsViewModel : ObservableObject
                             SizeBytes = m.SizeOriginal
                         });
                     }
+
+                    MissingManifestGroups.Clear();
+                    foreach (var g in missingGrouped) MissingManifestGroups.Add(g);
+
+                    LocalOnlyManifestGroups.Clear();
+                    foreach (var g in localOnlyGrouped) LocalOnlyManifestGroups.Add(g);
+
+                    ContributionBatchGroups.Clear();
+                    foreach (var g in localOnlyGrouped) ContributionBatchGroups.Add(g);
 
                     if (EnableVoluntaryContributions && batchCandidates.Count > 0)
                     {
