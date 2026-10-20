@@ -1370,4 +1370,197 @@ public sealed class ManifestHubProvider : IManifestHubProvider
 
         return null;
     }
+
+    /// <inheritdoc />
+    public async Task<BuildHistoryPage> GetBuildHistoryPagedAsync(
+        uint appId,
+        string? branch = "public",
+        int page = 1,
+        int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 20;
+
+        var effectiveBase = GetEffectiveHubBaseUrl();
+        if (!string.IsNullOrEmpty(effectiveBase))
+        {
+            var url = $"{effectiveBase}/api/v1/builds/{appId}/history?branch={Uri.EscapeDataString(branch ?? "public")}&page={page}&pageSize={pageSize}";
+            try
+            {
+                using var resp = await _http.GetAsync(url, ct).ConfigureAwait(false);
+                if (resp.IsSuccessStatusCode)
+                {
+                    var pageJson = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    var paged = JsonSerializer.Deserialize<BuildHistoryPage>(pageJson, SnapshotSerializerOptions);
+                    if (paged != null) return paged;
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "HTTP history endpoint failed for App {AppId}, falling back to local pagination", appId);
+            }
+        }
+
+        // Fallback: load all snapshots via GetAppSnapshotsAsync and page in-memory
+        var allSnapshots = await GetAppSnapshotsAsync(appId, ct).ConfigureAwait(false);
+        IEnumerable<BuildSnapshot> query = allSnapshots;
+        if (!string.IsNullOrWhiteSpace(branch) && !string.Equals(branch, "*", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(s => string.Equals(s.Branch, branch.Trim(), StringComparison.OrdinalIgnoreCase));
+        }
+
+        var ordered = query
+            .OrderByDescending(s => s.CreationTime.HasValue)
+            .ThenByDescending(s => s.CreationTime ?? s.Timestamp)
+            .ThenByDescending(s => s.BuildId)
+            .ToList();
+
+        int totalItems = ordered.Count;
+        int totalPages = totalItems == 0 ? 0 : (int)Math.Ceiling((double)totalItems / pageSize);
+        var pagedItems = ordered.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+        return new BuildHistoryPage
+        {
+            AppId = appId,
+            Branch = branch ?? "public",
+            Page = page,
+            PageSize = pageSize,
+            TotalItems = totalItems,
+            TotalPages = totalPages,
+            Items = pagedItems
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<BuildSnapshot?> GetSnapshotByIdAsync(uint appId, ulong buildId, CancellationToken ct = default)
+    {
+        var effectiveBase = GetEffectiveHubBaseUrl();
+        if (!string.IsNullOrEmpty(effectiveBase))
+        {
+            var url = $"{effectiveBase}/api/v1/builds/{appId}/{buildId}";
+            try
+            {
+                using var resp = await _http.GetAsync(url, ct).ConfigureAwait(false);
+                if (resp.IsSuccessStatusCode)
+                {
+                    var json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    var snapshot = JsonSerializer.Deserialize<BuildSnapshot>(json, SnapshotSerializerOptions);
+                    if (snapshot != null) return snapshot;
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "HTTP single snapshot endpoint failed for App {AppId} Build {BuildId}", appId, buildId);
+            }
+        }
+
+        // Fallback: search in full snapshots
+        var allSnapshots = await GetAppSnapshotsAsync(appId, ct).ConfigureAwait(false);
+        return allSnapshots.FirstOrDefault(s => s.BuildId == buildId);
+    }
+
+    /// <inheritdoc />
+    public async Task<SnapshotDiffResult?> CompareSnapshotsAsync(
+        uint appId,
+        ulong? baseBuildId,
+        ulong targetBuildId,
+        CancellationToken ct = default)
+    {
+        var effectiveBase = GetEffectiveHubBaseUrl();
+        if (!string.IsNullOrEmpty(effectiveBase))
+        {
+            var url = $"{effectiveBase}/api/v1/builds/{appId}/compare?baseBuildId={baseBuildId}&targetBuildId={targetBuildId}";
+            try
+            {
+                using var resp = await _http.GetAsync(url, ct).ConfigureAwait(false);
+                if (resp.IsSuccessStatusCode)
+                {
+                    var json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    var diffResult = JsonSerializer.Deserialize<SnapshotDiffResult>(json, SnapshotSerializerOptions);
+                    if (diffResult != null) return diffResult;
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "HTTP snapshot comparison endpoint failed, computing diff locally");
+            }
+        }
+
+        // Local differential computation fallback
+        var targetSnapshot = await GetSnapshotByIdAsync(appId, targetBuildId, ct).ConfigureAwait(false);
+        if (targetSnapshot == null) return null;
+
+        BuildSnapshot? baseSnapshot = null;
+        if (baseBuildId.HasValue && baseBuildId.Value > 0)
+        {
+            baseSnapshot = await GetSnapshotByIdAsync(appId, baseBuildId.Value, ct).ConfigureAwait(false);
+        }
+
+        var baseDepots = baseSnapshot?.DepotManifests ?? new Dictionary<uint, ulong>();
+        var targetDepots = targetSnapshot.DepotManifests;
+
+        var unchanged = new List<VersionDepotDiffItem>();
+        var modified = new List<VersionDepotDiffItem>();
+        var added = new List<VersionDepotDiffItem>();
+        var removed = new List<VersionDepotDiffItem>();
+
+        long totalDownloadBytes = 0;
+        long totalSavedBytes = 0;
+
+        bool isComplete = targetSnapshot.Completeness == SnapshotCompleteness.Complete &&
+                          (baseSnapshot == null || baseSnapshot.Completeness == SnapshotCompleteness.Complete);
+
+        foreach (var (depotId, targetManifestId) in targetDepots)
+        {
+            bool hasLocal = _cacheService?.HasManifest(depotId, targetManifestId) ?? false;
+            long sizeBytes = 0;
+
+            if (baseDepots.TryGetValue(depotId, out ulong baseManifestId))
+            {
+                if (baseManifestId == targetManifestId)
+                {
+                    unchanged.Add(new VersionDepotDiffItem(depotId, $"Depot {depotId}", baseManifestId, targetManifestId, sizeBytes, DepotDiffStatus.Unchanged, hasLocal));
+                    totalSavedBytes += sizeBytes;
+                }
+                else
+                {
+                    modified.Add(new VersionDepotDiffItem(depotId, $"Depot {depotId}", baseManifestId, targetManifestId, sizeBytes, DepotDiffStatus.Modified, hasLocal));
+                    totalDownloadBytes += sizeBytes;
+                }
+            }
+            else
+            {
+                added.Add(new VersionDepotDiffItem(depotId, $"Depot {depotId}", null, targetManifestId, sizeBytes, DepotDiffStatus.Added, hasLocal));
+                totalDownloadBytes += sizeBytes;
+            }
+        }
+
+        foreach (var (depotId, baseManifestId) in baseDepots)
+        {
+            if (!targetDepots.ContainsKey(depotId))
+            {
+                removed.Add(new VersionDepotDiffItem(depotId, $"Depot {depotId}", baseManifestId, null, 0, DepotDiffStatus.Removed, true));
+            }
+        }
+
+        return new SnapshotDiffResult
+        {
+            AppId = appId,
+            BaseBuildId = baseBuildId,
+            TargetBuildId = targetBuildId,
+            Branch = targetSnapshot.Branch,
+            IsCompleteComparison = isComplete,
+            WarningMessage = isComplete ? null : "Comparación parcial: uno de los snapshots no tiene cobertura total.",
+            Unchanged = unchanged,
+            Modified = modified,
+            Added = added,
+            Removed = removed,
+            TotalDownloadSizeBytes = totalDownloadBytes,
+            TotalSavedSizeBytes = totalSavedBytes
+        };
+    }
 }

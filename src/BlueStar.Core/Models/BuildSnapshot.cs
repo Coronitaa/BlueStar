@@ -20,7 +20,7 @@ public sealed class BuildSnapshot
     public ulong BuildId { get; init; }
 
     [JsonPropertyName("timestamp")]
-    public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UnixEpoch;
 
     /// <summary>
     /// Authentic manifest/build creation timestamp when known; strictly null if absent.
@@ -28,6 +28,12 @@ public sealed class BuildSnapshot
     /// </summary>
     [JsonPropertyName("creationTime")]
     public DateTimeOffset? CreationTime { get; init; }
+
+    [JsonPropertyName("dateCertainty")]
+    public DateCertainty DateQuality { get; init; } = DateCertainty.Unknown;
+
+    [JsonPropertyName("completeness")]
+    public SnapshotCompleteness Completeness { get; init; } = SnapshotCompleteness.Complete;
 
     [JsonPropertyName("branch")]
     public string Branch { get; init; } = "public";
@@ -52,4 +58,17 @@ public sealed class BuildSnapshot
     /// </summary>
     [JsonPropertyName("changedDepots")]
     public IReadOnlyList<uint> ChangedDepots { get; init; } = Array.Empty<uint>();
+
+    [JsonIgnore]
+    public bool HasAuthenticDate => CreationTime.HasValue;
+
+    [JsonIgnore]
+    public string DisplayDate => CreationTime.HasValue
+        ? CreationTime.Value.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")
+        : "Unknown date";
+
+    [JsonIgnore]
+    public string DisplayDateEs => CreationTime.HasValue
+        ? CreationTime.Value.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")
+        : "Fecha desconocida";
 }

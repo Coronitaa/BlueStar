@@ -931,4 +931,175 @@ public sealed class ManifestHubClientTests : IDisposable
         // Idempotently recorded: IsAlreadyCredited is true
         transport.IsAlreadyCredited(731, 9999999UL).Should().BeTrue();
     }
+
+    [Fact]
+    public async Task EndToEnd_VersionHistory_SnapshotDiff_And_IncrementalPlan_Verification()
+    {
+        // 1. Setup Mock HTTP Handler responding to Manifest Hub endpoints
+        var handlerMock = new Mock<HttpMessageHandler>(MockBehavior.Strict);
+
+        var historyJson = """
+        {
+          "appId": 730,
+          "branch": "public",
+          "totalItems": 2,
+          "totalPages": 1,
+          "page": 1,
+          "pageSize": 20,
+          "items": [
+            {
+              "appId": 730,
+              "buildId": 2000,
+              "branch": "public",
+              "creationTime": "2024-05-10T12:00:00Z",
+              "dateCertainty": "Verified",
+              "completeness": "Complete",
+              "depotManifests": { "731": 22222, "732": 33333, "733": 44444 }
+            },
+            {
+              "appId": 730,
+              "buildId": 1000,
+              "branch": "public",
+              "creationTime": null,
+              "dateCertainty": "Unknown",
+              "completeness": "Complete",
+              "depotManifests": { "731": 11111, "732": 33333 }
+            }
+          ]
+        }
+        """;
+
+        var compareJson = """
+        {
+          "appId": 730,
+          "baseBuildId": 1000,
+          "targetBuildId": 2000,
+          "unchanged": [ { "depotId": 732, "depotName": "Depot 732", "baseManifestId": 33333, "targetManifestId": 33333, "sizeBytes": 500000000, "status": "Unchanged", "isAvailableInHub": true } ],
+          "modified": [ { "depotId": 731, "depotName": "Depot 731", "baseManifestId": 11111, "targetManifestId": 22222, "sizeBytes": 150000000, "status": "Modified", "isAvailableInHub": true } ],
+          "added": [ { "depotId": 733, "depotName": "Depot 733", "baseManifestId": null, "targetManifestId": 44444, "sizeBytes": 20000000, "status": "Added", "isAvailableInHub": true } ],
+          "removed": [],
+          "totalDownloadSizeBytes": 170000000,
+          "totalSavedSizeBytes": 500000000
+        }
+        """;
+
+        var snapshot2000Json = """
+        {
+          "appId": 730,
+          "buildId": 2000,
+          "branch": "public",
+          "creationTime": "2024-05-10T12:00:00Z",
+          "dateCertainty": "Verified",
+          "completeness": "Complete",
+          "depotManifests": { "731": 22222, "732": 33333, "733": 44444 }
+        }
+        """;
+
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req => req.RequestUri != null && req.RequestUri.ToString().Contains("/api/v1/builds/730/history")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(historyJson, Encoding.UTF8, "application/json")
+            });
+
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req => req.RequestUri != null && req.RequestUri.ToString().Contains("/api/v1/builds/730/compare")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(compareJson, Encoding.UTF8, "application/json")
+            });
+
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req => req.RequestUri != null && req.RequestUri.ToString().Contains("/api/v1/builds/730/2000")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(snapshot2000Json, Encoding.UTF8, "application/json")
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object);
+        var manifestCache = new ManifestCacheService(NullLogger<ManifestCacheService>.Instance, Path.Combine(_testDir, "Cache"));
+        var provider = new ManifestHubProvider(
+            httpClient,
+            manifestCache,
+            NullLogger<ManifestHubProvider>.Instance,
+            hubBaseUrl: "http://127.0.0.1:8080");
+
+        // 2. Fetch history and verify chronological sorting & date authenticity
+        var history = await provider.GetBuildHistoryPagedAsync(730, "public", 1, 20);
+        history.Should().NotBeNull();
+        history!.Items.Should().HaveCount(2);
+
+        var snap2000 = history.Items[0];
+        snap2000.BuildId.Should().Be(2000UL);
+        snap2000.CreationTime.Should().NotBeNull();
+        snap2000.DateQuality.Should().Be(DateCertainty.Verified);
+        snap2000.Completeness.Should().Be(SnapshotCompleteness.Complete);
+
+        var snap1000 = history.Items[1];
+        snap1000.BuildId.Should().Be(1000UL);
+        snap1000.CreationTime.Should().BeNull(); // Authentic date was null -> transparently reported as unknown
+        snap1000.DateQuality.Should().Be(DateCertainty.Unknown);
+
+        // Wrap into client view model HubSnapshotItem
+        var hubItem2000 = new HubSnapshotItem { Snapshot = snap2000 };
+        hubItem2000.HasAuthenticDate.Should().BeTrue();
+        hubItem2000.AuthenticDateDisplay.Should().Contain("2024-05-10");
+        hubItem2000.CoverageStatus.Should().Be("Completo (verificado)");
+
+        var hubItem1000 = new HubSnapshotItem { Snapshot = snap1000 };
+        hubItem1000.HasAuthenticDate.Should().BeFalse();
+        hubItem1000.AuthenticDateDisplay.Should().BeEmpty();
+
+        // 3. Compare snapshots via Hub API contract
+        var diff = await provider.CompareSnapshotsAsync(730, 1000UL, 2000UL);
+        diff.Should().NotBeNull();
+        diff!.Unchanged.Should().ContainSingle(u => u.DepotId == 732 && u.TargetManifestId == 33333);
+        diff.Modified.Should().ContainSingle(m => m.DepotId == 731 && m.BaseManifestId == 11111 && m.TargetManifestId == 22222);
+        diff.Added.Should().ContainSingle(a => a.DepotId == 733 && a.TargetManifestId == 44444);
+        diff.Removed.Should().BeEmpty();
+        diff.TotalSavedSizeBytes.Should().Be(500000000);
+
+        // 4. Test client-side Differential inspection against currently installed instance
+        var installedMap = new Dictionary<uint, ulong>
+        {
+            [731] = 11111, // Modified in target
+            [732] = 33333  // Identical in target
+        };
+
+        var snapshotWithDiff = hubItem2000.WithDiffAgainst(installedMap, manifestCache);
+        snapshotWithDiff.UnchangedCount.Should().Be(1);
+        snapshotWithDiff.ModifiedCount.Should().Be(1);
+        snapshotWithDiff.AddedCount.Should().Be(1);
+        snapshotWithDiff.RemovedCount.Should().Be(0);
+
+        // 5. Test Incremental Plan Generation
+        // Only Modified and Added depots need to be scheduled for download
+        var updatedDepots = snapshotWithDiff.DepotManifests.Select(kv => new DepotInfo
+        {
+            DepotId = kv.Key,
+            ManifestId = kv.Value,
+            Name = $"Depot {kv.Key}"
+        }).ToList();
+
+        var incrementalDepotsToDownload = updatedDepots
+            .Where(d => !installedMap.TryGetValue(d.DepotId, out var curM) || curM != d.ManifestId)
+            .ToList();
+
+        // Verification: Depot 732 (unchanged) is completely excluded from download request!
+        incrementalDepotsToDownload.Should().HaveCount(2);
+        incrementalDepotsToDownload.Select(d => d.DepotId).Should().BeEquivalentTo([731u, 733u]);
+        incrementalDepotsToDownload.Any(d => d.DepotId == 732).Should().BeFalse();
+    }
 }

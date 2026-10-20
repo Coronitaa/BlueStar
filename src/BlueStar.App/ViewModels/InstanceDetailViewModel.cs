@@ -5053,7 +5053,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 HubSnapshots.Clear();
                 foreach (var s in snapshots)
                 {
-                    HubSnapshots.Add(new HubSnapshotItem { Snapshot = s });
+                    HubSnapshots.Add(new HubSnapshotItem { Snapshot = s }.WithDiffAgainst(Instance.InstalledManifestMap));
                 }
                 OnPropertyChanged(nameof(HasHubSnapshots));
 
@@ -5117,21 +5117,46 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 }
             }
 
+            var depotsToDownload = updatedDepots
+                .Where(d => !Instance.InstalledManifestMap.TryGetValue(d.DepotId, out var curM) || curM != d.ManifestId)
+                .ToList();
+
             Instance = Instance with
             {
                 Depots = updatedDepots.AsReadOnly(),
                 InstalledManifestMap = map,
                 IsBuildPinned = true,
-                ActiveBranch = item.BranchName
+                ActiveBranch = item.BranchName,
+                Status = depotsToDownload.Count == 0 ? InstanceStatus.Ready : Instance.Status
             };
 
             await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
             await LoadInstanceAsync(Instance).ConfigureAwait(true);
 
-            StatusMessage = $"✅ Applied snapshot {item.BuildId} ({item.Snapshot.DepotManifests.Count} depots).";
-            _notificationService?.ShowSuccess(
-                "Build Snapshot Applied",
-                $"Snapshot {item.BuildId} applied with {item.Snapshot.DepotManifests.Count} depot manifests.");
+            if (depotsToDownload.Count == 0)
+            {
+                StatusMessage = $"✅ Versión {item.BuildId} aplicada. Todos los manifests ya están presentes en disco.";
+                _notificationService?.ShowSuccess(
+                    "Versión al día",
+                    $"Snapshot {item.BuildId}: todos los {item.DepotCount} depots están actualizados.");
+            }
+            else
+            {
+                var downloadInstance = Instance with
+                {
+                    Depots = depotsToDownload.AsReadOnly()
+                };
+
+                await _downloadQueueManager.StartDownloadAsync(downloadInstance).ConfigureAwait(true);
+
+                StatusMessage = $"⬇️ Actualizando a {item.BuildId}: {depotsToDownload.Count} depot(s) a descargar, {item.UnchangedCount} sin cambios (reutilizados).";
+                _notificationService?.ShowInfo(
+                    "Actualización incremental iniciada",
+                    $"Descargando únicamente {depotsToDownload.Count} depot(s) modificados. {item.UnchangedCount} depots reutilizados sin red.");
+
+                ActiveJob = _downloadQueueManager.Queue.FirstOrDefault(j => j.Instance.Id == Instance.Id);
+                NotifyDownloadProps();
+            }
         }
         catch (Exception ex)
         {

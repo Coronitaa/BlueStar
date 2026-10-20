@@ -321,16 +321,26 @@ public partial class App : Application
         services.AddHttpClient<ISteamLicenseDiscoveryService, BlueStar.Infrastructure.Services.SteamLicenseDiscoveryService>();
 
         // Manifest Harvesters & Voluntary Contribution Coordinator
-        services.AddSingleton<BlueStar.Infrastructure.Services.SteamClientManifestHarvesterProvider>();
-        services.AddSingleton<BlueStar.Infrastructure.Services.DepotDownloaderManifestHarvesterProvider>();
-        services.AddSingleton<BlueStar.Infrastructure.Services.SteamManifestDownloaderAdapter>();
-        services.AddSingleton<IManifestHarvestCoordinator>(sp =>
-        {
-            var p1 = sp.GetRequiredService<BlueStar.Infrastructure.Services.SteamClientManifestHarvesterProvider>();
-            var p2 = sp.GetRequiredService<BlueStar.Infrastructure.Services.DepotDownloaderManifestHarvesterProvider>();
-            var p3 = sp.GetRequiredService<BlueStar.Infrastructure.Services.SteamManifestDownloaderAdapter>();
-            return new BlueStar.Infrastructure.Services.CompositeManifestHarvester([p1, p2, p3]);
-        });
+        services.AddSingleton(sp => new BlueStar.Infrastructure.Services.SteamClientManifestHarvesterProvider(
+            timeout: TimeSpan.FromSeconds(45),
+            logger: sp.GetService<Microsoft.Extensions.Logging.ILogger<BlueStar.Infrastructure.Services.SteamClientManifestHarvesterProvider>>()));
+        services.AddSingleton(sp => new BlueStar.Infrastructure.Services.DepotDownloaderManifestHarvesterProvider(
+            toolsDirectory: System.IO.Path.Combine(AppContext.BaseDirectory, "tools"),
+            sessionCookieProvider: sp.GetService<BlueStar.Core.Interfaces.ISteamSessionCookieProvider>(),
+ manifestCache: sp.GetService<BlueStar.Core.Interfaces.IManifestCacheService>(),
+ logger: sp.GetService<Microsoft.Extensions.Logging.ILogger<BlueStar.Infrastructure.Services.DepotDownloaderManifestHarvesterProvider>>()));
+ services.AddSingleton(sp => new BlueStar.Infrastructure.Services.SteamManifestDownloaderAdapter(
+ sessionCookieProvider: sp.GetService<BlueStar.Core.Interfaces.ISteamSessionCookieProvider>(),
+ logger: sp.GetService<Microsoft.Extensions.Logging.ILogger<BlueStar.Infrastructure.Services.SteamManifestDownloaderAdapter>>()));
+ services.AddSingleton<BlueStar.Core.Interfaces.IManifestHarvestCoordinator>(sp =>
+ {
+ var p1 = sp.GetRequiredService<BlueStar.Infrastructure.Services.SteamClientManifestHarvesterProvider>();
+ var p2 = sp.GetRequiredService<BlueStar.Infrastructure.Services.DepotDownloaderManifestHarvesterProvider>();
+ var p3 = sp.GetRequiredService<BlueStar.Infrastructure.Services.SteamManifestDownloaderAdapter>();
+ return new BlueStar.Infrastructure.Services.CompositeManifestHarvester(
+ [p1, p2, p3],
+ sp.GetService<Microsoft.Extensions.Logging.ILogger<BlueStar.Infrastructure.Services.CompositeManifestHarvester>>());
+ });
         services.AddSingleton<IVoluntaryManifestContributionCoordinator, BlueStar.Infrastructure.Services.VoluntaryManifestContributionCoordinator>();
 
         // ViewModels

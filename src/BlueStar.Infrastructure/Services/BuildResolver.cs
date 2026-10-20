@@ -154,22 +154,27 @@ public sealed class BuildResolver : IBuildResolver
 
                             var patchDate = !string.IsNullOrWhiteSpace(snap.PatchDate)
                                 ? snap.PatchDate
-                                : (snap.CreationTime?.ToString("yyyy-MM-dd") ?? snap.Timestamp.ToString("yyyy-MM-dd"));
+                                : (snap.CreationTime?.ToString("yyyy-MM-dd") ?? string.Empty);
 
                             var buildIdStr = snap.BuildId.ToString();
                             if (!versions.Any(v => v.BuildId == buildIdStr))
                             {
+                                string displayName = !string.IsNullOrWhiteSpace(snap.Description)
+                                    ? snap.Description
+                                    : (snap.CreationTime.HasValue ? $"Build {snap.BuildId} ({patchDate})" : $"Build {snap.BuildId}");
+
                                 versions.Add(new GameVersion
                                 {
                                     BuildId = buildIdStr,
                                     BranchName = snap.Branch,
-                                    DisplayName = !string.IsNullOrWhiteSpace(snap.Description) ? snap.Description : $"Build {snap.BuildId} ({patchDate})",
-                                    UpdatedAt = snap.CreationTime ?? snap.Timestamp,
+                                    DisplayName = displayName,
+                                    UpdatedAt = snap.CreationTime,
                                     PatchDate = patchDate,
                                     ChangedDepots = snap.ChangedDepots,
                                     Description = snap.Description,
                                     Source = "ManifestHub",
                                     IsInferred = false,
+                                    IsCompleteSnapshot = snap.Completeness == SnapshotCompleteness.Complete,
                                     Depots = depots.AsReadOnly()
                                 });
                             }
@@ -245,7 +250,13 @@ public sealed class BuildResolver : IBuildResolver
                 _logger.LogWarning(ex, "Failed to resolve available versions for AppId {AppId}", appId);
             }
 
-            return (IReadOnlyList<GameVersion>)versions.AsReadOnly();
+            var orderedVersions = versions
+                .OrderByDescending(v => v.UpdatedAt.HasValue)
+                .ThenByDescending(v => v.UpdatedAt)
+                .ThenByDescending(v => ulong.TryParse(v.BuildId, out var bid) ? bid : 0)
+                .ToList();
+
+            return (IReadOnlyList<GameVersion>)orderedVersions.AsReadOnly();
         }, ct).ConfigureAwait(false);
     }
 

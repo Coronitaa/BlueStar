@@ -17,7 +17,8 @@ namespace BlueStar.Infrastructure.Services;
 /// </summary>
 public sealed class SteamClientManifestHarvesterProvider : IManifestHarvesterProvider
 {
-    private static readonly byte[] SteamProtobufMagic = [0xD0, 0x17, 0xF6, 0x71];
+    private static readonly byte[] SteamProtobufMagicLE = [0xD0, 0x17, 0xF6, 0x71];
+    private static readonly byte[] SteamProtobufMagicBE = [0x71, 0xF6, 0x17, 0xD0];
 
     private readonly string? _steamPath;
     private readonly Func<string, string, bool>? _commandLauncher;
@@ -25,7 +26,7 @@ public sealed class SteamClientManifestHarvesterProvider : IManifestHarvesterPro
     private readonly ILogger<SteamClientManifestHarvesterProvider> _logger;
 
     public string Name => "SteamClient";
-    public int Priority => 300;
+    public int Priority => 400;
 
     public SteamClientManifestHarvesterProvider(
         string? steamPath = null,
@@ -35,7 +36,7 @@ public sealed class SteamClientManifestHarvesterProvider : IManifestHarvesterPro
     {
         _steamPath = steamPath;
         _commandLauncher = commandLauncher;
-        _timeout = timeout ?? TimeSpan.FromSeconds(15);
+        _timeout = timeout ?? TimeSpan.FromSeconds(45);
         _logger = logger ?? NullLogger<SteamClientManifestHarvesterProvider>.Instance;
     }
 
@@ -82,7 +83,15 @@ public sealed class SteamClientManifestHarvesterProvider : IManifestHarvesterPro
             return HarvestResult.Success(targetFilePath, Name);
         }
 
-        // 2. Setup FileSystemWatcher
+        // In production (_commandLauncher == null), never execute external steam.exe -console,
+        // steam:// protocol URIs, or clip.exe, because modern Steam CEF no longer supports download_manifest
+        // and opening UI/clipboard disrupts the user's PC desktop experience.
+        if (_commandLauncher == null)
+        {
+            return HarvestResult.Failed($"Manifest {manifestFileName} not present in local Steam depotcache.", Name);
+        }
+
+        // 2. Setup FileSystemWatcher for mock test harnesses using _commandLauncher
         using var tcs = new CancellationTokenSource(_timeout);
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, tcs.Token);
         var fileDetectedTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -104,63 +113,15 @@ public sealed class SteamClientManifestHarvesterProvider : IManifestHarvesterPro
         watcher.Created += onChangeOrCreated;
         watcher.Changed += onChangeOrCreated;
 
-        // 3. Trigger Steam download_manifest command
+        // 3. Trigger mock commandLauncher
         var commandArgs = $"-console +download_manifest {appId} {depotId} {manifestId}";
         try
         {
-            if (_commandLauncher != null)
-            {
-                _commandLauncher("steam.exe", commandArgs);
-            }
-            else
-            {
-                // Ensure Steam Console tab is open via protocol URI
-                try
-                {
-                    Process.Start(new ProcessStartInfo("steam://nav/console") { UseShellExecute = true });
-                }
-                catch { }
-
-                var steamExe = Path.Combine(steamPath, "steam.exe");
-                if (File.Exists(steamExe))
-                {
-                    var psi = new ProcessStartInfo
-                    {
-                        FileName = steamExe,
-                        Arguments = commandArgs,
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    };
-                    Process.Start(psi);
-                }
-
-                // Copy download_manifest command to clipboard for seamless user convenience
-                try
-                {
-                    var consoleCmd = $"download_manifest {appId} {depotId} {manifestId}";
-                    if (OperatingSystem.IsWindows())
-                    {
-                        using var p = new Process
-                        {
-                            StartInfo = new ProcessStartInfo("clip.exe")
-                            {
-                                UseShellExecute = false,
-                                RedirectStandardInput = true,
-                                CreateNoWindow = true
-                            }
-                        };
-                        p.Start();
-                        p.StandardInput.Write(consoleCmd);
-                        p.StandardInput.Close();
-                        p.WaitForExit(500);
-                    }
-                }
-                catch { }
-            }
+            _commandLauncher("steam.exe", commandArgs);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to launch Steam download_manifest command for Depot {DepotId}", depotId);
+            _logger.LogWarning(ex, "Failed to launch mock Steam command for Depot {DepotId}", depotId);
         }
 
         // 4. Await file appearance via watcher or polling fallback
@@ -219,10 +180,14 @@ public sealed class SteamClientManifestHarvesterProvider : IManifestHarvesterPro
             var bytesRead = fs.Read(header, 0, 4);
             if (bytesRead < 4) return false;
 
-            return header[0] == SteamProtobufMagic[0] &&
-                   header[1] == SteamProtobufMagic[1] &&
-                   header[2] == SteamProtobufMagic[2] &&
-                   header[3] == SteamProtobufMagic[3];
+            return (header[0] == SteamProtobufMagicLE[0] &&
+                    header[1] == SteamProtobufMagicLE[1] &&
+                    header[2] == SteamProtobufMagicLE[2] &&
+                    header[3] == SteamProtobufMagicLE[3]) ||
+                   (header[0] == SteamProtobufMagicBE[0] &&
+                    header[1] == SteamProtobufMagicBE[1] &&
+                    header[2] == SteamProtobufMagicBE[2] &&
+                    header[3] == SteamProtobufMagicBE[3]);
         }
         catch
         {

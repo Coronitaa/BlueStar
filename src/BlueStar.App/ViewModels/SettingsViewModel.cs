@@ -808,114 +808,139 @@ public partial class SettingsViewModel : ObservableObject
                 var appNameMap = targetApps.GroupBy(t => t.AppId).ToDictionary(g => g.Key, g => g.First().Name);
                 var ownedAppSet = new HashSet<uint>(targetApps.Select(t => t.AppId));
                 var steamPath = ShortcutHelper.GetSteamPath();
+                var depotToGameMap = SteamLibraryScanner.ScanInstalledDepotsToGameMap();
 
                 if (targetApps.Count > 0 || scope != "SteamLibrary")
                 {
                     progress.Report(new BackgroundTaskProgress(30, "Stage 2/7: Loading community demand from Manifest Hub..."));
 
-                // 2a. Load Demand Index from GitOps Hub
-                DemandIndex? demandIndex = null;
-                if (hubProvider != null)
-                {
-                    try
-                    {
-                        demandIndex = await hubProvider.GetDemandAsync(ct).ConfigureAwait(false);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogDebug(ex, "Failed to load demand index from primary Hub route");
-                    }
-                }
-
-                // Fallback to local clone demand.json if available
-                if (demandIndex == null || demandIndex.Records.Count == 0)
-                {
-                    var localDemandPath = @"D:\BlueStarMANI\indices\demand.json";
-                    if (File.Exists(localDemandPath))
+                    // 2a. Load Demand Index from GitOps Hub
+                    DemandIndex? demandIndex = null;
+                    if (hubProvider != null)
                     {
                         try
                         {
-                            var json = await File.ReadAllTextAsync(localDemandPath, ct).ConfigureAwait(false);
-                            using var doc = JsonDocument.Parse(json);
-                            if ((doc.RootElement.TryGetProperty("records", out var rProp) && rProp.ValueKind == JsonValueKind.Array) ||
-                                (doc.RootElement.TryGetProperty("items", out var iProp) && iProp.ValueKind == JsonValueKind.Array))
+                            demandIndex = await hubProvider.GetDemandAsync(ct).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogDebug(ex, "Failed to load demand index from primary Hub route");
+                        }
+                    }
+
+                    // Fallback to local clone demand.json if available
+                    if (demandIndex == null || demandIndex.Records.Count == 0)
+                    {
+                        var localDemandPath = @"D:\BlueStarMANI\indices\demand.json";
+                        if (File.Exists(localDemandPath))
+                        {
+                            try
                             {
-                                demandIndex = JsonSerializer.Deserialize<DemandIndex>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                                var json = await File.ReadAllTextAsync(localDemandPath, ct).ConfigureAwait(false);
+                                using var doc = JsonDocument.Parse(json);
+                                if ((doc.RootElement.TryGetProperty("records", out var rProp) && rProp.ValueKind == JsonValueKind.Array) ||
+                                    (doc.RootElement.TryGetProperty("items", out var iProp) && iProp.ValueKind == JsonValueKind.Array))
+                                {
+                                    demandIndex = JsonSerializer.Deserialize<DemandIndex>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+
+                    if (demandIndex != null && demandIndex.Records.Count > 0)
+                    {
+                        foreach (var d in demandIndex.Records)
+                        {
+                            if (d.AppId == 0 || d.DepotId == 0 || d.ManifestId == 0) continue;
+                            if (targetApps.Count > 0 && !ownedAppSet.Contains(d.AppId)) continue;
+
+                            bool inDepotCache = false;
+                            if (!string.IsNullOrWhiteSpace(steamPath))
+                            {
+                                var depotCacheFile = Path.Combine(steamPath, "depotcache", $"{d.DepotId}_{d.ManifestId}.manifest");
+                                inDepotCache = File.Exists(depotCacheFile);
+                            }
+                            bool inLocalCache = _manifestCacheService != null && _manifestCacheService.HasManifest(d.DepotId, d.ManifestId);
+
+                            string prov = inDepotCache
+                                ? "Steam DepotCache (Ready to Publish)"
+                                : (inLocalCache ? "Local Cache" : "Steam Client Demand (Needs Download)");
+
+                            string gameName = appNameMap.TryGetValue(d.AppId, out var gn) && !string.IsNullOrWhiteSpace(gn)
+                                ? gn
+                                : (!string.IsNullOrWhiteSpace(d.AppName) ? d.AppName : $"App {d.AppId}");
+
+                            knownRevisions.Add(new HubRevisionItem
+                            {
+                                AppId = d.AppId,
+                                DepotId = d.DepotId,
+                                ManifestId = d.ManifestId,
+                                DepotName = gameName,
+                                BranchName = "public",
+                                Provenance = prov,
+                                Status = "MissingFromHub"
+                            });
+                        }
+                    }
+
+                    // Query historical revisions across sources for licensed games (prioritizing installed games and bounding up to 50 games)
+                    if (revDiscovery != null && targetApps.Count > 0)
+                    {
+                        var distinctAppIds = new List<uint>();
+
+                        try
+                        {
+                            var installedGames = await SteamLibraryScanner.ScanInstalledGamesAsync(ct).ConfigureAwait(false);
+                            foreach (var g in installedGames)
+                            {
+                                if (g.AppId > 0 && ownedAppSet.Contains(g.AppId) && !distinctAppIds.Contains(g.AppId))
+                                {
+                                    distinctAppIds.Add(g.AppId);
+                                }
                             }
                         }
                         catch { }
-                    }
-                }
 
-                if (demandIndex != null && demandIndex.Records.Count > 0)
-                {
-                    foreach (var d in demandIndex.Records)
-                    {
-                        if (d.AppId == 0 || d.DepotId == 0 || d.ManifestId == 0) continue;
-                        if (targetApps.Count > 0 && !ownedAppSet.Contains(d.AppId)) continue;
-
-                        bool inDepotCache = false;
-                        if (!string.IsNullOrWhiteSpace(steamPath))
+                        foreach (var t in targetApps)
                         {
-                            var depotCacheFile = Path.Combine(steamPath, "depotcache", $"{d.DepotId}_{d.ManifestId}.manifest");
-                            inDepotCache = File.Exists(depotCacheFile);
-                        }
-                        bool inLocalCache = _manifestCacheService != null && _manifestCacheService.HasManifest(d.DepotId, d.ManifestId);
-
-                        string prov = inDepotCache
-                            ? "Steam DepotCache (Ready to Publish)"
-                            : (inLocalCache ? "Local Cache" : "Steam Client Demand (Needs Download)");
-
-                        string gameName = appNameMap.TryGetValue(d.AppId, out var gn) && !string.IsNullOrWhiteSpace(gn)
-                            ? gn
-                            : (!string.IsNullOrWhiteSpace(d.AppName) ? d.AppName : $"App {d.AppId}");
-
-                        knownRevisions.Add(new HubRevisionItem
-                        {
-                            AppId = d.AppId,
-                            DepotId = d.DepotId,
-                            ManifestId = d.ManifestId,
-                            DepotName = gameName,
-                            BranchName = "public",
-                            Provenance = prov,
-                            Status = "MissingFromHub"
-                        });
-                    }
-                }
-
-                // If bounded app count (<= 10), also query individual historical revisions across sources
-                if (revDiscovery != null && targetApps.Count > 0 && targetApps.Count <= 10)
-                {
-                    progress.Report(new BackgroundTaskProgress(40, "Stage 2/7: Checking bounded historical revisions for games..."));
-                    var distinctAppIds = targetApps.Select(t => t.AppId).Distinct().ToList();
-                    var revDict = await revDiscovery.DiscoverRevisionsForAppsAsync(distinctAppIds, ct).ConfigureAwait(false);
-                    if (revDict != null)
-                    {
-                        foreach (var kvp in revDict)
-                        {
-                            if (kvp.Value != null)
+                            if (distinctAppIds.Count >= 50) break;
+                            if (!distinctAppIds.Contains(t.AppId))
                             {
-                                knownRevisions.AddRange(kvp.Value);
+                                distinctAppIds.Add(t.AppId);
+                            }
+                        }
+
+                        if (distinctAppIds.Count > 0)
+                        {
+                            progress.Report(new BackgroundTaskProgress(40, $"Stage 2/7: Checking historical revisions for {distinctAppIds.Count} games..."));
+                            var revDict = await revDiscovery.DiscoverRevisionsForAppsAsync(distinctAppIds, ct).ConfigureAwait(false);
+                            if (revDict != null)
+                            {
+                                foreach (var kvp in revDict)
+                                {
+                                    if (kvp.Value != null)
+                                    {
+                                        knownRevisions.AddRange(kvp.Value);
+                                    }
+                                }
                             }
                         }
                     }
                 }
-            }
 
                 // Include local artifacts if present
                 if (localArtifacts.Count > 0)
                 {
-                    var defaultAppId = targetApps.FirstOrDefault().AppId;
                     foreach (var la in localArtifacts)
                     {
                         if (!knownRevisions.Any(r => r.DepotId == la.DepotId && r.ManifestId == la.ManifestId))
                         {
-                            uint matchedAppId = defaultAppId;
-                            if (targetApps.Any(t => t.AppId == la.DepotId))
-                            {
-                                matchedAppId = la.DepotId;
-                            }
-                            else
+                            var resolved = SteamLibraryScanner.TryResolveDepotToGame(la.DepotId, depotToGameMap, appNameMap);
+                            uint matchedAppId = resolved.AppId;
+                            string resolvedGameName = resolved.GameName;
+
+                            if (matchedAppId == 0)
                             {
                                 var existing = knownRevisions.FirstOrDefault(r => r.DepotId == la.DepotId);
                                 if (existing != null && existing.AppId > 0)
@@ -924,16 +949,28 @@ public partial class SettingsViewModel : ObservableObject
                                 }
                             }
 
+                            if (ownedAppSet.Count > 0 && matchedAppId > 0 && !ownedAppSet.Contains(matchedAppId) && matchedAppId != 228980 && matchedAppId != 480)
+                            {
+                                continue;
+                            }
+
                             string prov = (!string.IsNullOrWhiteSpace(la.LocalCachePath) && la.LocalCachePath.Contains("depotcache", StringComparison.OrdinalIgnoreCase))
                                 ? "Steam DepotCache (Ready to Publish)"
                                 : "LocalCache";
 
+                            string depotName = !string.IsNullOrWhiteSpace(resolvedGameName) && !resolvedGameName.StartsWith("Depot ")
+                                ? resolvedGameName
+                                : (appNameMap.TryGetValue(matchedAppId, out var gn) && !string.IsNullOrWhiteSpace(gn)
+                                    ? gn
+                                    : (matchedAppId > 0 ? $"App {matchedAppId} Depot {la.DepotId}" : $"Depot {la.DepotId}"));
+
                             knownRevisions.Add(new HubRevisionItem
                             {
-                                AppId = matchedAppId,
+                                AppId = matchedAppId > 0 ? matchedAppId : la.DepotId,
                                 DepotId = la.DepotId,
                                 ManifestId = la.ManifestId,
-                                DepotName = $"Depot {la.DepotId}",
+                                DepotName = depotName,
+                                BranchName = "public",
                                 Provenance = prov,
                                 SizeOriginal = la.SizeBytes,
                                 Status = "Available"

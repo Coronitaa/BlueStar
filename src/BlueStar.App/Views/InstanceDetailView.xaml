@@ -1707,6 +1707,11 @@
 
                                                         <!-- Depot Count -->
                                                         <TextBlock Text="{Binding DepotCount, StringFormat='{}{0} depots'}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}"/>
+                                                        <!-- Completeness Badge -->
+                                                        <Border Background="#1610B981" BorderBrush="#3510B981" BorderThickness="1"
+                                                                CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="12,0,0,0">
+                                                            <TextBlock Text="{Binding CoverageStatus}" FontSize="10" FontWeight="SemiBold" Foreground="#10B981"/>
+                                                        </Border>
                                                     </StackPanel>
 
                                                     <!-- Authentic Date vs Unknown Badge -->
@@ -1730,6 +1735,43 @@
                                                             <TextBlock Text="{Binding IngestionDateDisplay}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}"/>
                                                         </StackPanel>
                                                     </StackPanel>
+                                                    <!-- Differential Summary vs Local Instance -->
+                                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0"
+                                                                Visibility="{Binding HasDiffDetails, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                        <Border Background="#1A10B981" CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="0,0,8,0"
+                                                                Visibility="{Binding HasUnchangedDepots, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                            <TextBlock Text="{Binding UnchangedCount, StringFormat='&#x2714; {0} sin cambios'}" FontSize="10" Foreground="#10B981" FontWeight="SemiBold"/>
+                                                        </Border>
+                                                        <Border Background="#1A3B82F6" CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="0,0,8,0"
+                                                                Visibility="{Binding HasModifiedDepots, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                            <TextBlock Text="{Binding ModifiedCount, StringFormat='&#x25B2; {0} a descargar'}" FontSize="10" Foreground="#3B82F6" FontWeight="SemiBold"/>
+                                                        </Border>
+                                                        <Border Background="#1AF59E0B" CornerRadius="{StaticResource RadiusSm}" Padding="6,2" Margin="0,0,8,0"
+                                                                Visibility="{Binding HasAddedDepots, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                            <TextBlock Text="{Binding AddedCount, StringFormat='+ {0} nuevos'}" FontSize="10" Foreground="#F59E0B" FontWeight="SemiBold"/>
+                                                        </Border>
+                                                    </StackPanel>
+
+                                                    <!-- Expandable Depot Breakdown -->
+                                                    <Expander Header="Composici&#243;n detallada de depots" Margin="0,6,0,0" Foreground="{StaticResource SecondaryTextBrush}" FontSize="11"
+                                                              Visibility="{Binding HasDiffDetails, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                        <ItemsControl ItemsSource="{Binding DiffItems}" Margin="4,4,0,0">
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Grid Margin="0,2">
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="90"/>
+                                                                            <ColumnDefinition Width="*"/>
+                                                                            <ColumnDefinition Width="Auto"/>
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <TextBlock Text="{Binding DepotId, StringFormat='Depot {0}'}" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                                        <TextBlock Grid.Column="1" Text="{Binding TargetManifestId, StringFormat='Manifest: {0}'}" FontSize="11" Foreground="{StaticResource PrimaryTextBrush}"/>
+                                                                        <TextBlock Grid.Column="2" Text="{Binding StatusBadge}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
+                                                                    </Grid>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </Expander>
                                                 </StackPanel>
 
                                                 <!-- Right Apply Snapshot Action -->

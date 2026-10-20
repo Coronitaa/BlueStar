@@ -7,7 +7,7 @@ namespace BlueStar.Core.Interfaces;
 
 /// <summary>
 /// Defines extended capabilities for community Manifest Hub interactions,
-/// including remote catalog coverage querying and build snapshot retrieval.
+/// including remote catalog coverage querying, build snapshot retrieval, and differential comparisons.
 /// </summary>
 public interface IManifestHubProvider : IManifestProvider
 {
@@ -25,6 +25,21 @@ public interface IManifestHubProvider : IManifestProvider
     /// Fetches historical revisions for the specified Steam Application ID.
     /// </summary>
     Task<IReadOnlyList<HubRevisionItem>> GetRevisionsForAppAsync(uint appId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Fetches paginated build history for the specified Steam Application ID and branch.
+    /// </summary>
+    Task<BuildHistoryPage> GetBuildHistoryPagedAsync(uint appId, string? branch = "public", int page = 1, int pageSize = 20, CancellationToken ct = default);
+
+    /// <summary>
+    /// Fetches a specific build snapshot by its BuildId.
+    /// </summary>
+    Task<BuildSnapshot?> GetSnapshotByIdAsync(uint appId, ulong buildId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Compares two build snapshots and computes the differential depot/manifest plan.
+    /// </summary>
+    Task<SnapshotDiffResult?> CompareSnapshotsAsync(uint appId, ulong? baseBuildId, ulong targetBuildId, CancellationToken ct = default);
 
     /// <summary>
     /// Fetches the active community manifest demand index (indices/demand.json).

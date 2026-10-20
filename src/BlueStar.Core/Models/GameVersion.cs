@@ -54,6 +54,36 @@ public record GameVersion
     /// Gets a value indicating whether this build is curated and recommended for stable play.
     /// </summary>
     public bool IsCurated { get; init; }
+    /// <summary>
+    /// Gets a value indicating whether this version snapshot is complete across all its depots.
+    /// </summary>
+    public bool IsCompleteSnapshot { get; init; } = true;
+
+    /// <summary>
+    /// Gets the completeness status of this build snapshot.
+    /// </summary>
+    public SnapshotCompleteness Completeness { get; init; } = SnapshotCompleteness.Complete;
+
+    /// <summary>
+    /// Gets the date certainty / quality rating of the timestamp.
+    /// </summary>
+    public DateCertainty DateQuality { get; init; } = DateCertainty.Verified;
+
+    /// <summary>
+    /// Gets whether this build version has a verified authentic timestamp.
+    /// </summary>
+    public bool HasAuthenticDate =>
+        UpdatedAt.HasValue &&
+        UpdatedAt.Value > DateTimeOffset.UnixEpoch &&
+        UpdatedAt.Value > DateTimeOffset.MinValue &&
+        DateQuality != DateCertainty.Unknown;
+
+    /// <summary>
+    /// Gets the display date string with transparent badge for unknown or authentic dates.
+    /// </summary>
+    public string DisplayDateBadge => HasAuthenticDate
+        ? UpdatedAt!.Value.LocalDateTime.ToString("yyyy-MM-dd")
+        : "Fecha desconocida";
 
     /// <summary>
     /// Gets the primary source of the build metadata ("SteamCMD", "ManifestHub", "DepotBox", "LocalArchive").

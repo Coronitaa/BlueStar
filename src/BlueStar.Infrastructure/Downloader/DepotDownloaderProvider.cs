@@ -107,7 +107,7 @@ public partial class DepotDownloaderProvider : IDownloadProvider
             // Step 3: Build the request with manifest file paths
             var depotItems = depotsWithKeys.Select(depot =>
             {
-                var manifestFile = FindValidManifestFile(workingDir, instanceManifestDir, depot.DepotId, depot.ManifestId, _manifestCache);
+                var manifestFile = FindValidManifestFile(workingDir, instanceManifestDir, depot.DepotId, depot.ManifestId, _manifestCache, instance.InstallPath);
                 return new DepotDownloadItem
                 {
                     DepotId = depot.DepotId,
@@ -442,7 +442,7 @@ public partial class DepotDownloaderProvider : IDownloadProvider
     }
 
     /// <summary>Finds a valid non-empty manifest file in the working directory, persistent instance storage, or global manifest cache.</summary>
-    private static string? FindValidManifestFile(string workingDir, string instanceManifestDir, uint depotId, ulong manifestId, IManifestCacheService? manifestCache = null)
+    private static string? FindValidManifestFile(string workingDir, string instanceManifestDir, uint depotId, ulong manifestId, IManifestCacheService? manifestCache = null, string? installPath = null)
     {
         var exactName = $"{depotId}_{manifestId}.manifest";
 
@@ -490,6 +490,18 @@ public partial class DepotDownloaderProvider : IDownloadProvider
             {
                 var copyDest = Path.Combine(workingDir, exactName);
                 File.Copy(cached, copyDest, overwrite: true);
+                return copyDest;
+            }
+        }
+
+        // 4. Check instance local installation staging directory
+        if (!string.IsNullOrWhiteSpace(installPath))
+        {
+            var stagingManifest = Path.Combine(installPath, ".DepotDownloader", exactName);
+            if (File.Exists(stagingManifest) && new FileInfo(stagingManifest).Length > 32)
+            {
+                var copyDest = Path.Combine(workingDir, exactName);
+                File.Copy(stagingManifest, copyDest, overwrite: true);
                 return copyDest;
             }
         }
