@@ -145,4 +145,4 @@ If you have questions about this Privacy Policy, please open an issue on our Git
 
 ---
 
-*This privacy policy applies to BlueStar Launcher version 1.4.5 and later.*
+*This privacy policy applies to BlueStar Launcher version 1.4.6 and later.*

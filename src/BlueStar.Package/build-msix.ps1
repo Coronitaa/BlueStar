@@ -15,7 +15,7 @@
     Packaging target: 'Store' (default), 'LocalTest', or 'All'.
 
 .PARAMETER Version
-    The 4-part version number for the package (e.g. 1.4.5.0). Defaults to 1.4.5.0.
+    The 4-part version number for the package (e.g. 1.4.6.0). Defaults to 1.4.6.0.
 
 .PARAMETER Configuration
     Build configuration. Default: Release.
@@ -28,7 +28,7 @@
 param(
     [ValidateSet("Store", "LocalTest", "All")]
     [string]$Target = "Store",
-    [string]$Version = "1.4.5.0",
+    [string]$Version = "1.4.6.0",
     [string]$Configuration = "Release"
 )
 
