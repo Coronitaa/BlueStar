@@ -1,3 +1,4 @@
+using BlueStar.Core.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -359,7 +360,9 @@ public sealed class ReFixEmulator : IEmulator
                 ? instance.AppId.ToString()
                 : (!string.IsNullOrWhiteSpace(detection.DetectedAppId) && detection.DetectedAppId != "0" ? detection.DetectedAppId : "480");
             var maskAppIdStr = isGoldberg ? realAppIdStr : "480";
-            var userName = Environment.UserName;
+            var userName = !string.IsNullOrWhiteSpace(instance.CustomEmulatorUsername)
+                ? instance.CustomEmulatorUsername.Trim()
+                : Environment.UserName;
             var lanPort = "47584";
             var dlcMode = "all";
             var dlcListStr = "all";
@@ -530,6 +533,12 @@ public sealed class ReFixEmulator : IEmulator
                 Message = $"Successfully deployed and configured {modeDisplayName}!",
                 CurrentStep = "Complete"
             });
+
+            EmulatorIniHelper.ApplyOverrides(targetDir, instance.CustomEmulatorUsername, instance.CustomEmulatorSteamId);
+            if (Directory.Exists(exeDir) && !string.Equals(exeDir, targetDir, StringComparison.OrdinalIgnoreCase))
+            {
+                EmulatorIniHelper.ApplyOverrides(exeDir, instance.CustomEmulatorUsername, instance.CustomEmulatorSteamId);
+            }
 
             AppendReFixLog(exeDir, $"Deployed Mode: {modeDisplayName} | Game: {gameName} | Engine: {engineType} | RealAppId: {realAppIdStr} | MaskAppId: {maskAppIdStr}");
             _logger.LogInformation("Successfully deployed ReFix ({OptionId}) for {Game}", optionId, instance.Name);

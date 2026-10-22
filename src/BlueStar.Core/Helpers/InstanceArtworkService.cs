@@ -174,39 +174,6 @@ public static class InstanceArtworkService
             }
         }
 
-        // Fallbacks for instance banner <-> header, and instance logo <-> icon
-        if (type == SteamArtworkType.InstanceBanner)
-        {
-            foreach (var ext in candidateExtensions)
-            {
-                var fallback = Path.Combine(dir, $"header{ext}");
-                if (File.Exists(fallback)) return fallback;
-            }
-        }
-        else if (type == SteamArtworkType.Header)
-        {
-            foreach (var ext in candidateExtensions)
-            {
-                var fallback = Path.Combine(dir, $"instance_banner{ext}");
-                if (File.Exists(fallback)) return fallback;
-            }
-        }
-        else if (type == SteamArtworkType.InstanceLogo)
-        {
-            foreach (var ext in candidateExtensions)
-            {
-                var fallback = Path.Combine(dir, $"icon{ext}");
-                if (File.Exists(fallback)) return fallback;
-            }
-        }
-        else if (type == SteamArtworkType.Icon)
-        {
-            foreach (var ext in candidateExtensions)
-            {
-                var fallback = Path.Combine(dir, $"instance_logo{ext}");
-                if (File.Exists(fallback)) return fallback;
-            }
-        }
 
         return null;
     }

@@ -813,6 +813,14 @@
     <sys:String x:Key="String_InstallModalEmulatorSpecificBadge">ONLINE FIX</sys:String>
     <sys:String x:Key="String_InstallModalSpecificFixSelectLabel">Seleccionar parche o emulador específico:</sys:String>
     <sys:String x:Key="String_InstallModalSpecificFixInfo">Se descargará e instalará automáticamente el parche especializado ({0}) tras finalizar la descarga.</sys:String>
+    <sys:String x:Key="String_InstallModalAdvancedOptions">Opciones Avanzadas</sys:String>
+    <sys:String x:Key="String_InstallModalAdvancedOptionsDesc">Configura y sobrescribe parámetros de emuladores (archivos .ini de ReFix y OnlineFix)</sys:String>
+    <sys:String x:Key="String_InstallModalUsernameLabel">Nombre de Usuario</sys:String>
+    <sys:String x:Key="String_InstallModalUsernamePlaceholder">Por defecto: tu usuario del sistema</sys:String>
+    <sys:String x:Key="String_InstallModalSteamIdLabel">SteamID (SteamID64)</sys:String>
+    <sys:String x:Key="String_InstallModalSteamIdPlaceholder">ej. 76561198000000001 (vacío para auto)</sys:String>
+    <sys:String x:Key="String_InstallModalGenerateRandomSteamId">Generar Aleatorio</sys:String>
+    <sys:String x:Key="String_InstallModalResetIdentity">Restablecer</sys:String>
 
 
     <!-- ═══ EXPLORAR — BUSCADOR FACETADO DE STEAM ═══ -->
@@ -1047,13 +1055,13 @@
     <sys:String x:Key="String_ArtworkHeroDesc">1920 × 620 px (~3.1:1)</sys:String>
     <sys:String x:Key="String_ArtworkLogoTitle">Logotipo (Logo)</sys:String>
     <sys:String x:Key="String_ArtworkLogoDesc">PNG Transparente</sys:String>
-    <sys:String x:Key="String_ArtworkHeaderTitle">Portada Horizontal (Grid)</sys:String>
-    <sys:String x:Key="String_ArtworkHeaderDesc">460 × 215 / 920 × 430 px</sys:String>
+    <sys:String x:Key="String_ArtworkHeaderTitle">Grid Banner</sys:String>
+    <sys:String x:Key="String_ArtworkHeaderDesc">460 × 215 px (Grid de la Biblioteca)</sys:String>
     <sys:String x:Key="String_ArtworkIconTitle">Ícono del Juego</sys:String>
     <sys:String x:Key="String_ArtworkIconDesc">256 × 256 px (.ico / .png)</sys:String>
 
     <sys:String x:Key="String_ArtworkInstanceBannerTitle">Banner de la Instancia</sys:String>
-    <sys:String x:Key="String_ArtworkInstanceBannerDesc">460 × 215 px (Portada y Biblioteca)</sys:String>
+    <sys:String x:Key="String_ArtworkInstanceBannerDesc">460 × 215 px (Cabecera de la Instancia)</sys:String>
     <sys:String x:Key="String_ArtworkInstanceLogoTitle">Logo de la Instancia</sys:String>
     <sys:String x:Key="String_ArtworkInstanceLogoDesc">256 × 256 px (Pestaña Nav Lateral)</sys:String>
 

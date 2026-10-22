@@ -103,6 +103,29 @@ public sealed class ImageCacheService
                 ? url
                 : $"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{appId}/header.jpg";
 
+            // Local file on disk: read directly into a non-locking frozen bitmap without L2 disk caching or file locks
+            var localCandidate = primaryUrl.StartsWith("file:", StringComparison.OrdinalIgnoreCase) && Uri.TryCreate(primaryUrl, UriKind.Absolute, out var parsedFileUri)
+                ? parsedFileUri.LocalPath
+                : primaryUrl;
+
+            if (File.Exists(localCandidate))
+            {
+                try
+                {
+                    var fileBytes = File.ReadAllBytes(localCandidate);
+                    if (fileBytes.Length > 0)
+                    {
+                        var localBitmap = CreateFrozenBitmap(fileBytes);
+                        if (localBitmap != null)
+                        {
+                            _memoryCache[key] = localBitmap;
+                            return localBitmap;
+                        }
+                    }
+                }
+                catch { }
+            }
+
             if (Uri.TryCreate(primaryUrl, UriKind.Absolute, out var uri))
             {
                 var bmp = new BitmapImage();
@@ -352,17 +375,57 @@ public sealed class ImageCacheService
     }
 
     /// <summary>
-    /// Returns true for the one image per app that every view is meant to share: the store header,
-    /// the capsule, or the library artwork.
+    /// <summary>
+    /// Evicts an image entry from memory and disk cache.
     /// </summary>
+    public void Invalidate(string? url, uint appId = 0)
+    {
+        var keysToInvalidate = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!string.IsNullOrWhiteSpace(url))
+        {
+            keysToInvalidate.Add(BuildKey(url, appId));
+            keysToInvalidate.Add(url.Trim());
+            keysToInvalidate.Add(url.Trim().Replace('/', '\\'));
+            keysToInvalidate.Add(url.Trim().Replace('\\', '/'));
+        }
+
+        if (appId > 0)
+        {
+            keysToInvalidate.Add($"steam_app_{appId}");
+        }
+
+        foreach (var key in keysToInvalidate)
+        {
+            _memoryCache.TryRemove(key, out _);
+            _inFlightTasks.TryRemove(key, out _);
+
+            try
+            {
+                var diskPath = GetDiskCachePath(key);
+                if (File.Exists(diskPath))
+                {
+                    File.Delete(diskPath);
+                }
+            }
+            catch { }
+        }
+    }
+
     private static bool IsCanonicalArtworkUrl(string url)
     {
+        if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
         var fileName = url;
 
         var query = fileName.IndexOf('?');
         if (query >= 0) fileName = fileName[..query];
 
-        var lastSlash = fileName.LastIndexOf('/');
+        var lastSlash = Math.Max(fileName.LastIndexOf('/'), fileName.LastIndexOf('\\'));
         if (lastSlash >= 0 && lastSlash < fileName.Length - 1) fileName = fileName[(lastSlash + 1)..];
 
         return fileName.StartsWith("header", StringComparison.OrdinalIgnoreCase)

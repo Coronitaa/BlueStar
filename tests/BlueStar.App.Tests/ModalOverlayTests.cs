@@ -21,7 +21,7 @@ public class ModalOverlayTests
             var overlay = new ModalOverlay();
             Assert.False(overlay.IsOpen);
             Assert.True(overlay.CloseOnEscape);
-            Assert.False(overlay.CloseOnBackdropClick);
+            Assert.True(overlay.CloseOnBackdropClick);
             Assert.True(overlay.AnimateScale);
             Assert.Null(overlay.CloseCommand);
             Assert.NotNull(overlay.BackdropBrush);

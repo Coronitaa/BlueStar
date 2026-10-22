@@ -62,7 +62,7 @@
                                 <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}"
                                       Stretch="Uniform" Width="32" Height="32"
                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Image Source="{Binding Instance.HeaderImageUrl, Converter={StaticResource CachedImageConverter}}"
+                                <Image Source="{Binding CoverBannerImage}"
                                        Stretch="UniformToFill"
                                        RenderOptions.BitmapScalingMode="HighQuality"/>
                             </Grid>
@@ -2858,10 +2858,10 @@
                                 <!-- ═══ 2. HORIZONTAL BANNERS (~2.14:1) — SYMMETRICAL TWIN COLUMNS ═══ -->
                                 <Grid Margin="0,0,0,16">
                                     <Grid.ColumnDefinitions>
-                                        <!-- Left: Instance Banner (BlueStar) -->
+                                        <!-- Left: Instance Banner (Detail Header) -->
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="16"/>
-                                        <!-- Right: Steam Header (Steam Grid) -->
+                                        <!-- Right: Grid Banner (Library Grid) -->
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
 
@@ -2872,7 +2872,7 @@
                                                                          AspectRatio="2.1395"/>
                                     </StackPanel>
 
-                                    <!-- Steam Horizontal Header -->
+                                    <!-- Grid Banner (Library Grid) -->
                                     <StackPanel Grid.Column="2">
                                         <TextBlock Text="{DynamicResource String_ArtworkHeaderTitle}" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
                                         <controls:ArtworkViewportControl Slot="{Binding HeaderArtwork}"
@@ -4712,6 +4712,68 @@
 
                             <Separator Margin="0,0,0,14" Background="{StaticResource SubtleBorderBrush}"/>
 
+                            <!-- 3.5. Emulator Advanced Options (.ini Overrides for ReFix & OnlineFix) -->
+                            <StackPanel Margin="0,0,0,14">
+                                <Button Style="{StaticResource GhostButton}"
+                                        Command="{Binding ToggleInstallModalAdvancedOptionsCommand}"
+                                        HorizontalAlignment="Left"
+                                        Padding="0,3" Margin="0,0,0,4"
+                                        Cursor="Hand">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding AdvancedOptionsChevron, FallbackValue='▶'}"
+                                                   FontSize="10" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource AccentBrush}"/>
+                                        <TextBlock Text="{DynamicResource String_InstallModalAdvancedOptions}"
+                                                   FontWeight="SemiBold" FontSize="12"
+                                                   Foreground="{StaticResource AccentBrush}"
+                                                   TextDecorations="Underline" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <Border Background="{StaticResource SurfaceInputBrush}"
+                                        BorderBrush="{StaticResource SubtleBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource RadiusMd}"
+                                        Padding="14,12" Margin="0,6,0,0"
+                                        Visibility="{Binding IsInstallModalAdvancedOptionsExpanded, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <StackPanel>
+                                        <TextBlock Text="{DynamicResource String_InstallModalAdvancedOptionsDesc}"
+                                                   Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}"
+                                                   TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                                        <!-- Username Field -->
+                                        <TextBlock Text="{DynamicResource String_InstallModalUsernameLabel}"
+                                                   Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                                        <TextBox Style="{StaticResource DarkTextBox}"
+                                                 Text="{Binding InstallModalCustomUsername, UpdateSourceTrigger=PropertyChanged}"
+                                                 Margin="0,0,0,12"/>
+
+                                        <!-- SteamID Field -->
+                                        <TextBlock Text="{DynamicResource String_InstallModalSteamIdLabel}"
+                                                   Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="8"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="8"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox Grid.Column="0" Style="{StaticResource DarkTextBox}"
+                                                     Text="{Binding InstallModalCustomSteamId, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <Button Grid.Column="2" Content="{DynamicResource String_InstallModalGenerateRandomSteamId}"
+                                                    Style="{StaticResource SecondaryButton}" Padding="10,6"
+                                                    Command="{Binding GenerateInstallModalRandomSteamIdCommand}"/>
+                                            <Button Grid.Column="4" Content="{DynamicResource String_InstallModalResetIdentity}"
+                                                    Style="{StaticResource GhostButton}" Padding="8,6"
+                                                    Command="{Binding ResetInstallModalEmulatorIdentityCommand}"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <Separator Margin="0,0,0,14" Background="{StaticResource SubtleBorderBrush}"/>
+
                             <!-- 4. Optional DLCs -->
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
@@ -4994,7 +5056,8 @@
                 </StackPanel>
             </Border>
         </controls:ModalOverlay>
-        <controls:ModalOverlay IsOpen="{Binding IsReFixConfigModalOpen}">
+        <controls:ModalOverlay IsOpen="{Binding IsReFixConfigModalOpen}"
+                               CloseCommand="{Binding CloseReFixConfigModalCommand}">
             <Border Background="{StaticResource SurfaceCardBrush}" 
                     BorderBrush="{StaticResource StrongBorderBrush}" BorderThickness="1"
                     CornerRadius="{StaticResource RadiusLg}" Padding="24" Width="400"

@@ -25,6 +25,7 @@ public class ModalOverlay : ContentControl
 
     private static readonly List<ModalOverlay> ActiveModals = new();
 
+    private FrameworkElement? _root;
     private FrameworkElement? _backdrop;
     private FrameworkElement? _contentHolder;
     private ScaleTransform? _scaleTransform;
@@ -108,7 +109,7 @@ public class ModalOverlay : ContentControl
             nameof(CloseOnBackdropClick),
             typeof(bool),
             typeof(ModalOverlay),
-            new PropertyMetadata(false));
+            new PropertyMetadata(true));
 
     public bool CloseOnBackdropClick
     {
@@ -151,6 +152,17 @@ public class ModalOverlay : ContentControl
         if (_backdrop != null)
         {
             _backdrop.MouseLeftButtonDown -= OnBackdropMouseLeftButtonDown;
+        }
+
+        if (_root != null)
+        {
+            _root.MouseLeftButtonDown -= OnRootMouseLeftButtonDown;
+        }
+
+        _root = GetTemplateChild(PartRoot) as FrameworkElement;
+        if (_root != null)
+        {
+            _root.MouseLeftButtonDown += OnRootMouseLeftButtonDown;
         }
 
         _backdrop = GetTemplateChild(PartBackdrop) as FrameworkElement;
@@ -468,6 +480,33 @@ public class ModalOverlay : ContentControl
             RequestClose();
             e.Handled = true;
         }
+    }
+
+    private void OnRootMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (CloseOnBackdropClick && IsOpen)
+        {
+            if (IsInsideContentHolder(e.OriginalSource as DependencyObject))
+            {
+                return;
+            }
+            RequestClose();
+            e.Handled = true;
+        }
+    }
+
+    private bool IsInsideContentHolder(DependencyObject? dep)
+    {
+        if (dep == null || _contentHolder == null) return false;
+        DependencyObject? current = dep;
+        while (current != null)
+        {
+            if (current == _contentHolder) return true;
+            current = (current is Visual || current is System.Windows.Media.Media3D.Visual3D)
+                ? VisualTreeHelper.GetParent(current)
+                : LogicalTreeHelper.GetParent(current);
+        }
+        return false;
     }
 
     private void OnWindowPreviewKeyDown(object sender, KeyEventArgs e)

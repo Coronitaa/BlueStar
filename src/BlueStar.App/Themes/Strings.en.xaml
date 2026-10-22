@@ -813,6 +813,14 @@
     <sys:String x:Key="String_InstallModalEmulatorSpecificBadge">ONLINE FIX</sys:String>
     <sys:String x:Key="String_InstallModalSpecificFixSelectLabel">Select specific fix or emulator to deploy:</sys:String>
     <sys:String x:Key="String_InstallModalSpecificFixInfo">Specialized patch ({0}) will be automatically downloaded and deployed after the game finishes downloading.</sys:String>
+    <sys:String x:Key="String_InstallModalAdvancedOptions">Advanced Options</sys:String>
+    <sys:String x:Key="String_InstallModalAdvancedOptionsDesc">Configure and override emulator settings (.ini files for ReFix and OnlineFix)</sys:String>
+    <sys:String x:Key="String_InstallModalUsernameLabel">Username</sys:String>
+    <sys:String x:Key="String_InstallModalUsernamePlaceholder">Default: your system username</sys:String>
+    <sys:String x:Key="String_InstallModalSteamIdLabel">SteamID (SteamID64)</sys:String>
+    <sys:String x:Key="String_InstallModalSteamIdPlaceholder">e.g. 76561198000000001 (leave empty for auto)</sys:String>
+    <sys:String x:Key="String_InstallModalGenerateRandomSteamId">Generate Random</sys:String>
+    <sys:String x:Key="String_InstallModalResetIdentity">Reset</sys:String>
 
 
     <!-- ═══ EXPLORE — FACETED STEAM SEARCH ═══ -->
@@ -1048,13 +1056,13 @@
     <sys:String x:Key="String_ArtworkHeroDesc">1920 × 620 px (~3.1:1)</sys:String>
     <sys:String x:Key="String_ArtworkLogoTitle">Logo</sys:String>
     <sys:String x:Key="String_ArtworkLogoDesc">Transparent PNG</sys:String>
-    <sys:String x:Key="String_ArtworkHeaderTitle">Horizontal Header (Grid)</sys:String>
-    <sys:String x:Key="String_ArtworkHeaderDesc">460 × 215 / 920 × 430 px</sys:String>
+    <sys:String x:Key="String_ArtworkHeaderTitle">Grid Banner</sys:String>
+    <sys:String x:Key="String_ArtworkHeaderDesc">460 × 215 px (Library Grid)</sys:String>
     <sys:String x:Key="String_ArtworkIconTitle">Game Icon</sys:String>
     <sys:String x:Key="String_ArtworkIconDesc">256 × 256 px (.ico / .png)</sys:String>
 
     <sys:String x:Key="String_ArtworkInstanceBannerTitle">Instance Banner</sys:String>
-    <sys:String x:Key="String_ArtworkInstanceBannerDesc">460 × 215 px (Header &amp; Library)</sys:String>
+    <sys:String x:Key="String_ArtworkInstanceBannerDesc">460 × 215 px (Detail Header)</sys:String>
     <sys:String x:Key="String_ArtworkInstanceLogoTitle">Instance Logo (Nav)</sys:String>
     <sys:String x:Key="String_ArtworkInstanceLogoDesc">256 × 256 px (Sidebar Tab Icon)</sys:String>
 

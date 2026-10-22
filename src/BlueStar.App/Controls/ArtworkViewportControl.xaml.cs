@@ -82,6 +82,7 @@ public partial class ArtworkViewportControl : UserControl
             Slot.PropertyChanged -= OnSlotPropertyChanged;
             Slot.PropertyChanged += OnSlotPropertyChanged;
         }
+        UpdateVisuals();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -99,7 +100,7 @@ public partial class ArtworkViewportControl : UserControl
             or nameof(ArtworkSlotViewModel.ActualHeight)
             or nameof(ArtworkSlotViewModel.HasImage))
         {
-            Dispatcher.InvokeAsync(InvalidateMeasure);
+            Dispatcher.InvokeAsync(UpdateVisuals);
         }
     }
 
@@ -114,6 +115,7 @@ public partial class ArtworkViewportControl : UserControl
 
             if (e.NewValue is ArtworkSlotViewModel slot)
             {
+                slot.PropertyChanged -= control.OnSlotPropertyChanged;
                 slot.PropertyChanged += control.OnSlotPropertyChanged;
 
                 if (control.AspectRatio <= 0)
@@ -138,8 +140,34 @@ public partial class ArtworkViewportControl : UserControl
                 }
             }
 
-            control.InvalidateMeasure();
+            control.UpdateVisuals();
         }
+    }
+
+    private void UpdateVisuals()
+    {
+        if (ArtworkImage == null) return;
+
+        var hasImage = Slot?.HasImage == true && Slot?.ImageSource != null;
+        ArtworkImage.Source = Slot?.ImageSource;
+        ArtworkImage.Visibility = hasImage ? Visibility.Visible : Visibility.Collapsed;
+        if (PlaceholderPanel != null)
+        {
+            PlaceholderPanel.Visibility = hasImage ? Visibility.Collapsed : Visibility.Visible;
+        }
+        if (CheckerboardBackdrop != null)
+        {
+            CheckerboardBackdrop.Visibility = (ShowCheckerboard || Slot?.SlotType == SteamArtworkType.Logo)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+        if (ClearButton != null)
+        {
+            ClearButton.Visibility = (IsMouseOver && hasImage) ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        InvalidateVisual();
+        InvalidateMeasure();
     }
 
     private static void OnShowCheckerboardChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -279,26 +307,7 @@ public partial class ArtworkViewportControl : UserControl
     {
         double ar = AspectRatio;
 
-        // If an image is loaded and valid dimensions exist, use the exact natural aspect ratio of the image
-        // within reasonable bounds for the slot type so that the box stretches to fit the image
-        // without vertical cropping and without black bars ("justo antes de que aparezcan las barras negras").
-        if (Slot?.HasImage == true && Slot.ActualWidth > 0 && Slot.ActualHeight > 0)
-        {
-            double naturalAr = (double)Slot.ActualWidth / Slot.ActualHeight;
-            if (Slot.SlotType == SteamArtworkType.Hero)
-            {
-                ar = Math.Clamp(naturalAr, 2.0, 4.0);
-            }
-            else if (Slot.SlotType is SteamArtworkType.Header or SteamArtworkType.InstanceBanner)
-            {
-                ar = Math.Clamp(naturalAr, 1.5, 3.0);
-            }
-            else if (ar <= 0)
-            {
-                ar = naturalAr;
-            }
-        }
-        else if (ar <= 0 && Slot != null)
+        if (ar <= 0 && Slot != null)
         {
             ar = Slot.SlotType switch
             {

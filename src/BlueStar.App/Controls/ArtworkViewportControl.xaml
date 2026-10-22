@@ -21,6 +21,7 @@
                 BorderBrush="{DynamicResource SubtleBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="{DynamicResource RadiusMd}"
+                ClipToBounds="True"
                 SnapsToDevicePixels="True">
             <Border.Style>
                 <Style TargetType="Border">

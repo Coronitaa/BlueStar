@@ -1391,6 +1391,8 @@ public class DownloadQueueManager
                                         await _instanceManager.UpdateAsync(updatedInstance, CancellationToken.None).ConfigureAwait(false);
                                     }
                                 }
+
+                                BlueStar.Core.Helpers.EmulatorIniHelper.ApplyOverrides(updatedInstance.InstallPath, updatedInstance.CustomEmulatorUsername, updatedInstance.CustomEmulatorSteamId);
                             }
                             catch (Exception ex)
                             {

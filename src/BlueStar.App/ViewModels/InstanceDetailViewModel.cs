@@ -533,6 +533,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(IsDetectedVersionVisible))]
     [NotifyPropertyChangedFor(nameof(ForceInstallAllDlcs))]
     [NotifyPropertyChangedFor(nameof(CanDownloadAndInstallDlcs))]
+    [NotifyPropertyChangedFor(nameof(CoverBannerImage))]
     private GameInstance _instance = null!;
 
     public IReadOnlyList<GameTag> HeroTags => _tagsService?.GetInstanceDetailHeroTags(Instance, HasGameUpdateAvailable) ?? [];
@@ -568,6 +569,44 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private ArtworkSlotViewModel? _instanceLogoArtwork;
+
+    public System.Windows.Media.ImageSource? CoverBannerImage
+    {
+        get
+        {
+            if (InstanceBannerArtwork?.HasImage == true && InstanceBannerArtwork.ImageSource != null)
+                return InstanceBannerArtwork.ImageSource;
+
+            var bannerPath = (!string.IsNullOrWhiteSpace(Instance?.CustomBannerPath) && File.Exists(Instance.CustomBannerPath))
+                ? Instance.CustomBannerPath
+                : InstanceArtworkService.GetArtworkFilePath(Instance?.Id ?? Guid.Empty, SteamArtworkType.InstanceBanner);
+
+            if (!string.IsNullOrWhiteSpace(bannerPath) && File.Exists(bannerPath))
+            {
+                return ImageCacheService.Instance.GetOrLoadImage(bannerPath, Instance?.AppId ?? 0);
+            }
+
+            if (HeaderArtwork?.HasImage == true && HeaderArtwork.ImageSource != null)
+                return HeaderArtwork.ImageSource;
+
+            var gridPath = (!string.IsNullOrWhiteSpace(Instance?.CustomGridBannerPath) && File.Exists(Instance.CustomGridBannerPath))
+                ? Instance.CustomGridBannerPath
+                : InstanceArtworkService.GetArtworkFilePath(Instance?.Id ?? Guid.Empty, SteamArtworkType.Header);
+
+            if (!string.IsNullOrWhiteSpace(gridPath) && File.Exists(gridPath))
+            {
+                return ImageCacheService.Instance.GetOrLoadImage(gridPath, Instance?.AppId ?? 0);
+            }
+
+            var headerUrl = Instance?.HeaderImageUrl;
+            if (!string.IsNullOrWhiteSpace(headerUrl))
+            {
+                return ImageCacheService.Instance.GetOrLoadImage(headerUrl, Instance?.AppId ?? 0);
+            }
+
+            return null;
+        }
+    }
 
     [ObservableProperty]
     private bool _isDownloadingArtworks;
@@ -1217,6 +1256,41 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private string _installModalSelectedBranch = "public";
+
+    [ObservableProperty]
+    private bool _isInstallModalAdvancedOptionsExpanded;
+
+    [ObservableProperty]
+    private string? _installModalCustomUsername;
+
+    [ObservableProperty]
+    private string? _installModalCustomSteamId;
+
+    public string AdvancedOptionsChevron => IsInstallModalAdvancedOptionsExpanded ? "▼" : "▶";
+
+    partial void OnIsInstallModalAdvancedOptionsExpandedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(AdvancedOptionsChevron));
+    }
+
+    [RelayCommand]
+    public void ToggleInstallModalAdvancedOptions()
+    {
+        IsInstallModalAdvancedOptionsExpanded = !IsInstallModalAdvancedOptionsExpanded;
+    }
+
+    [RelayCommand]
+    public void GenerateInstallModalRandomSteamId()
+    {
+        InstallModalCustomSteamId = EmulatorIniHelper.GenerateRandomSteamId64();
+    }
+
+    [RelayCommand]
+    public void ResetInstallModalEmulatorIdentity()
+    {
+        InstallModalCustomUsername = Environment.UserName;
+        InstallModalCustomSteamId = null;
+    }
 
     [ObservableProperty]
     private string _installModalTargetVersionMode = "Latest";
@@ -2054,6 +2128,13 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         InstallModalCreateDesktopShortcut = true;
         InstallModalCreateStartMenuShortcut = true;
 
+        InstallModalCustomUsername = !string.IsNullOrWhiteSpace(Instance.CustomEmulatorUsername)
+            ? Instance.CustomEmulatorUsername
+            : Environment.UserName;
+        InstallModalCustomSteamId = Instance.CustomEmulatorSteamId;
+        IsInstallModalAdvancedOptionsExpanded = !string.IsNullOrWhiteSpace(Instance.CustomEmulatorSteamId)
+            || (!string.IsNullOrWhiteSpace(Instance.CustomEmulatorUsername) && Instance.CustomEmulatorUsername != Environment.UserName);
+
         UpdateInstallModalDiskSpace();
 
         InstallModalInstallPrerequisites = true;
@@ -2328,6 +2409,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
         var updatedInstance = Instance with
         {
+            CustomEmulatorUsername = string.IsNullOrWhiteSpace(InstallModalCustomUsername) ? null : InstallModalCustomUsername.Trim(),
+            CustomEmulatorSteamId = string.IsNullOrWhiteSpace(InstallModalCustomSteamId) ? null : InstallModalCustomSteamId.Trim(),
             InstallPath = targetPath,
             ActiveBranch = targetBranch,
             ActiveBuildId = targetBuildId ?? Instance.ActiveBuildId,
@@ -2355,6 +2438,11 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
         await _instanceManager.UpdateAsync(updatedInstance, CancellationToken.None).ConfigureAwait(true);
         Instance = updatedInstance;
+
+        if (Directory.Exists(targetPath))
+        {
+            EmulatorIniHelper.ApplyOverrides(targetPath, updatedInstance.CustomEmulatorUsername, updatedInstance.CustomEmulatorSteamId);
+        }
 
         // Remember directory for future installs
         _ = _appSettings.SetLastInstallDirectoryAsync(Directory.GetParent(targetPath)?.FullName ?? targetPath);
@@ -9575,7 +9663,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
         HeaderArtwork = new ArtworkSlotViewModel(
             SteamArtworkType.Header,
-            "Portada Horizontal (Grid)",
+            "Grid Banner",
             "460 × 215 / 920 × 430 px",
             OnArtworkReplaceRequested,
             OnArtworkClearRequested);
@@ -9600,6 +9688,22 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             "256 × 256 px (1:1)",
             OnArtworkReplaceRequested,
             OnArtworkClearRequested);
+
+        InstanceBannerArtwork.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName is nameof(ArtworkSlotViewModel.ImageSource) or nameof(ArtworkSlotViewModel.HasImage))
+            {
+                OnPropertyChanged(nameof(CoverBannerImage));
+            }
+        };
+
+        HeaderArtwork.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName is nameof(ArtworkSlotViewModel.ImageSource) or nameof(ArtworkSlotViewModel.HasImage))
+            {
+                OnPropertyChanged(nameof(CoverBannerImage));
+            }
+        };
     }
 
     private void OnArtworkServiceChanged(object? sender, (Guid InstanceId, SteamArtworkType Type) e)
@@ -9630,7 +9734,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         SteamArtworkType.Capsule => "Portada Vertical",
         SteamArtworkType.Hero => "Fondo Hero",
         SteamArtworkType.Logo => "Logotipo",
-        SteamArtworkType.Header => "Portada Horizontal",
+        SteamArtworkType.Header => "Grid Banner",
         SteamArtworkType.Icon => "Ícono del Juego",
         SteamArtworkType.InstanceBanner => "Banner de la Instancia",
         SteamArtworkType.InstanceLogo => "Logo de la Instancia",
@@ -9647,7 +9751,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             var capsulePath = InstanceArtworkService.GetArtworkFilePath(id, SteamArtworkType.Capsule);
             var heroPath = InstanceArtworkService.GetArtworkFilePath(id, SteamArtworkType.Hero);
             var logoPath = InstanceArtworkService.GetArtworkFilePath(id, SteamArtworkType.Logo);
-            var headerPath = InstanceArtworkService.GetArtworkFilePath(id, SteamArtworkType.Header);
+            var headerPath = (!string.IsNullOrWhiteSpace(Instance.CustomGridBannerPath) && File.Exists(Instance.CustomGridBannerPath))
+                ? Instance.CustomGridBannerPath
+                : InstanceArtworkService.GetArtworkFilePath(id, SteamArtworkType.Header);
             var iconPath = InstanceArtworkService.GetArtworkFilePath(id, SteamArtworkType.Icon);
             var instanceBannerPath = (!string.IsNullOrWhiteSpace(Instance.CustomBannerPath) && File.Exists(Instance.CustomBannerPath))
                 ? Instance.CustomBannerPath
@@ -9704,6 +9810,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 IconArtwork?.LoadFromFile(iconPath);
                 InstanceBannerArtwork?.LoadFromFile(instanceBannerPath);
                 InstanceLogoArtwork?.LoadFromFile(instanceLogoPath);
+                OnPropertyChanged(nameof(CoverBannerImage));
             });
         }).ConfigureAwait(false);
     }
@@ -9715,7 +9822,14 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
         var path = await Task.Run(() => InstanceArtworkService.GetArtworkFilePath(id, type)).ConfigureAwait(true);
         var slot = GetSlotViewModel(type);
-        slot?.LoadFromFile(path);
+        if (slot != null)
+        {
+            if (string.IsNullOrWhiteSpace(path) || slot.ImagePath != path || !slot.HasImage)
+            {
+                slot.LoadFromFile(path);
+                OnPropertyChanged(nameof(CoverBannerImage));
+            }
+        }
     }
 
     [RelayCommand]
@@ -9819,8 +9933,16 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var (w, h) = InstanceArtworkService.GetImageDimensions(fileBytes);
         var ext = Path.GetExtension(filePath);
+        double targetRatio = BlueStar.App.Helpers.ImageCropHelper.GetTargetAspectRatio(type);
+        if (targetRatio > 0)
+        {
+            var cropped = BlueStar.App.Helpers.ImageCropHelper.CropToAspectRatio(fileBytes, targetRatio, ext);
+            fileBytes = cropped.Data;
+            ext = cropped.Extension;
+        }
+
+        var (w, h) = InstanceArtworkService.GetImageDimensions(fileBytes);
         var validation = InstanceArtworkService.ValidateDimensions(type, w, h, ext);
 
         if (!validation.IsValid || !string.IsNullOrWhiteSpace(validation.WarningMessage))
@@ -9905,7 +10027,13 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
             var savedPath = InstanceArtworkService.GetArtworkFilePath(Instance.Id, type);
 
-            if (type == SteamArtworkType.InstanceBanner || type == SteamArtworkType.Header)
+            ImageCacheService.Instance.Invalidate(savedPath, Instance.AppId);
+            if (!string.IsNullOrWhiteSpace(Instance.HeaderImageUrl))
+            {
+                ImageCacheService.Instance.Invalidate(Instance.HeaderImageUrl, Instance.AppId);
+            }
+
+            if (type == SteamArtworkType.InstanceBanner)
             {
                 Instance = Instance with { CustomBannerPath = savedPath };
                 if (_instanceManager != null)
@@ -9913,7 +10041,15 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                     await _instanceManager.UpdateAsync(Instance).ConfigureAwait(true);
                 }
             }
-            else if (type == SteamArtworkType.InstanceLogo || type == SteamArtworkType.Icon)
+            else if (type == SteamArtworkType.Header)
+            {
+                Instance = Instance with { CustomGridBannerPath = savedPath };
+                if (_instanceManager != null)
+                {
+                    await _instanceManager.UpdateAsync(Instance).ConfigureAwait(true);
+                }
+            }
+            else if (type == SteamArtworkType.InstanceLogo)
             {
                 Instance = Instance with { CustomIconPath = savedPath };
                 if (_instanceManager != null)
@@ -9922,10 +10058,24 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 }
             }
 
-            var slot = GetSlotViewModel(type);
-            slot?.LoadFromBytes(data, savedPath);
+            if (App.Current?.Dispatcher != null)
+            {
+                await App.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    var slot = GetSlotViewModel(type);
+                    slot?.LoadFromBytes(data, savedPath);
+                    OnPropertyChanged(nameof(CoverBannerImage));
+                    ArtworkStatusMessage = $"✅ {GetArtworkSlotName(type)} guardado y sincronizado.";
+                });
+            }
+            else
+            {
+                var slot = GetSlotViewModel(type);
+                slot?.LoadFromBytes(data, savedPath);
+                OnPropertyChanged(nameof(CoverBannerImage));
+                ArtworkStatusMessage = $"✅ {GetArtworkSlotName(type)} guardado y sincronizado.";
+            }
 
-            ArtworkStatusMessage = $"✅ {GetArtworkSlotName(type)} guardado y sincronizado.";
             _notificationService?.ShowSuccess("Artwork Actualizado", $"{GetArtworkSlotName(type)} guardado y sincronizado.");
         }
         catch (Exception ex)
@@ -9945,28 +10095,102 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             var existingFile = InstanceArtworkService.GetArtworkFilePath(Instance.Id, type);
             if (!string.IsNullOrWhiteSpace(existingFile) && File.Exists(existingFile))
             {
-                File.Delete(existingFile);
+                try { File.Delete(existingFile); } catch { }
+            }
+
+            ImageCacheService.Instance.Invalidate(existingFile, Instance.AppId);
+            if (!string.IsNullOrWhiteSpace(Instance.HeaderImageUrl))
+            {
+                ImageCacheService.Instance.Invalidate(Instance.HeaderImageUrl, Instance.AppId);
             }
 
             if (type == SteamArtworkType.InstanceBanner)
             {
+                var bannerFile1 = InstanceArtworkService.GetArtworkFilePath(Instance.Id, SteamArtworkType.InstanceBanner);
+                if (!string.IsNullOrWhiteSpace(bannerFile1) && File.Exists(bannerFile1))
+                {
+                    try { File.Delete(bannerFile1); } catch { }
+                }
+
                 Instance = Instance with { CustomBannerPath = null };
                 if (_instanceManager != null)
                 {
                     await _instanceManager.UpdateAsync(Instance).ConfigureAwait(true);
                 }
+
+                Action updateSlots = () =>
+                {
+                    InstanceBannerArtwork?.LoadFromFile(null);
+                    OnPropertyChanged(nameof(CoverBannerImage));
+                };
+
+                if (App.Current?.Dispatcher != null)
+                    await App.Current.Dispatcher.InvokeAsync(updateSlots);
+                else
+                    updateSlots();
+            }
+            else if (type == SteamArtworkType.Header)
+            {
+                var headerFile1 = InstanceArtworkService.GetArtworkFilePath(Instance.Id, SteamArtworkType.Header);
+                if (!string.IsNullOrWhiteSpace(headerFile1) && File.Exists(headerFile1))
+                {
+                    try { File.Delete(headerFile1); } catch { }
+                }
+
+                Instance = Instance with { CustomGridBannerPath = null };
+                if (_instanceManager != null)
+                {
+                    await _instanceManager.UpdateAsync(Instance).ConfigureAwait(true);
+                }
+
+                Action updateSlots = () =>
+                {
+                    HeaderArtwork?.LoadFromFile(null);
+                    OnPropertyChanged(nameof(CoverBannerImage));
+                };
+
+                if (App.Current?.Dispatcher != null)
+                    await App.Current.Dispatcher.InvokeAsync(updateSlots);
+                else
+                    updateSlots();
             }
             else if (type == SteamArtworkType.InstanceLogo)
             {
+                var logoFile1 = InstanceArtworkService.GetArtworkFilePath(Instance.Id, SteamArtworkType.InstanceLogo);
+                if (!string.IsNullOrWhiteSpace(logoFile1) && File.Exists(logoFile1))
+                {
+                    try { File.Delete(logoFile1); } catch { }
+                }
+
                 Instance = Instance with { CustomIconPath = null };
                 if (_instanceManager != null)
                 {
                     await _instanceManager.UpdateAsync(Instance).ConfigureAwait(true);
                 }
-            }
 
-            var slot = GetSlotViewModel(type);
-            slot?.LoadFromFile(null);
+                Action updateSlots = () =>
+                {
+                    InstanceLogoArtwork?.LoadFromFile(null);
+                };
+
+                if (App.Current?.Dispatcher != null)
+                    await App.Current.Dispatcher.InvokeAsync(updateSlots);
+                else
+                    updateSlots();
+            }
+            else
+            {
+                Action updateSlots = () =>
+                {
+                    var slot = GetSlotViewModel(type);
+                    slot?.LoadFromFile(null);
+                };
+
+                if (App.Current?.Dispatcher != null)
+                    await App.Current.Dispatcher.InvokeAsync(updateSlots);
+                else
+                    updateSlots();
+            }
 
             ArtworkStatusMessage = $"🗑 {GetArtworkSlotName(type)} eliminado.";
             _notificationService?.ShowInfo("Artwork Quitado", $"Se quitó el artwork de {GetArtworkSlotName(type)}.");

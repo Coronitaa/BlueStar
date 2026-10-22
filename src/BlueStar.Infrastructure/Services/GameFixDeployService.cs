@@ -335,6 +335,7 @@ public sealed class GameFixDeployService : IGameFixDeployService
 
             // Persist instance updates
             await _instanceManager.UpdateAsync(updatedInstance, ct).ConfigureAwait(false);
+            BlueStar.Core.Helpers.EmulatorIniHelper.ApplyOverrides(instance.InstallPath, instance.CustomEmulatorUsername, instance.CustomEmulatorSteamId);
 
             progress?.Report(new DeployProgress
             {

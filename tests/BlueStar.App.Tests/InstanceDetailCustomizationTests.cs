@@ -475,4 +475,203 @@ public class InstanceDetailCustomizationTests
             }
         }
     }
+
+
+    [Fact]
+    public void InstallModal_AdvancedOptions_ToggleAndGenerateSteamId_WorkCorrectly()
+    {
+        var instance = new GameInstance
+        {
+            Id = Guid.NewGuid(),
+            Name = "Adv Options Game",
+            AppId = 480,
+            InstallPath = @"C:\Games\AdvGame",
+            Origin = InstanceOrigin.DepotBox,
+            Status = InstanceStatus.NotInstalled
+        };
+
+        var vm = CreateViewModel(instance);
+
+        Assert.False(vm.IsInstallModalAdvancedOptionsExpanded);
+        Assert.Equal("▶", vm.AdvancedOptionsChevron);
+
+        vm.ToggleInstallModalAdvancedOptionsCommand.Execute(null);
+        Assert.True(vm.IsInstallModalAdvancedOptionsExpanded);
+        Assert.Equal("▼", vm.AdvancedOptionsChevron);
+
+        vm.GenerateInstallModalRandomSteamIdCommand.Execute(null);
+        Assert.NotNull(vm.InstallModalCustomSteamId);
+        Assert.StartsWith("76561198", vm.InstallModalCustomSteamId);
+        Assert.Equal(17, vm.InstallModalCustomSteamId.Length);
+
+        vm.ResetInstallModalEmulatorIdentityCommand.Execute(null);
+        Assert.Equal(Environment.UserName, vm.InstallModalCustomUsername);
+        Assert.Null(vm.InstallModalCustomSteamId);
+    }
+
+    [Fact]
+    public async Task ArtworkSlots_InstanceBannerAndHeader_RemainIndependent()
+    {
+        var instance = new GameInstance
+        {
+            Id = Guid.NewGuid(),
+            Name = "Banner Separation Game",
+            AppId = 480,
+            InstallPath = @"C:\Games\BannerSeparationGame",
+            Origin = InstanceOrigin.Steam,
+            Status = InstanceStatus.Ready
+        };
+
+        var vm = CreateViewModel(instance);
+
+        var tempHeaderFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"artwork_hdr_{Guid.NewGuid():N}.png");
+        var tempBannerFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"artwork_bnr_{Guid.NewGuid():N}.png");
+        try
+        {
+            byte[] validPng = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
+            System.IO.File.WriteAllBytes(tempHeaderFile, validPng);
+            System.IO.File.WriteAllBytes(tempBannerFile, validPng);
+
+            // 1. Applying to Header must NOT modify Instance.CustomBannerPath or InstanceBannerArtwork
+            await vm.ProcessNewArtworkFileAsync(BlueStar.Core.Helpers.SteamArtworkType.Header, tempHeaderFile);
+            if (vm.IsArtworkDimensionModalOpen)
+            {
+                await vm.ConfirmPendingArtworkAsync();
+            }
+
+            Assert.True(vm.HeaderArtwork?.HasImage);
+            Assert.Null(vm.Instance.CustomBannerPath);
+            Assert.False(vm.InstanceBannerArtwork?.HasImage ?? false);
+
+            // 2. Applying to InstanceBanner updates CustomBannerPath and InstanceBannerArtwork without overwriting HeaderArtwork
+            await vm.ProcessNewArtworkFileAsync(BlueStar.Core.Helpers.SteamArtworkType.InstanceBanner, tempBannerFile);
+            if (vm.IsArtworkDimensionModalOpen)
+            {
+                await vm.ConfirmPendingArtworkAsync();
+            }
+
+            Assert.NotNull(vm.Instance.CustomBannerPath);
+            Assert.True(System.IO.File.Exists(vm.Instance.CustomBannerPath));
+            Assert.True(vm.InstanceBannerArtwork?.HasImage);
+            Assert.True(vm.HeaderArtwork?.HasImage);
+        }
+        finally
+        {
+            if (System.IO.File.Exists(tempHeaderFile)) System.IO.File.Delete(tempHeaderFile);
+            if (System.IO.File.Exists(tempBannerFile)) System.IO.File.Delete(tempBannerFile);
+        }
+    }
+
+    [Fact]
+    public void ImageCropHelper_CropsImageToRequestedAspectRatio()
+    {
+        // Create a 200x100 (2:1) test PNG
+        var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap(200, 100, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+        using var ms = new System.IO.MemoryStream();
+        encoder.Save(ms);
+        byte[] originalBytes = ms.ToArray();
+
+        // Target ratio for Capsule is 600 / 900 = 0.6667 (vertical)
+        double targetCapsule = 600.0 / 900.0;
+        var (croppedBytes, newW, newH, ext) = BlueStar.App.Helpers.ImageCropHelper.CropToAspectRatio(originalBytes, targetCapsule, ".png");
+
+        Assert.NotEmpty(croppedBytes);
+        Assert.True(newW > 0);
+        Assert.True(newH > 0);
+        double achievedRatio = (double)newW / newH;
+        Assert.True(Math.Abs(achievedRatio - targetCapsule) / targetCapsule < 0.02);
+    }
+
+    [Fact]
+    public void ImageCropHelper_TestJpegCrop()
+    {
+        var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap(200, 100, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+        using var ms = new System.IO.MemoryStream();
+        encoder.Save(ms);
+        byte[] pngBytes = ms.ToArray();
+
+        double target = 460.0 / 215.0;
+        var (cropped, w, h, ext) = BlueStar.App.Helpers.ImageCropHelper.CropToAspectRatio(pngBytes, target, ".jpg");
+        Assert.Equal(".jpg", ext);
+        Assert.NotEmpty(cropped);
+        Assert.True(w > 0);
+        Assert.True(h > 0);
+    }
+
+    [Fact]
+    public void CoverBannerImage_UpdatesWhenInstanceBannerSlotChanges()
+    {
+        var instance = new GameInstance
+        {
+            Id = Guid.NewGuid(),
+            Name = "Banner Refresh Test Game",
+            AppId = 0,
+            InstallPath = @"C:\Games\Test",
+            Origin = InstanceOrigin.ImportedFolder,
+            Status = InstanceStatus.Ready
+        };
+
+        var vm = CreateViewModel(instance);
+
+        // Initially null cover banner image since AppId is 0 and no custom banner
+        Assert.Null(vm.CoverBannerImage);
+
+        // Create a 200x100 test image bytes
+        var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap(200, 100, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+        using var ms = new System.IO.MemoryStream();
+        encoder.Save(ms);
+        byte[] imgBytes = ms.ToArray();
+
+        // Load into InstanceBannerArtwork
+        vm.InstanceBannerArtwork?.LoadFromBytes(imgBytes, @"C:\dummy\instance_banner.png");
+
+        // CoverBannerImage immediately reflects it
+        Assert.NotNull(vm.CoverBannerImage);
+        Assert.True(vm.InstanceBannerArtwork?.HasImage);
+
+        // Clear slot
+        vm.InstanceBannerArtwork?.LoadFromFile(null);
+        Assert.False(vm.InstanceBannerArtwork?.HasImage);
+    }
+
+    [Fact]
+    public void ImageCacheService_Invalidate_PurgesCache()
+    {
+        var cache = BlueStar.App.Services.ImageCacheService.Instance;
+        var dummyUrl = "https://cdn.example.com/test_image_purge.jpg";
+
+        // Calling Invalidate should execute safely and remove keys without throwing
+        cache.Invalidate(dummyUrl, 999999);
+        var result = cache.GetFromMemoryOrDisk(dummyUrl, 999999);
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void GridBanner_IsIndependentFromInstanceBanner()
+    {
+        var instance = new GameInstance
+        {
+            Id = Guid.NewGuid(),
+            Name = "Grid Independence Game",
+            AppId = 440,
+            InstallPath = @"C:\Games\TF2",
+            Origin = InstanceOrigin.Steam,
+            Status = InstanceStatus.Ready,
+            CustomBannerPath = @"C:\dummy\instance_banner.png"
+        };
+
+        // Grid banner (HeaderImageUrl) MUST NOT depend on instance_banner.png
+        Assert.NotEqual(@"C:\dummy\instance_banner.png", instance.HeaderImageUrl);
+        Assert.Contains("440", instance.HeaderImageUrl);
+
+        // When CustomGridBannerPath is set, HeaderImageUrl reflects it
+        var withGridBanner = instance with { CustomGridBannerPath = @"C:\dummy\grid_header.jpg" };
+        Assert.Equal(@"C:\dummy\grid_header.jpg", withGridBanner.HeaderImageUrl);
+    }
 }

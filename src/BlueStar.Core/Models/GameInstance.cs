@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BlueStar.Core.Helpers;
 
 namespace BlueStar.Core.Models;
 
@@ -282,9 +283,14 @@ public record GameInstance
     public bool CanManageDepots => Origin != InstanceOrigin.Steam;
 
     /// <summary>
-    /// Gets or sets a custom banner/header image path or URL for this instance.
+    /// Gets or sets a custom banner image path or URL for this instance (displayed inside the instance detail view).
     /// </summary>
     public string? CustomBannerPath { get; init; }
+
+    /// <summary>
+    /// Gets or sets a custom grid banner image path or URL for this instance (displayed in the library grid).
+    /// </summary>
+    public string? CustomGridBannerPath { get; init; }
 
     /// <summary>
     /// Gets or sets a custom icon or logo image path or URL for this instance (displayed in sidebar recent navigation tabs and shortcuts).
@@ -292,20 +298,55 @@ public record GameInstance
     public string? CustomIconPath { get; init; }
 
     /// <summary>
-    /// Gets the Steam header or custom banner image URL/path for this game instance.
+    /// Custom emulator username override for ReFix and OnlineFix (.ini configuration).
     /// </summary>
-    public string HeaderImageUrl => !string.IsNullOrWhiteSpace(CustomBannerPath)
-        ? CustomBannerPath
-        : (!string.IsNullOrWhiteSpace(Metadata?.HeaderImageUrl)
-            ? Metadata.HeaderImageUrl
-            : (AppId > 0 ? $"https://cdn.cloudflare.steamstatic.com/steam/apps/{AppId}/header.jpg" : string.Empty));
+    public string? CustomEmulatorUsername { get; init; }
+
+    /// <summary>
+    /// Custom emulator SteamID64 override for ReFix and OnlineFix (.ini configuration).
+    /// </summary>
+    public string? CustomEmulatorSteamId { get; init; }
+
+    /// <summary>
+    /// Gets the Steam header or custom grid banner image URL/path for this game instance in the library grid.
+    /// Prefers CustomGridBannerPath or local header artwork, then falls back to Steam metadata.
+    /// Does not depend on CustomBannerPath (Instance Banner).
+    /// </summary>
+    public string HeaderImageUrl
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(CustomGridBannerPath))
+                return CustomGridBannerPath;
+
+            var localHeader = BlueStar.Core.Helpers.InstanceArtworkService.GetArtworkFilePath(Id, SteamArtworkType.Header);
+            if (!string.IsNullOrWhiteSpace(localHeader) && System.IO.File.Exists(localHeader))
+                return localHeader;
+
+            return !string.IsNullOrWhiteSpace(Metadata?.HeaderImageUrl)
+                ? Metadata.HeaderImageUrl
+                : (AppId > 0 ? $"https://cdn.cloudflare.steamstatic.com/steam/apps/{AppId}/header.jpg" : string.Empty);
+        }
+    }
 
     /// <summary>
     /// Gets the logo or icon to display for this instance in the sidebar recent navigation tabs.
-    /// Prefers CustomIconPath, then falls back to HeaderImageUrl.
+    /// Prefers CustomIconPath, then local instance_logo / icon artwork, then falls back to HeaderImageUrl.
     /// </summary>
-    public string NavLogoUrl => !string.IsNullOrWhiteSpace(CustomIconPath)
-        ? CustomIconPath
-        : HeaderImageUrl;
+    public string NavLogoUrl
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(CustomIconPath))
+                return CustomIconPath;
+
+            var localLogo = BlueStar.Core.Helpers.InstanceArtworkService.GetArtworkFilePath(Id, SteamArtworkType.InstanceLogo)
+                         ?? BlueStar.Core.Helpers.InstanceArtworkService.GetArtworkFilePath(Id, SteamArtworkType.Icon);
+            if (!string.IsNullOrWhiteSpace(localLogo) && System.IO.File.Exists(localLogo))
+                return localLogo;
+
+            return HeaderImageUrl;
+        }
+    }
 }
 
