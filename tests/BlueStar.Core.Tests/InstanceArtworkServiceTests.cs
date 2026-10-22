@@ -177,4 +177,82 @@ public class InstanceArtworkServiceTests
             }
         }
     }
+
+    [Fact]
+    public void DeleteArtworkFiles_RemovesAllMatchingFilesAndFiresEvent()
+    {
+        var testInstanceId = Guid.NewGuid();
+        var dir = InstanceArtworkService.GetArtworkDirectory(testInstanceId);
+        bool eventFired = false;
+        EventHandler<(Guid InstanceId, SteamArtworkType Type)> handler = (s, e) =>
+        {
+            if (e.InstanceId == testInstanceId && e.Type == SteamArtworkType.InstanceLogo)
+            {
+                eventFired = true;
+            }
+        };
+
+        InstanceArtworkService.ArtworkChanged += handler;
+
+        try
+        {
+            var p1 = Path.Combine(dir, "instance_logo.png");
+            var p2 = Path.Combine(dir, "instance_logo.ico");
+            var p3 = Path.Combine(dir, "instance_banner.png");
+            File.WriteAllText(p1, "png data");
+            File.WriteAllText(p2, "ico data");
+            File.WriteAllText(p3, "banner data");
+
+            var success = InstanceArtworkService.DeleteArtworkFiles(testInstanceId, SteamArtworkType.InstanceLogo);
+            success.Should().BeTrue();
+            File.Exists(p1).Should().BeFalse();
+            File.Exists(p2).Should().BeFalse();
+            File.Exists(p3).Should().BeTrue(); // other slot untouched
+            eventFired.Should().BeTrue();
+        }
+        finally
+        {
+            InstanceArtworkService.ArtworkChanged -= handler;
+            var rootDir = Path.Combine(InstanceArtworkService.GetInstancesRootPath(), testInstanceId.ToString());
+            if (Directory.Exists(rootDir))
+            {
+                try { Directory.Delete(rootDir, recursive: true); } catch { }
+            }
+        }
+    }
+
+    [Fact]
+    public void EnsureIcoPath_ResolvesSiblingOrConverts()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "bluestar_ico_test_" + Guid.NewGuid());
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var pngFile = Path.Combine(tempDir, "game.png");
+            var icoFile = Path.Combine(tempDir, "game.ico");
+            File.WriteAllText(pngFile, "png content");
+
+            // 1. If sibling ico exists, return sibling
+            File.WriteAllText(icoFile, "ico content");
+            var resolved = ShortcutHelper.EnsureIcoPath(pngFile);
+            resolved.Should().Be(icoFile);
+
+            // 2. If no sibling, but converter provided, converts and creates sibling
+            File.Delete(icoFile);
+            ShortcutHelper.ImageToIcoConverter = (b) => Encoding.UTF8.GetBytes("converted_ico");
+            var resolved2 = ShortcutHelper.EnsureIcoPath(pngFile);
+            resolved2.Should().Be(icoFile);
+            File.Exists(icoFile).Should().BeTrue();
+            File.ReadAllText(icoFile).Should().Be("converted_ico");
+        }
+        finally
+        {
+            ShortcutHelper.ImageToIcoConverter = null;
+            if (Directory.Exists(tempDir))
+            {
+                try { Directory.Delete(tempDir, recursive: true); } catch { }
+            }
+        }
+    }
 }

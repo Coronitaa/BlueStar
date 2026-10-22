@@ -111,7 +111,14 @@ public static class ImageCropHelper
             using var outStream = new MemoryStream();
             encoder.Save(outStream);
 
-            return (outStream.ToArray(), cropW, cropH, outExt);
+            var resultData = outStream.ToArray();
+            if (ext == ".ico")
+            {
+                resultData = IconConversionHelper.ConvertToWindowsIco(resultData);
+                outExt = ".ico";
+            }
+
+            return (resultData, cropW, cropH, outExt);
         }
         catch
         {

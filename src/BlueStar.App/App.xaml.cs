@@ -318,6 +318,11 @@ public partial class App : Application
             Services.GetService<ISteamStatusService>(),
             Services.GetService<IPrerequisiteService>());
 
+        // Wire artwork and shortcut platform services
+        BlueStar.Core.Helpers.InstanceArtworkService.ExecutableIconExtractor = ViewModels.InstanceDetailViewModel.ExtractIconFromExecutable;
+        BlueStar.Core.Helpers.InstanceArtworkService.ImageToIcoConverter = Helpers.IconConversionHelper.ConvertToWindowsIco;
+        BlueStar.Core.Helpers.ShortcutHelper.ImageToIcoConverter = Helpers.IconConversionHelper.ConvertToWindowsIco;
+
         // Wire UI dispatchers
         BlueStar.Infrastructure.Services.NotificationService.UiDispatcher = action =>
         {

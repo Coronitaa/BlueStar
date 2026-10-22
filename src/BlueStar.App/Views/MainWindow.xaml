@@ -202,7 +202,7 @@
                                                     <!-- Centered Image (strictly clipped to rounded border) -->
                                                     <Border CornerRadius="8">
                                                         <Border.Background>
-                                                            <ImageBrush ImageSource="{Binding NavLogoUrl}" Stretch="UniformToFill"/>
+                                                            <ImageBrush ImageSource="{Binding NavLogoUrl, Converter={StaticResource CachedImageConverter}}" Stretch="UniformToFill"/>
                                                         </Border.Background>
                                                     </Border>
                                                 </Grid>

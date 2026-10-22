@@ -54,6 +54,54 @@ public static class ShortcutHelper
     ];
 
     /// <summary>
+    /// Optional platform-specific delegate to convert image bytes (PNG, JPG, BMP, etc.) into a valid multi-size Windows .ico container.
+    /// Signature: (inputImageBytes) -> icoBytes
+    /// </summary>
+    public static Func<byte[], byte[]>? ImageToIcoConverter { get; set; }
+
+    /// <summary>
+    /// Ensures that the provided icon path resolves to a valid .ico file. If the path points to
+    /// an image format that Windows shortcuts cannot use (such as .png or .jpg), attempts to find a
+    /// sibling .ico file or convert the image to .ico using ImageToIcoConverter.
+    /// </summary>
+    public static string? EnsureIcoPath(string? candidatePath)
+    {
+        if (string.IsNullOrWhiteSpace(candidatePath) || !File.Exists(candidatePath))
+            return candidatePath;
+
+        if (candidatePath.EndsWith(".ico", StringComparison.OrdinalIgnoreCase))
+            return candidatePath;
+
+        var dir = Path.GetDirectoryName(candidatePath) ?? "";
+        var nameNoExt = Path.GetFileNameWithoutExtension(candidatePath);
+
+        var siblingIco = Path.Combine(dir, $"{nameNoExt}.ico");
+        if (File.Exists(siblingIco))
+            return siblingIco;
+
+        var slotIco = Path.Combine(dir, "icon.ico");
+        if (File.Exists(slotIco))
+            return slotIco;
+
+        if (ImageToIcoConverter != null)
+        {
+            try
+            {
+                var rawBytes = File.ReadAllBytes(candidatePath);
+                var icoBytes = ImageToIcoConverter(rawBytes);
+                if (icoBytes != null && icoBytes.Length > 0)
+                {
+                    File.WriteAllBytes(siblingIco, icoBytes);
+                    return siblingIco;
+                }
+            }
+            catch { }
+        }
+
+        return candidatePath;
+    }
+
+    /// <summary>
     /// Computes the IEEE 802.3 CRC32 hash of a UTF-8 string.
     /// </summary>
     public static uint ComputeCrc32(string input)
@@ -689,6 +737,7 @@ public static class ShortcutHelper
         Guid? instanceId = null,
         CancellationToken ct = default)
     {
+        iconPath = EnsureIcoPath(iconPath);
         var steamPath = GetSteamPath();
         if (string.IsNullOrWhiteSpace(steamPath))
         {
@@ -934,6 +983,8 @@ public static class ShortcutHelper
         var created = new List<string>();
         var errors = new List<string>();
 
+        iconPath = EnsureIcoPath(iconPath);
+
         if (createDesktop)
         {
             try
@@ -1100,6 +1151,7 @@ public static class ShortcutHelper
             if (!string.IsNullOrWhiteSpace(arguments))
                 shortcut.Arguments = arguments;
 
+            iconPath = EnsureIcoPath(iconPath);
             if (!string.IsNullOrWhiteSpace(iconPath) && File.Exists(iconPath))
             {
                 shortcut.IconLocation = $"{iconPath},0";

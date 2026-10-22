@@ -8122,9 +8122,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         ShortcutStatusMessage = "⏳ Creating shortcuts & downloading artwork...";
         IsShortcutStatusSuccess = true;
 
-        var effectiveIcon = Instance?.CustomIconPath
-                         ?? InstanceArtworkService.GetArtworkFilePath(Instance?.Id ?? Guid.Empty, SteamArtworkType.Icon)
-                         ?? InstanceArtworkService.GetArtworkFilePath(Instance?.Id ?? Guid.Empty, SteamArtworkType.InstanceLogo);
+        var effectiveIcon = InstanceArtworkService.GetArtworkFilePath(Instance?.Id ?? Guid.Empty, SteamArtworkType.Icon)
+                         ?? InstanceArtworkService.GetArtworkFilePath(Instance?.Id ?? Guid.Empty, SteamArtworkType.InstanceLogo)
+                         ?? Instance?.CustomIconPath;
+        effectiveIcon = ShortcutHelper.EnsureIcoPath(effectiveIcon);
 
         var effectiveHeader = Instance?.CustomBannerPath
                            ?? Instance?.HeaderImageUrl
@@ -9934,12 +9935,19 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }
 
         var ext = Path.GetExtension(filePath);
-        double targetRatio = BlueStar.App.Helpers.ImageCropHelper.GetTargetAspectRatio(type);
-        if (targetRatio > 0)
+        if (type == SteamArtworkType.Icon && Helpers.IconConversionHelper.IsValidIco(fileBytes))
         {
-            var cropped = BlueStar.App.Helpers.ImageCropHelper.CropToAspectRatio(fileBytes, targetRatio, ext);
-            fileBytes = cropped.Data;
-            ext = cropped.Extension;
+            ext = ".ico";
+        }
+        else
+        {
+            double targetRatio = BlueStar.App.Helpers.ImageCropHelper.GetTargetAspectRatio(type);
+            if (targetRatio > 0)
+            {
+                var cropped = BlueStar.App.Helpers.ImageCropHelper.CropToAspectRatio(fileBytes, targetRatio, ext);
+                fileBytes = cropped.Data;
+                ext = cropped.Extension;
+            }
         }
 
         var (w, h) = InstanceArtworkService.GetImageDimensions(fileBytes);
@@ -10016,6 +10024,12 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             var targetExe = !string.IsNullOrWhiteSpace(Instance.ExecutablePath) ? Instance.ExecutablePath : SelectedExecutable;
             var shortcutName = !string.IsNullOrWhiteSpace(ShortcutName) ? ShortcutName : Instance.Name;
 
+            if (type == SteamArtworkType.Icon)
+            {
+                data = Helpers.IconConversionHelper.ConvertToWindowsIco(data);
+                extension = ".ico";
+            }
+
             await InstanceArtworkService.SaveCustomArtworkAsync(
                 Instance.Id,
                 type,
@@ -10028,10 +10042,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             var savedPath = InstanceArtworkService.GetArtworkFilePath(Instance.Id, type);
 
             ImageCacheService.Instance.Invalidate(savedPath, Instance.AppId);
-            if (!string.IsNullOrWhiteSpace(Instance.HeaderImageUrl))
-            {
-                ImageCacheService.Instance.Invalidate(Instance.HeaderImageUrl, Instance.AppId);
-            }
+            ImageCacheService.Instance.Invalidate(savedPath, 0);
 
             if (type == SteamArtworkType.InstanceBanner)
             {
@@ -10057,23 +10068,46 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                     await _instanceManager.UpdateAsync(Instance).ConfigureAwait(true);
                 }
             }
-
-            if (App.Current?.Dispatcher != null)
-            {
-                await App.Current.Dispatcher.InvokeAsync(() =>
-                {
-                    var slot = GetSlotViewModel(type);
-                    slot?.LoadFromBytes(data, savedPath);
-                    OnPropertyChanged(nameof(CoverBannerImage));
-                    ArtworkStatusMessage = $"✅ {GetArtworkSlotName(type)} guardado y sincronizado.";
-                });
-            }
             else
+            {
+                if (_instanceManager != null)
+                {
+                    await _instanceManager.UpdateAsync(Instance).ConfigureAwait(true);
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(Instance.HeaderImageUrl))
+            {
+                ImageCacheService.Instance.Invalidate(Instance.HeaderImageUrl, Instance.AppId);
+                ImageCacheService.Instance.Invalidate(Instance.HeaderImageUrl, 0);
+            }
+            if (!string.IsNullOrWhiteSpace(Instance.CapsuleImageUrl))
+            {
+                ImageCacheService.Instance.Invalidate(Instance.CapsuleImageUrl, Instance.AppId);
+                ImageCacheService.Instance.Invalidate(Instance.CapsuleImageUrl, 0);
+            }
+            if (!string.IsNullOrWhiteSpace(Instance.NavLogoUrl))
+            {
+                ImageCacheService.Instance.Invalidate(Instance.NavLogoUrl, Instance.AppId);
+                ImageCacheService.Instance.Invalidate(Instance.NavLogoUrl, 0);
+            }
+
+            Action updateSlots = () =>
             {
                 var slot = GetSlotViewModel(type);
                 slot?.LoadFromBytes(data, savedPath);
+                OnPropertyChanged(nameof(Instance));
                 OnPropertyChanged(nameof(CoverBannerImage));
                 ArtworkStatusMessage = $"✅ {GetArtworkSlotName(type)} guardado y sincronizado.";
+            };
+
+            if (App.Current?.Dispatcher != null)
+            {
+                await App.Current.Dispatcher.InvokeAsync(updateSlots);
+            }
+            else
+            {
+                updateSlots();
             }
 
             _notificationService?.ShowSuccess("Artwork Actualizado", $"{GetArtworkSlotName(type)} guardado y sincronizado.");
@@ -10092,105 +10126,66 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
         try
         {
-            var existingFile = InstanceArtworkService.GetArtworkFilePath(Instance.Id, type);
-            if (!string.IsNullOrWhiteSpace(existingFile) && File.Exists(existingFile))
+            var dir = InstanceArtworkService.GetArtworkDirectory(Instance.Id);
+            var baseName = InstanceArtworkService.GetCanonicalFileName(type);
+            var filesToDelete = Directory.Exists(dir) ? Directory.GetFiles(dir, $"{baseName}.*") : [];
+
+            foreach (var f in filesToDelete)
             {
-                try { File.Delete(existingFile); } catch { }
+                ImageCacheService.Instance.Invalidate(f, Instance.AppId);
+                ImageCacheService.Instance.Invalidate(f, 0);
             }
 
-            ImageCacheService.Instance.Invalidate(existingFile, Instance.AppId);
-            if (!string.IsNullOrWhiteSpace(Instance.HeaderImageUrl))
-            {
-                ImageCacheService.Instance.Invalidate(Instance.HeaderImageUrl, Instance.AppId);
-            }
+            // Delete all file candidates on disk with retry and GC
+            InstanceArtworkService.DeleteArtworkFiles(Instance.Id, type);
 
             if (type == SteamArtworkType.InstanceBanner)
             {
-                var bannerFile1 = InstanceArtworkService.GetArtworkFilePath(Instance.Id, SteamArtworkType.InstanceBanner);
-                if (!string.IsNullOrWhiteSpace(bannerFile1) && File.Exists(bannerFile1))
-                {
-                    try { File.Delete(bannerFile1); } catch { }
-                }
-
                 Instance = Instance with { CustomBannerPath = null };
-                if (_instanceManager != null)
-                {
-                    await _instanceManager.UpdateAsync(Instance).ConfigureAwait(true);
-                }
-
-                Action updateSlots = () =>
-                {
-                    InstanceBannerArtwork?.LoadFromFile(null);
-                    OnPropertyChanged(nameof(CoverBannerImage));
-                };
-
-                if (App.Current?.Dispatcher != null)
-                    await App.Current.Dispatcher.InvokeAsync(updateSlots);
-                else
-                    updateSlots();
             }
             else if (type == SteamArtworkType.Header)
             {
-                var headerFile1 = InstanceArtworkService.GetArtworkFilePath(Instance.Id, SteamArtworkType.Header);
-                if (!string.IsNullOrWhiteSpace(headerFile1) && File.Exists(headerFile1))
-                {
-                    try { File.Delete(headerFile1); } catch { }
-                }
-
                 Instance = Instance with { CustomGridBannerPath = null };
-                if (_instanceManager != null)
-                {
-                    await _instanceManager.UpdateAsync(Instance).ConfigureAwait(true);
-                }
-
-                Action updateSlots = () =>
-                {
-                    HeaderArtwork?.LoadFromFile(null);
-                    OnPropertyChanged(nameof(CoverBannerImage));
-                };
-
-                if (App.Current?.Dispatcher != null)
-                    await App.Current.Dispatcher.InvokeAsync(updateSlots);
-                else
-                    updateSlots();
             }
             else if (type == SteamArtworkType.InstanceLogo)
             {
-                var logoFile1 = InstanceArtworkService.GetArtworkFilePath(Instance.Id, SteamArtworkType.InstanceLogo);
-                if (!string.IsNullOrWhiteSpace(logoFile1) && File.Exists(logoFile1))
-                {
-                    try { File.Delete(logoFile1); } catch { }
-                }
-
                 Instance = Instance with { CustomIconPath = null };
-                if (_instanceManager != null)
-                {
-                    await _instanceManager.UpdateAsync(Instance).ConfigureAwait(true);
-                }
-
-                Action updateSlots = () =>
-                {
-                    InstanceLogoArtwork?.LoadFromFile(null);
-                };
-
-                if (App.Current?.Dispatcher != null)
-                    await App.Current.Dispatcher.InvokeAsync(updateSlots);
-                else
-                    updateSlots();
             }
-            else
+
+            if (!string.IsNullOrWhiteSpace(Instance.HeaderImageUrl))
             {
-                Action updateSlots = () =>
-                {
-                    var slot = GetSlotViewModel(type);
-                    slot?.LoadFromFile(null);
-                };
-
-                if (App.Current?.Dispatcher != null)
-                    await App.Current.Dispatcher.InvokeAsync(updateSlots);
-                else
-                    updateSlots();
+                ImageCacheService.Instance.Invalidate(Instance.HeaderImageUrl, Instance.AppId);
+                ImageCacheService.Instance.Invalidate(Instance.HeaderImageUrl, 0);
             }
+            if (!string.IsNullOrWhiteSpace(Instance.CapsuleImageUrl))
+            {
+                ImageCacheService.Instance.Invalidate(Instance.CapsuleImageUrl, Instance.AppId);
+                ImageCacheService.Instance.Invalidate(Instance.CapsuleImageUrl, 0);
+            }
+            if (!string.IsNullOrWhiteSpace(Instance.NavLogoUrl))
+            {
+                ImageCacheService.Instance.Invalidate(Instance.NavLogoUrl, Instance.AppId);
+                ImageCacheService.Instance.Invalidate(Instance.NavLogoUrl, 0);
+            }
+
+            if (_instanceManager != null)
+            {
+                await _instanceManager.UpdateAsync(Instance).ConfigureAwait(true);
+            }
+
+            Action updateSlots = () =>
+            {
+                var slot = GetSlotViewModel(type);
+                slot?.LoadFromFile(null);
+
+                OnPropertyChanged(nameof(Instance));
+                OnPropertyChanged(nameof(CoverBannerImage));
+            };
+
+            if (App.Current?.Dispatcher != null)
+                await App.Current.Dispatcher.InvokeAsync(updateSlots);
+            else
+                updateSlots();
 
             ArtworkStatusMessage = $"🗑 {GetArtworkSlotName(type)} eliminado.";
             _notificationService?.ShowInfo("Artwork Quitado", $"Se quitó el artwork de {GetArtworkSlotName(type)}.");

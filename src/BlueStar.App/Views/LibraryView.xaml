@@ -2277,7 +2277,7 @@
                                                 <Border Grid.Column="0" Width="44" Height="26" CornerRadius="4" Background="#161822" ClipToBounds="True">
                                                     <Grid>
                                                         <TextBlock Text="🎮" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                        <Image Source="{Binding Instance.HeaderImageUrl}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                        <Image Source="{Binding Instance.HeaderImageUrl, Converter={StaticResource CachedImageConverter}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                                                     </Grid>
                                                 </Border>
 
