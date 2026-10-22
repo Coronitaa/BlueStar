@@ -147,5 +147,139 @@ public class DownloadQueueManagerTests
         downloadCallCount.Should().Be(2);
         queueManager.HistoryLog.Last(h => h.Instance?.Id == instanceId).Status.Should().Be(DownloadJobStatus.Completed);
     }
+
+    [Fact]
+    public void HistoryPersistence_SavesAndLoadsHistory_WithInstanceResolution()
+    {
+        var instanceId = Guid.NewGuid();
+        var instance = new GameInstance
+        {
+            Id = instanceId,
+            Name = "History Test Game",
+            AppId = 4000,
+            InstallPath = @"C:\Games\HistoryTest",
+            Status = InstanceStatus.Ready
+        };
+
+        var mockInstanceManager = new Mock<IInstanceManager>();
+        mockInstanceManager
+            .Setup(m => m.GetByIdAsync(instanceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(instance);
+
+        var mockDownloadProvider = new Mock<IDownloadProvider>();
+
+        var historyFilePath = Path.Combine(
+            Path.GetTempPath(),
+            $"bluestar_history_test_{Guid.NewGuid():N}.json");
+
+        try
+        {
+            if (File.Exists(historyFilePath)) File.Delete(historyFilePath);
+
+            var queueManager = new DownloadQueueManager(
+                mockDownloadProvider.Object,
+                NullLogger<DownloadQueueManager>.Instance,
+                mockInstanceManager.Object,
+                historyFilePath: historyFilePath);
+
+            queueManager.HistoryLog.Add(new DownloadLogEntry
+            {
+                GameName = "History Test Game " + instanceId,
+                Status = DownloadJobStatus.Completed,
+                Message = "Installed nicely",
+                InstanceId = instanceId,
+                Instance = instance,
+                Timestamp = DateTimeOffset.UtcNow
+            });
+
+            // Save manually to test serialization
+            queueManager.SaveHistory();
+
+            File.Exists(historyFilePath).Should().BeTrue();
+
+            // Create new queue manager which loads history on construction
+            var newQueueManager = new DownloadQueueManager(
+                mockDownloadProvider.Object,
+                NullLogger<DownloadQueueManager>.Instance,
+                mockInstanceManager.Object,
+                historyFilePath: historyFilePath);
+
+            newQueueManager.HistoryLog.Should().NotBeEmpty();
+            var entry = newQueueManager.HistoryLog.First(e => e.GameName == "History Test Game " + instanceId);
+            entry.Status.Should().Be(DownloadJobStatus.Completed);
+            entry.InstanceId.Should().Be(instanceId);
+            entry.Instance.Should().NotBeNull();
+            entry.Instance!.Name.Should().Be("History Test Game");
+        }
+        finally
+        {
+            try { if (File.Exists(historyFilePath)) File.Delete(historyFilePath); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task CancelAsync_WhenUpdateWasInProgress_RevertsInstanceAndBuildHistory()
+    {
+        var instanceId = Guid.NewGuid();
+        var oldManifestId = 111111UL;
+        var newManifestId = 999999UL;
+
+        var prevSnapshot = new InstalledBuildSnapshot
+        {
+            BuildId = "PreviousBuild",
+            BranchName = "public",
+            ManifestMap = new Dictionary<uint, ulong> { [501] = oldManifestId }
+        };
+
+        var instanceBeingUpdated = new GameInstance
+        {
+            Id = instanceId,
+            Name = "Updating Game",
+            AppId = 500,
+            InstallPath = @"C:\Games\UpdatingGame",
+            Status = InstanceStatus.Downloading,
+            AwaitingPostUpdateRedeploy = true,
+            Depots = [new DepotInfo { DepotId = 501, ManifestId = newManifestId, IsDownloaded = false }],
+            InstalledManifestMap = new Dictionary<uint, ulong> { [501] = newManifestId },
+            BuildHistory = [prevSnapshot]
+        };
+
+        GameInstance? updatedInstance = null;
+
+        var mockInstanceManager = new Mock<IInstanceManager>();
+        mockInstanceManager
+            .Setup(m => m.GetByIdAsync(instanceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(instanceBeingUpdated);
+
+        mockInstanceManager
+            .Setup(m => m.UpdateAsync(It.IsAny<GameInstance>(), It.IsAny<CancellationToken>()))
+            .Callback<GameInstance, CancellationToken>((inst, _) => updatedInstance = inst)
+            .ReturnsAsync((GameInstance inst, CancellationToken _) => inst);
+
+        var mockDownloadProvider = new Mock<IDownloadProvider>();
+        mockDownloadProvider
+            .Setup(p => p.CancelAsync(instanceId))
+            .Returns(Task.CompletedTask);
+
+        var queueManager = new DownloadQueueManager(
+            mockDownloadProvider.Object,
+            NullLogger<DownloadQueueManager>.Instance,
+            mockInstanceManager.Object);
+
+        // Cancel
+        await queueManager.CancelAsync(instanceId);
+
+        // Allow async revert task to complete
+        await Task.Delay(300);
+
+        updatedInstance.Should().NotBeNull();
+        updatedInstance!.Status.Should().Be(InstanceStatus.Ready);
+        updatedInstance.AwaitingPostUpdateRedeploy.Should().BeFalse();
+        updatedInstance.Depots.Should().HaveCount(1);
+        updatedInstance.Depots[0].ManifestId.Should().Be(oldManifestId);
+        updatedInstance.Depots[0].IsDownloaded.Should().BeTrue();
+        updatedInstance.InstalledManifestMap[501].Should().Be(oldManifestId);
+        updatedInstance.BuildHistory.Should().BeEmpty(); // unapplied BuildHistory[0] removed!
+    }
 }
 

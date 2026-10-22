@@ -8,7 +8,7 @@
         Title="BlueStar"
         Icon="pack://application:,,,/BlueStar;component/Assets/bluestar.ico"
         Width="1280" Height="840"
-        MinWidth="860" MinHeight="580"
+        MinWidth="860" MinHeight="630"
         Background="{StaticResource BaseBackgroundBrush}"
         Foreground="{StaticResource PrimaryTextBrush}"
         FontFamily="{StaticResource MainFontFamily}"
@@ -202,7 +202,7 @@
                                                     <!-- Centered Image (strictly clipped to rounded border) -->
                                                     <Border CornerRadius="8">
                                                         <Border.Background>
-                                                            <ImageBrush ImageSource="{Binding HeaderImageUrl}" Stretch="UniformToFill"/>
+                                                            <ImageBrush ImageSource="{Binding NavLogoUrl}" Stretch="UniformToFill"/>
                                                         </Border.Background>
                                                     </Border>
                                                 </Grid>

@@ -38,6 +38,7 @@ public partial class HomeViewModel : ObservableObject, IDisposable
     private readonly BlueStar.Infrastructure.Storage.AppSettingsService? _settingsService;
     private readonly IBackgroundTaskService? _backgroundTaskService;
     private readonly ISteamCatalogSearchService? _catalogSearch;
+    private readonly ILocalCatalogRepository? _localRepo;
     private readonly ILogger<HomeViewModel> _logger;
     private readonly CancellationTokenSource _cts = new();
     private bool _isDisposed;
@@ -234,6 +235,72 @@ public partial class HomeViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
+    /// Dynamically updates the detail panel target when the user navigates inside the embedded store page.
+    /// </summary>
+    public async Task UpdateDetailTargetFromWebAsync(uint appId, string suggestedName, string currentUrl)
+    {
+        if (appId == 0) return;
+
+        SearchResult? resolved = null;
+        if (_localRepo != null)
+        {
+            try
+            {
+                var cat = await _localRepo.GetByAppIdAsync(appId, _cts.Token).ConfigureAwait(true);
+                if (cat != null)
+                {
+                    resolved = new SearchResult
+                    {
+                        AppId = cat.AppId,
+                        Name = !string.IsNullOrWhiteSpace(cat.Name) ? cat.Name : suggestedName,
+                        StorePageUrl = currentUrl,
+                        HeaderImageUrl = cat.HeaderImageUrl ?? $"https://cdn.cloudflare.steamstatic.com/steam/apps/{appId}/header.jpg",
+                        ReleaseDateText = cat.ReleaseDateText,
+                        PriceText = cat.PriceText,
+                        PriceCents = cat.PriceCents,
+                        ReviewPercent = cat.ReviewPercent,
+                        ReviewSummary = cat.ReviewPercent.HasValue ? BlueStar.Core.Helpers.RatingEngine.GetReviewSummary(cat.ReviewPercent.Value, cat.ReviewCount ?? 100) : null,
+                        HasWindows = cat.HasWindows,
+                        HasMac = cat.HasMac,
+                        HasLinux = cat.HasLinux,
+                        IsNsfw = cat.IsNsfw,
+                        HasDrm = cat.HasDrm,
+                        DrmName = cat.DrmName,
+                        HasAntiCheat = cat.HasAntiCheat,
+                        AntiCheatName = cat.AntiCheatName,
+                        HasExternalLauncher = cat.HasExternalLauncher,
+                        LauncherName = cat.LauncherName,
+                        HasAccount = cat.HasAccount,
+                        AccountName = cat.AccountName,
+                        HasEula = cat.HasEula,
+                        EulaName = cat.EulaName,
+                        DlcCount = cat.DlcCount,
+                        TagIds = cat.TagIds
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to resolve app {AppId} from local catalog in Home", appId);
+            }
+        }
+
+        if (resolved is null)
+        {
+            resolved = new SearchResult
+            {
+                AppId = appId,
+                Name = suggestedName,
+                StorePageUrl = currentUrl,
+                HeaderImageUrl = $"https://cdn.cloudflare.steamstatic.com/steam/apps/{appId}/header.jpg"
+            };
+        }
+
+        DetailTarget = resolved;
+        DetailUrl = currentUrl;
+    }
+
+    /// <summary>
     /// Hands the open title over to Explore, which applies its featured tags as filters. Home has
     /// no filter panel of its own, so "similar games" belongs on the tab that does.
     /// </summary>
@@ -267,7 +334,8 @@ public partial class HomeViewModel : ObservableObject, IDisposable
         INotificationService? notificationService = null,
         BlueStar.Infrastructure.Storage.AppSettingsService? settingsService = null,
         IBackgroundTaskService? backgroundTaskService = null,
-        ISteamCatalogSearchService? catalogSearch = null)
+        ISteamCatalogSearchService? catalogSearch = null,
+        ILocalCatalogRepository? localRepo = null)
     {
         _instanceManager = instanceManager;
         _downloadQueueManager = downloadQueueManager;
@@ -282,6 +350,7 @@ public partial class HomeViewModel : ObservableObject, IDisposable
         _settingsService = settingsService;
         _backgroundTaskService = backgroundTaskService;
         _catalogSearch = catalogSearch;
+        _localRepo = localRepo;
 
         if (_settingsService != null)
         {
@@ -304,9 +373,20 @@ public partial class HomeViewModel : ObservableObject, IDisposable
             UpdateActiveDownload();
         };
         _downloadQueueManager.Queue.CollectionChanged += _queueCollectionChangedHandler;
+        _instanceManager.InstancesChanged += OnInstancesChanged;
 
         _ = LoadDashboardDataAsync();
         _ = LoadCategoryFeedsAsync();
+    }
+
+    private void OnInstancesChanged(object? sender, EventArgs e)
+    {
+        if (_isDisposed) return;
+        App.Current?.Dispatcher?.InvokeAsync(async () =>
+        {
+            if (_isDisposed) return;
+            await LoadDashboardDataAsync().ConfigureAwait(true);
+        });
     }
 
     /// <summary>
@@ -1826,5 +1906,6 @@ public partial class HomeViewModel : ObservableObject, IDisposable
         }
 
         _downloadQueueManager.Queue.CollectionChanged -= _queueCollectionChangedHandler;
+        _instanceManager.InstancesChanged -= OnInstancesChanged;
     }
 }

@@ -83,3 +83,5 @@ settings.json
 *.env
 *.env.*
 *.token
+
+graphify-out/

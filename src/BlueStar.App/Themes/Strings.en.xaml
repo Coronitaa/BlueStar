@@ -45,6 +45,7 @@
     <sys:String x:Key="String_Reset">Reset</sys:String>
     <sys:String x:Key="String_RetryAction">Retry</sys:String>
     <sys:String x:Key="String_CancelAction">Cancel</sys:String>
+    <sys:String x:Key="String_Canceling">Canceling...</sys:String>
     <sys:String x:Key="String_RemoveAction">Remove</sys:String>
     <sys:String x:Key="String_StopAction">Stop</sys:String>
     <sys:String x:Key="String_OpenFolder">Open Folder</sys:String>
@@ -428,7 +429,8 @@
     <sys:String x:Key="String_FeedbackFollowupDesc">Feedback recorded. Would you like to uninstall this emulator and choose another option?</sys:String>
     <sys:String x:Key="String_FeedbackCancelKeep">Cancel / Keep</sys:String>
     <sys:String x:Key="String_FeedbackUninstallChange">Uninstall &amp; Change</sys:String>
-    <sys:String x:Key="String_UpdateAvailableDepotBox">Update Available on DepotBox</sys:String>
+    <sys:String x:Key="String_UpdateAvailableDepotBox">An update is available for download</sys:String>
+    <sys:String x:Key="String_UpdateAvailableDownloadTooltip">An update is available for download</sys:String>
     <sys:String x:Key="String_Import">Import</sys:String>
     <sys:String x:Key="String_CheckReqsSetting">Check automatically when starting BlueStar</sys:String>
     <sys:String x:Key="String_DeleteModalTitle">Delete Instance</sys:String>
@@ -965,6 +967,10 @@
     <sys:String x:Key="String_Facet_Language_hindi">Hindi</sys:String>
     <sys:String x:Key="String_Facet_Language_catalan">Catalan</sys:String>
     <sys:String x:Key="String_HiddenByFilters">hidden by filters</sys:String>
+    <x:Static Member="sys:String.Empty" x:Key="String_HiddenByPreferencesPrefix"/>
+    <sys:String x:Key="String_HiddenByPreferencesMiddle" xml:space="preserve"> games were hidden according to your </sys:String>
+    <sys:String x:Key="String_HiddenByPreferencesLink">preferences</sys:String>
+    <x:Static Member="sys:String.Empty" x:Key="String_HiddenByPreferencesSuffix"/>
     <sys:String x:Key="String_LoadingMore">Loading more games…</sys:String>
     <sys:String x:Key="String_InvertOrder">Invert the order</sys:String>
     <sys:String x:Key="String_ShowList">Show</sys:String>
@@ -1026,4 +1032,36 @@
     <sys:String x:Key="String_Apply">Apply</sys:String>
     <sys:String x:Key="String_Configure">Configure</sys:String>
     <sys:String x:Key="String_ConfigureReFixTooltip">Configure ReFix Version and Update Settings</sys:String>
+
+    <!-- ═══ STEAM SHORTCUT & GRID ARTWORKS SECTION ═══ -->
+    <sys:String x:Key="String_SteamArtworksSectionTitle">Steam Shortcut &amp; Grid Artworks</sys:String>
+    <sys:String x:Key="String_SteamArtworksSectionDesc">Customize the artworks displayed by Steam for this game shortcut in your library. Click any slot or drag and drop an image to replace it.</sys:String>
+    <sys:String x:Key="String_ArtworkRedownloadBtn">Restore from Steam</sys:String>
+    <sys:String x:Key="String_ArtworkOpenFolderBtn">Open Folder</sys:String>
+    <sys:String x:Key="String_ArtworkClickOrDropHint">Click or drag an image</sys:String>
+    <sys:String x:Key="String_ArtworkReplaceLabel">Replace image</sys:String>
+    <sys:String x:Key="String_ArtworkDropHereHint">Drop image here</sys:String>
+    <sys:String x:Key="String_ArtworkClearTooltip">Remove this artwork</sys:String>
+    <sys:String x:Key="String_ArtworkVerticalCapsuleTitle">Vertical Capsule (Poster)</sys:String>
+    <sys:String x:Key="String_ArtworkVerticalCapsuleDesc">600 × 900 px (2:3)</sys:String>
+    <sys:String x:Key="String_ArtworkHeroTitle">Hero Banner</sys:String>
+    <sys:String x:Key="String_ArtworkHeroDesc">1920 × 620 px (~3.1:1)</sys:String>
+    <sys:String x:Key="String_ArtworkLogoTitle">Logo</sys:String>
+    <sys:String x:Key="String_ArtworkLogoDesc">Transparent PNG</sys:String>
+    <sys:String x:Key="String_ArtworkHeaderTitle">Horizontal Header (Grid)</sys:String>
+    <sys:String x:Key="String_ArtworkHeaderDesc">460 × 215 / 920 × 430 px</sys:String>
+    <sys:String x:Key="String_ArtworkIconTitle">Game Icon</sys:String>
+    <sys:String x:Key="String_ArtworkIconDesc">256 × 256 px (.ico / .png)</sys:String>
+
+    <sys:String x:Key="String_ArtworkInstanceBannerTitle">Instance Banner</sys:String>
+    <sys:String x:Key="String_ArtworkInstanceBannerDesc">460 × 215 px (Header &amp; Library)</sys:String>
+    <sys:String x:Key="String_ArtworkInstanceLogoTitle">Instance Logo (Nav)</sys:String>
+    <sys:String x:Key="String_ArtworkInstanceLogoDesc">256 × 256 px (Sidebar Tab Icon)</sys:String>
+
+    <!-- Dimension Warning Modal -->
+    <sys:String x:Key="String_ArtworkDimensionWarningTitle">Dimension Mismatch Warning</sys:String>
+    <sys:String x:Key="String_ArtworkDimensionWarningDesc">The selected image does not match Steam's optimal dimensions for this artwork slot. It may appear cropped or stretched in your library.</sys:String>
+    <sys:String x:Key="String_ArtworkCurrentDimensionsLabel">Selected dimensions:</sys:String>
+    <sys:String x:Key="String_ArtworkRecommendedDimensionsLabel">Recommended dimensions:</sys:String>
+    <sys:String x:Key="String_ArtworkApplyAnywayBtn">Apply Anyway</sys:String>
 </ResourceDictionary>

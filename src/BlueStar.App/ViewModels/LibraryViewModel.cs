@@ -360,8 +360,43 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
         }
 
         _gameLauncher.RunningStateChanged += OnRunningStateChanged;
+        _instanceManager.InstancesChanged += OnInstancesChanged;
 
         _ = LoadInstancesAsync();
+    }
+
+    private void OnInstancesChanged(object? sender, EventArgs e)
+    {
+        if (_isDisposed) return;
+        _uiContext.Post(async _ =>
+        {
+            if (_isDisposed) return;
+            try
+            {
+                var all = await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
+                var sanitized = all.Select(i =>
+                {
+                    var status = i.Status;
+                    if (status != InstanceStatus.NotInstalled && _gameLauncher.IsRunning(i.Id))
+                    {
+                        status = InstanceStatus.Running;
+                    }
+                    return i with
+                    {
+                        Name = CleanName(i.Name) ?? i.Name,
+                        Status = status,
+                        Dlcs = i.Dlcs.Select(d => d with { Name = CleanName(d.Name) ?? d.Name }).ToList().AsReadOnly()
+                    };
+                }).ToList();
+
+                Instances = new ObservableCollection<GameInstance>(sanitized);
+                ApplyFilters();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to refresh instances on InstancesChanged event");
+            }
+        }, null);
     }
 
     private void OnLanguageChanged(object? sender, EventArgs e)
@@ -2000,6 +2035,7 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
         catch { }
 
         _gameLauncher.RunningStateChanged -= OnRunningStateChanged;
+        _instanceManager.InstancesChanged -= OnInstancesChanged;
         if (_localizationService != null)
         {
             _localizationService.LanguageChanged -= OnLanguageChanged;

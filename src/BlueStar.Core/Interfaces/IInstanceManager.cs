@@ -20,27 +20,27 @@ public interface IInstanceManager
     /// <summary>
     /// Retrieves all managed game instances.
     /// </summary>
-    Task<IReadOnlyList<GameInstance>> GetAllAsync(CancellationToken ct);
+    Task<IReadOnlyList<GameInstance>> GetAllAsync(CancellationToken ct = default);
 
     /// <summary>
     /// Retrieves a specific game instance by its unique identifier.
     /// </summary>
-    Task<GameInstance?> GetByIdAsync(Guid id, CancellationToken ct);
+    Task<GameInstance?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>
     /// Creates a new game instance.
     /// </summary>
-    Task<GameInstance> CreateAsync(GameInstance instance, CancellationToken ct);
+    Task<GameInstance> CreateAsync(GameInstance instance, CancellationToken ct = default);
 
     /// <summary>
     /// Updates an existing game instance.
     /// </summary>
-    Task<GameInstance> UpdateAsync(GameInstance instance, CancellationToken ct);
+    Task<GameInstance> UpdateAsync(GameInstance instance, CancellationToken ct = default);
 
     /// <summary>
     /// Deletes a game instance by its unique identifier.
     /// </summary>
-    Task<bool> DeleteAsync(Guid id, CancellationToken ct);
+    Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>
     /// Deploys a new zero-copy game instance from an immutable base depot with isolated ReFix settings.

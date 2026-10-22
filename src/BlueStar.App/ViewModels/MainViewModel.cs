@@ -953,6 +953,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             var vm = App.Services.GetRequiredService<BrowseViewModel>();
             vm.OnManageInstanceRequested = OpenInstanceDetail;
+            vm.OnNavigateToSettingsPreferencesRequested = NavigateToSettingsContentFilters;
 
             _exploreView = new BrowseView { DataContext = vm };
         }
@@ -976,6 +977,15 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     public void CloseSidebarImportMenu() => IsSidebarImportMenuOpen = false;
+
+    public void NavigateToSettingsContentFilters()
+    {
+        Navigate("Settings");
+        if (CurrentView?.DataContext is SettingsViewModel settingsVm)
+        {
+            settingsVm.IsContentFiltersExpanded = true;
+        }
+    }
 
     [RelayCommand]
     public void OpenDownloads() => Navigate("Downloads");

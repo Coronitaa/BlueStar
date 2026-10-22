@@ -65,7 +65,7 @@ public interface ILocalCatalogRepository : IDisposable
     /// <summary>
     /// Queries the catalog with faceted filters, full-text search, deterministic sorting, and pagination.
     /// </summary>
-    Task<(IReadOnlyList<CatalogAppItem> Items, int TotalCount)> QueryAsync(LocalCatalogQuery query, CancellationToken ct = default);
+    Task<(IReadOnlyList<CatalogAppItem> Items, int TotalCount, int HiddenCount)> QueryAsync(LocalCatalogQuery query, CancellationToken ct = default);
 
     /// <summary>
     /// Gets the total number of indexed applications in the local catalog.

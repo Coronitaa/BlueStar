@@ -46,6 +46,9 @@ public partial class SettingsViewModel : ObservableObject
     private bool _hasUpdateAvailable;
 
     [ObservableProperty]
+    private bool _isContentFiltersExpanded;
+
+    [ObservableProperty]
     private string? _availableUpdateVersion;
 
     [ObservableProperty]

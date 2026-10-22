@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System;
 using System.ComponentModel;
 using System.IO;
@@ -141,6 +142,10 @@ public partial class BrowseView : UserControl
         try
         {
             await EnsureWebViewAsync().ConfigureAwait(true);
+            if (string.Equals(StorePageView.CoreWebView2.Source?.TrimEnd('/'), url.TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
             StorePageView.CoreWebView2.Navigate(url);
         }
         catch (Exception)
@@ -187,9 +192,57 @@ public partial class BrowseView : UserControl
             }
         };
 
+        StorePageView.CoreWebView2.SourceChanged += OnStorePageNavigated;
+        StorePageView.NavigationCompleted += OnStorePageNavigationCompleted;
+
         _ = BlueStar.App.Services.SteamWebSessionHelper.TrySyncSteamCookiesAsync(StorePageView.CoreWebView2);
 
         _webViewReady = true;
+    }
+
+    private void OnStorePageNavigated(object? sender, CoreWebView2SourceChangedEventArgs e)
+    {
+        TryUpdateTargetFromWebView();
+    }
+
+    private void OnStorePageNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+    {
+        TryUpdateTargetFromWebView();
+    }
+
+    private void TryUpdateTargetFromWebView()
+    {
+        if (_viewModel is null || StorePageView?.CoreWebView2 is null) return;
+
+        var uri = StorePageView.CoreWebView2.Source;
+        if (string.IsNullOrWhiteSpace(uri)) return;
+
+        var match = Regex.Match(uri, @"store\.steampowered\.com/app/(\d+)(?:/([^/?#]+))?", RegexOptions.IgnoreCase);
+        if (!match.Success) return;
+
+        if (!uint.TryParse(match.Groups[1].Value, out var appId) || appId == 0) return;
+
+        if (_viewModel.DetailTarget?.AppId == appId) return;
+
+        string extractedName = string.Empty;
+        var docTitle = StorePageView.CoreWebView2.DocumentTitle;
+        if (!string.IsNullOrWhiteSpace(docTitle))
+        {
+            extractedName = docTitle.Replace(" on Steam", "", StringComparison.OrdinalIgnoreCase).Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(extractedName) && match.Groups.Count > 2 && match.Groups[2].Success)
+        {
+            var slug = match.Groups[2].Value;
+            extractedName = slug.Replace('_', ' ').Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(extractedName))
+        {
+            extractedName = $"App {appId}";
+        }
+
+        _ = _viewModel.UpdateDetailTargetFromWebAsync(appId, extractedName, uri);
     }
 
     // ── Explore Loading Overlay Control (Disabled in favor of in-place Skeleton cards) ──

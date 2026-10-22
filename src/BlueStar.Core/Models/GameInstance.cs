@@ -282,10 +282,30 @@ public record GameInstance
     public bool CanManageDepots => Origin != InstanceOrigin.Steam;
 
     /// <summary>
-    /// Gets the Steam header image URL for this game instance.
+    /// Gets or sets a custom banner/header image path or URL for this instance.
     /// </summary>
-    public string HeaderImageUrl => !string.IsNullOrWhiteSpace(Metadata?.HeaderImageUrl)
-        ? Metadata.HeaderImageUrl
-        : $"https://cdn.cloudflare.steamstatic.com/steam/apps/{AppId}/header.jpg";
+    public string? CustomBannerPath { get; init; }
+
+    /// <summary>
+    /// Gets or sets a custom icon or logo image path or URL for this instance (displayed in sidebar recent navigation tabs and shortcuts).
+    /// </summary>
+    public string? CustomIconPath { get; init; }
+
+    /// <summary>
+    /// Gets the Steam header or custom banner image URL/path for this game instance.
+    /// </summary>
+    public string HeaderImageUrl => !string.IsNullOrWhiteSpace(CustomBannerPath)
+        ? CustomBannerPath
+        : (!string.IsNullOrWhiteSpace(Metadata?.HeaderImageUrl)
+            ? Metadata.HeaderImageUrl
+            : (AppId > 0 ? $"https://cdn.cloudflare.steamstatic.com/steam/apps/{AppId}/header.jpg" : string.Empty));
+
+    /// <summary>
+    /// Gets the logo or icon to display for this instance in the sidebar recent navigation tabs.
+    /// Prefers CustomIconPath, then falls back to HeaderImageUrl.
+    /// </summary>
+    public string NavLogoUrl => !string.IsNullOrWhiteSpace(CustomIconPath)
+        ? CustomIconPath
+        : HeaderImageUrl;
 }
 

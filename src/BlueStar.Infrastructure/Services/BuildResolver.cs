@@ -98,20 +98,56 @@ public sealed class BuildResolver : IBuildResolver
                     : new Dictionary<uint, string>();
 
                 // 4. Map SteamCMD builds into GameVersion snapshots
+                var latestDiscoveredByDepot = discoveredManifests
+                    .Where(m => m.ManifestId > 0)
+                    .GroupBy(m => m.DepotId)
+                    .ToDictionary(g => g.Key, g => g.OrderByDescending(m => m.ManifestId).First());
+
                 foreach (var build in steamBuilds)
                 {
                     var depots = new List<DepotVersion>();
+                    var buildDepotIds = new HashSet<uint>();
+                    bool isPublicBranch = string.Equals(build.BranchName, "public", StringComparison.OrdinalIgnoreCase);
+
                     foreach (var (depotId, manifestId) in build.DepotManifests)
                     {
+                        buildDepotIds.Add(depotId);
+                        var effectiveManifestId = manifestId;
+                        if (effectiveManifestId == 0 && isPublicBranch && latestDiscoveredByDepot.TryGetValue(depotId, out var disc))
+                        {
+                            effectiveManifestId = disc.ManifestId;
+                        }
+
                         knownKeys.TryGetValue(depotId, out var key);
                         depots.Add(new DepotVersion
                         {
                             DepotId = depotId,
-                            ManifestId = manifestId,
+                            ManifestId = effectiveManifestId,
                             Name = $"Depot {depotId}",
                             DepotKey = key,
                             IsRecommended = true
                         });
+                    }
+
+                    // Enrich/fill depots missing from the build if present in discoveredManifests (public branch only)
+                    if (isPublicBranch)
+                    {
+                        foreach (var (discDepotId, discManifest) in latestDiscoveredByDepot)
+                        {
+                            if (!buildDepotIds.Contains(discDepotId))
+                            {
+                                knownKeys.TryGetValue(discDepotId, out var key);
+                                depots.Add(new DepotVersion
+                                {
+                                    DepotId = discDepotId,
+                                    ManifestId = discManifest.ManifestId,
+                                    Name = $"Depot {discDepotId}",
+                                    SizeBytes = discManifest.SizeBytes,
+                                    DepotKey = key,
+                                    IsRecommended = true
+                                });
+                            }
+                        }
                     }
 
                     versions.Add(new GameVersion
@@ -127,10 +163,16 @@ public sealed class BuildResolver : IBuildResolver
                     });
                 }
 
-                // 5. If no formal builds returned from SteamCMD, synthesize an inferred version from discovered provider manifests
-                if (versions.Count == 0 && discoveredManifests.Count > 0)
+                // 5. If no formal builds returned from SteamCMD or formal builds yielded zero depot manifests with ManifestId > 0, synthesize or augment with the latest discovered provider build from discoveredManifests
+                bool hasAnyValidManifest = versions.Any(v => v.Depots.Any(d => d.ManifestId > 0));
+                if ((versions.Count == 0 || !hasAnyValidManifest) && discoveredManifests.Count > 0)
                 {
-                    var inferredDepots = discoveredManifests.Select(m =>
+                    var latestManifestsPerDepot = discoveredManifests
+                        .GroupBy(m => m.DepotId)
+                        .Select(g => g.OrderByDescending(m => m.ManifestId).First())
+                        .ToList();
+
+                    var inferredDepots = latestManifestsPerDepot.Select(m =>
                     {
                         knownKeys.TryGetValue(m.DepotId, out var key);
                         return new DepotVersion
@@ -144,13 +186,26 @@ public sealed class BuildResolver : IBuildResolver
                         };
                     }).ToList();
 
+                    DateTimeOffset? authenticDate = null;
+                    foreach (var m in latestManifestsPerDepot)
+                    {
+                        if (!string.IsNullOrWhiteSpace(m.LocalCachePath))
+                        {
+                            var d = Downloader.SteamManifestDateHelper.GetManifestCreationDate(m.LocalCachePath);
+                            if (d.HasValue && (!authenticDate.HasValue || d.Value > authenticDate.Value))
+                            {
+                                authenticDate = d.Value;
+                            }
+                        }
+                    }
+
                     versions.Add(new GameVersion
                     {
                         BuildId = "Discovered",
                         BranchName = "public",
                         DisplayName = "Latest Discovered Provider Build",
-                        UpdatedAt = DateTimeOffset.UtcNow,
-                        Description = $"{discoveredManifests.Count} verified manifests discovered across providers",
+                        UpdatedAt = authenticDate ?? DateTimeOffset.UtcNow,
+                        Description = $"{latestManifestsPerDepot.Count} verified manifests discovered across providers",
                         Source = "MultiProvider",
                         IsInferred = true,
                         Depots = inferredDepots.AsReadOnly()

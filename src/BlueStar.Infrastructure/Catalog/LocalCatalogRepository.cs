@@ -592,7 +592,7 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
     }
 
     /// <inheritdoc />
-    public async Task<(IReadOnlyList<CatalogAppItem> Items, int TotalCount)> QueryAsync(
+    public async Task<(IReadOnlyList<CatalogAppItem> Items, int TotalCount, int HiddenCount)> QueryAsync(
         LocalCatalogQuery query, CancellationToken ct = default)
     {
         await InitializeAsync(ct).ConfigureAwait(false);
@@ -750,6 +750,32 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             else if (countRes is int i) totalCount = i;
         }
 
+        // Hidden count calculation (unfiltered total - totalCount)
+        int hiddenCount = 0;
+        if (query.HideAdult == true || query.NoDrm == true)
+        {
+            var unfilteredClauses = whereClauses
+                .Where(c => c != "a.is_nsfw = 0" && !c.Contains("a.has_drm"))
+                .ToList();
+
+            var unfilteredWhereSql = unfilteredClauses.Count > 0
+                ? "WHERE " + string.Join(" AND ", unfilteredClauses)
+                : string.Empty;
+
+            using (var unfilterCmd = connection.CreateCommand())
+            {
+                unfilterCmd.CommandText = $"SELECT COUNT(*) {fromClause} {unfilteredWhereSql};";
+                foreach (var p in parameters) unfilterCmd.Parameters.Add(new SqliteParameter(p.ParameterName, p.Value));
+
+                var unfilterRes = await unfilterCmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
+                int unfilteredTotal = 0;
+                if (unfilterRes is long ul) unfilteredTotal = (int)ul;
+                else if (unfilterRes is int ui) unfilteredTotal = ui;
+
+                hiddenCount = Math.Max(0, unfilteredTotal - totalCount);
+            }
+        }
+
         // 2. Sorting
         var dir = query.Descending ? "DESC" : "ASC";
         var sortSql = (query.SortBy ?? string.Empty).ToLowerInvariant() switch
@@ -805,7 +831,7 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             }
         }
 
-        return (items, totalCount);
+        return (items, totalCount, hiddenCount);
     }
 
     /// <inheritdoc />

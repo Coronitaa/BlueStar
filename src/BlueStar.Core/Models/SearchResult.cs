@@ -719,7 +719,16 @@ public class SearchResult : INotifyPropertyChanged
     /// <summary>
     /// Gets the store page URL for this app.
     /// </summary>
-    public string StorePageUrl => $"https://store.steampowered.com/app/{AppId}/";
+    private string? _storePageUrl;
+
+    /// <summary>
+    /// Gets or sets the store page URL for this app.
+    /// </summary>
+    public string StorePageUrl
+    {
+        get => !string.IsNullOrWhiteSpace(_storePageUrl) ? _storePageUrl : $"https://store.steampowered.com/app/{AppId}/";
+        set => SetField(ref _storePageUrl, value);
+    }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

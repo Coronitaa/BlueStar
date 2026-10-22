@@ -93,8 +93,21 @@ public partial class DownloadsViewModel : ObservableObject
         _ = _queueManager.RetryAsync(instanceId);
 
     [RelayCommand]
-    private void CancelDownload(Guid instanceId) =>
+    private void CancelDownload(Guid instanceId)
+    {
+        var job = DownloadQueue.FirstOrDefault(q => q.Instance.Id == instanceId);
+        if (job != null)
+        {
+            job.IsCanceling = true;
+            try
+            {
+                if (System.Windows.Application.Current?.TryFindResource("String_Canceling") is string loc)
+                    job.StatusMessage = loc;
+            }
+            catch { }
+        }
         _ = _queueManager.CancelAsync(instanceId);
+    }
 
     [RelayCommand]
     private void RemoveJob(Guid instanceId) =>

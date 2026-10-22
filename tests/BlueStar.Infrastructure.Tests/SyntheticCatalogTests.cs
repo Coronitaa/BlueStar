@@ -88,7 +88,7 @@ public class SyntheticCatalogTests : IDisposable
         await Populate10000AppsAsync();
 
         var sw = Stopwatch.StartNew();
-        var (results, count) = await _repo.QueryAsync(new LocalCatalogQuery
+        var (results, count, _) = await _repo.QueryAsync(new LocalCatalogQuery
         {
             Term = "Cyberpunk Neo",
             Limit = 10
@@ -105,7 +105,7 @@ public class SyntheticCatalogTests : IDisposable
     {
         await Populate10000AppsAsync();
 
-        var (results, count) = await _repo.QueryAsync(new LocalCatalogQuery
+        var (results, count, _) = await _repo.QueryAsync(new LocalCatalogQuery
         {
             Term = "Cyber Action",
             Limit = 10
@@ -122,7 +122,7 @@ public class SyntheticCatalogTests : IDisposable
         await Populate10000AppsAsync();
 
         // Sort by released DESC: newest first
-        var (descResults, _) = await _repo.QueryAsync(new LocalCatalogQuery
+        var (descResults, _, _) = await _repo.QueryAsync(new LocalCatalogQuery
         {
             SortBy = "released",
             Descending = true,
@@ -138,7 +138,7 @@ public class SyntheticCatalogTests : IDisposable
         }
 
         // Sort by released ASC: oldest first
-        var (ascResults, _) = await _repo.QueryAsync(new LocalCatalogQuery
+        var (ascResults, _, _) = await _repo.QueryAsync(new LocalCatalogQuery
         {
             SortBy = "released",
             Descending = false,
@@ -159,7 +159,7 @@ public class SyntheticCatalogTests : IDisposable
     {
         await Populate10000AppsAsync();
 
-        var (highRated, totalHighRated) = await _repo.QueryAsync(new LocalCatalogQuery
+        var (highRated, totalHighRated, _) = await _repo.QueryAsync(new LocalCatalogQuery
         {
             MinRatingPercent = 90,
             Limit = 50
@@ -175,7 +175,7 @@ public class SyntheticCatalogTests : IDisposable
         await Populate10000AppsAsync();
 
         // Games only
-        var (games, gameCount) = await _repo.QueryAsync(new LocalCatalogQuery
+        var (games, gameCount, _) = await _repo.QueryAsync(new LocalCatalogQuery
         {
             AppTypes = "998",
             Limit = 50
@@ -184,7 +184,7 @@ public class SyntheticCatalogTests : IDisposable
         Assert.All(games, g => Assert.Equal("Game", g.AppType));
 
         // Software only
-        var (software, softCount) = await _repo.QueryAsync(new LocalCatalogQuery
+        var (software, softCount, _) = await _repo.QueryAsync(new LocalCatalogQuery
         {
             AppTypes = "994",
             Limit = 50

@@ -54,6 +54,7 @@ public sealed record SearchResponse
 {
     public IReadOnlyList<SearchResult> Items { get; init; } = [];
     public int TotalCount { get; init; }
+    public int HiddenCount { get; init; } = 0;
     public int Start { get; init; }
     public SearchResolutionType ResolutionType { get; init; }
     public bool IsFromLocalCatalog { get; init; }

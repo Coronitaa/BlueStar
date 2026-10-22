@@ -686,6 +686,7 @@ public static class ShortcutHelper
         string? customCapsuleUrl = null,
         string? iconPath = null,
         string? launchOptions = null,
+        Guid? instanceId = null,
         CancellationToken ct = default)
     {
         var steamPath = GetSteamPath();
@@ -713,13 +714,57 @@ public static class ShortcutHelper
         uint shortcutAppId32 = ComputeCrc32(targetExePath + shortcutName) | 0x80000000;
         int successCount = 0;
 
+        // If an instanceId is provided, first check / deploy from instance artwork directory
+        if (instanceId.HasValue)
+        {
+            try
+            {
+                var cachedIcon = InstanceArtworkService.GetArtworkFilePath(instanceId.Value, SteamArtworkType.Icon)
+                              ?? InstanceArtworkService.GetArtworkFilePath(instanceId.Value, SteamArtworkType.InstanceLogo);
+                if (string.IsNullOrWhiteSpace(iconPath) && !string.IsNullOrWhiteSpace(cachedIcon) && File.Exists(cachedIcon))
+                {
+                    iconPath = cachedIcon;
+                }
+
+                var cachedHeader = InstanceArtworkService.GetArtworkFilePath(instanceId.Value, SteamArtworkType.InstanceBanner)
+                                ?? InstanceArtworkService.GetArtworkFilePath(instanceId.Value, SteamArtworkType.Header);
+                if (string.IsNullOrWhiteSpace(customHeaderUrl) && !string.IsNullOrWhiteSpace(cachedHeader) && File.Exists(cachedHeader))
+                {
+                    customHeaderUrl = cachedHeader;
+                }
+
+                // If no artworks downloaded yet and AppID provided, download them to instance artworks
+                var existingCapsule = InstanceArtworkService.GetArtworkFilePath(instanceId.Value, SteamArtworkType.Capsule);
+                if (string.IsNullOrWhiteSpace(existingCapsule) && originalGameAppId > 0)
+                {
+                    await InstanceArtworkService.DownloadArtworkForInstanceAsync(
+                        instanceId.Value,
+                        originalGameAppId,
+                        customHeaderUrl,
+                        customCapsuleUrl,
+                        targetExePath,
+                        shortcutName,
+                        ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    await InstanceArtworkService.DeployArtworksToSteamGridAsync(
+                        instanceId.Value,
+                        targetExePath,
+                        shortcutName,
+                        ct).ConfigureAwait(false);
+                }
+            }
+            catch { }
+        }
+
         foreach (var userFolder in userFolders)
         {
             var vdfPath = Path.Combine(userFolder, "config", "shortcuts.vdf");
             string? effectiveIconPath = iconPath;
 
-            // 1. Download artwork & clienticon first if AppID is provided
-            if (originalGameAppId > 0)
+            // 1. Download artwork & clienticon if AppID is provided and not already deployed via instanceId
+            if (originalGameAppId > 0 && !instanceId.HasValue)
             {
                 var downloadedIcon = await InstallSteamGridArtworkAsync(
                     userFolder,
@@ -865,6 +910,7 @@ public static class ShortcutHelper
         string? customCapsuleUrl = null,
         string? arguments = null,
         string? iconPath = null,
+        Guid? instanceId = null,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(targetExePath) || !File.Exists(targetExePath))
@@ -954,6 +1000,7 @@ public static class ShortcutHelper
                     customCapsuleUrl,
                     iconPath,
                     arguments,
+                    instanceId,
                     ct).ConfigureAwait(false);
 
                 if (steamRes.Success)

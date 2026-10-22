@@ -45,6 +45,7 @@
     <sys:String x:Key="String_Reset">Restablecer</sys:String>
     <sys:String x:Key="String_RetryAction">Reintentar</sys:String>
     <sys:String x:Key="String_CancelAction">Cancelar</sys:String>
+    <sys:String x:Key="String_Canceling">Cancelando...</sys:String>
     <sys:String x:Key="String_RemoveAction">Quitar</sys:String>
     <sys:String x:Key="String_StopAction">Detener</sys:String>
     <sys:String x:Key="String_OpenFolder">Abrir Carpeta</sys:String>
@@ -428,7 +429,8 @@
     <sys:String x:Key="String_FeedbackFollowupDesc">Valoración registrada. ¿Deseas desinstalar este emulador y probar otra opción?</sys:String>
     <sys:String x:Key="String_FeedbackCancelKeep">Cancelar / Mantener</sys:String>
     <sys:String x:Key="String_FeedbackUninstallChange">Desinstalar y Cambiar</sys:String>
-    <sys:String x:Key="String_UpdateAvailableDepotBox">Actualización disponible en DepotBox</sys:String>
+    <sys:String x:Key="String_UpdateAvailableDepotBox">Hay una actualización disponible para descargar</sys:String>
+    <sys:String x:Key="String_UpdateAvailableDownloadTooltip">Hay una actualización disponible para descargar</sys:String>
     <sys:String x:Key="String_Import">Importar</sys:String>
     <sys:String x:Key="String_CheckReqsSetting">Verificar automáticamente al iniciar BlueStar</sys:String>
     <sys:String x:Key="String_DeleteModalTitle">Eliminar Juego</sys:String>
@@ -965,6 +967,10 @@
     <sys:String x:Key="String_Facet_Language_hindi">Hindi</sys:String>
     <sys:String x:Key="String_Facet_Language_catalan">Catalán</sys:String>
     <sys:String x:Key="String_HiddenByFilters">ocultos por los filtros</sys:String>
+    <sys:String x:Key="String_HiddenByPreferencesPrefix" xml:space="preserve">Se ocultaron </sys:String>
+    <sys:String x:Key="String_HiddenByPreferencesMiddle" xml:space="preserve"> juegos según tus </sys:String>
+    <sys:String x:Key="String_HiddenByPreferencesLink">preferencias</sys:String>
+    <x:Static Member="sys:String.Empty" x:Key="String_HiddenByPreferencesSuffix"/>
     <sys:String x:Key="String_LoadingMore">Cargando más juegos…</sys:String>
     <sys:String x:Key="String_InvertOrder">Invertir el orden</sys:String>
     <sys:String x:Key="String_ShowList">Mostrar</sys:String>
@@ -1025,4 +1031,36 @@
     <sys:String x:Key="String_Apply">Aplicar</sys:String>
     <sys:String x:Key="String_Configure">Configurar</sys:String>
     <sys:String x:Key="String_ConfigureReFixTooltip">Configurar Versión de ReFix y Actualizaciones</sys:String>
+
+    <!-- ═══ STEAM SHORTCUT & GRID ARTWORKS SECTION ═══ -->
+    <sys:String x:Key="String_SteamArtworksSectionTitle">Artworks para Steam</sys:String>
+    <sys:String x:Key="String_SteamArtworksSectionDesc">Personaliza las imágenes que Steam muestra para el acceso directo en tu biblioteca. Haz clic en un recuadro o arrastra una imagen para reemplazarla.</sys:String>
+    <sys:String x:Key="String_ArtworkRedownloadBtn">Restaurar de Steam</sys:String>
+    <sys:String x:Key="String_ArtworkOpenFolderBtn">Abrir Carpeta</sys:String>
+    <sys:String x:Key="String_ArtworkClickOrDropHint">Clic o arrastra una imagen</sys:String>
+    <sys:String x:Key="String_ArtworkReplaceLabel">Reemplazar imagen</sys:String>
+    <sys:String x:Key="String_ArtworkDropHereHint">Soltar imagen aquí</sys:String>
+    <sys:String x:Key="String_ArtworkClearTooltip">Quitar este artwork</sys:String>
+    <sys:String x:Key="String_ArtworkVerticalCapsuleTitle">Portada Vertical (Capsule)</sys:String>
+    <sys:String x:Key="String_ArtworkVerticalCapsuleDesc">600 × 900 px (2:3)</sys:String>
+    <sys:String x:Key="String_ArtworkHeroTitle">Fondo / Banner Hero</sys:String>
+    <sys:String x:Key="String_ArtworkHeroDesc">1920 × 620 px (~3.1:1)</sys:String>
+    <sys:String x:Key="String_ArtworkLogoTitle">Logotipo (Logo)</sys:String>
+    <sys:String x:Key="String_ArtworkLogoDesc">PNG Transparente</sys:String>
+    <sys:String x:Key="String_ArtworkHeaderTitle">Portada Horizontal (Grid)</sys:String>
+    <sys:String x:Key="String_ArtworkHeaderDesc">460 × 215 / 920 × 430 px</sys:String>
+    <sys:String x:Key="String_ArtworkIconTitle">Ícono del Juego</sys:String>
+    <sys:String x:Key="String_ArtworkIconDesc">256 × 256 px (.ico / .png)</sys:String>
+
+    <sys:String x:Key="String_ArtworkInstanceBannerTitle">Banner de la Instancia</sys:String>
+    <sys:String x:Key="String_ArtworkInstanceBannerDesc">460 × 215 px (Portada y Biblioteca)</sys:String>
+    <sys:String x:Key="String_ArtworkInstanceLogoTitle">Logo de la Instancia</sys:String>
+    <sys:String x:Key="String_ArtworkInstanceLogoDesc">256 × 256 px (Pestaña Nav Lateral)</sys:String>
+
+    <!-- Dimension Warning Modal -->
+    <sys:String x:Key="String_ArtworkDimensionWarningTitle">Advertencia de Dimensiones</sys:String>
+    <sys:String x:Key="String_ArtworkDimensionWarningDesc">La imagen que seleccionaste no coincide con las especificaciones óptimas de Steam para este artwork. Podría verse recortada o deformada en tu biblioteca.</sys:String>
+    <sys:String x:Key="String_ArtworkCurrentDimensionsLabel">Dimensiones de la imagen:</sys:String>
+    <sys:String x:Key="String_ArtworkRecommendedDimensionsLabel">Dimensiones recomendadas:</sys:String>
+    <sys:String x:Key="String_ArtworkApplyAnywayBtn">Aplicar de todos modos</sys:String>
 </ResourceDictionary>

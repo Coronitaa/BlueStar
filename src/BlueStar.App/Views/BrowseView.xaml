@@ -1053,12 +1053,19 @@
                             </Border>
                         </StackPanel>
 
-                        <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center"
-                                    Visibility="{Binding HiddenByContentFilters, Converter={StaticResource NullToVisibilityConverter}}">
-                            <TextBlock FontSize="11" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center">
-                                <Run Text="{Binding HiddenByContentFilters, Mode=OneWay}"/><Run Text=" "/><Run Text="{DynamicResource String_HiddenByFilters}"/>
-                            </TextBlock>
-                        </StackPanel>
+                        <TextBlock Grid.Column="3"
+                                   Margin="12,0,0,0"
+                                   VerticalAlignment="Center"
+                                   FontSize="12"
+                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   TextOptions.TextFormattingMode="Display"
+                                   TextOptions.TextRenderingMode="ClearType"
+                                   TextOptions.TextHintingMode="Fixed"
+                                   UseLayoutRounding="True"
+                                   SnapsToDevicePixels="True"
+                                   Visibility="{Binding HiddenByContentFilters, Converter={StaticResource NullToVisibilityConverter}}">
+                            <Run Text="{DynamicResource String_HiddenByPreferencesPrefix}"/><Run Text="{Binding HiddenByContentFilters, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}"/><Run Text="{DynamicResource String_HiddenByPreferencesMiddle}"/><Hyperlink Command="{Binding NavigateToSettingsPreferencesCommand}" Foreground="{StaticResource AccentBrush}" TextDecorations="Underline" Cursor="Hand"><Run Text="{DynamicResource String_HiddenByPreferencesLink}"/></Hyperlink><Run Text="{DynamicResource String_HiddenByPreferencesSuffix}"/>
+                        </TextBlock>
                     </Grid>
 
                     <!-- Error: shown only when SearchState == Error -->
@@ -1267,14 +1274,16 @@
                            CloseOnEscape="True"
                            BackdropBrush="#C2040407"
                            AnimateScale="False"
-                           Panel.ZIndex="150">
+                           Panel.ZIndex="1400"
+                           HorizontalContentAlignment="Stretch"
+                           VerticalContentAlignment="Stretch">
 
             <!-- Modal dialog card -->
             <Border Background="{StaticResource SurfaceCardBrush}"
                     BorderBrush="{StaticResource StrongBorderBrush}" BorderThickness="1"
                     CornerRadius="{StaticResource RadiusLg}"
-                    Width="1000" MaxWidth="1120" Height="750" Margin="28"
-                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                    MaxWidth="1120" MaxHeight="850" Margin="24,18" MinWidth="480" MinHeight="360"
                     ClipToBounds="True">
                 <Grid>
                     <Grid.RowDefinitions>

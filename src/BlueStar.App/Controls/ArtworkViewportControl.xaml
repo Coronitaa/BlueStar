@@ -1,0 +1,149 @@
+<UserControl x:Class="BlueStar.App.Controls.ArtworkViewportControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d">
+
+    <Grid x:Name="RootGrid"
+          AllowDrop="True"
+          Cursor="Hand"
+          MouseLeftButtonUp="OnMouseLeftButtonUp"
+          DragEnter="OnDragEnter"
+          DragOver="OnDragOver"
+          DragLeave="OnDragLeave"
+          Drop="OnDrop"
+          MouseEnter="OnMouseEnter"
+          MouseLeave="OnMouseLeave">
+
+        <!-- Outer Framing Border with smooth hover highlights -->
+        <Border x:Name="ViewportBorder"
+                BorderBrush="{DynamicResource SubtleBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="{DynamicResource RadiusMd}"
+                SnapsToDevicePixels="True">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Background" Value="{DynamicResource SurfaceInputBrush}"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Slot.HasImage, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                            <Setter Property="Background" Value="Transparent"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+
+            <Grid>
+                <!-- Subtle checkerboard background for transparent logos/icons -->
+                <Border x:Name="CheckerboardBackdrop"
+                        Background="#0D0D11"
+                        Visibility="Collapsed"/>
+
+                <!-- Loaded Artwork Image (Stretched flush to outer border with zero gaps or inner borders) -->
+                <Image x:Name="ArtworkImage"
+                       Source="{Binding Slot.ImageSource, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                       Stretch="{Binding StretchMode, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                       HorizontalAlignment="Stretch"
+                       VerticalAlignment="Stretch"
+                       RenderOptions.BitmapScalingMode="HighQuality"
+                       RenderOptions.EdgeMode="Aliased"
+                       SnapsToDevicePixels="True"
+                       Visibility="{Binding Slot.HasImage, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                <!-- Placeholder when no image is loaded -->
+                <StackPanel x:Name="PlaceholderPanel"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Center"
+                            Margin="8"
+                            Visibility="{Binding Slot.HasImage, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                    <Path Data="{StaticResource IconPalette}"
+                          Fill="{DynamicResource MutedTextBrush}"
+                          Width="22" Height="22"
+                          Stretch="Uniform"
+                          HorizontalAlignment="Center"
+                          Margin="0,0,0,6"/>
+                    <TextBlock Text="{DynamicResource String_ArtworkClickOrDropHint}"
+                               Style="{DynamicResource Caption}"
+                               Foreground="{DynamicResource MutedTextBrush}"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+
+                <!-- Hover Overlay with subtle blur/dark tint -->
+                <Border x:Name="HoverOverlay"
+                        Background="#B309090C"
+                        Opacity="0"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <Border Background="{DynamicResource AccentBrush}"
+                                CornerRadius="16"
+                                Width="32" Height="32"
+                                HorizontalAlignment="Center"
+                                Margin="0,0,0,6">
+                            <Path Data="{StaticResource IconPalette}"
+                                  Fill="White"
+                                  Width="14" Height="14"
+                                  Stretch="Uniform"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock Text="{DynamicResource String_ArtworkReplaceLabel}"
+                                   Style="{DynamicResource CaptionBold}"
+                                   Foreground="White"
+                                   HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Dimensions Pill Badge (bottom-right) -->
+                <Border HorizontalAlignment="Right"
+                        VerticalAlignment="Bottom"
+                        Margin="6"
+                        Background="#D90B0B0E"
+                        BorderBrush="{DynamicResource SubtleBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="6,2"
+                        IsHitTestVisible="False"
+                        Visibility="{Binding Slot.HasImage, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <TextBlock Text="{Binding Slot.ActualDimensions, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                               FontSize="9"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource SecondaryTextBrush}"/>
+                </Border>
+
+                <!-- Clear / Reset Button (top-right, only on hover or when image exists) -->
+                <Button x:Name="ClearButton"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Margin="4"
+                        Width="22" Height="22"
+                        Padding="0"
+                        Style="{DynamicResource GhostButton}"
+                        Content="✕"
+                        FontSize="10"
+                        Foreground="{DynamicResource SecondaryTextBrush}"
+                        ToolTip="{DynamicResource String_ArtworkClearTooltip}"
+                        Click="OnClearButtonClick"
+                        Visibility="Collapsed"/>
+
+                <!-- Drag & Drop Active Overlay -->
+                <Border x:Name="DragOverOverlay"
+                        Background="{DynamicResource AccentTranslucentBrush}"
+                        BorderBrush="{DynamicResource AccentBrush}"
+                        BorderThickness="2"
+                        CornerRadius="{DynamicResource RadiusMd}"
+                        Visibility="{Binding Slot.IsDragOver, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <TextBlock Text="📥" FontSize="20" HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                        <TextBlock Text="{DynamicResource String_ArtworkDropHereHint}"
+                                   Style="{DynamicResource CaptionBold}"
+                                   Foreground="{DynamicResource AccentBrush}"
+                                   HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

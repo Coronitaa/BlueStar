@@ -316,7 +316,7 @@
                     <!-- ── RIGHT COLUMN BLOQUECITOS ── -->
                     <StackPanel Grid.Column="2">
                         <!-- ═══ CATALOG & CONTENT FILTERS SECTION ═══ -->
-                                        <Expander Style="{StaticResource SettingsExpanderCard}">
+                                        <Expander Style="{StaticResource SettingsExpanderCard}" IsExpanded="{Binding IsContentFiltersExpanded, Mode=TwoWay}">
                                             <Expander.Header>
                                                 <Grid Margin="0,0,12,0">
                                                     <Grid.ColumnDefinitions>

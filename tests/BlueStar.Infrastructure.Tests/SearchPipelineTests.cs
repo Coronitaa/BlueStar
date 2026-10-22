@@ -179,6 +179,27 @@ public class SearchPipelineTests : IDisposable
         Assert.Empty(response.Items);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_WhenAdultOrNoDrmFiltered_PopulatesHiddenCountInResponse()
+    {
+        await _localRepo.UpsertAppsAsync([
+            new CatalogAppItem { AppId = 10, Name = "Family Quest", NormalizedName = "family quest", CompactName = "familyquest", IsNsfw = false, HasDrm = false },
+            new CatalogAppItem { AppId = 20, Name = "Adult Fantasy", NormalizedName = "adult fantasy", CompactName = "adultfantasy", IsNsfw = true, HasDrm = false },
+            new CatalogAppItem { AppId = 30, Name = "Secured Vault", NormalizedName = "secured vault", CompactName = "securedvault", IsNsfw = false, HasDrm = true }
+        ]);
+
+        var requestHideAdult = new SearchRequest
+        {
+            RawQuery = "fantasy",
+            HideAdult = true
+        };
+
+        var response = await _pipeline.ExecuteAsync(requestHideAdult);
+
+        Assert.Equal(0, response.TotalCount);
+        Assert.Equal(1, response.HiddenCount);
+    }
+
     private sealed class FakeSteamCatalogSearchService : ISteamCatalogSearchService
     {
         public int SearchCallCount { get; private set; }

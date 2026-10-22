@@ -174,27 +174,28 @@ public static class GameUpdateDetectionHelper
                 }
             }
 
-            // Fallback: use instance local installation timestamp instead of the game's initial release date
-            if (!installedDate.HasValue)
-            {
-                installedDate = instance.UpdatedAt > DateTimeOffset.MinValue ? instance.UpdatedAt : instance.CreatedAt;
-            }
+            // Do NOT fall back to assigning instance.UpdatedAt or instance.CreatedAt as installedDate.
+            // If there is no real manifest date found, keep installedDate null so it is not poisoned by local install time.
 
             var installedDateText = installedDate.HasValue ? $"{installedDate.Value:d MMM yyyy}" : null;
 
             // 2. Direct Depot Manifest ID comparison
-            if (instance.Status == InstanceStatus.Ready && depotInfo != null && instance.Depots.Count > 0)
+            if ((instance.Status == InstanceStatus.Ready || instance.Status == InstanceStatus.Running) && depotInfo != null && instance.Depots.Count > 0)
             {
                 bool allDepotsMatch = true;
                 bool hasCheckedDepot = false;
 
                 foreach (var depot in instance.Depots)
                 {
+                    ulong currentManifestId = instance.InstalledManifestMap.TryGetValue(depot.DepotId, out var im) && im > 0
+                        ? im
+                        : depot.ManifestId;
+
                     // Only compare non-zero manifest IDs
-                    if (depot.ManifestId > 0 && depotInfo.PublicManifests.TryGetValue(depot.DepotId, out var publicGid) && publicGid > 0)
+                    if (currentManifestId > 0 && depotInfo.PublicManifests.TryGetValue(depot.DepotId, out var publicGid) && publicGid > 0)
                     {
                         hasCheckedDepot = true;
-                        if (depot.ManifestId != publicGid)
+                        if (currentManifestId != publicGid)
                         {
                             allDepotsMatch = false;
                             break;
@@ -204,12 +205,7 @@ public static class GameUpdateDetectionHelper
 
                 if (hasCheckedDepot && !allDepotsMatch)
                 {
-                    // If dates are also present and show no difference, don't flag as outdated
-                    if (installedDate.HasValue && latestDate.HasValue && latestDate.Value <= installedDate.Value.AddDays(1))
-                    {
-                        return (UpdateCheckStatus.UpToDate, null, latestDate, latestDateText, installedDate, installedDateText);
-                    }
-
+                    // Manifests differ! This is an authentic update, do not suppress it with date heuristics.
                     return (UpdateCheckStatus.UpdateAvailable, "Newer depot build available on Steam/DepotBox", latestDate, latestDateText, installedDate, installedDateText);
                 }
                 else if (hasCheckedDepot && allDepotsMatch)

@@ -293,5 +293,186 @@ public class InstanceDetailCustomizationTests
         Assert.False(vm.IsForceAllDlcsWarningOpen);
         Assert.True(vm.ForceInstallAllDlcs);
     }
-}
 
+
+    [Fact]
+    public void ArtworkSlots_AreInitializedWithCorrectTypesAndTitles()
+    {
+        var instance = new GameInstance
+        {
+            Id = Guid.NewGuid(),
+            Name = "Artwork Game",
+            AppId = 730,
+            InstallPath = @"C:\Games\CS2",
+            Origin = InstanceOrigin.Steam,
+            Status = InstanceStatus.Ready
+        };
+
+        var vm = CreateViewModel(instance);
+
+        Assert.NotNull(vm.CapsuleArtwork);
+        Assert.Equal(BlueStar.Core.Helpers.SteamArtworkType.Capsule, vm.CapsuleArtwork.SlotType);
+
+        Assert.NotNull(vm.HeroArtwork);
+        Assert.Equal(BlueStar.Core.Helpers.SteamArtworkType.Hero, vm.HeroArtwork.SlotType);
+
+        Assert.NotNull(vm.LogoArtwork);
+        Assert.Equal(BlueStar.Core.Helpers.SteamArtworkType.Logo, vm.LogoArtwork.SlotType);
+
+        Assert.NotNull(vm.HeaderArtwork);
+        Assert.Equal(BlueStar.Core.Helpers.SteamArtworkType.Header, vm.HeaderArtwork.SlotType);
+
+        Assert.NotNull(vm.IconArtwork);
+        Assert.Equal(BlueStar.Core.Helpers.SteamArtworkType.Icon, vm.IconArtwork.SlotType);
+
+        Assert.NotNull(vm.InstanceBannerArtwork);
+        Assert.Equal(BlueStar.Core.Helpers.SteamArtworkType.InstanceBanner, vm.InstanceBannerArtwork.SlotType);
+
+        Assert.NotNull(vm.InstanceLogoArtwork);
+        Assert.Equal(BlueStar.Core.Helpers.SteamArtworkType.InstanceLogo, vm.InstanceLogoArtwork.SlotType);
+    }
+
+    [Fact]
+    public async Task ProcessNewArtworkFile_InvalidDimensions_TriggersWarningModal_AndCanBeCancelled()
+    {
+        var instance = new GameInstance
+        {
+            Id = Guid.NewGuid(),
+            Name = "Artwork Game",
+            AppId = 730,
+            InstallPath = @"C:\Games\CS2",
+            Origin = InstanceOrigin.Steam,
+            Status = InstanceStatus.Ready
+        };
+
+        var vm = CreateViewModel(instance);
+
+        var tempFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"artwork_test_{Guid.NewGuid():N}.png");
+        try
+        {
+            using (var ms = new System.IO.MemoryStream())
+            using (var bw = new System.IO.BinaryWriter(ms))
+            {
+                bw.Write(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A });
+                bw.Write(new byte[] { 0x00, 0x00, 0x00, 0x0D });
+                bw.Write(System.Text.Encoding.ASCII.GetBytes("IHDR"));
+                bw.Write(new byte[] { 0x00, 0x00, 0x00, 0x64 }); // 100
+                bw.Write(new byte[] { 0x00, 0x00, 0x00, 0x64 }); // 100
+                bw.Write(new byte[] { 0x08, 0x06, 0x00, 0x00, 0x00 });
+                bw.Write(new byte[] { 0x00, 0x00, 0x00, 0x00 });
+                bw.Write(new byte[] { 0x00, 0x00, 0x00, 0x00 });
+                bw.Write(System.Text.Encoding.ASCII.GetBytes("IEND"));
+                bw.Write(new byte[] { 0xAE, 0x42, 0x60, 0x82 });
+                System.IO.File.WriteAllBytes(tempFile, ms.ToArray());
+            }
+
+            Assert.False(vm.IsArtworkDimensionModalOpen);
+
+            await vm.ProcessNewArtworkFileAsync(BlueStar.Core.Helpers.SteamArtworkType.Capsule, tempFile);
+
+            Assert.True(vm.IsArtworkDimensionModalOpen);
+            Assert.False(string.IsNullOrWhiteSpace(vm.PendingArtworkWarningMessage));
+
+            vm.CancelPendingArtworkCommand.Execute(null);
+            Assert.False(vm.IsArtworkDimensionModalOpen);
+        }
+        finally
+        {
+            if (System.IO.File.Exists(tempFile))
+            {
+                System.IO.File.Delete(tempFile);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ProcessNewArtworkFile_InvalidDimensions_Confirmed_AppliesArtworkAndClosesModal()
+    {
+        var instance = new GameInstance
+        {
+            Id = Guid.NewGuid(),
+            Name = "Artwork Game",
+            AppId = 730,
+            InstallPath = @"C:\Games\CS2",
+            Origin = InstanceOrigin.Steam,
+            Status = InstanceStatus.Ready
+        };
+
+        var vm = CreateViewModel(instance);
+
+        var tempFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"artwork_test_confirm_{Guid.NewGuid():N}.png");
+        try
+        {
+            using (var ms = new System.IO.MemoryStream())
+            using (var bw = new System.IO.BinaryWriter(ms))
+            {
+                bw.Write(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A });
+                bw.Write(new byte[] { 0x00, 0x00, 0x00, 0x0D });
+                bw.Write(System.Text.Encoding.ASCII.GetBytes("IHDR"));
+                bw.Write(new byte[] { 0x00, 0x00, 0x00, 0x64 }); // 100
+                bw.Write(new byte[] { 0x00, 0x00, 0x00, 0x64 }); // 100
+                bw.Write(new byte[] { 0x08, 0x06, 0x00, 0x00, 0x00 });
+                bw.Write(new byte[] { 0x00, 0x00, 0x00, 0x00 });
+                bw.Write(new byte[] { 0x00, 0x00, 0x00, 0x00 });
+                bw.Write(System.Text.Encoding.ASCII.GetBytes("IEND"));
+                bw.Write(new byte[] { 0xAE, 0x42, 0x60, 0x82 });
+                System.IO.File.WriteAllBytes(tempFile, ms.ToArray());
+            }
+
+            await vm.ProcessNewArtworkFileAsync(BlueStar.Core.Helpers.SteamArtworkType.Capsule, tempFile);
+            Assert.True(vm.IsArtworkDimensionModalOpen);
+
+            await vm.ConfirmPendingArtworkCommand.ExecuteAsync(null);
+
+            Assert.False(vm.IsArtworkDimensionModalOpen);
+            Assert.Null(vm.PendingArtworkBytes);
+        }
+        finally
+        {
+            if (System.IO.File.Exists(tempFile))
+            {
+                System.IO.File.Delete(tempFile);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ProcessNewArtworkFile_InstanceLogo_UpdatesInstanceCustomIconPathAndSlot()
+    {
+        var instance = new GameInstance
+        {
+            Id = Guid.NewGuid(),
+            Name = "Logo Test Game",
+            AppId = 730,
+            InstallPath = @"C:\Games\CS2",
+            Origin = InstanceOrigin.Steam,
+            Status = InstanceStatus.Ready
+        };
+
+        var vm = CreateViewModel(instance);
+
+        var tempFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"artwork_logo_{Guid.NewGuid():N}.png");
+        try
+        {
+            // Valid 1x1 PNG bytes (square 1:1 aspect ratio)
+            byte[] validPng = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
+            System.IO.File.WriteAllBytes(tempFile, validPng);
+
+            await vm.ProcessNewArtworkFileAsync(BlueStar.Core.Helpers.SteamArtworkType.InstanceLogo, tempFile);
+
+            Assert.NotNull(vm.Instance.CustomIconPath);
+            Assert.True(System.IO.File.Exists(vm.Instance.CustomIconPath));
+            Assert.NotNull(vm.InstanceLogoArtwork);
+            Assert.True(vm.InstanceLogoArtwork.HasImage);
+            Assert.NotNull(vm.InstanceLogoArtwork.ImageSource);
+            Assert.Equal(vm.Instance.CustomIconPath, vm.Instance.NavLogoUrl);
+        }
+        finally
+        {
+            if (System.IO.File.Exists(tempFile))
+            {
+                System.IO.File.Delete(tempFile);
+            }
+        }
+    }
+}

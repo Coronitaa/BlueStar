@@ -209,6 +209,28 @@ public sealed class InstanceManager : IInstanceManager
                 _ = _statsService.ReportInstanceAddedAsync(newInstance.AppId, newInstance.Name, CancellationToken.None);
             }
 
+            if (newInstance.AppId > 0)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await InstanceArtworkService.DownloadArtworkForInstanceAsync(
+                            newInstance.Id,
+                            newInstance.AppId,
+                            newInstance.HeaderImageUrl,
+                            newInstance.Metadata?.CapsuleImageUrl,
+                            newInstance.ExecutablePath,
+                            newInstance.Name,
+                            CancellationToken.None).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to download initial artworks for instance {Id} (AppId={AppId})", newInstance.Id, newInstance.AppId);
+                    }
+                });
+            }
+
             return newInstance;
         }
         catch
@@ -290,6 +312,29 @@ public sealed class InstanceManager : IInstanceManager
             newId, instanceName, depotPath);
 
         InstancesChanged?.Invoke(this, EventArgs.Empty);
+
+        if (appId > 0)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await InstanceArtworkService.DownloadArtworkForInstanceAsync(
+                        newId,
+                        appId,
+                        gameInstance.HeaderImageUrl,
+                        gameInstance.Metadata?.CapsuleImageUrl,
+                        gameInstance.ExecutablePath,
+                        gameInstance.Name,
+                        CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to download artworks for depot instance {Id}", newId);
+                }
+            });
+        }
+
         return gameInstance;
     }
 
@@ -377,6 +422,22 @@ public sealed class InstanceManager : IInstanceManager
 
         var json = JsonSerializer.Serialize(clonedInstance, JsonOptions);
         await File.WriteAllTextAsync(Path.Combine(instanceContainerDir, "instance.json"), json, ct).ConfigureAwait(false);
+
+        // Copy cached artworks if present
+        try
+        {
+            var srcArtworks = Path.Combine(_rootPath, sourceInstanceId.ToString(), "artworks");
+            if (Directory.Exists(srcArtworks))
+            {
+                var dstArtworks = Path.Combine(instanceContainerDir, "artworks");
+                Directory.CreateDirectory(dstArtworks);
+                foreach (var file in Directory.GetFiles(srcArtworks))
+                {
+                    File.Copy(file, Path.Combine(dstArtworks, Path.GetFileName(file)), overwrite: true);
+                }
+            }
+        }
+        catch { }
 
         _logger.LogInformation("Cloned instance {SourceId} into {NewId} ({Name})", sourceInstanceId, newId, newInstanceName);
 

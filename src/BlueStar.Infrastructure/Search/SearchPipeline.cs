@@ -116,7 +116,7 @@ public sealed class SearchPipeline : ISearchPipeline
                 Limit = request.Count
             };
 
-            var (localItems, totalCount) = await _localRepo.QueryAsync(localQuery, ct).ConfigureAwait(false);
+            var (localItems, totalCount, hiddenCount) = await _localRepo.QueryAsync(localQuery, ct).ConfigureAwait(false);
 
             if (totalCount > 0)
             {
@@ -144,6 +144,7 @@ public sealed class SearchPipeline : ISearchPipeline
                 {
                     Items = results,
                     TotalCount = totalCount,
+                    HiddenCount = hiddenCount,
                     Start = request.Start,
                     ResolutionType = resType,
                     IsFromLocalCatalog = true
@@ -151,7 +152,12 @@ public sealed class SearchPipeline : ISearchPipeline
             }
 
             // Stage 5: Fallback to Steam live store search
-            return await ExecuteSteamFallbackSearchAsync(request, parsed.NormalizedTerm, sortBase, descending, ct).ConfigureAwait(false);
+            var fallbackRes = await ExecuteSteamFallbackSearchAsync(request, parsed.NormalizedTerm, sortBase, descending, ct).ConfigureAwait(false);
+            if (hiddenCount > 0 && fallbackRes.HiddenCount < hiddenCount)
+            {
+                return fallbackRes with { HiddenCount = hiddenCount };
+            }
+            return fallbackRes;
             }
             catch (OperationCanceledException)
             {
@@ -432,13 +438,14 @@ public sealed class SearchPipeline : ISearchPipeline
                     Limit = request.Count
                 };
 
-                var (localBrowseItems, totalLocalCount) = await _localRepo.QueryAsync(localBrowseQuery, ct).ConfigureAwait(false);
+                var (localBrowseItems, totalLocalCount, localBrowseHiddenCount) = await _localRepo.QueryAsync(localBrowseQuery, ct).ConfigureAwait(false);
                 if (totalLocalCount > 0)
                 {
                     return new SearchResponse
                     {
                         Items = localBrowseItems.Select(ToSearchResult).ToList(),
                         TotalCount = totalLocalCount,
+                        HiddenCount = localBrowseHiddenCount,
                         Start = request.Start,
                         ResolutionType = SearchResolutionType.FullText,
                         IsFromLocalCatalog = true
@@ -505,13 +512,14 @@ public sealed class SearchPipeline : ISearchPipeline
                     Limit = request.Count
                 };
 
-                var (localSortedItems, totalLocalCount) = await _localRepo.QueryAsync(localBrowseQuery, ct).ConfigureAwait(false);
+                var (localSortedItems, totalLocalCount, localSortedHiddenCount) = await _localRepo.QueryAsync(localBrowseQuery, ct).ConfigureAwait(false);
                 if (totalLocalCount > 0)
                 {
                     return new SearchResponse
                     {
                         Items = localSortedItems.Select(ToSearchResult).ToList(),
                         TotalCount = totalLocalCount,
+                        HiddenCount = localSortedHiddenCount,
                         Start = request.Start,
                         ResolutionType = SearchResolutionType.FullText,
                         IsFromLocalCatalog = true,
@@ -593,11 +601,12 @@ public sealed class SearchPipeline : ISearchPipeline
             Limit = request.Count
         };
 
-        var (localFallbackItems, totalFallbackCount) = await _localRepo.QueryAsync(localQuery, ct).ConfigureAwait(false);
+        var (localFallbackItems, totalFallbackCount, localFallbackHiddenCount) = await _localRepo.QueryAsync(localQuery, ct).ConfigureAwait(false);
         return new SearchResponse
         {
             Items = localFallbackItems.Select(ToSearchResult).ToList(),
             TotalCount = totalFallbackCount,
+            HiddenCount = localFallbackHiddenCount,
             Start = request.Start,
             ResolutionType = SearchResolutionType.FullText,
             IsFromLocalCatalog = true
@@ -615,6 +624,7 @@ public sealed class SearchPipeline : ISearchPipeline
             var page = await _steamSearchService.SearchAsync(steamQuery, ct).ConfigureAwait(false);
             var validation = _validator.ValidateResponse(steamQuery, page.RawPayload ?? string.Empty, page.Items, page.TotalCount);
             var items = page.Items.Where(i => MatchesRequestFilters(i, request)).ToList();
+            int hiddenCount = Math.Max(0, page.Items.Count - items.Count);
 
             // Pre-fill catalog enrichment data into Steam results (DRM, DLC, tags, price, reviews, date)
             await MergeFromCatalogAsync(items, ct).ConfigureAwait(false);
@@ -663,13 +673,14 @@ public sealed class SearchPipeline : ISearchPipeline
                     Limit = request.Count
                 };
 
-                var (localSortedItems, totalLocalCount) = await _localRepo.QueryAsync(localQuery, ct).ConfigureAwait(false);
+                var (localSortedItems, totalLocalCount, localSortedHiddenCount) = await _localRepo.QueryAsync(localQuery, ct).ConfigureAwait(false);
                 if (totalLocalCount > 0)
                 {
                     return new SearchResponse
                     {
                         Items = localSortedItems.Select(ToSearchResult).ToList(),
                         TotalCount = totalLocalCount,
+                        HiddenCount = localSortedHiddenCount,
                         Start = request.Start,
                         ResolutionType = SearchResolutionType.FullText,
                         IsFromLocalCatalog = true,
@@ -687,6 +698,7 @@ public sealed class SearchPipeline : ISearchPipeline
             {
                 Items = items,
                 TotalCount = page.TotalCount,
+                HiddenCount = hiddenCount,
                 Start = request.Start,
                 ResolutionType = SearchResolutionType.FallbackSteam,
                 IsFromLocalCatalog = false,
@@ -731,7 +743,7 @@ public sealed class SearchPipeline : ISearchPipeline
                 Limit = results.Count + 10
             };
 
-            var (catalogItems, _) = await _localRepo.QueryAsync(query, ct).ConfigureAwait(false);
+            var (catalogItems, _, _) = await _localRepo.QueryAsync(query, ct).ConfigureAwait(false);
             if (catalogItems.Count == 0) return;
 
             var byId = new Dictionary<uint, CatalogAppItem>(catalogItems.Count);

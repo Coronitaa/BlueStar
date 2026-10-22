@@ -186,6 +186,10 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
 
     /// <summary>Raised when the person asks to open the detail page of a created instance.</summary>
     public Action<GameInstance>? OnManageInstanceRequested { get; set; }
+    public Action? OnNavigateToSettingsPreferencesRequested { get; set; }
+
+    [RelayCommand]
+    public void NavigateToSettingsPreferences() => OnNavigateToSettingsPreferencesRequested?.Invoke();
 
     private readonly ISteamCatalogSearchService? _catalogSearch;
     private readonly ISearchPipeline? _searchPipeline;
@@ -244,6 +248,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     private List<int> _selectedExcludedTagIds = [];
     private int _ladderRung;
     private int _rungStart;
+    private int _pipelineHiddenCount;
 
     private readonly PriorityQueue<SearchResult, int> _priorityEnrichQueue = new();
     private readonly HashSet<uint> _enqueuedEnrichAppIds = [];
@@ -887,6 +892,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
             BuildLadder();
             _ladderRung = 0;
             _rungStart = 0;
+            _pipelineHiddenCount = 0;
             ExactMatchCount = 0;
             IsShowingRelated = false;
             HasMoreResults = true;
@@ -985,6 +991,8 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
 
                     var res = await _searchPipeline.ExecuteAsync(req, token).ConfigureAwait(true);
                     if (_isDisposed || generation != _searchGeneration) return;
+
+                    _pipelineHiddenCount = Math.Max(_pipelineHiddenCount, res.HiddenCount);
 
                     if (_ladderRung == 0) ExactMatchCount = res.TotalCount;
 
@@ -1655,7 +1663,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                   .ToList()
             : kept.ToList();
 
-        HiddenByContentFilters = _fetched.Count - visible.Count;
+        HiddenByContentFilters = Math.Max(_fetched.Count - visible.Count, _pipelineHiddenCount);
 
         SyncCollection(Results, visible);
     }
@@ -1850,7 +1858,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                 Limit = ids.Count + 10
             };
 
-            var (catalogItems, _) = await _localRepo.QueryAsync(query, ct).ConfigureAwait(false);
+            var (catalogItems, _, _) = await _localRepo.QueryAsync(query, ct).ConfigureAwait(false);
             if (catalogItems.Count == 0) return;
 
             var byId = catalogItems.ToDictionary(c => c.AppId);
@@ -2453,6 +2461,82 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         IsDetailOpen = false;
         DetailTarget = null;
         DetailUrl = null;
+    }
+
+    /// <summary>
+    /// Dynamically updates the detail panel target when the user navigates inside the embedded store page.
+    /// </summary>
+    public async Task UpdateDetailTargetFromWebAsync(uint appId, string suggestedName, string currentUrl)
+    {
+        if (appId == 0) return;
+
+        SearchResult? resolved = null;
+        if (_localRepo != null)
+        {
+            try
+            {
+                var cat = await _localRepo.GetByAppIdAsync(appId, _cts.Token).ConfigureAwait(true);
+                if (cat != null)
+                {
+                    resolved = new SearchResult
+                    {
+                        AppId = cat.AppId,
+                        Name = !string.IsNullOrWhiteSpace(cat.Name) ? cat.Name : suggestedName,
+                        StorePageUrl = currentUrl,
+                        HeaderImageUrl = cat.HeaderImageUrl ?? $"https://cdn.cloudflare.steamstatic.com/steam/apps/{appId}/header.jpg",
+                        ReleaseDateText = cat.ReleaseDateText,
+                        PriceText = cat.PriceText,
+                        PriceCents = cat.PriceCents,
+                        ReviewPercent = cat.ReviewPercent,
+                        ReviewSummary = cat.ReviewPercent.HasValue ? BlueStar.Core.Helpers.RatingEngine.GetReviewSummary(cat.ReviewPercent.Value, cat.ReviewCount ?? 100) : null,
+                        HasWindows = cat.HasWindows,
+                        HasMac = cat.HasMac,
+                        HasLinux = cat.HasLinux,
+                        IsNsfw = cat.IsNsfw,
+                        HasDrm = cat.HasDrm,
+                        DrmName = cat.DrmName,
+                        HasAntiCheat = cat.HasAntiCheat,
+                        AntiCheatName = cat.AntiCheatName,
+                        HasExternalLauncher = cat.HasExternalLauncher,
+                        LauncherName = cat.LauncherName,
+                        HasAccount = cat.HasAccount,
+                        AccountName = cat.AccountName,
+                        HasEula = cat.HasEula,
+                        EulaName = cat.EulaName,
+                        DlcCount = cat.DlcCount,
+                        TagIds = cat.TagIds
+                    };
+
+                    if (cat.TagIds.Count > 0 && _tagCatalog != null)
+                    {
+                        try
+                        {
+                            var names = await _tagCatalog.ResolveNamesAsync(cat.TagIds, _cts.Token).ConfigureAwait(true);
+                            resolved.StoreTags = names.Take(8).Select(n => new StoreTagRef(n, _activeTagNames.Contains(n))).ToList();
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to resolve app {AppId} from local catalog in Browse", appId);
+            }
+        }
+
+        if (resolved is null)
+        {
+            resolved = new SearchResult
+            {
+                AppId = appId,
+                Name = suggestedName,
+                StorePageUrl = currentUrl,
+                HeaderImageUrl = $"https://cdn.cloudflare.steamstatic.com/steam/apps/{appId}/header.jpg"
+            };
+        }
+
+        DetailTarget = resolved;
+        DetailUrl = currentUrl;
     }
 
     /// <summary>

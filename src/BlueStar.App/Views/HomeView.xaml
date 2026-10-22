@@ -370,7 +370,7 @@
                                                             CornerRadius="{StaticResource RadiusSm}"
                                                             Padding="7,2"
                                                             Visibility="{Binding HasUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                            ToolTip="{DynamicResource String_GameUpdateAvailable}">
+                                                            ToolTip="{DynamicResource String_UpdateAvailableDownloadTooltip}">
                                                         <Border.Effect>
                                                             <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="2" Opacity="0.6"/>
                                                         </Border.Effect>
@@ -427,20 +427,15 @@
 
                                                 <!-- Remaining Action Buttons to the right of the name -->
                                                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <!-- Update Available (DepotBox) Button — only shown when update is available -->
-                                                    <Button ToolTip="{DynamicResource String_UpdateAvailableDepotBox}"
+                                                    <!-- Update Available Button — only shown when update is available -->
+                                                    <Button Style="{StaticResource UpdateActionButton}"
+                                                            ToolTip="{DynamicResource String_UpdateAvailableDownloadTooltip}"
                                                             Visibility="{Binding HasUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}"
                                                             Command="{Binding DataContext.CheckDepotBoxUpdatesCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                             CommandParameter="{Binding}"
                                                             Margin="0,0,6,0">
-                                                        <Button.Style>
-                                                            <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
-                                                                <Setter Property="BorderBrush" Value="#F59E0B"/>
-                                                                <Setter Property="BorderThickness" Value="1"/>
-                                                                <Setter Property="Background" Value="#26F59E0B"/>
-                                                            </Style>
-                                                        </Button.Style>
-                                                        <Path Data="{StaticResource IconDownload}" Fill="#F59E0B"
+                                                        <Path Data="{StaticResource IconDownload}"
+                                                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                                               Stretch="Uniform" Width="13" Height="13"/>
                                                     </Button>
 
@@ -1038,13 +1033,15 @@
                                CloseOnEscape="True"
                                BackdropBrush="#C2040407"
                                AnimateScale="False"
-                               Panel.ZIndex="1400">
+                               Panel.ZIndex="1400"
+                               HorizontalContentAlignment="Stretch"
+                               VerticalContentAlignment="Stretch">
 
             <Border Background="{StaticResource SurfaceCardBrush}"
                     BorderBrush="{StaticResource StrongBorderBrush}" BorderThickness="1"
                     CornerRadius="{StaticResource RadiusLg}"
-                    Width="1000" MaxWidth="1120" Height="750" Margin="28"
-                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                    MaxWidth="1120" MaxHeight="850" Margin="24,18" MinWidth="480" MinHeight="360"
                     ClipToBounds="True">
                 <Grid>
                     <Grid.RowDefinitions>

@@ -27,7 +27,8 @@ public sealed class DownloadLogEntry
     public DownloadJobStatus Status { get; init; }
     public string Message { get; init; } = "";
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.Now;
-    public GameInstance? Instance { get; init; }
+    public Guid? InstanceId { get; init; }
+    public GameInstance? Instance { get; set; }
 
     public string FormattedTime => Timestamp.ToString("HH:mm:ss");
 
@@ -66,6 +67,7 @@ public partial class DownloadJobItem : ObservableObject
     [ObservableProperty] private uint _currentDepotId;
     [ObservableProperty] private int _currentDepotIndex;
     [ObservableProperty] private int _totalDepots;
+    [ObservableProperty] private bool _isCanceling;
 
     // ── Computed state flags ─────────────────────────────────────────────────
     public bool IsDownloading => JobStatus == DownloadJobStatus.Downloading;
@@ -74,14 +76,30 @@ public partial class DownloadJobItem : ObservableObject
     public bool IsFailed      => JobStatus == DownloadJobStatus.Failed;
     public bool IsCanceled    => JobStatus == DownloadJobStatus.Canceled;
     public bool IsActive      => JobStatus is DownloadJobStatus.Downloading or DownloadJobStatus.Queued;
-    public bool CanPause      => JobStatus == DownloadJobStatus.Downloading;
-    public bool CanResume     => JobStatus == DownloadJobStatus.Paused;
+    public bool CanPause      => !IsCanceling && JobStatus == DownloadJobStatus.Downloading;
+    public bool CanResume     => !IsCanceling && JobStatus == DownloadJobStatus.Paused;
     public bool CanRetry      => JobStatus is DownloadJobStatus.Failed or DownloadJobStatus.Canceled;
     public bool CanCancel     => JobStatus is DownloadJobStatus.Downloading or DownloadJobStatus.Queued or DownloadJobStatus.Paused;
     public bool CanRemove     => JobStatus is DownloadJobStatus.Completed or DownloadJobStatus.Failed or DownloadJobStatus.Canceled;
 
+    partial void OnIsCancelingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanCancel));
+        OnPropertyChanged(nameof(CanPause));
+        OnPropertyChanged(nameof(CanResume));
+        OnPropertyChanged(nameof(FriendlyPhase));
+        OnPropertyChanged(nameof(PhaseGlyph));
+        OnPropertyChanged(nameof(ActiveOperationDetail));
+    }
+
     partial void OnJobStatusChanged(DownloadJobStatus value)
     {
+        if (value is DownloadJobStatus.Completed or DownloadJobStatus.Failed or DownloadJobStatus.Canceled)
+        {
+            _isCanceling = false;
+            OnPropertyChanged(nameof(IsCanceling));
+        }
+
         OnPropertyChanged(nameof(IsDownloading));
         OnPropertyChanged(nameof(IsPaused));
         OnPropertyChanged(nameof(IsCompleted));
@@ -96,6 +114,8 @@ public partial class DownloadJobItem : ObservableObject
         OnPropertyChanged(nameof(FriendlyPhase));
         OnPropertyChanged(nameof(PhaseGlyph));
         OnPropertyChanged(nameof(StageDetail));
+        OnPropertyChanged(nameof(ActiveOperationDetail));
+        OnPropertyChanged(nameof(ActiveOperationDetail));
         OnPropertyChanged(nameof(IsIndeterminate));
     }
 
@@ -127,7 +147,7 @@ public partial class DownloadJobItem : ObservableObject
     public string FormattedProgress =>
         TotalBytes > 0
             ? $"{FormatBytes(DownloadedBytes)} / {FormatBytes(TotalBytes)}  ({Percentage:F1}%)"
-            : Percentage > 0 ? $"{Percentage:F1}%" : "Preparing...";
+            : Percentage > 0 ? $"{Percentage:F1}%" : string.Empty;
 
     public string FormattedTotalSize =>
         TotalBytes > 0 ? FormatBytes(TotalBytes) : "—";
@@ -140,38 +160,51 @@ public partial class DownloadJobItem : ObservableObject
     /// the manifests, download, write, put the layers back — and a bare percentage told the user
     /// none of that, which made a long "0%" look like a hang.
     /// </summary>
-    public string FriendlyPhase => JobStatus switch
+    public string FriendlyPhase
     {
-        DownloadJobStatus.Queued    => "Waiting in queue",
-        DownloadJobStatus.Paused    => "Paused",
-        DownloadJobStatus.Completed => "Finished",
-        DownloadJobStatus.Failed    => "Failed",
-        DownloadJobStatus.Canceled  => "Canceled",
-        _ => (Phase ?? string.Empty).ToLowerInvariant() switch
+        get
         {
-            "initializing" => "Connecting to Steam",
-            "preparing"    => "Preparing files",
-            "manifests"    => "Fetching manifests",
-            "downloading"  => "Downloading",
-            "verifying" or "validating" => "Verifying files",
-            "installing"   => "Writing to disk",
-            "completed"    => "Finishing up",
-            "paused"       => "Paused",
-            "failed"       => "Failed",
-            _ => "Working"
+            if (IsCanceling)
+            {
+                return "Canceling...";
+            }
+
+            return JobStatus switch
+            {
+                DownloadJobStatus.Queued    => "Waiting in queue",
+                DownloadJobStatus.Paused    => "Paused",
+                DownloadJobStatus.Completed => "Finished",
+                DownloadJobStatus.Failed    => "Failed",
+                DownloadJobStatus.Canceled  => "Canceled",
+                _ => (Phase ?? string.Empty).ToLowerInvariant() switch
+                {
+                    "initializing" => "Connecting to Steam",
+                    "preparing"    => "Preparing files",
+                    "manifests"    => "Fetching manifests",
+                    "downloading"  => "Downloading",
+                    "verifying" or "validating" => "Verifying files",
+                    "installing"   => "Writing to disk",
+                    "completed"    => "Finishing up",
+                    "paused"       => "Paused",
+                    "failed"       => "Failed",
+                    _ => "Working"
+                }
+            };
         }
-    };
+    }
 
     /// <summary>Gets the icon that goes with <see cref="FriendlyPhase"/>.</summary>
-    public string PhaseGlyph => JobStatus switch
-    {
-        DownloadJobStatus.Queued    => "\U0001F551",
-        DownloadJobStatus.Paused    => "\u23F8",
-        DownloadJobStatus.Completed => "\u2705",
-        DownloadJobStatus.Failed    => "\u274C",
-        DownloadJobStatus.Canceled  => "\u26A0",
-        _ => "\U0001F4E5"
-    };
+    public string PhaseGlyph =>
+        IsCanceling ? "\u23F3" :
+        JobStatus switch
+        {
+            DownloadJobStatus.Queued    => "\U0001F551",
+            DownloadJobStatus.Paused    => "\u23F8",
+            DownloadJobStatus.Completed => "\u2705",
+            DownloadJobStatus.Failed    => "\u274C",
+            DownloadJobStatus.Canceled  => "\u26A0",
+            _ => "\U0001F4E5"
+        };
 
     /// <summary>
     /// Gets the secondary line under the phase: which depot, how many chunks, how fast the disk is
@@ -199,6 +232,42 @@ public partial class DownloadJobItem : ObservableObject
                 parts.Add($"disk {FormattedWriteSpeed}");
 
             return parts.Count > 0 ? string.Join("  \u00B7  ", parts) : StatusMessage;
+        }
+    }
+
+    /// <summary>Gets a concise description of the active operation without redundant phase wording.</summary>
+    public string ActiveOperationDetail
+    {
+        get
+        {
+            if (IsCanceling)
+            {
+                return "Canceling...";
+            }
+
+            if (!string.IsNullOrWhiteSpace(StatusMessage) &&
+                !StatusMessage.Equals("Downloading...", StringComparison.OrdinalIgnoreCase) &&
+                !StatusMessage.Equals("Queued", StringComparison.OrdinalIgnoreCase) &&
+                !StatusMessage.Equals("Preparing...", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusMessage;
+            }
+
+            if (TotalDepots > 0)
+            {
+                var depotStr = $"Depot {Math.Min(CurrentDepotIndex + 1, TotalDepots)} of {TotalDepots}";
+                if (TotalChunks > 0)
+                {
+                    depotStr += $"  \u00B7  {CompletedChunks:N0}/{TotalChunks:N0} chunks";
+                }
+                if (WriteBytesPerSec > 0)
+                {
+                    depotStr += $"  \u00B7  disk {FormattedWriteSpeed}";
+                }
+                return depotStr;
+            }
+
+            return StatusMessage;
         }
     }
 
@@ -242,7 +311,27 @@ public class DownloadQueueManager
     private readonly DownloadStateManager? _stateManager;
     private readonly IEmulatorLifecycleService? _emulatorLifecycleService;
     private readonly IGameFixDeployService? _gameFixDeployService;
+    private readonly ICacheService? _cacheService;
     private readonly ILogger<DownloadQueueManager> _logger;
+    private readonly string _historyFilePath;
+    private readonly object _historyFileLock = new();
+    private CancellationTokenSource? _saveHistoryCts;
+    private bool _isHistoryLoading;
+
+    private static bool IsRunningInTest()
+    {
+        var domainName = AppDomain.CurrentDomain.FriendlyName;
+        if (domainName.Contains("testhost", StringComparison.OrdinalIgnoreCase) ||
+            domainName.Contains("xunit", StringComparison.OrdinalIgnoreCase) ||
+            domainName.Contains("test", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return AppDomain.CurrentDomain.GetAssemblies()
+            .Any(a => a.GetName().Name?.StartsWith("xunit", StringComparison.OrdinalIgnoreCase) == true
+                   || a.GetName().Name?.StartsWith("Microsoft.TestPlatform", StringComparison.OrdinalIgnoreCase) == true);
+    }
 
     /// <summary>
     /// Serializes actual downloading to one job at a time.
@@ -290,7 +379,9 @@ public class DownloadQueueManager
         INotificationService? notificationService = null,
         DownloadStateManager? stateManager = null,
         IEmulatorLifecycleService? emulatorLifecycleService = null,
-        IGameFixDeployService? gameFixDeployService = null)
+        IGameFixDeployService? gameFixDeployService = null,
+        ICacheService? cacheService = null,
+        string? historyFilePath = null)
     {
         _downloadProvider = downloadProvider;
         _logger = logger;
@@ -299,7 +390,17 @@ public class DownloadQueueManager
         _stateManager = stateManager;
         _emulatorLifecycleService = emulatorLifecycleService;
         _gameFixDeployService = gameFixDeployService;
+        _cacheService = cacheService;
         _uiContext = SynchronizationContext.Current;
+
+        _historyFilePath = historyFilePath ?? (IsRunningInTest()
+            ? Path.Combine(Path.GetTempPath(), $"bluestar_test_history_{Guid.NewGuid():N}.json")
+            : Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "BlueStar", "download_history.json"));
+
+        LoadHistory();
+        HistoryLog.CollectionChanged += (_, _) => DebouncedSaveHistory();
     }
 
     private void UpdateTelemetry(double netSpeed, double writeSpeed)
@@ -501,13 +602,23 @@ public class DownloadQueueManager
     }
 
     /// <summary>Cancels an active or paused download.</summary>
-    public Task CancelAsync(Guid instanceId)
+    public async Task CancelAsync(Guid instanceId)
     {
         _pausedInstances.TryRemove(instanceId, out _);
         _stateManager?.ClearState(instanceId);
 
         var item = Queue.FirstOrDefault(q => q.Instance.Id == instanceId);
-        if (item is not null && (item.IsPaused || item.JobStatus == DownloadJobStatus.Queued))
+        if (item is not null)
+        {
+            RunOnUi(() =>
+            {
+                item.IsCanceling = true;
+                item.StatusMessage = "Canceling...";
+                item.NotifyMetricsChanged();
+            });
+        }
+
+        if (item is not null && (item.IsPaused || item.JobStatus == DownloadJobStatus.Queued || !_ctsMap.ContainsKey(instanceId)))
         {
             RunOnUi(() =>
             {
@@ -534,16 +645,13 @@ public class DownloadQueueManager
             try { cts.Cancel(); } catch { }
         }
 
-        _ = Task.Run(async () =>
+        try
         {
-            try
-            {
-                await _downloadProvider.CancelAsync(instanceId).ConfigureAwait(false);
-            }
-            catch { }
-        });
+            await _downloadProvider.CancelAsync(instanceId).ConfigureAwait(false);
+        }
+        catch { }
 
-        return Task.CompletedTask;
+        await RevertCancelledUpdateAsync(instanceId).ConfigureAwait(false);
     }
 
     /// <summary>Cancels if active, then removes the job from the queue.</summary>
@@ -650,6 +758,266 @@ public class DownloadQueueManager
 
             NotifyQueueChanged();
         });
+    }
+
+    internal sealed class DownloadHistoryDto
+    {
+        public string GameName { get; set; } = "";
+        public DownloadJobStatus Status { get; set; }
+        public string Message { get; set; } = "";
+        public DateTimeOffset Timestamp { get; set; }
+        public Guid? InstanceId { get; set; }
+    }
+
+    public void LoadHistory()
+    {
+        try
+        {
+            if (!File.Exists(_historyFilePath)) return;
+
+            var json = File.ReadAllText(_historyFilePath);
+            var dtos = System.Text.Json.JsonSerializer.Deserialize<List<DownloadHistoryDto>>(json, new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            if (dtos == null || dtos.Count == 0) return;
+
+            var loadedEntries = new List<DownloadLogEntry>();
+            foreach (var dto in dtos.Take(100))
+            {
+                if (string.IsNullOrWhiteSpace(dto.GameName)) continue;
+                if (dto.GameName.Equals("Test Game", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                GameInstance? inst = null;
+                if (dto.InstanceId.HasValue && _instanceManager != null)
+                {
+                    try
+                    {
+                        inst = Task.Run(() => _instanceManager.GetByIdAsync(dto.InstanceId.Value, CancellationToken.None)).GetAwaiter().GetResult();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Could not resolve instance {InstanceId} for history entry", dto.InstanceId);
+                    }
+                }
+
+                loadedEntries.Add(new DownloadLogEntry
+                {
+                    GameName = dto.GameName ?? "",
+                    Status = dto.Status,
+                    Message = dto.Message ?? "",
+                    Timestamp = dto.Timestamp,
+                    InstanceId = dto.InstanceId,
+                    Instance = inst
+                });
+            }
+
+            _isHistoryLoading = true;
+            try
+            {
+                HistoryLog.Clear();
+                foreach (var entry in loadedEntries)
+                {
+                    HistoryLog.Add(entry);
+                }
+            }
+            finally
+            {
+                _isHistoryLoading = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load download history from {Path}", _historyFilePath);
+        }
+    }
+
+    public void SaveHistory()
+    {
+        try
+        {
+            List<DownloadLogEntry> snapshot;
+            try
+            {
+                snapshot = HistoryLog.Take(100).ToList();
+            }
+            catch
+            {
+                snapshot = HistoryLog.ToList();
+            }
+
+            var dtos = snapshot.Select(e => new DownloadHistoryDto
+            {
+                GameName = e.GameName,
+                Status = e.Status,
+                Message = e.Message,
+                Timestamp = e.Timestamp,
+                InstanceId = e.Instance?.Id ?? e.InstanceId
+            }).ToList();
+
+            lock (_historyFileLock)
+            {
+                var dir = Path.GetDirectoryName(_historyFilePath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+
+                var json = System.Text.Json.JsonSerializer.Serialize(dtos, new System.Text.Json.JsonSerializerOptions
+                {
+                    WriteIndented = true
+                });
+
+                var tmpPath = _historyFilePath + ".tmp";
+                File.WriteAllText(tmpPath, json);
+                File.Move(tmpPath, _historyFilePath, overwrite: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to save download history to {Path}", _historyFilePath);
+        }
+    }
+
+    private void DebouncedSaveHistory()
+    {
+        if (_isHistoryLoading) return;
+
+        lock (_historyFileLock)
+        {
+            _saveHistoryCts?.Cancel();
+            _saveHistoryCts?.Dispose();
+            _saveHistoryCts = new CancellationTokenSource();
+            var token = _saveHistoryCts.Token;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(500, token).ConfigureAwait(false);
+                    SaveHistory();
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Debounced save of download history cancelled or failed");
+                }
+            }, token);
+        }
+    }
+
+    private async Task RevertCancelledUpdateAsync(Guid instanceId)
+    {
+        if (_instanceManager == null) return;
+
+        try
+        {
+            var existing = await _instanceManager.GetByIdAsync(instanceId, CancellationToken.None).ConfigureAwait(false);
+            if (existing == null) return;
+
+            // 1. Scan physical disk manifests in instances/{instanceId}/manifests as ground truth
+            var diskManifestMap = new Dictionary<uint, ulong>();
+            try
+            {
+                var instanceManifestDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "BlueStar", "instances", instanceId.ToString(), "manifests");
+                if (Directory.Exists(instanceManifestDir))
+                {
+                    foreach (var f in Directory.GetFiles(instanceManifestDir, "*.manifest"))
+                    {
+                        var match = System.Text.RegularExpressions.Regex.Match(Path.GetFileName(f), @"^(\d+)_(\d+)\.manifest$");
+                        if (match.Success && uint.TryParse(match.Groups[1].Value, out var dId) && ulong.TryParse(match.Groups[2].Value, out var mId))
+                        {
+                            diskManifestMap[dId] = mId;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to read physical manifests for revert on instance {InstanceId}", instanceId);
+            }
+
+            var newHistory = new List<InstalledBuildSnapshot>(existing.BuildHistory ?? []);
+            var restoredManifestMap = new Dictionary<uint, ulong>(existing.InstalledManifestMap);
+
+            InstalledBuildSnapshot? prevSnap = null;
+            if (newHistory.Count > 0)
+            {
+                prevSnap = newHistory[0];
+                newHistory.RemoveAt(0);
+
+                if (prevSnap.ManifestMap != null && prevSnap.ManifestMap.Count > 0)
+                {
+                    restoredManifestMap = new Dictionary<uint, ulong>(prevSnap.ManifestMap);
+                }
+            }
+
+            // Restore depots: physical disk manifest is ground truth, then build snapshot, then existing
+            var restoredDepots = existing.Depots.Select(d =>
+            {
+                if (diskManifestMap.TryGetValue(d.DepotId, out var diskMid) && diskMid > 0)
+                {
+                    restoredManifestMap[d.DepotId] = diskMid;
+                    return d with { ManifestId = diskMid, IsDownloaded = true };
+                }
+                if (prevSnap?.ManifestMap != null && prevSnap.ManifestMap.TryGetValue(d.DepotId, out var snapMid) && snapMid > 0)
+                {
+                    restoredManifestMap[d.DepotId] = snapMid;
+                    return d with { ManifestId = snapMid, IsDownloaded = true };
+                }
+                if (restoredManifestMap.TryGetValue(d.DepotId, out var oldManifestId) && oldManifestId > 0)
+                {
+                    return d with { ManifestId = oldManifestId, IsDownloaded = true };
+                }
+                return d;
+            }).ToList();
+
+            var reverted = existing with
+            {
+                AwaitingPostUpdateRedeploy = false,
+                Status = InstanceStatus.Ready,
+                Depots = restoredDepots.AsReadOnly(),
+                InstalledManifestMap = restoredManifestMap,
+                BuildHistory = newHistory.AsReadOnly()
+            };
+
+            await _instanceManager.UpdateAsync(reverted, CancellationToken.None).ConfigureAwait(false);
+            _logger.LogInformation("Reverted in-progress update state for {Game} ({InstanceId})", reverted.Name, instanceId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to revert update state for instance {InstanceId}", instanceId);
+        }
+        finally
+        {
+            // Clean up DepotWork/{instanceId}
+            try
+            {
+                var workDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "BlueStar", "DepotWork", instanceId.ToString());
+                if (Directory.Exists(workDir))
+                {
+                    Directory.Delete(workDir, recursive: true);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to clean DepotWork dir for {InstanceId}", instanceId);
+            }
+
+            // Clear cache key instance_update_state_{instanceId}
+            if (_cacheService != null)
+            {
+                _ = _cacheService.RemoveAsync($"instance_update_state_{instanceId}");
+            }
+        }
     }
 
     /// <summary>Clears all completed, failed, and canceled history entries and inactive queue cards.</summary>
@@ -814,11 +1182,43 @@ public class DownloadQueueManager
             {
                 try
                 {
+                    // 1. Commit staged manifests from DepotWork/{id} to instances/{id}/manifests
+                    var workingDir = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "BlueStar", "DepotWork", instance.Id.ToString());
+                    var instanceManifestDir = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                        "BlueStar", "instances", instance.Id.ToString(), "manifests");
+                    Directory.CreateDirectory(instanceManifestDir);
+
+                    if (Directory.Exists(workingDir))
+                    {
+                        foreach (var mf in Directory.GetFiles(workingDir, "*.manifest"))
+                        {
+                            var dest = Path.Combine(instanceManifestDir, Path.GetFileName(mf));
+                            File.Copy(mf, dest, overwrite: true);
+                        }
+                    }
+
                     var existing = await _instanceManager.GetByIdAsync(instance.Id, CancellationToken.None).ConfigureAwait(false) ?? instance;
                     var downloadedDepotIds = instance.Depots.Select(d => d.DepotId).ToHashSet();
+                    var downloadedDepotsByDepotId = instance.Depots.ToDictionary(d => d.DepotId);
 
+                    // Update existing.Depots with the new ManifestId and IsDownloaded = true
                     var updatedDepots = existing.Depots.Count > 0
-                        ? existing.Depots.Select(d => (downloadedDepotIds.Contains(d.DepotId) || d.IsDownloaded) ? d with { IsDownloaded = true } : d).ToList()
+                        ? existing.Depots.Select(d =>
+                        {
+                            if (downloadedDepotsByDepotId.TryGetValue(d.DepotId, out var targetDepot))
+                            {
+                                return d with
+                                {
+                                    ManifestId = targetDepot.ManifestId > 0 ? targetDepot.ManifestId : d.ManifestId,
+                                    DepotKey = !string.IsNullOrWhiteSpace(targetDepot.DepotKey) ? targetDepot.DepotKey : d.DepotKey,
+                                    IsDownloaded = true
+                                };
+                            }
+                            return d.IsDownloaded ? d : d;
+                        }).ToList()
                         : instance.Depots.Select(d => d with { IsDownloaded = true }).ToList();
 
                     var updatedDlcs = existing.Dlcs.Select(dlc =>
@@ -1134,6 +1534,8 @@ public class DownloadQueueManager
                 // Explicitly canceled by user
                 _stateManager?.ClearState(instance.Id);
 
+                await RevertCancelledUpdateAsync(instance.Id).ConfigureAwait(false);
+
                 RunOnUi(() =>
                 {
                     job.JobStatus = DownloadJobStatus.Canceled;
@@ -1193,8 +1595,22 @@ public class DownloadQueueManager
         }
     }
 
-    private void AddToLog(DownloadLogEntry entry) =>
-        RunOnUi(() => HistoryLog.Insert(0, entry)); // newest first
+    private void AddToLog(DownloadLogEntry entry)
+    {
+        var resolved = entry.InstanceId == null && entry.Instance != null
+            ? new DownloadLogEntry
+            {
+                GameName = entry.GameName,
+                Status = entry.Status,
+                Message = entry.Message,
+                Timestamp = entry.Timestamp,
+                InstanceId = entry.Instance.Id,
+                Instance = entry.Instance
+            }
+            : entry;
+
+        RunOnUi(() => HistoryLog.Insert(0, resolved)); // newest first
+    }
 
     private void ClearHistoryOnUi() =>
         RunOnUi(() => HistoryLog.Clear());

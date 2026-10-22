@@ -267,14 +267,14 @@
         <Setter Property="Foreground" Value="{StaticResource DangerBrush}"/>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Background" Value="{StaticResource DangerBrush}"/>
-                <Setter Property="BorderBrush" Value="{StaticResource DangerBrush}"/>
-                <Setter Property="Foreground" Value="{StaticResource WhiteBrush}"/>
+                <Setter Property="Background" Value="{StaticResource DangerHoverBgBrush}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource DangerBorderHoverBrush}"/>
+                <Setter Property="Foreground" Value="{StaticResource DangerBrush}"/>
             </Trigger>
             <Trigger Property="IsPressed" Value="True">
-                <Setter Property="Background" Value="{StaticResource DangerPressedBrush}"/>
-                <Setter Property="BorderBrush" Value="{StaticResource DangerPressedBrush}"/>
-                <Setter Property="Foreground" Value="{StaticResource WhiteBrush}"/>
+                <Setter Property="Background" Value="{StaticResource DangerPressedBgBrush}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource DangerBrush}"/>
+                <Setter Property="Foreground" Value="{StaticResource DangerBrush}"/>
             </Trigger>
         </Style.Triggers>
     </Style>
@@ -446,6 +446,30 @@
         <Setter Property="Padding" Value="8"/>
         <Setter Property="Width" Value="36"/>
         <Setter Property="Height" Value="36"/>
+    </Style>
+
+    <!-- Update Action Button (Amber / Orange) for Instances list, grid & cards -->
+    <Style x:Key="UpdateActionButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
+        <Setter Property="Background" Value="#26F59E0B"/>
+        <Setter Property="BorderBrush" Value="#80F59E0B"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Foreground" Value="#F59E0B"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#50F59E0B"/>
+                <Setter Property="BorderBrush" Value="#F59E0B"/>
+                <Setter Property="Foreground" Value="#FFFFFF"/>
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="Background" Value="#70F59E0B"/>
+                <Setter Property="BorderBrush" Value="#D97706"/>
+                <Setter Property="Foreground" Value="#FFFFFF"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.45"/>
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <!-- TitleBar Window Control Buttons -->

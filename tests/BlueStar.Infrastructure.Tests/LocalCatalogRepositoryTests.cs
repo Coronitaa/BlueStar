@@ -169,7 +169,7 @@ public class LocalCatalogRepositoryTests : IDisposable
         await _repo.UpsertAppsAsync(apps);
 
         // Filter 95%+ ratings
-        var (highRated, count) = await _repo.QueryAsync(new LocalCatalogQuery
+        var (highRated, count, _) = await _repo.QueryAsync(new LocalCatalogQuery
         {
             MinRatingPercent = 95,
             SortBy = "Reviews",
@@ -182,7 +182,7 @@ public class LocalCatalogRepositoryTests : IDisposable
         Assert.Equal(96, highRated[1].ReviewPercent);
 
         // Sort by Name ASC
-        var (sortedByName, _) = await _repo.QueryAsync(new LocalCatalogQuery
+        var (sortedByName, _, _) = await _repo.QueryAsync(new LocalCatalogQuery
         {
             SortBy = "Name",
             Descending = false
@@ -248,7 +248,7 @@ public class LocalCatalogRepositoryTests : IDisposable
             var completeness = await repo.GetCompletenessAsync();
             Assert.Equal(1, completeness.TotalIndexedApps);
 
-            var (results, count) = await repo.QueryAsync(new LocalCatalogQuery { Term = "Counter-Strike" });
+            var (results, count, _) = await repo.QueryAsync(new LocalCatalogQuery { Term = "Counter-Strike" });
             Assert.Equal(1, count);
             Assert.Equal(730u, results[0].AppId);
         }
@@ -292,7 +292,7 @@ public class LocalCatalogRepositoryTests : IDisposable
 
             await repo.UpsertAppsAsync([app1, app2, app3]);
 
-            var (items, count) = await repo.QueryAsync(new LocalCatalogQuery
+            var (items, count, _) = await repo.QueryAsync(new LocalCatalogQuery
             {
                 SortBy = "price",
                 Descending = false,
@@ -328,7 +328,7 @@ public class LocalCatalogRepositoryTests : IDisposable
 
             await repo.UpsertAppsAsync([appA, appB, appC, appD, appE]);
 
-            var (items, count) = await repo.QueryAsync(new LocalCatalogQuery
+            var (items, count, _) = await repo.QueryAsync(new LocalCatalogQuery
             {
                 SortBy = "reviews",
                 Descending = true,
@@ -390,7 +390,7 @@ public class LocalCatalogRepositoryTests : IDisposable
             await repo.UpsertAppsAsync([game1, game2, game3]);
 
             // Search by "repo" without dots
-            var (itemsRepo, countRepo) = await repo.QueryAsync(new LocalCatalogQuery
+            var (itemsRepo, countRepo, _) = await repo.QueryAsync(new LocalCatalogQuery
             {
                 Term = "repo",
                 Limit = 10
@@ -403,7 +403,7 @@ public class LocalCatalogRepositoryTests : IDisposable
             Assert.Equal(100u, itemsRepo[2].AppId); // Repossession (0 reviews)
 
             // Search by "R.E.P.O." with dots
-            var (itemsDotted, countDotted) = await repo.QueryAsync(new LocalCatalogQuery
+            var (itemsDotted, countDotted, _) = await repo.QueryAsync(new LocalCatalogQuery
             {
                 Term = "R.E.P.O.",
                 Limit = 10
@@ -417,6 +417,66 @@ public class LocalCatalogRepositoryTests : IDisposable
             Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
             try { if (File.Exists(dbPath)) File.Delete(dbPath); } catch { }
         }
+    }
+
+    [Fact]
+    public async Task QueryAsync_WhenAdultOrNoDrmFilterApplied_CalculatesHiddenCountCorrectly()
+    {
+        var app1 = new CatalogAppItem
+        {
+            AppId = 5001,
+            Name = "Clean Free Game",
+            AppType = "Game",
+            IsNsfw = false,
+            HasDrm = false
+        };
+        var app2 = new CatalogAppItem
+        {
+            AppId = 5002,
+            Name = "Adult Free Game",
+            AppType = "Game",
+            IsNsfw = true,
+            HasDrm = false
+        };
+        var app3 = new CatalogAppItem
+        {
+            AppId = 5003,
+            Name = "Drm Protected Game",
+            AppType = "Game",
+            IsNsfw = false,
+            HasDrm = true,
+            DrmName = "Denuvo"
+        };
+
+        await _repo.UpsertAppsAsync([app1, app2, app3]);
+
+        // Hide Adult only
+        var (adultFiltered, countAdult, hiddenAdult) = await _repo.QueryAsync(new LocalCatalogQuery
+        {
+            HideAdult = true,
+            RestrictToAppIds = [5001, 5002, 5003]
+        });
+        Assert.Equal(2, countAdult);
+        Assert.Equal(1, hiddenAdult);
+
+        // No DRM only
+        var (drmFiltered, countDrm, hiddenDrm) = await _repo.QueryAsync(new LocalCatalogQuery
+        {
+            NoDrm = true,
+            RestrictToAppIds = [5001, 5002, 5003]
+        });
+        Assert.Equal(2, countDrm);
+        Assert.Equal(1, hiddenDrm);
+
+        // Both HideAdult and NoDrm
+        var (bothFiltered, countBoth, hiddenBoth) = await _repo.QueryAsync(new LocalCatalogQuery
+        {
+            HideAdult = true,
+            NoDrm = true,
+            RestrictToAppIds = [5001, 5002, 5003]
+        });
+        Assert.Equal(1, countBoth);
+        Assert.Equal(2, hiddenBoth);
     }
 }
 

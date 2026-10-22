@@ -547,6 +547,63 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     public bool IsPrerequisitesTabVisible => Instance != null && !IsFolderWithoutSteamAssociation;
     public bool IsDetectedVersionVisible => Instance != null && !IsFolderWithoutSteamAssociation;
 
+    // ── Steam Grid Artworks Management ──
+    [ObservableProperty]
+    private ArtworkSlotViewModel? _capsuleArtwork;
+
+    [ObservableProperty]
+    private ArtworkSlotViewModel? _heroArtwork;
+
+    [ObservableProperty]
+    private ArtworkSlotViewModel? _logoArtwork;
+
+    [ObservableProperty]
+    private ArtworkSlotViewModel? _headerArtwork;
+
+    [ObservableProperty]
+    private ArtworkSlotViewModel? _iconArtwork;
+
+    [ObservableProperty]
+    private ArtworkSlotViewModel? _instanceBannerArtwork;
+
+    [ObservableProperty]
+    private ArtworkSlotViewModel? _instanceLogoArtwork;
+
+    [ObservableProperty]
+    private bool _isDownloadingArtworks;
+
+    [ObservableProperty]
+    private string? _artworkStatusMessage;
+
+    // ── Artwork Dimension Warning Modal State ──
+    [ObservableProperty]
+    private bool _isArtworkDimensionModalOpen;
+
+    [ObservableProperty]
+    private SteamArtworkType _pendingArtworkType;
+
+    [ObservableProperty]
+    private string? _pendingArtworkFilePath;
+
+    [ObservableProperty]
+    private byte[]? _pendingArtworkBytes;
+
+    [ObservableProperty]
+    private string? _pendingArtworkExtension;
+
+    [ObservableProperty]
+    private System.Windows.Media.ImageSource? _pendingArtworkPreviewSource;
+
+    [ObservableProperty]
+    private string? _pendingArtworkActualDimensions;
+
+    [ObservableProperty]
+    private string? _pendingArtworkRecommendedDimensions;
+
+    [ObservableProperty]
+    private string? _pendingArtworkWarningMessage;
+
+
 
     // ── Association Modal State (ImportedFolder -> DepotBox) ──
     [ObservableProperty]
@@ -594,6 +651,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         else if (value == "Prerequisites")
         {
             _ = ScanPrerequisitesAsync();
+        }
+        else if (value == "Settings")
+        {
+            _ = LoadArtworksAsync();
         }
     }
 
@@ -1053,7 +1114,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     private DownloadJobItem? _activeJob;
 
     public bool IsInstanceDownloading => ActiveJob?.IsActive ?? false;
-    public bool HasActiveJob => ActiveJob is not null && !ActiveJob.IsCompleted;
+    public bool HasActiveJob => ActiveJob is not null && (ActiveJob.IsActive || ActiveJob.IsPaused);
     public bool ShowDownloadButton => ActiveJob is null || ActiveJob.IsCompleted;
     public bool IsInstalled => Instance?.Status == InstanceStatus.Ready ||
                                Instance?.Status == InstanceStatus.Running ||
@@ -2503,6 +2564,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             _localizationService.LanguageChanged += _languageChangedHandler;
         }
 
+        _downloadQueueManager.QueueChanged += OnQueueChanged;
         _downloadQueueManager.Queue.CollectionChanged += OnQueueChanged;
         _instanceManager.InstancesChanged += OnInstanceManagerInstancesChanged;
         _gameLauncher.RunningStateChanged += OnGameRunningStateChanged;
@@ -2522,10 +2584,14 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             });
         };
         _appSettings.SettingsChanged += _settingsChangedHandler;
+
+        InstanceArtworkService.ExecutableIconExtractor = ExtractIconFromExecutable;
+        InitializeArtworkSlots();
+        InstanceArtworkService.ArtworkChanged += OnArtworkServiceChanged;
     }
 
 
-    private void OnQueueChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    private void OnQueueChanged(object? sender, EventArgs e)
     {
         if (_isDisposed || Instance is null) return;
         ActiveJob = _downloadQueueManager.Queue.FirstOrDefault(j => j.Instance.Id == Instance.Id);
@@ -2533,14 +2599,27 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         {
             if (_isDisposed || Instance is null) return;
             var refreshed = await _instanceManager.GetByIdAsync(Instance.Id, CancellationToken.None).ConfigureAwait(true);
-            if (refreshed != null && (refreshed.Status != Instance.Status || refreshed.Depots.Any(d => d.IsDownloaded != Instance.Depots.FirstOrDefault(x => x.DepotId == d.DepotId)?.IsDownloaded)))
+            if (refreshed != null)
             {
-                await LoadInstanceAsync(refreshed).ConfigureAwait(true);
+                HasGameUpdateAvailable = refreshed.HasUpdateAvailable;
+                if (refreshed.Status != Instance.Status || refreshed.Depots.Any(d => d.IsDownloaded != Instance.Depots.FirstOrDefault(x => x.DepotId == d.DepotId)?.IsDownloaded))
+                {
+                    await LoadInstanceAsync(refreshed).ConfigureAwait(true);
+                }
+                else
+                {
+                    Instance = refreshed;
+                }
             }
             NotifyDownloadProps();
-            OnPropertyChanged(nameof(HeroTags));
+            OnPropertyChanged(nameof(HasActiveJob));
             OnPropertyChanged(nameof(IsInstalled));
             OnPropertyChanged(nameof(CanDeployEmulator));
+            OnPropertyChanged(nameof(ShowDownloadButton));
+            OnPropertyChanged(nameof(InstanceDownloadPercentage));
+            OnPropertyChanged(nameof(InstanceDownloadLabel));
+            OnPropertyChanged(nameof(IsInstanceDownloading));
+            OnPropertyChanged(nameof(HeroTags));
         }, null);
     }
 
@@ -2551,9 +2630,17 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         {
             if (_isDisposed || Instance is null) return;
             var refreshed = await _instanceManager.GetByIdAsync(Instance.Id, CancellationToken.None).ConfigureAwait(true);
-            if (refreshed != null && refreshed.Status != Instance.Status)
+            if (refreshed != null)
             {
-                await LoadInstanceAsync(refreshed).ConfigureAwait(true);
+                HasGameUpdateAvailable = refreshed.HasUpdateAvailable;
+                if (refreshed.Status != Instance.Status)
+                {
+                    await LoadInstanceAsync(refreshed).ConfigureAwait(true);
+                }
+                else
+                {
+                    Instance = refreshed;
+                }
             }
         }, null);
     }
@@ -2792,6 +2879,11 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 Status = status
             };
 
+            if (instance.HasUpdateAvailable || HasPendingDepotUpdate)
+            {
+                HasGameUpdateAvailable = true;
+            }
+
             if (status != instance.Status)
             {
                 _ = _instanceManager.UpdateAsync(Instance, CancellationToken.None);
@@ -2934,7 +3026,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                             InstalledVersionText = cachedState.InstalledDateText ?? $"{cachedState.InstalledDate.Value:d MMM yyyy}";
                         }
 
-                        HasGameUpdateAvailable = cachedState.Status == UpdateCheckStatus.UpdateAvailable;
+                        if (cachedState.Status == UpdateCheckStatus.UpdateAvailable)
+                        {
+                            HasGameUpdateAvailable = true;
+                        }
                     }
                 }
                 catch { }
@@ -2962,11 +3057,14 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                     InstalledVersionDate = sessionState.InstalledDate.Value;
                     InstalledVersionText = sessionState.InstalledDateText ?? $"{sessionState.InstalledDate.Value:d MMM yyyy}";
                 }
-                HasGameUpdateAvailable = sessionState.Status == UpdateCheckStatus.UpdateAvailable;
+                if (sessionState.Status == UpdateCheckStatus.UpdateAvailable)
+                {
+                    HasGameUpdateAvailable = true;
+                }
             }
             else
             {
-                _ = CheckSteamVersionDateAsync();
+                _ = CheckSteamVersionDateAsync(userInitiated: false, allowClearingUpdateFlag: false);
             }
 
             _ = LoadDlcsFromMetadataIfEmptyAsync();
@@ -3196,7 +3294,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     /// this coarser date comparison clear the flag is what made opening and closing the update
     /// modal mark the game as already updated.
     /// </param>
-    private async Task CheckSteamVersionDateAsync(bool userInitiated = false, bool allowClearingUpdateFlag = true)
+    private async Task CheckSteamVersionDateAsync(bool userInitiated = false, bool allowClearingUpdateFlag = false)
     {
         if (_isDisposed || Instance == null || Instance.AppId == 0) return;
 
@@ -3258,14 +3356,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                     // current, so "same date" does not mean "nothing to download".
                     bool depotUpdatePending = HasPendingDepotUpdate || UpdateAvailableDepots.Count > 0;
 
-                    if (allowClearingUpdateFlag && !depotUpdatePending)
+                    if (allowClearingUpdateFlag && !depotUpdatePending && !Instance.HasUpdateAvailable)
                     {
                         HasGameUpdateAvailable = false;
-                        if (Instance.HasUpdateAvailable)
-                        {
-                            Instance = Instance with { HasUpdateAvailable = false };
-                            await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
-                        }
                     }
                 }
                 // When status is UpdateCheckStatus.Unknown, preserve existing known state
@@ -3315,12 +3408,15 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
         // User explicitly triggered update check: Invalidate session and disk cache to force live check
         _verifiedInstancesThisSession.TryRemove(Instance.Id, out _);
-        _apiClient.InvalidateAppCache(Instance.AppId);
+        _apiClient?.InvalidateAppCache(Instance.AppId);
         if (_cacheService != null)
         {
             _ = _cacheService.RemoveAsync($"instance_update_state_{Instance.Id}");
             _ = _cacheService.RemoveAsync($"steamcmd_depotinfo_{Instance.AppId}_v3");
             _ = _cacheService.RemoveAsync($"steam_latest_update_{Instance.AppId}_v3");
+            _ = _cacheService.RemoveAsync($"steamcmd_unified_{Instance.AppId}_v3");
+            _ = _cacheService.RemoveAsync($"build_versions_{Instance.AppId}");
+            _ = _cacheService.RemoveAsync($"manifesthub_discovery_{Instance.AppId}");
         }
 
         // A manual check is always honoured, even when automatic checks are disabled. It refreshes
@@ -3373,6 +3469,20 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
         try
         {
+            // 0. Discover provider manifests early so discoveredArtifacts is available to map target manifests
+            IReadOnlyList<ManifestArtifact> discoveredArtifacts = Array.Empty<ManifestArtifact>();
+            if (_manifestRegistry != null && Instance != null && Instance.AppId > 0)
+            {
+                try
+                {
+                    discoveredArtifacts = await _manifestRegistry.DiscoverManifestsAsync(Instance.AppId, ct).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to discover manifests across providers for {AppId}", Instance.AppId);
+                }
+            }
+
             // 1. Resolve newest build / version
             GameVersion? latestVersion = null;
             if (_buildResolver != null && Instance!.AppId > 0)
@@ -3397,6 +3507,23 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                     if (d.ManifestId > 0)
                     {
                         targetManifests[d.DepotId] = d.ManifestId;
+                    }
+                }
+            }
+
+            // If targetManifests.Count == 0 or missing depots, populate target manifests from discoveredArtifacts (latest per depot)
+            if (discoveredArtifacts.Count > 0)
+            {
+                var latestDiscoveredByDepot = discoveredArtifacts
+                    .Where(a => a.ManifestId > 0)
+                    .GroupBy(a => a.DepotId)
+                    .ToDictionary(g => g.Key, g => g.OrderByDescending(a => a.ManifestId).First().ManifestId);
+
+                foreach (var (dId, mId) in latestDiscoveredByDepot)
+                {
+                    if (!targetManifests.TryGetValue(dId, out var existingM) || existingM == 0 || mId > existingM)
+                    {
+                        targetManifests[dId] = mId;
                     }
                 }
             }
@@ -3426,7 +3553,11 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 progress.Report(new BackgroundTaskProgress(100, "Manifest check complete.", "Complete"));
                 _uiContext.Post(_ =>
                 {
-                    if (HasGameUpdateAvailable || Instance!.HasUpdateAvailable)
+                    bool steamIsStrictlyNewer = LatestVersionDate.HasValue
+                        && InstalledVersionDate.HasValue
+                        && LatestVersionDate.Value > InstalledVersionDate.Value.AddDays(1);
+
+                    if ((HasGameUpdateAvailable || Instance!.HasUpdateAvailable) && steamIsStrictlyNewer)
                     {
                         _notificationService?.ShowInfo(
                             "Latest Version Not Available Yet",
@@ -3445,22 +3576,73 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
             // 3. Find only depots that actually changed!
             var changedDepots = new List<(uint DepotId, ulong CurrentManifestId, ulong NewManifestId, DepotInfo? LocalDepot)>();
-            foreach (var (depotId, newManifestId) in targetManifests)
+            var checkedDepotIds = new HashSet<uint>();
+
+            if (Instance != null)
             {
-                var local = Instance!.Depots.FirstOrDefault(d => d.DepotId == depotId);
-                ulong installedManifest = 0;
-                if (Instance.InstalledManifestMap.TryGetValue(depotId, out var im))
+                // Read physical manifests on disk as ground truth for installed manifests
+                var diskManifests = new Dictionary<uint, ulong>();
+                try
                 {
-                    installedManifest = im;
+                    var instanceManifestDir = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                        "BlueStar", "instances", Instance.Id.ToString(), "manifests");
+                    if (Directory.Exists(instanceManifestDir))
+                    {
+                        foreach (var f in Directory.GetFiles(instanceManifestDir, "*.manifest"))
+                        {
+                            var m = System.Text.RegularExpressions.Regex.Match(Path.GetFileName(f), @"^(\d+)_(\d+)\.manifest$");
+                            if (m.Success && uint.TryParse(m.Groups[1].Value, out var did) && ulong.TryParse(m.Groups[2].Value, out var mid))
+                            {
+                                diskManifests[did] = mid;
+                            }
+                        }
+                    }
                 }
-                else if (local != null)
+                catch (Exception ex)
                 {
-                    installedManifest = local.ManifestId;
+                    _logger.LogDebug(ex, "Failed to read physical manifests for {InstanceId}", Instance.Id);
                 }
 
-                if (local == null || installedManifest != newManifestId)
+                foreach (var local in Instance.Depots)
                 {
-                    changedDepots.Add((depotId, installedManifest, newManifestId, local));
+                    checkedDepotIds.Add(local.DepotId);
+                    ulong installedManifest = diskManifests.TryGetValue(local.DepotId, out var diskMid) && diskMid > 0
+                        ? diskMid
+                        : (Instance.InstalledManifestMap.TryGetValue(local.DepotId, out var im) && im > 0
+                            ? im
+                            : local.ManifestId);
+
+                    ulong newManifestId = 0;
+                    if (targetManifests.TryGetValue(local.DepotId, out var tm) && tm > 0)
+                    {
+                        newManifestId = tm;
+                    }
+                    else if (discoveredArtifacts.Count > 0)
+                    {
+                        var disc = discoveredArtifacts
+                            .Where(a => a.DepotId == local.DepotId && a.ManifestId > 0)
+                            .OrderByDescending(a => a.ManifestId)
+                            .FirstOrDefault();
+                        if (disc != null)
+                        {
+                            newManifestId = disc.ManifestId;
+                        }
+                    }
+
+                    if (newManifestId > 0 && newManifestId != installedManifest)
+                    {
+                        changedDepots.Add((local.DepotId, installedManifest, newManifestId, local));
+                    }
+                }
+            }
+
+            // Also check for any targetManifests depots not yet in Instance.Depots
+            foreach (var (depotId, newManifestId) in targetManifests)
+            {
+                if (!checkedDepotIds.Contains(depotId) && newManifestId > 0)
+                {
+                    changedDepots.Add((depotId, 0, newManifestId, null));
                 }
             }
 
@@ -3469,13 +3651,23 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 progress.Report(new BackgroundTaskProgress(100, "All depots match installed version.", "Complete"));
                 _uiContext.Post(_ =>
                 {
-                    if (HasGameUpdateAvailable || Instance!.HasUpdateAvailable)
+                    bool steamIsStrictlyNewer = LatestVersionDate.HasValue
+                        && InstalledVersionDate.HasValue
+                        && LatestVersionDate.Value > InstalledVersionDate.Value.AddDays(1);
+
+                    if (steamIsStrictlyNewer)
                     {
                         // Steam has a newer version, but providers do not have newer manifests yet.
                         // Keep HasGameUpdateAvailable = true so the user is informed!
+                        HasGameUpdateAvailable = true;
+                        if (Instance != null && !Instance.HasUpdateAvailable)
+                        {
+                            Instance = Instance with { HasUpdateAvailable = true, UpdateDescription = "Newer depot build available for download" };
+                            _ = _instanceManager.UpdateAsync(Instance, CancellationToken.None);
+                        }
                         _notificationService?.ShowInfo(
-                            "Latest Version Not Available Yet",
-                            "A newer version was detected on Steam, but its depot manifests are not yet available across configured providers. Installed files remain unchanged.",
+                            GetString("String_NewVersionNotAvailableYetTitle", "Latest Version Not Available Yet"),
+                            GetString("String_NewVersionNotAvailableYetDesc", "A newer version was detected on Steam, but its depot manifests are not yet available across configured providers. Installed files remain unchanged."),
                             TimeSpan.FromSeconds(6));
                     }
                     else
@@ -3483,7 +3675,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                         HasGameUpdateAvailable = false;
                         HasPendingDepotUpdate = false;
                         UpdateAvailableDepots = [];
-                        if (Instance!.HasUpdateAvailable)
+                        if (Instance != null && Instance.HasUpdateAvailable)
                         {
                             Instance = Instance with { HasUpdateAvailable = false, UpdateDescription = null };
                             _ = _instanceManager.UpdateAsync(Instance, CancellationToken.None);
@@ -3500,8 +3692,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
             progress.Report(new BackgroundTaskProgress(60, "Resolving providers for updated depots...", "Resolving"));
 
-            IReadOnlyList<ManifestArtifact> discoveredArtifacts = Array.Empty<ManifestArtifact>();
-            if (_manifestRegistry != null && Instance != null)
+            if (discoveredArtifacts.Count == 0 && _manifestRegistry != null && Instance != null)
             {
                 try
                 {
@@ -3516,15 +3707,49 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 string providerName = "Community";
                 long size = item.LocalDepot?.SizeBytes ?? 0;
 
+                ManifestArtifact? artifact = null;
                 if (discoveredArtifacts.Count > 0)
                 {
-                    var artifact = discoveredArtifacts.FirstOrDefault(a => a.DepotId == item.DepotId && a.ManifestId == item.NewManifestId);
-                    if (artifact != null && artifact.Routes.Count > 0)
+                    artifact = discoveredArtifacts.FirstOrDefault(a => a.DepotId == item.DepotId && a.ManifestId == item.NewManifestId);
+                    if (artifact != null)
                     {
-                        var bestRoute = artifact.Routes.OrderByDescending(r => r.Priority).First();
-                        providerName = !string.IsNullOrWhiteSpace(bestRoute.ProviderName) ? bestRoute.ProviderName : "Community";
+                        if (artifact.SizeBytes > 0) size = artifact.SizeBytes;
+                        if (artifact.Routes != null && artifact.Routes.Count > 0)
+                        {
+                            var bestRoute = artifact.Routes.OrderByDescending(r => r.Priority).First();
+                            providerName = !string.IsNullOrWhiteSpace(bestRoute.ProviderName) ? bestRoute.ProviderName : "Community";
+                        }
                     }
                 }
+
+                // If size is still 0, try resolving size from latestVersion or instance depots
+                if (size <= 0 && latestVersion != null)
+                {
+                    var dMatch = latestVersion.Depots.FirstOrDefault(d => d.DepotId == item.DepotId);
+                    if (dMatch != null && dMatch.SizeBytes > 0)
+                    {
+                        size = dMatch.SizeBytes;
+                    }
+                }
+                if (size <= 0 && Instance?.Depots != null)
+                {
+                    var lMatch = Instance.Depots.FirstOrDefault(d => d.DepotId == item.DepotId);
+                    if (lMatch != null && lMatch.SizeBytes > 0)
+                    {
+                        size = lMatch.SizeBytes;
+                    }
+                }
+
+                // Strictly filter out 0 KB / dummy depots
+                if (size <= 0 || item.NewManifestId == 0)
+                {
+                    continue;
+                }
+
+                // Preselect only depots compatible with current OS that were already installed
+                bool isAlreadyInstalled = item.CurrentManifestId > 0 || (item.LocalDepot != null && item.LocalDepot.IsDownloaded);
+                bool isCompatible = item.LocalDepot == null || IsDepotCompatibleWithCurrentOS(item.LocalDepot);
+                bool isPreselected = isAlreadyInstalled && isCompatible;
 
                 outdatedDepots.Add(new DepotUpdateItem
                 {
@@ -3537,8 +3762,33 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                     NewManifestId = item.NewManifestId,
                     SizeBytes = size,
                     SourceProvider = providerName,
-                    IsSelected = true
+                    IsSelected = isPreselected
                 });
+            }
+
+            if (outdatedDepots.Count == 0)
+            {
+                progress.Report(new BackgroundTaskProgress(100, "Manifest check complete.", "Complete"));
+                _uiContext.Post(_ =>
+                {
+                    bool steamIsStrictlyNewer = LatestVersionDate.HasValue
+                        && InstalledVersionDate.HasValue
+                        && LatestVersionDate.Value > InstalledVersionDate.Value.AddDays(1);
+
+                    HasPendingDepotUpdate = false;
+                    IsUpdateModalOpen = false;
+
+                    if (HasGameUpdateAvailable || Instance?.HasUpdateAvailable == true || steamIsStrictlyNewer)
+                    {
+                        HasGameUpdateAvailable = true;
+                    }
+
+                    _notificationService?.ShowInfo(
+                        GetString("String_NewVersionNotAvailableYetTitle", "No Downloads Available from Providers"),
+                        GetString("String_NewVersionNotAvailableYetDesc", "A newer version was detected on Steam, but its depot manifests are not yet available across configured providers. Installed files remain unchanged."),
+                        TimeSpan.FromSeconds(6));
+                }, null);
+                return;
             }
 
             progress.Report(new BackgroundTaskProgress(100, $"Found {outdatedDepots.Count} updated depot(s).", "Complete"));
@@ -3655,13 +3905,14 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     {
         progress.Report(new BackgroundTaskProgress(5, "Acquiring manifests for updated depots...", "Downloading"));
 
-        var instanceManifestDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "BlueStar", "instances", Instance!.Id.ToString(), "manifests");
-        Directory.CreateDirectory(instanceManifestDir);
+        // Stage manifests in DepotWork/{Instance.Id} so DepotDownloaderProvider finds them,
+        // but GameUpdateDetectionHelper does not mistake them for an already installed build.
+        var workingDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "BlueStar", "DepotWork", Instance!.Id.ToString());
+        Directory.CreateDirectory(workingDir);
 
-        var updatedDepots = new List<DepotInfo>(Instance.Depots);
-        var updatedManifestMap = new Dictionary<uint, ulong>(Instance.InstalledManifestMap);
+        var downloadDepots = new List<DepotInfo>();
 
         // 1. Acquire manifests & keys for selected depots
         for (int i = 0; i < selected.Count; i++)
@@ -3685,10 +3936,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 }
             }
 
-            // Copy acquired manifest to instance manifests directory
+            // Stage acquired manifest in working directory (DepotWork/{id}) instead of instance manifests directory
             if (!string.IsNullOrWhiteSpace(manifestFilePath) && File.Exists(manifestFilePath))
             {
-                var destPath = Path.Combine(instanceManifestDir, $"{item.DepotId}_{item.NewManifestId}.manifest");
+                var destPath = Path.Combine(workingDir, $"{item.DepotId}_{item.NewManifestId}.manifest");
                 File.Copy(manifestFilePath, destPath, overwrite: true);
             }
 
@@ -3699,34 +3950,19 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 depotKey = await _depotKeyRepository.GetKeyAsync(item.DepotId, ct).ConfigureAwait(false);
             }
 
-            // Update depot info in instance
-            var idx = updatedDepots.FindIndex(d => d.DepotId == item.DepotId);
-            if (idx >= 0)
+            var existingDepot = Instance.Depots.FirstOrDefault(d => d.DepotId == item.DepotId);
+            downloadDepots.Add(new DepotInfo
             {
-                var existing = updatedDepots[idx];
-                updatedDepots[idx] = existing with
-                {
-                    ManifestId = item.NewManifestId,
-                    DepotKey = !string.IsNullOrWhiteSpace(depotKey) ? depotKey : existing.DepotKey,
-                    IsDownloaded = false
-                };
-            }
-            else
-            {
-                updatedDepots.Add(new DepotInfo
-                {
-                    DepotId = item.DepotId,
-                    ManifestId = item.NewManifestId,
-                    Name = item.Name,
-                    Category = item.Category,
-                    Platform = item.Platform,
-                    Architecture = item.Architecture,
-                    DepotKey = depotKey,
-                    IsDownloaded = false
-                });
-            }
-
-            updatedManifestMap[item.DepotId] = item.NewManifestId;
+                DepotId = item.DepotId,
+                ManifestId = item.NewManifestId,
+                Name = item.Name,
+                Category = item.Category,
+                Platform = item.Platform,
+                Architecture = item.Architecture,
+                DepotKey = !string.IsNullOrWhiteSpace(depotKey) ? depotKey : existingDepot?.DepotKey,
+                SizeBytes = item.SizeBytes,
+                IsDownloaded = false
+            });
         }
 
         // 2. Roll the instance back to a pristine state.
@@ -3767,9 +4003,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
         var buildHistory = PushBuildHistory(preparedInstance, "update");
 
+        // Do NOT overwrite Instance.Depots with newManifestId before the download completes!
+        // Instance.Depots retains the currently installed manifests.
         var updatedInstance = preparedInstance with
         {
-            Depots = updatedDepots.AsReadOnly(),
             BuildHistory = buildHistory,
             IsBuildPinned = false
         };
@@ -3781,7 +4018,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 BuildId = Instance.ActiveBuildId ?? "Updated",
                 BranchName = Instance.ActiveBranch ?? "public",
                 DisplayName = "Updated Build",
-                Depots = updatedDepots.Select(d => new DepotVersion
+                Depots = downloadDepots.Select(d => new DepotVersion
                 {
                     DepotId = d.DepotId,
                     ManifestId = d.ManifestId,
@@ -3821,17 +4058,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             // Enqueue updated depots for download
             var downloadInstance = Instance with
             {
-                Depots = selected.Select(s =>
-                {
-                    var updated = updatedDepots.FirstOrDefault(d => d.DepotId == s.DepotId);
-                    return updated ?? new DepotInfo
-                    {
-                        DepotId = s.DepotId,
-                        ManifestId = s.NewManifestId,
-                        SizeBytes = s.SizeBytes,
-                        Name = s.Name
-                    };
-                }).ToList().AsReadOnly()
+                Depots = downloadDepots.AsReadOnly()
             };
 
             _ = _downloadQueueManager.StartDownloadAsync(downloadInstance);
@@ -3862,6 +4089,19 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
         StatusMessage = "🔍 Rechecking instance manifests and update state...";
 
+        // Invalidate all caches
+        _verifiedInstancesThisSession.TryRemove(Instance.Id, out _);
+        _apiClient?.InvalidateAppCache(Instance.AppId);
+        if (_cacheService != null)
+        {
+            await _cacheService.RemoveAsync($"instance_update_state_{Instance.Id}").ConfigureAwait(false);
+            await _cacheService.RemoveAsync($"steamcmd_depotinfo_{Instance.AppId}_v3").ConfigureAwait(false);
+            await _cacheService.RemoveAsync($"steam_latest_update_{Instance.AppId}_v3").ConfigureAwait(false);
+            await _cacheService.RemoveAsync($"steamcmd_unified_{Instance.AppId}_v3").ConfigureAwait(false);
+            await _cacheService.RemoveAsync($"build_versions_{Instance.AppId}").ConfigureAwait(false);
+            await _cacheService.RemoveAsync($"manifesthub_discovery_{Instance.AppId}").ConfigureAwait(false);
+        }
+
         var instanceManifestDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "BlueStar", "instances", Instance.Id.ToString(), "manifests");
@@ -3881,20 +4121,28 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }
 
         var updatedManifestMap = new Dictionary<uint, ulong>();
+        var updatedDepots = new List<DepotInfo>();
         foreach (var d in Instance.Depots)
         {
-            if (d.IsDownloaded && d.ManifestId > 0)
+            if (localManifestMap.TryGetValue(d.DepotId, out var diskMid) && diskMid > 0)
+            {
+                updatedManifestMap[d.DepotId] = diskMid;
+                updatedDepots.Add(d with { ManifestId = diskMid, IsDownloaded = true });
+            }
+            else if (d.IsDownloaded && d.ManifestId > 0)
             {
                 updatedManifestMap[d.DepotId] = d.ManifestId;
+                updatedDepots.Add(d);
             }
-            else if (localManifestMap.TryGetValue(d.DepotId, out var mId) && d.IsDownloaded)
+            else
             {
-                updatedManifestMap[d.DepotId] = mId;
+                updatedDepots.Add(d);
             }
         }
 
         var updatedInstance = Instance with
         {
+            Depots = updatedDepots.AsReadOnly(),
             InstalledManifestMap = updatedManifestMap.Count > 0 ? updatedManifestMap : Instance.InstalledManifestMap
         };
 
@@ -3905,7 +4153,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
         Instance = updatedInstance;
 
-        await CheckSteamVersionDateAsync().ConfigureAwait(true);
+        await CheckSteamVersionDateAsync(userInitiated: true, allowClearingUpdateFlag: false).ConfigureAwait(true);
+
+        await CheckDepotUpdatesInternalAsync(new Progress<BackgroundTaskProgress>(), CancellationToken.None).ConfigureAwait(true);
 
         _notificationService?.ShowSuccess("Version Rechecked", "Instance version and update status have been rechecked.");
     }
@@ -4755,8 +5005,12 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
     private static IReadOnlyList<InstalledBuildSnapshot> PushBuildHistory(GameInstance instance, string reason)
     {
+        var manifestMap = (instance.InstalledManifestMap != null && instance.InstalledManifestMap.Count > 0)
+            ? new Dictionary<uint, ulong>(instance.InstalledManifestMap)
+            : instance.Depots?.Where(d => d.ManifestId > 0).ToDictionary(d => d.DepotId, d => d.ManifestId) ?? [];
+
         // Nothing installed yet, or no manifests to remember: nothing worth recording.
-        if (instance.InstalledManifestMap == null || instance.InstalledManifestMap.Count == 0)
+        if (manifestMap.Count == 0)
         {
             return instance.BuildHistory ?? [];
         }
@@ -4770,7 +5024,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             BuildId = buildId,
             BranchName = instance.ActiveBranch ?? "public",
             DisplayName = reason == "rollback" ? null : instance.UpdateDescription,
-            ManifestMap = new Dictionary<uint, ulong>(instance.InstalledManifestMap),
+            ManifestMap = manifestMap,
             InstalledAt = instance.UpdatedAt,
             BuildDate = instance.InstalledVersionDate,
             SizeBytes = instance.Depots?.Sum(d => d.SizeBytes) ?? 0
@@ -5422,6 +5676,27 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
             await _instanceManager.UpdateAsync(updatedInstance, CancellationToken.None).ConfigureAwait(true);
             await LoadInstanceAsync(updatedInstance).ConfigureAwait(true);
+
+            // Download artworks for newly associated Steam game in background
+            if (newAppId > 0)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await InstanceArtworkService.DownloadArtworkForInstanceAsync(
+                            updatedInstance.Id,
+                            newAppId,
+                            updatedInstance.HeaderImageUrl,
+                            updatedInstance.Metadata?.CapsuleImageUrl,
+                            updatedInstance.ExecutablePath,
+                            updatedInstance.Name,
+                            CancellationToken.None).ConfigureAwait(false);
+                        _ = LoadArtworksAsync();
+                    }
+                    catch { }
+                });
+            }
 
             IsAssociationModalOpen = false;
             _notificationService?.ShowSuccess("DepotBox Associated", $"{Instance.Name} is now linked to DepotBox!");
@@ -7291,8 +7566,30 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     private async Task CancelDownloadAsync()
     {
         if (Instance is null) return;
+        if (ActiveJob != null)
+        {
+            ActiveJob.IsCanceling = true;
+            ActiveJob.StatusMessage = GetString("String_Canceling", "Cancelando...");
+        }
         await _downloadQueueManager.CancelAsync(Instance.Id).ConfigureAwait(true);
+        var refreshed = await _instanceManager.GetByIdAsync(Instance.Id, CancellationToken.None).ConfigureAwait(true);
+        if (refreshed != null)
+        {
+            Instance = refreshed;
+            if (refreshed.HasUpdateAvailable)
+            {
+                HasGameUpdateAvailable = true;
+            }
+        }
+        ActiveJob = _downloadQueueManager.Queue.FirstOrDefault(j => j.Instance.Id == Instance.Id);
         NotifyDownloadProps();
+        OnPropertyChanged(nameof(HasActiveJob));
+        OnPropertyChanged(nameof(IsInstalled));
+        OnPropertyChanged(nameof(CanDeployEmulator));
+        OnPropertyChanged(nameof(ShowDownloadButton));
+        OnPropertyChanged(nameof(InstanceDownloadPercentage));
+        OnPropertyChanged(nameof(InstanceDownloadLabel));
+        OnPropertyChanged(nameof(IsInstanceDownloading));
     }
 
     [RelayCommand]
@@ -7737,6 +8034,14 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         ShortcutStatusMessage = "⏳ Creating shortcuts & downloading artwork...";
         IsShortcutStatusSuccess = true;
 
+        var effectiveIcon = Instance?.CustomIconPath
+                         ?? InstanceArtworkService.GetArtworkFilePath(Instance?.Id ?? Guid.Empty, SteamArtworkType.Icon)
+                         ?? InstanceArtworkService.GetArtworkFilePath(Instance?.Id ?? Guid.Empty, SteamArtworkType.InstanceLogo);
+
+        var effectiveHeader = Instance?.CustomBannerPath
+                           ?? Instance?.HeaderImageUrl
+                           ?? Instance?.Metadata?.HeaderImageUrl;
+
         var result = await ShortcutHelper.CreateShortcutsAsync(
             SelectedExecutable,
             ShortcutName,
@@ -7744,8 +8049,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             CreateStartMenuShortcut,
             CreateSteamShortcut,
             originalGameAppId: Instance?.AppId ?? 0,
-            customHeaderUrl: Instance?.HeaderImageUrl ?? Instance?.Metadata?.HeaderImageUrl,
-            customCapsuleUrl: Instance?.Metadata?.CapsuleImageUrl);
+            customHeaderUrl: effectiveHeader,
+            customCapsuleUrl: Instance?.Metadata?.CapsuleImageUrl,
+            iconPath: effectiveIcon,
+            instanceId: Instance?.Id);
 
         ShortcutStatusMessage = result.Message;
         IsShortcutStatusSuccess = result.Success;
@@ -8255,10 +8562,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         // 2. Check cached discovered artifacts
         if (_discoveredManifestArtifacts != null && _discoveredManifestArtifacts.Count > 0)
         {
-            var match = _discoveredManifestArtifacts.FirstOrDefault(a => a.DepotId == depotId && a.ManifestId == manifestId);
+            var match = _discoveredManifestArtifacts.FirstOrDefault(a => a != null && a.DepotId == depotId && a.ManifestId == manifestId);
             if (match != null)
             {
-                var prov = match.Routes.FirstOrDefault()?.ProviderId ?? "Provider";
+                var prov = match.Routes?.FirstOrDefault()?.ProviderId ?? "Provider";
                 return (false, prov, true);
             }
         }
@@ -8269,10 +8576,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             try
             {
                 _discoveredManifestArtifacts = await _manifestRegistry.DiscoverManifestsAsync(Instance.AppId, CancellationToken.None).ConfigureAwait(false);
-                var match = _discoveredManifestArtifacts.FirstOrDefault(a => a.DepotId == depotId && a.ManifestId == manifestId);
+                var match = _discoveredManifestArtifacts?.FirstOrDefault(a => a != null && a.DepotId == depotId && a.ManifestId == manifestId);
                 if (match != null)
                 {
-                    var prov = match.Routes.FirstOrDefault()?.ProviderId ?? "Provider";
+                    var prov = match.Routes?.FirstOrDefault()?.ProviderId ?? "Provider";
                     return (false, prov, true);
                 }
             }
@@ -8357,8 +8664,12 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             // 5. Update each SelectableDepotItem on UI thread
             _uiContext.Post(_ =>
             {
-                foreach (var item in Depots)
+                if (_isDisposed || Instance == null || Depots == null) return;
+                var currentInstance = Instance;
+                if (currentInstance == null) return;
+                foreach (var item in Depots.ToList())
                 {
+                    if (item?.Depot == null) continue;
                     var depotId = item.Depot.DepotId;
                     var options = new List<DepotManifestOption>();
                     var seen = new HashSet<ulong>();
@@ -8383,9 +8694,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                     }
 
                     // Versions from IBuildResolver (SteamCMD branches & builds)
-                    foreach (var v in versions)
+                    foreach (var v in versions ?? [])
                     {
-                        var match = v.Depots.FirstOrDefault(d => d.DepotId == depotId);
+                        if (v?.Depots == null) continue;
+                        var match = v.Depots.FirstOrDefault(d => d != null && d.DepotId == depotId);
                         if (match != null && match.ManifestId > 0 && seen.Add(match.ManifestId))
                         {
                             var branchLabel = !string.IsNullOrWhiteSpace(v.BranchName) ? v.BranchName : "build";
@@ -8405,41 +8717,46 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                     // Artifacts discovered across providers
                     if (_discoveredManifestArtifacts != null)
                     {
-                        foreach (var art in _discoveredManifestArtifacts.Where(a => a.DepotId == depotId))
+                        foreach (var art in _discoveredManifestArtifacts.Where(a => a != null && a.DepotId == depotId))
                         {
                             if (seen.Add(art.ManifestId))
                             {
-                                var providerLabel = string.Join(", ", art.Routes.Select(r => r.ProviderId));
+                                var providerLabel = art.Routes != null
+                                    ? string.Join(", ", art.Routes.Where(r => r != null).Select(r => r.ProviderId))
+                                    : string.Empty;
                                 options.Add(new DepotManifestOption
                                 {
                                     ManifestId = art.ManifestId,
                                     DisplayText = string.IsNullOrEmpty(providerLabel) ? "Provider" : providerLabel,
                                     Source = string.IsNullOrEmpty(providerLabel) ? "Online" : providerLabel,
-                                    IsBacked = art.Routes.Count > 0 || IsLocallyAvailable(art.ManifestId)
+                                    IsBacked = (art.Routes != null && art.Routes.Count > 0) || IsLocallyAvailable(art.ManifestId)
                                 });
                             }
                         }
                     }
 
                     // Everything DepotBox lists for this depot, backed or not
-                    foreach (var mi in depotBoxManifests.Where(m => m.DepotId == depotId))
+                    if (depotBoxManifests != null)
                     {
-                        if (mi.ManifestId > 0 && seen.Add(mi.ManifestId))
+                        foreach (var mi in depotBoxManifests.Where(m => m != null && m.DepotId == depotId))
                         {
-                            options.Add(new DepotManifestOption
+                            if (mi.ManifestId > 0 && seen.Add(mi.ManifestId))
                             {
-                                ManifestId = mi.ManifestId,
-                                DisplayText = "DepotBox catalogue",
-                                Source = "DepotBox",
-                                IsBacked = mi.IsDownloaded || IsLocallyAvailable(mi.ManifestId)
-                            });
+                                options.Add(new DepotManifestOption
+                                {
+                                    ManifestId = mi.ManifestId,
+                                    DisplayText = "DepotBox catalogue",
+                                    Source = "DepotBox",
+                                    IsBacked = mi.IsDownloaded || IsLocallyAvailable(mi.ManifestId)
+                                });
+                            }
                         }
                     }
 
                     // Builds this instance previously had installed
-                    foreach (var snap in Instance.BuildHistory ?? [])
+                    foreach (var snap in currentInstance.BuildHistory ?? [])
                     {
-                        if (snap.ManifestMap.TryGetValue(depotId, out var histId) && histId > 0 && seen.Add(histId))
+                        if (snap?.ManifestMap != null && snap.ManifestMap.TryGetValue(depotId, out var histId) && histId > 0 && seen.Add(histId))
                         {
                             options.Add(new DepotManifestOption
                             {
@@ -8453,19 +8770,22 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                     }
 
                     // Builds shown in the build picker (includes user-imported and custom ones)
-                    foreach (var b in AvailableBuilds)
+                    if (AvailableBuilds != null)
                     {
-                        if (b.DepotManifests.TryGetValue(depotId, out var bId) && bId > 0 && seen.Add(bId))
+                        foreach (var b in AvailableBuilds)
                         {
-                            options.Add(new DepotManifestOption
+                            if (b?.DepotManifests != null && b.DepotManifests.TryGetValue(depotId, out var bId) && bId > 0 && seen.Add(bId))
                             {
-                                ManifestId = bId,
-                                DisplayText = $"{b.DisplayName} · {b.Source}",
-                                Source = b.Source,
-                                BranchName = b.BranchName,
-                                BuildId = b.BuildId,
-                                IsBacked = IsLocallyAvailable(bId)
-                            });
+                                options.Add(new DepotManifestOption
+                                {
+                                    ManifestId = bId,
+                                    DisplayText = $"{b.DisplayName} · {b.Source}",
+                                    Source = b.Source,
+                                    BranchName = b.BranchName,
+                                    BuildId = b.BuildId,
+                                    IsBacked = IsLocallyAvailable(bId)
+                                });
+                            }
                         }
                     }
 
@@ -8495,7 +8815,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                         item.ManifestInputText = item.SelectedManifestOption.ManifestId.ToString();
                     }
 
-                    _ = item.CheckAvailabilityForIdAsync(item.Depot.ManifestId);
+                    if (item.Depot != null)
+                    {
+                        _ = item.CheckAvailabilityForIdAsync(item.Depot.ManifestId);
+                    }
                 }
             }, null);
         }
@@ -9225,6 +9548,520 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
     #endregion
 
+    #region ── Steam Grid Artworks Management ──
+
+    private void InitializeArtworkSlots()
+    {
+        CapsuleArtwork = new ArtworkSlotViewModel(
+            SteamArtworkType.Capsule,
+            "Portada Vertical (Capsule)",
+            "600 × 900 px (2:3)",
+            OnArtworkReplaceRequested,
+            OnArtworkClearRequested);
+
+        HeroArtwork = new ArtworkSlotViewModel(
+            SteamArtworkType.Hero,
+            "Fondo / Banner Hero",
+            "1920 × 620 px (~3.1:1)",
+            OnArtworkReplaceRequested,
+            OnArtworkClearRequested);
+
+        LogoArtwork = new ArtworkSlotViewModel(
+            SteamArtworkType.Logo,
+            "Logotipo (Logo)",
+            "PNG Transparente",
+            OnArtworkReplaceRequested,
+            OnArtworkClearRequested);
+
+        HeaderArtwork = new ArtworkSlotViewModel(
+            SteamArtworkType.Header,
+            "Portada Horizontal (Grid)",
+            "460 × 215 / 920 × 430 px",
+            OnArtworkReplaceRequested,
+            OnArtworkClearRequested);
+
+        IconArtwork = new ArtworkSlotViewModel(
+            SteamArtworkType.Icon,
+            "Ícono del Juego / Shortcut",
+            "256 × 256 px (.ico / .png)",
+            OnArtworkReplaceRequested,
+            OnArtworkClearRequested);
+
+        InstanceBannerArtwork = new ArtworkSlotViewModel(
+            SteamArtworkType.InstanceBanner,
+            "Banner de la Instancia",
+            "460 × 215 px (~2.14:1)",
+            OnArtworkReplaceRequested,
+            OnArtworkClearRequested);
+
+        InstanceLogoArtwork = new ArtworkSlotViewModel(
+            SteamArtworkType.InstanceLogo,
+            "Logo de la Instancia (Nav)",
+            "256 × 256 px (1:1)",
+            OnArtworkReplaceRequested,
+            OnArtworkClearRequested);
+    }
+
+    private void OnArtworkServiceChanged(object? sender, (Guid InstanceId, SteamArtworkType Type) e)
+    {
+        if (Instance != null && e.InstanceId == Instance.Id)
+        {
+            App.Current?.Dispatcher?.InvokeAsync(async () =>
+            {
+                await LoadSingleArtworkSlotAsync(e.Type).ConfigureAwait(true);
+            });
+        }
+    }
+
+    private ArtworkSlotViewModel? GetSlotViewModel(SteamArtworkType type) => type switch
+    {
+        SteamArtworkType.Capsule => CapsuleArtwork,
+        SteamArtworkType.Hero => HeroArtwork,
+        SteamArtworkType.Logo => LogoArtwork,
+        SteamArtworkType.Header => HeaderArtwork,
+        SteamArtworkType.Icon => IconArtwork,
+        SteamArtworkType.InstanceBanner => InstanceBannerArtwork,
+        SteamArtworkType.InstanceLogo => InstanceLogoArtwork,
+        _ => null
+    };
+
+    private string GetArtworkSlotName(SteamArtworkType type) => type switch
+    {
+        SteamArtworkType.Capsule => "Portada Vertical",
+        SteamArtworkType.Hero => "Fondo Hero",
+        SteamArtworkType.Logo => "Logotipo",
+        SteamArtworkType.Header => "Portada Horizontal",
+        SteamArtworkType.Icon => "Ícono del Juego",
+        SteamArtworkType.InstanceBanner => "Banner de la Instancia",
+        SteamArtworkType.InstanceLogo => "Logo de la Instancia",
+        _ => "Artwork"
+    };
+
+    public async Task LoadArtworksAsync()
+    {
+        if (Instance == null) return;
+        var id = Instance.Id;
+
+        await Task.Run(() =>
+        {
+            var capsulePath = InstanceArtworkService.GetArtworkFilePath(id, SteamArtworkType.Capsule);
+            var heroPath = InstanceArtworkService.GetArtworkFilePath(id, SteamArtworkType.Hero);
+            var logoPath = InstanceArtworkService.GetArtworkFilePath(id, SteamArtworkType.Logo);
+            var headerPath = InstanceArtworkService.GetArtworkFilePath(id, SteamArtworkType.Header);
+            var iconPath = InstanceArtworkService.GetArtworkFilePath(id, SteamArtworkType.Icon);
+            var instanceBannerPath = (!string.IsNullOrWhiteSpace(Instance.CustomBannerPath) && File.Exists(Instance.CustomBannerPath))
+                ? Instance.CustomBannerPath
+                : InstanceArtworkService.GetArtworkFilePath(id, SteamArtworkType.InstanceBanner);
+            var instanceLogoPath = (!string.IsNullOrWhiteSpace(Instance.CustomIconPath) && File.Exists(Instance.CustomIconPath))
+                ? Instance.CustomIconPath
+                : InstanceArtworkService.GetArtworkFilePath(id, SteamArtworkType.InstanceLogo);
+
+            bool hasAny = !string.IsNullOrWhiteSpace(capsulePath) || !string.IsNullOrWhiteSpace(heroPath) ||
+                          !string.IsNullOrWhiteSpace(logoPath) || !string.IsNullOrWhiteSpace(headerPath) ||
+                          !string.IsNullOrWhiteSpace(iconPath) || !string.IsNullOrWhiteSpace(instanceBannerPath) ||
+                          !string.IsNullOrWhiteSpace(instanceLogoPath);
+
+            if (!hasAny && Instance.AppId > 0 && !IsDownloadingArtworks)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var targetExe = !string.IsNullOrWhiteSpace(Instance.ExecutablePath) ? Instance.ExecutablePath : SelectedExecutable;
+                        var shortcutName = !string.IsNullOrWhiteSpace(Instance.Name) ? Instance.Name : "Game";
+
+                        await InstanceArtworkService.DownloadArtworkForInstanceAsync(
+                            id,
+                            Instance.AppId,
+                            Instance.HeaderImageUrl,
+                            Instance.Metadata?.CapsuleImageUrl,
+                            targetExe,
+                            shortcutName,
+                            CancellationToken.None).ConfigureAwait(false);
+                    }
+                    catch { }
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(iconPath) && !string.IsNullOrWhiteSpace(Instance.ExecutablePath) && File.Exists(Instance.ExecutablePath))
+            {
+                var artworkDir = InstanceArtworkService.GetArtworkDirectory(id);
+                var extractedIco = Path.Combine(artworkDir, "icon.ico");
+                var extractedPng = Path.Combine(artworkDir, "icon.png");
+                if (ExtractIconFromExecutable(Instance.ExecutablePath, extractedIco))
+                {
+                    iconPath = extractedIco;
+                    if (string.IsNullOrWhiteSpace(instanceLogoPath)) instanceLogoPath = extractedPng;
+                }
+            }
+
+            App.Current?.Dispatcher?.Invoke(() =>
+            {
+                CapsuleArtwork?.LoadFromFile(capsulePath);
+                HeroArtwork?.LoadFromFile(heroPath);
+                LogoArtwork?.LoadFromFile(logoPath);
+                HeaderArtwork?.LoadFromFile(headerPath);
+                IconArtwork?.LoadFromFile(iconPath);
+                InstanceBannerArtwork?.LoadFromFile(instanceBannerPath);
+                InstanceLogoArtwork?.LoadFromFile(instanceLogoPath);
+            });
+        }).ConfigureAwait(false);
+    }
+
+    private async Task LoadSingleArtworkSlotAsync(SteamArtworkType type)
+    {
+        if (Instance == null) return;
+        var id = Instance.Id;
+
+        var path = await Task.Run(() => InstanceArtworkService.GetArtworkFilePath(id, type)).ConfigureAwait(true);
+        var slot = GetSlotViewModel(type);
+        slot?.LoadFromFile(path);
+    }
+
+    [RelayCommand]
+    public async Task RedownloadSteamArtworksAsync()
+    {
+        if (Instance == null || Instance.AppId == 0)
+        {
+            _notificationService?.ShowWarning("Sin AppID de Steam", "Esta instancia no está vinculada a un juego de Steam.");
+            return;
+        }
+
+        IsDownloadingArtworks = true;
+        ArtworkStatusMessage = "⏳ Descargando artworks oficiales de Steam...";
+
+        try
+        {
+            var targetExe = !string.IsNullOrWhiteSpace(Instance.ExecutablePath) ? Instance.ExecutablePath : SelectedExecutable;
+            var shortcutName = !string.IsNullOrWhiteSpace(Instance.Name) ? Instance.Name : "Game";
+
+            await InstanceArtworkService.DownloadArtworkForInstanceAsync(
+                Instance.Id,
+                Instance.AppId,
+                Instance.HeaderImageUrl,
+                Instance.Metadata?.CapsuleImageUrl,
+                targetExe,
+                shortcutName,
+                CancellationToken.None).ConfigureAwait(true);
+
+            await LoadArtworksAsync().ConfigureAwait(true);
+            ArtworkStatusMessage = "✅ Artworks descargados y sincronizados con éxito.";
+            _notificationService?.ShowSuccess("Artworks Actualizados", "Se descargaron y sincronizaron los artworks de Steam.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to redownload artworks for instance {Id}", Instance.Id);
+            ArtworkStatusMessage = $"❌ Error al descargar: {ex.Message}";
+            _notificationService?.ShowError("Error al descargar artworks", ex.Message);
+        }
+        finally
+        {
+            IsDownloadingArtworks = false;
+        }
+    }
+
+    [RelayCommand]
+    public void OpenArtworksFolder()
+    {
+        if (Instance == null) return;
+        try
+        {
+            var dir = InstanceArtworkService.GetArtworkDirectory(Instance.Id);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = dir,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to open artworks directory");
+        }
+    }
+
+    private void OnArtworkReplaceRequested(SteamArtworkType type)
+    {
+        var filter = type == SteamArtworkType.Icon
+            ? "Iconos e Imágenes (*.ico;*.png;*.jpg;*.jpeg;*.webp)|*.ico;*.png;*.jpg;*.jpeg;*.webp|Todos los archivos (*.*)|*.*"
+            : "Imágenes (*.png;*.jpg;*.jpeg;*.webp)|*.png;*.jpg;*.jpeg;*.webp|Todos los archivos (*.*)|*.*";
+
+        var (recW, recH, _) = InstanceArtworkService.GetRecommendedDimensions(type);
+        var dlg = new OpenFileDialog
+        {
+            Title = $"Seleccionar imagen para {GetArtworkSlotName(type)} ({recW} × {recH} px)",
+            Filter = filter
+        };
+
+        if (dlg.ShowDialog() == true)
+        {
+            _ = ProcessNewArtworkFileAsync(type, dlg.FileName);
+        }
+    }
+
+    public void HandleArtworkDrop(SteamArtworkType type, string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return;
+        _ = ProcessNewArtworkFileAsync(type, filePath);
+    }
+
+    public async Task ProcessNewArtworkFileAsync(SteamArtworkType type, string filePath)
+    {
+        if (Instance == null || string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return;
+
+        byte[] fileBytes;
+        try
+        {
+            fileBytes = await File.ReadAllBytesAsync(filePath).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _notificationService?.ShowError("Error de lectura", $"No se pudo leer el archivo: {ex.Message}");
+            return;
+        }
+
+        var (w, h) = InstanceArtworkService.GetImageDimensions(fileBytes);
+        var ext = Path.GetExtension(filePath);
+        var validation = InstanceArtworkService.ValidateDimensions(type, w, h, ext);
+
+        if (!validation.IsValid || !string.IsNullOrWhiteSpace(validation.WarningMessage))
+        {
+            PendingArtworkType = type;
+            PendingArtworkFilePath = filePath;
+            PendingArtworkBytes = fileBytes;
+            PendingArtworkExtension = ext;
+            PendingArtworkActualDimensions = $"{w} × {h} px";
+            PendingArtworkRecommendedDimensions = $"{validation.RecommendedWidth} × {validation.RecommendedHeight} px ({validation.RatioDescription})";
+            PendingArtworkWarningMessage = validation.WarningMessage;
+
+            try
+            {
+                using var ms = new MemoryStream(fileBytes);
+                var bmp = new System.Windows.Media.Imaging.BitmapImage();
+                bmp.BeginInit();
+                bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                bmp.StreamSource = ms;
+                bmp.EndInit();
+                if (bmp.CanFreeze) bmp.Freeze();
+                PendingArtworkPreviewSource = bmp;
+            }
+            catch
+            {
+                PendingArtworkPreviewSource = null;
+            }
+
+            IsArtworkDimensionModalOpen = true;
+            return;
+        }
+
+        await ApplyArtworkBytesAsync(type, fileBytes, ext).ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    public async Task ConfirmPendingArtworkAsync()
+    {
+        IsArtworkDimensionModalOpen = false;
+        if (PendingArtworkBytes != null && !string.IsNullOrWhiteSpace(PendingArtworkExtension))
+        {
+            await ApplyArtworkBytesAsync(PendingArtworkType, PendingArtworkBytes, PendingArtworkExtension).ConfigureAwait(true);
+        }
+        ClearPendingArtwork();
+    }
+
+    [RelayCommand]
+    public void CancelPendingArtwork()
+    {
+        IsArtworkDimensionModalOpen = false;
+        ClearPendingArtwork();
+    }
+
+    private void ClearPendingArtwork()
+    {
+        PendingArtworkFilePath = null;
+        PendingArtworkBytes = null;
+        PendingArtworkExtension = null;
+        PendingArtworkPreviewSource = null;
+        PendingArtworkActualDimensions = null;
+        PendingArtworkRecommendedDimensions = null;
+        PendingArtworkWarningMessage = null;
+    }
+
+    private async Task ApplyArtworkBytesAsync(SteamArtworkType type, byte[] data, string extension)
+    {
+        if (Instance == null) return;
+
+        try
+        {
+            var targetExe = !string.IsNullOrWhiteSpace(Instance.ExecutablePath) ? Instance.ExecutablePath : SelectedExecutable;
+            var shortcutName = !string.IsNullOrWhiteSpace(ShortcutName) ? ShortcutName : Instance.Name;
+
+            await InstanceArtworkService.SaveCustomArtworkAsync(
+                Instance.Id,
+                type,
+                data,
+                extension,
+                targetExe,
+                shortcutName,
+                CancellationToken.None).ConfigureAwait(true);
+
+            var savedPath = InstanceArtworkService.GetArtworkFilePath(Instance.Id, type);
+
+            if (type == SteamArtworkType.InstanceBanner || type == SteamArtworkType.Header)
+            {
+                Instance = Instance with { CustomBannerPath = savedPath };
+                if (_instanceManager != null)
+                {
+                    await _instanceManager.UpdateAsync(Instance).ConfigureAwait(true);
+                }
+            }
+            else if (type == SteamArtworkType.InstanceLogo || type == SteamArtworkType.Icon)
+            {
+                Instance = Instance with { CustomIconPath = savedPath };
+                if (_instanceManager != null)
+                {
+                    await _instanceManager.UpdateAsync(Instance).ConfigureAwait(true);
+                }
+            }
+
+            var slot = GetSlotViewModel(type);
+            slot?.LoadFromBytes(data, savedPath);
+
+            ArtworkStatusMessage = $"✅ {GetArtworkSlotName(type)} guardado y sincronizado.";
+            _notificationService?.ShowSuccess("Artwork Actualizado", $"{GetArtworkSlotName(type)} guardado y sincronizado.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to apply custom artwork");
+            ArtworkStatusMessage = $"❌ Error: {ex.Message}";
+            _notificationService?.ShowError("Error al guardar", ex.Message);
+        }
+    }
+
+    private async void OnArtworkClearRequested(SteamArtworkType type)
+    {
+        if (Instance == null) return;
+
+        try
+        {
+            var existingFile = InstanceArtworkService.GetArtworkFilePath(Instance.Id, type);
+            if (!string.IsNullOrWhiteSpace(existingFile) && File.Exists(existingFile))
+            {
+                File.Delete(existingFile);
+            }
+
+            if (type == SteamArtworkType.InstanceBanner)
+            {
+                Instance = Instance with { CustomBannerPath = null };
+                if (_instanceManager != null)
+                {
+                    await _instanceManager.UpdateAsync(Instance).ConfigureAwait(true);
+                }
+            }
+            else if (type == SteamArtworkType.InstanceLogo)
+            {
+                Instance = Instance with { CustomIconPath = null };
+                if (_instanceManager != null)
+                {
+                    await _instanceManager.UpdateAsync(Instance).ConfigureAwait(true);
+                }
+            }
+
+            var slot = GetSlotViewModel(type);
+            slot?.LoadFromFile(null);
+
+            ArtworkStatusMessage = $"🗑 {GetArtworkSlotName(type)} eliminado.";
+            _notificationService?.ShowInfo("Artwork Quitado", $"Se quitó el artwork de {GetArtworkSlotName(type)}.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to clear artwork");
+            _notificationService?.ShowError("Error al quitar", ex.Message);
+        }
+    }
+
+    
+    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "PrivateExtractIconsW", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    private static extern uint PrivateExtractIcons(
+        string lpszFile,
+        int nIconIndex,
+        int cxIcon,
+        int cyIcon,
+        IntPtr[] phicon,
+        uint[] piconid,
+        uint nIcons,
+        uint flags);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool DestroyIcon(IntPtr hIcon);
+
+    public static bool ExtractIconFromExecutable(string exePath, string destIcoOrPngPath)
+    {
+        if (string.IsNullOrWhiteSpace(exePath) || !File.Exists(exePath))
+            return false;
+
+        try
+        {
+            var hIcons = new IntPtr[1];
+            var iconIds = new uint[1];
+            uint count = PrivateExtractIcons(exePath, 0, 256, 256, hIcons, iconIds, 1, 0);
+            if (count == 0 || hIcons[0] == IntPtr.Zero)
+            {
+                count = PrivateExtractIcons(exePath, 0, 48, 48, hIcons, iconIds, 1, 0);
+            }
+
+            if (count > 0 && hIcons[0] != IntPtr.Zero)
+            {
+                try
+                {
+                    var bs = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
+                        hIcons[0],
+                        System.Windows.Int32Rect.Empty,
+                        System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
+
+                    if (bs.CanFreeze) bs.Freeze();
+
+                    var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                    encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bs));
+                    using var ms = new MemoryStream();
+                    encoder.Save(ms);
+                    var pngBytes = ms.ToArray();
+
+                    var baseDir = Path.GetDirectoryName(destIcoOrPngPath);
+                    if (!string.IsNullOrEmpty(baseDir)) Directory.CreateDirectory(baseDir);
+
+                    var baseNoExt = Path.Combine(baseDir ?? "", Path.GetFileNameWithoutExtension(destIcoOrPngPath));
+                    File.WriteAllBytes($"{baseNoExt}.png", pngBytes);
+
+                    using var icoMs = new MemoryStream();
+                    using var bw = new BinaryWriter(icoMs);
+                    bw.Write((ushort)0);
+                    bw.Write((ushort)1);
+                    bw.Write((ushort)1);
+                    bw.Write((byte)(bs.PixelWidth >= 256 ? 0 : bs.PixelWidth));
+                    bw.Write((byte)(bs.PixelHeight >= 256 ? 0 : bs.PixelHeight));
+                    bw.Write((byte)0);
+                    bw.Write((byte)0);
+                    bw.Write((ushort)1);
+                    bw.Write((ushort)32);
+                    bw.Write((uint)pngBytes.Length);
+                    bw.Write((uint)22);
+                    bw.Write(pngBytes);
+
+                    File.WriteAllBytes($"{baseNoExt}.ico", icoMs.ToArray());
+                    return true;
+                }
+                finally
+                {
+                    DestroyIcon(hIcons[0]);
+                }
+            }
+        }
+        catch { }
+        return false;
+    }
+
+
+    #endregion
+
     private static string? CleanName(string? rawName)
     {
         if (string.IsNullOrWhiteSpace(rawName)) return rawName;
@@ -9253,6 +10090,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }
         catch { }
 
+        _downloadQueueManager.QueueChanged -= OnQueueChanged;
         _downloadQueueManager.Queue.CollectionChanged -= OnQueueChanged;
         _instanceManager.InstancesChanged -= OnInstanceManagerInstancesChanged;
         _gameLauncher.RunningStateChanged -= OnGameRunningStateChanged;
@@ -9271,5 +10109,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         {
             ActiveJob.PropertyChanged -= OnActiveJobPropertyChanged;
         }
+
+        InstanceArtworkService.ArtworkChanged -= OnArtworkServiceChanged;
     }
 }
