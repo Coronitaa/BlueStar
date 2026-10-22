@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -17,7 +17,7 @@ namespace BlueStar.Infrastructure.Tests;
 public class SystemPrerequisiteTests
 {
     [Fact]
-    public async Task DetectSystemPrerequisitesAsync_ReturnsStandardFiveRuntimes()
+    public async Task DetectSystemPrerequisitesAsync_ReturnsStandardRuntimes()
     {
         // Arrange
         using var http = new HttpClient();
@@ -28,20 +28,25 @@ public class SystemPrerequisiteTests
 
         // Assert
         prereqs.Should().NotBeNull();
-        prereqs.Should().HaveCount(5);
+        prereqs.Should().HaveCount(6);
 
         var ids = prereqs.Select(p => p.Id).ToList();
         ids.Should().Contain("vcredist_2015_2022_x64");
         ids.Should().Contain("vcredist_2015_2022_x86");
         ids.Should().Contain("directx_enduser");
         ids.Should().Contain("dotnet_desktop_8");
-        ids.Should().Contain("dotnet_runtime_9");
+        ids.Should().Contain("dotnet_runtime_8");
+        ids.Should().Contain("webview2_runtime");
 
         // Essential runtimes
         prereqs.First(p => p.Id == "vcredist_2015_2022_x64").IsEssential.Should().BeTrue();
         prereqs.First(p => p.Id == "vcredist_2015_2022_x86").IsEssential.Should().BeTrue();
         prereqs.First(p => p.Id == "directx_enduser").IsEssential.Should().BeTrue();
-        prereqs.First(p => p.Id == "dotnet_runtime_9").IsEssential.Should().BeTrue();
+        prereqs.First(p => p.Id == "dotnet_runtime_8").IsEssential.Should().BeTrue();
+        prereqs.First(p => p.Id == "webview2_runtime").IsEssential.Should().BeTrue();
+
+        // Must not contain dotnet 9 as DepotDownloaderMod targets .NET 8
+        ids.Should().NotContain("dotnet_runtime_9");
     }
 
     [Fact]
@@ -127,5 +132,33 @@ public class SystemPrerequisiteTests
 
         // Assert
         installedCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task InstallAllPrerequisitesAsync_SkipsUnverifiedPackagesRequiringConsent()
+    {
+        // Arrange
+        using var http = new HttpClient();
+        var service = new PrerequisiteService(http, NullLogger<PrerequisiteService>.Instance);
+
+        var items = new[]
+        {
+            new PrerequisiteItem
+            {
+                Id = "unverified_custom_tool",
+                Name = "Unknown Tool in Game Folder",
+                Status = PrerequisiteStatus.AvailableInGame,
+                IsRecognized = false,
+                RequiresExplicitConsent = true,
+                LocalInstallerPath = @"C:\Fake\unverified.exe"
+            }
+        };
+
+        // Act
+        var count = await service.InstallAllPrerequisitesAsync(items, null, CancellationToken.None);
+
+        // Assert: Bulk installation must skip unverified third-party installers
+        count.Should().Be(0);
+        items[0].Status.Should().Be(PrerequisiteStatus.AvailableInGame);
     }
 }

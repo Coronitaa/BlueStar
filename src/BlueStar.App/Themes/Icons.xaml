@@ -198,6 +198,7 @@
 
     <!-- Row list view -->
     <Geometry x:Key="IconListView">M3 4h18v6H3zm0 10h18v6H3z</Geometry>
+    <Geometry x:Key="IconPosterGrid">M3 3h5v18H3zm6.5 0h5v18h-5zm6.5 0h5v18h-5z</Geometry>
 
     <!-- Overlapping circles / similar games -->
     <Geometry x:Key="IconSimilar">M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11zm0 2a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7zm6 4a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11zm0 2a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7z</Geometry>

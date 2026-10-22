@@ -1,26 +1,33 @@
 <#
 .SYNOPSIS
-    Builds BlueStar as an MSIX package for Microsoft Store submission.
+    Builds BlueStar as an MSIX package for Microsoft Store submission or local testing.
 
 .DESCRIPTION
-    This script builds the BlueStar WPF application and packages it as an MSIX
-    suitable for uploading to the Microsoft Store via Partner Center.
+    This script builds the BlueStar WPF application and packages it as an MSIX.
+    Supports two distinct packaging modes:
+    1. 'Store' (Default): Generates an unsigned .msixupload bundle with symbols via MSBuild
+       and the Windows Application Packaging Project (WAPProj). This is the only valid,
+       compliant format for Microsoft Store ingestion via Partner Center.
+    2. 'LocalTest': Generates a locally signed .msix for developer side-loading and testing.
+       Local test packages are NEVER suitable for Microsoft Store submission.
 
-    When submitted to the Microsoft Store, Microsoft signs the package with their
-    trusted certificate, which completely eliminates SmartScreen warnings.
+.PARAMETER Target
+    Packaging target: 'Store' (default), 'LocalTest', or 'All'.
 
 .PARAMETER Version
-    The version number for the package. Default: 1.4.3
+    The 4-part version number for the package (e.g. 1.4.4.0). Defaults to 1.4.4.0.
 
 .PARAMETER Configuration
-    Build configuration. Default: Release
+    Build configuration. Default: Release.
 
 .EXAMPLE
-    .\build-msix.ps1
-    .\build-msix.ps1 -Version "1.5.0"
+    .\build-msix.ps1 -Target Store
+    .\build-msix.ps1 -Target LocalTest
 #>
 
 param(
+    [ValidateSet("Store", "LocalTest", "All")]
+    [string]$Target = "Store",
     [string]$Version = "1.4.4.0",
     [string]$Configuration = "Release"
 )
@@ -29,6 +36,7 @@ $ErrorActionPreference = "Stop"
 
 Write-Host "================================================" -ForegroundColor Cyan
 Write-Host "  BlueStar MSIX Package Builder (v$Version)" -ForegroundColor Cyan
+Write-Host "  Target Mode: $Target | Config: $Configuration" -ForegroundColor Cyan
 Write-Host "================================================" -ForegroundColor Cyan
 
 $rootDir    = Split-Path $PSScriptRoot -Parent | Split-Path -Parent
@@ -36,222 +44,206 @@ $packageDir = $PSScriptRoot
 $distDir    = Join-Path $rootDir "dist"
 $appProject = Join-Path $rootDir "src\BlueStar.App\BlueStar.App.csproj"
 
-# Parse version for MSIX (must be x.y.z.w format)
+# Ensure 4-part version format
 $versionParts = $Version.Split('.')
 while ($versionParts.Count -lt 4) { $versionParts += "0" }
-$msixVersion = $versionParts -join '.'
+$msixVersion = $versionParts[0..3] -join '.'
 
-# 1. Generate tile images if they don't exist
+# 1. Generate tile images if missing
 $imagesDir = Join-Path $packageDir "Images"
-if (-not (Test-Path (Join-Path $imagesDir "StoreLogo.png"))) {
-    Write-Host "[1/4] Generating MSIX tile images..." -ForegroundColor Yellow
+if (-not (Test-Path (Join-Path $imagesDir "Square44x44Logo.targetsize-24_altform-unplated.png"))) {
+    Write-Host "[1/4] Generating MSIX tile images (including unplated transparent assets)..." -ForegroundColor Yellow
     & (Join-Path $packageDir "generate-tiles.ps1")
 } else {
-    Write-Host "[1/4] Tile images already exist, skipping generation." -ForegroundColor Gray
+    Write-Host "[1/4] Tile assets present." -ForegroundColor Gray
 }
 
-# 2. Update Package.appxmanifest version
-Write-Host "[2/4] Updating manifest version to $msixVersion..." -ForegroundColor Yellow
+# 2. Sync Package.appxmanifest version if needed (non-destructive)
 $manifestPath = Join-Path $packageDir "Package.appxmanifest"
-$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 $manifestContent = [System.IO.File]::ReadAllText($manifestPath, [System.Text.Encoding]::UTF8)
-$manifestContent = [regex]::Replace($manifestContent, '(?<=<Identity\b[^>]*?\bVersion=")[^"]+', $msixVersion)
-[System.IO.File]::WriteAllText($manifestPath, $manifestContent, $utf8NoBom)
-
-# 3. Build the MSIX package
-Write-Host "[3/4] Building MSIX package..." -ForegroundColor Yellow
-
-$msixOutputDir = Join-Path $distDir "msix"
-if (Test-Path $msixOutputDir) {
-    Remove-Item $msixOutputDir -Recurse -Force
+$currentVersionMatch = [regex]::Match($manifestContent, '(?<=<Identity\b[^>]*?\bVersion=")[^"]+')
+if ($currentVersionMatch.Success -and $currentVersionMatch.Value -ne $msixVersion) {
+    Write-Host "[2/4] Synchronizing manifest version to $msixVersion..." -ForegroundColor Yellow
+    $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+    $updatedManifest = [regex]::Replace($manifestContent, '(?<=<Identity\b[^>]*?\bVersion=")[^"]+', $msixVersion)
+    [System.IO.File]::WriteAllText($manifestPath, $updatedManifest, $utf8NoBom)
+} else {
+    Write-Host "[2/4] Manifest version already in sync ($msixVersion)." -ForegroundColor Gray
 }
-New-Item -ItemType Directory -Path $msixOutputDir -Force | Out-Null
 
-# Build using dotnet publish for the app first
-Write-Host "  Publishing self-contained app for x64..." -ForegroundColor Gray
+# 3. Publish app self-contained win-x64
+$msixOutputDir = Join-Path $distDir "msix"
+if (-not (Test-Path $msixOutputDir)) {
+    New-Item -ItemType Directory -Path $msixOutputDir -Force | Out-Null
+}
+
+$appPublishDir = Join-Path $rootDir "dist\publish"
+Write-Host "[3/4] Publishing application binaries (self-contained win-x64)..." -ForegroundColor Yellow
 & dotnet publish $appProject `
     -c $Configuration `
     -r win-x64 `
     --self-contained true `
     -p:PublishReadyToRun=true `
     -p:PublishSingleFile=false `
-    -p:Version=$Version
+    -p:Version=$Version `
+    -o $appPublishDir
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "dotnet publish failed!"
     exit 1
 }
 
-# Try to build the MSIX using MSBuild (requires VS or Build Tools)
-$msbuildPaths = @(
-    "${env:ProgramFiles}\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe",
-    "${env:ProgramFiles}\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe",
-    "${env:ProgramFiles}\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe",
-    "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe"
-)
+# 4. Packaging execution
+Write-Host "[4/4] Generating packages for target: $Target..." -ForegroundColor Yellow
 
-$msbuild = $msbuildPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
-
-if ($msbuild) {
-    Write-Host "  Building MSIX with MSBuild..." -ForegroundColor Gray
-    $wapproj = Join-Path $packageDir "BlueStar.Package.wapproj"
-
-    & $msbuild $wapproj `
-        /p:Configuration=$Configuration `
-        /p:Platform=x64 `
-        /p:UapAppxPackageBuildMode=StoreUpload `
-        /p:AppxPackageDir="$msixOutputDir\" `
-        /p:AppxBundle=Always `
-        /p:AppxBundlePlatforms=x64 `
-        /p:AppxPackageSigningEnabled=false `
-        /restore `
-        /v:minimal
-
-    if ($LASTEXITCODE -ne 0) {
-        Write-Warning "MSBuild MSIX packaging failed. Falling back to makeappx..."
-    } else {
-        Write-Host "  MSIX package built successfully!" -ForegroundColor Green
+# Locate MSBuild and DesktopBridge tools
+$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+$msbuild = $null
+if (Test-Path $vswhere) {
+    $vsPath = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
+    if ($vsPath) {
+        $candidateMsbuild = Join-Path $vsPath "MSBuild\Current\Bin\amd64\MSBuild.exe"
+        if (-not (Test-Path $candidateMsbuild)) {
+            $candidateMsbuild = Join-Path $vsPath "MSBuild\Current\Bin\MSBuild.exe"
+        }
+        if (Test-Path $candidateMsbuild) {
+            $msbuild = $candidateMsbuild
+        }
     }
 }
 
-# Fallback: Use MakeAppx.exe directly if MSBuild approach failed
-$msixFile = Get-ChildItem -Path $msixOutputDir -Filter "*.msix" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-$msixBundle = Get-ChildItem -Path $msixOutputDir -Filter "*.msixbundle" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+$desktopBridgeProps = $null
+if ($msbuild) {
+    $vsRoot = Split-Path (Split-Path (Split-Path (Split-Path $msbuild -Parent) -Parent) -Parent)
+    $candidateProps = Join-Path $vsRoot "MSBuild\Microsoft\DesktopBridge\Microsoft.DesktopBridge.props"
+    if (Test-Path $candidateProps) {
+        $desktopBridgeProps = $candidateProps
+    }
+}
 
-if (-not $msixFile -and -not $msixBundle) {
-    Write-Host "  Using MakeAppx.exe fallback..." -ForegroundColor Yellow
+# --- Target: Store Upload ---
+if ($Target -in @("Store", "All")) {
+    Write-Host "  [Store Mode] Generating Microsoft Store upload artifact (.msixupload)..." -ForegroundColor Cyan
 
-    # Find MakeAppx.exe
+    if (-not $msbuild -or -not $desktopBridgeProps) {
+        Write-Error @"
+BUILD REQUIREMENT ERROR:
+Microsoft Store packaging requires the Windows Application Packaging Project workload (DesktopBridge).
+The target 'Microsoft.DesktopBridge.props' was not found in the installed Visual Studio / Build Tools instance.
+To build a valid, compliant Store upload package (.msixupload), install the 'Desktop development with C++' or 'Universal Windows Platform development' workload in Visual Studio Installer.
+Do NOT use MakeAppx to fake a Store package, as Partner Center ingestion will reject manually packed Win32 bundles without proper Store symbol maps and package metadata.
+"@
+        if ($Target -eq "Store") {
+            exit 1
+        }
+    } else {
+        $wapproj = Join-Path $packageDir "BlueStar.Package.wapproj"
+        $storeOutputDir = Join-Path $msixOutputDir "StoreUpload"
+        if (Test-Path $storeOutputDir) { Remove-Item $storeOutputDir -Recurse -Force }
+        New-Item -ItemType Directory -Path $storeOutputDir -Force | Out-Null
+
+        & $msbuild $wapproj `
+            /p:Configuration=$Configuration `
+            /p:Platform=x64 `
+            /p:UapAppxPackageBuildMode=StoreUpload `
+            /p:AppxPackageDir="$storeOutputDir\" `
+            /p:AppxBundle=Always `
+            /p:AppxBundlePlatforms=x64 `
+            /p:AppxPackageSigningEnabled=false `
+            /restore `
+            /v:minimal
+
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "MSBuild Store packaging failed!"
+            exit 1
+        }
+
+        Write-Host "  Microsoft Store upload bundle (.msixupload) built successfully." -ForegroundColor Green
+    }
+}
+
+# --- Target: Local Testing ---
+if ($Target -in @("LocalTest", "All")) {
+    Write-Host "  [LocalTest Mode] Generating signed local test package for sideloading..." -ForegroundColor Cyan
+
     $sdkPaths = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Filter "10.*" -Directory -ErrorAction SilentlyContinue |
         Sort-Object Name -Descending
 
     $makeappx = $null
+    $signtool = $null
     foreach ($sdkPath in $sdkPaths) {
         $candidate = Join-Path $sdkPath.FullName "x64\makeappx.exe"
-        if (Test-Path $candidate) {
-            $makeappx = $candidate
-            break
-        }
+        if (Test-Path $candidate) { $makeappx = $candidate; break }
+    }
+    foreach ($sdkPath in $sdkPaths) {
+        $candidate = Join-Path $sdkPath.FullName "x64\signtool.exe"
+        if (Test-Path $candidate) { $signtool = $candidate; break }
     }
 
-    if (-not $makeappx) {
-        $appCert = "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\makeappx.exe"
-        if (Test-Path $appCert) { $makeappx = $appCert }
-    }
+    if (-not $makeappx -or -not $signtool) {
+        Write-Warning "Windows SDK tools (makeappx / signtool) not found. Skipping local test package generation."
+    } else {
+        $localOutputDir = Join-Path $msixOutputDir "LocalTest"
+        if (Test-Path $localOutputDir) { Remove-Item $localOutputDir -Recurse -Force }
+        New-Item -ItemType Directory -Path $localOutputDir -Force | Out-Null
 
-    if ($makeappx) {
-        $publishDir = Join-Path $rootDir "src\BlueStar.App\bin\Release\net8.0-windows\win-x64\publish"
-        if (-not (Test-Path $publishDir)) {
-            $publishDir = Join-Path $rootDir "dist\publish"
-        }
-
-        $mappingFile = Join-Path $msixOutputDir "mapping.txt"
+        $mappingFile = Join-Path $localOutputDir "mapping.txt"
         $mappingContent = @("[Files]")
         $mappingContent += "`"$manifestPath`" `"AppxManifest.xml`""
 
-        # Add images
         Get-ChildItem -Path $imagesDir -Filter "*.png" | ForEach-Object {
             $mappingContent += "`"$($_.FullName)`" `"Images\$($_.Name)`""
         }
 
-        # Add app files
-        if (Test-Path $publishDir) {
-            Get-ChildItem -Path $publishDir -Recurse -File | ForEach-Object {
-                $relativePath = $_.FullName.Substring($publishDir.Length + 1)
-                $mappingContent += "`"$($_.FullName)`" `"BlueStar.App\$relativePath`""
-            }
+        Get-ChildItem -Path $appPublishDir -Recurse -File | ForEach-Object {
+            $relativePath = $_.FullName.Substring($appPublishDir.Length + 1)
+            $mappingContent += "`"$($_.FullName)`" `"BlueStar.App\$relativePath`""
         }
 
         $mappingContent | Set-Content -Path $mappingFile -Encoding UTF8
 
-        $outputMsix = Join-Path $msixOutputDir "BlueStar-v${Version}-win-x64.msix"
-        & $makeappx pack /f $mappingFile /p $outputMsix /o
+        $localMsix = Join-Path $localOutputDir "BlueStar-v${Version}-win-x64-LocalTest.msix"
+        & $makeappx pack /f $mappingFile /p $localMsix /o
 
         if ($LASTEXITCODE -eq 0) {
-            Write-Host "  MSIX created: $outputMsix" -ForegroundColor Green
+            # Extract Publisher CN from manifest to match certificate
+            $publisherMatch = [regex]::Match($manifestContent, '(?<=<Identity\b[^>]*?\bPublisher=")[^"]+')
+            $subject = if ($publisherMatch.Success) { $publisherMatch.Value } else { "CN=BlueStar Local Test" }
 
-            # Find signtool.exe
-            $signtool = $null
-            foreach ($sdkPath in $sdkPaths) {
-                $candidate = Join-Path $sdkPath.FullName "x64\signtool.exe"
-                if (Test-Path $candidate) {
-                    $signtool = $candidate
-                    break
-                }
-            }
-
-            # Sign with publisher certificate
-            $subject = "CN=16138BAA-C137-4D82-9EB1-FA186856FF82"
             $cert = Get-ChildItem -Path "Cert:\CurrentUser\My" | Where-Object { $_.Subject -eq $subject } | Select-Object -First 1
             if (-not $cert) {
-                Write-Host "  Generating code-signing certificate for $subject..." -ForegroundColor Cyan
+                Write-Host "  Creating dedicated local test certificate for $subject..." -ForegroundColor Gray
                 $cert = New-SelfSignedCertificate `
                     -Type Custom `
                     -Subject $subject `
                     -KeyUsage DigitalSignature `
-                    -FriendlyName "Corøna's Studios (BlueStar)" `
+                    -FriendlyName "BlueStar Local Test Certificate" `
                     -CertStoreLocation "Cert:\CurrentUser\My" `
                     -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}") `
                     -NotAfter (Get-Date).AddYears(5)
             }
 
-            # Trust certificate in CurrentUser\TrustedPeople for local testing
-            $trusted = Get-ChildItem -Path "Cert:\CurrentUser\TrustedPeople" | Where-Object { $_.Thumbprint -eq $cert.Thumbprint }
-            if (-not $trusted) {
-                $store = Get-Item "Cert:\CurrentUser\TrustedPeople"
-                $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
-                $store.Add($cert)
-                $store.Close()
-            }
-
-            # Export public certificate for distribution
-            $cerPath = Join-Path $msixOutputDir "CoronasStudios.cer"
+            # Export certificate for user to trust locally
+            $cerPath = Join-Path $localOutputDir "BlueStarTestCert.cer"
             Export-Certificate -Cert $cert -FilePath $cerPath -Force | Out-Null
 
-            if ($signtool) {
-                Write-Host "  Signing MSIX with certificate: $subject ($($cert.Thumbprint))..." -ForegroundColor Cyan
-                & $signtool sign /fd SHA256 /sha1 $cert.Thumbprint $outputMsix
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Host "  MSIX signed successfully!" -ForegroundColor Green
-                } else {
-                    Write-Warning "SignTool failed to sign MSIX."
-                }
+            Write-Host "  Signing local test package with: $subject..." -ForegroundColor Gray
+            & $signtool sign /fd SHA256 /sha1 $cert.Thumbprint $localMsix
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "  Local test MSIX created and signed: $localMsix" -ForegroundColor Green
+                Write-Host "  NOTE: This package is signed with a private local certificate and is ONLY for local sideloading." -ForegroundColor Yellow
             }
-
-            # Ensure standard release filename
-            $releaseMsix = Join-Path $msixOutputDir "BlueStar-v${Version}-win-x64.msix"
-            if ($outputMsix -ne $releaseMsix) {
-                Copy-Item $outputMsix $releaseMsix -Force
-            }
-        } else {
-            Write-Warning "MakeAppx.exe failed. You may need to install the Windows SDK."
         }
-    } else {
-        Write-Warning "MakeAppx.exe not found. Install Windows 10 SDK from Visual Studio Installer."
-        Write-Host "  You can also create the MSIX through Visual Studio: Right-click BlueStar.Package > Publish > Create App Packages" -ForegroundColor Yellow
     }
 }
 
-# 4. Summary
+# 5. Summary
 Write-Host "`n================================================" -ForegroundColor Cyan
 Write-Host "  MSIX Build Summary" -ForegroundColor Cyan
 Write-Host "================================================" -ForegroundColor Cyan
 
-$packages = Get-ChildItem -Path $msixOutputDir -Include *.msix,*.msixbundle,*.msixupload -Recurse -ErrorAction SilentlyContinue
-if ($packages) {
-    foreach ($pkg in $packages) {
-        $sizeMb = [math]::Round($pkg.Length / 1MB, 2)
-        Write-Host "  Package: $($pkg.Name) ($sizeMb MB)" -ForegroundColor Green
-    }
-    Write-Host "`n  Next steps:" -ForegroundColor Yellow
-    Write-Host "  1. Create a developer account at https://storedeveloper.microsoft.com" -ForegroundColor White
-    Write-Host "  2. Go to Partner Center > Apps & Games > New Product" -ForegroundColor White
-    Write-Host "  3. Upload the .msixupload or .msixbundle file" -ForegroundColor White
-    Write-Host "  4. Microsoft will sign it with their trusted certificate!" -ForegroundColor White
-} else {
-    Write-Host "  No MSIX packages were generated." -ForegroundColor Red
-    Write-Host "  Use Visual Studio to create the package manually:" -ForegroundColor Yellow
-    Write-Host "  1. Open BlueStar.sln in Visual Studio" -ForegroundColor White
-    Write-Host "  2. Right-click BlueStar.Package > Publish > Create App Packages" -ForegroundColor White
-    Write-Host "  3. Select 'Microsoft Store' as distribution method" -ForegroundColor White
+Get-ChildItem -Path $msixOutputDir -Recurse -File -Include *.msix,*.msixbundle,*.msixupload | ForEach-Object {
+    $sizeMb = [math]::Round($_.Length / 1MB, 2)
+    Write-Host "  [$($_.Extension)] $($_.Name) ($sizeMb MB)" -ForegroundColor Green
+    Write-Host "      Location: $($_.FullName)" -ForegroundColor Gray
 }

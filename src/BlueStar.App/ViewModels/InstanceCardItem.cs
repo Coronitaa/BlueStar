@@ -17,6 +17,7 @@ public partial class InstanceCardItem : ObservableObject
     public string Name => Instance.Name;
     public uint AppId => Instance.AppId;
     public string HeaderImageUrl => Instance.HeaderImageUrl;
+    public string CapsuleImageUrl => Instance.CapsuleImageUrl;
     public InstanceStatus Status => Instance.Status;
     public EngineInfo? Engine => Instance.Engine;
     public string InstallPath => Instance.InstallPath;

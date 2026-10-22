@@ -46,6 +46,16 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
     private int _columnCount = 3;
 
     [ObservableProperty]
+    private int _responsiveColumnCount = 5;
+
+    public int EffectiveColumnCount => ColumnCount == -1 ? ResponsiveColumnCount : (ColumnCount > 0 ? ColumnCount : 1);
+
+    partial void OnColumnCountChanged(int value)
+    {
+        OnPropertyChanged(nameof(EffectiveColumnCount));
+    }
+
+    [ObservableProperty]
     private ObservableCollection<GameInstance> _instances = [];
 
     [ObservableProperty]
@@ -2004,18 +2014,35 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task CycleColumnCountAsync()
     {
-        // Cycles: 3 -> 4 -> 5 -> 0 (list view) -> 3
+        // Cycles: 3 -> 4 -> 5 -> 0 (list view) -> -1 (poster capsule view) -> 3
         ColumnCount = ColumnCount switch
         {
             3 => 4,
             4 => 5,
             5 => 0,
+            0 => -1,
             _ => 3
         };
 
         if (_appSettingsService != null)
         {
             await _appSettingsService.SetInstancesColumnCountAsync(ColumnCount).ConfigureAwait(false);
+        }
+    }
+    /// <summary>
+    /// Updates the responsive column count for the poster grid mode (-1) according to window/container width.
+    /// </summary>
+    public void UpdateResponsiveColumns(double availableWidth)
+    {
+        if (availableWidth <= 0) return;
+        int cols = Math.Clamp((int)(availableWidth / 220), 2, 12);
+        if (cols != ResponsiveColumnCount)
+        {
+            ResponsiveColumnCount = cols;
+            if (ColumnCount == -1)
+            {
+                OnPropertyChanged(nameof(EffectiveColumnCount));
+            }
         }
     }
 

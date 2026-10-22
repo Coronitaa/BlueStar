@@ -17,7 +17,7 @@
     <WapProjPath Condition="'$(WapProjPath)'==''">$(MSBuildExtensionsPath)\Microsoft\DesktopBridge\</WapProjPath>
     <PathToXAMLWinRTImplementations>BlueStar.App\</PathToXAMLWinRTImplementations>
   </PropertyGroup>
-  <Import Project="$(WapProjPath)\Microsoft.DesktopBridge.props" />
+  <Import Project="$(WapProjPath)\Microsoft.DesktopBridge.props" Condition="Exists('$(WapProjPath)\Microsoft.DesktopBridge.props')" />
   <PropertyGroup>
     <ProjectGuid>F1234567-AAAA-BBBB-CCCC-DDDDEEEEFFFF</ProjectGuid>
     <TargetPlatformVersion>10.0.22621.0</TargetPlatformVersion>
@@ -42,5 +42,9 @@
   <ItemGroup>
     <ProjectReference Include="..\BlueStar.App\BlueStar.App.csproj" />
   </ItemGroup>
-  <Import Project="$(WapProjPath)\Microsoft.DesktopBridge.targets" />
+  <Import Project="$(WapProjPath)\Microsoft.DesktopBridge.targets" Condition="Exists('$(WapProjPath)\Microsoft.DesktopBridge.targets')" />
+  <Target Name="_DesktopBridgeCheck" BeforeTargets="Build;Publish" Condition="!Exists('$(WapProjPath)\Microsoft.DesktopBridge.props')">
+    <Error Text="The Windows Application Packaging Project workload is required. Please install DesktopBridge / Universal Windows Platform tools." />
+  </Target>
+  <Target Name="VSTest" />
 </Project>

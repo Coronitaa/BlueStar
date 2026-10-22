@@ -7,12 +7,12 @@ using BlueStar.Core.Models;
 namespace BlueStar.Core.Interfaces;
 
 /// <summary>
-/// Service for detecting and installing game prerequisites (Visual C++ Redistributables, DirectX, .NET, Unreal Engine Prereqs).
+/// Service for detecting and installing game and launcher prerequisites (Visual C++ Redistributables, DirectX, .NET 8, WebView2, Unreal Engine Prereqs).
 /// </summary>
 public interface IPrerequisiteService
 {
     /// <summary>
-    /// Detects all system-wide prerequisites required by BlueStar and modern games (Visual C++ 2015-2022 x64/x86, DirectX, .NET 8, .NET 9).
+    /// Detects all system-wide prerequisites required by BlueStar and modern games (Visual C++ 2015-2022 x64/x86, DirectX, .NET 8, WebView2).
     /// </summary>
     Task<IReadOnlyList<PrerequisiteItem>> DetectSystemPrerequisitesAsync(CancellationToken ct = default);
 

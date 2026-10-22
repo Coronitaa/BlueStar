@@ -48,20 +48,22 @@ public sealed class PrerequisiteService : IPrerequisiteService
                 Id = "vcredist_2015_2022_x64",
                 Name = "Visual C++ 2015-2022 Redistributable (x64)",
                 Category = "Visual C++",
-                Description = "Required by almost all modern 64-bit Windows games and injectors (C++ standard libraries & MSVCP140.dll).",
+                Description = "Required by BlueStar, modern 64-bit Windows games, and injectors (C++ standard libraries & MSVCP140.dll).",
                 DownloadUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe",
                 SilentArguments = "/install /quiet /norestart",
-                IsEssential = true
+                IsEssential = true,
+                IsRecognized = true
             },
             new()
             {
                 Id = "vcredist_2015_2022_x86",
                 Name = "Visual C++ 2015-2022 Redistributable (x86)",
                 Category = "Visual C++",
-                Description = "Required by 32-bit components, launchers, and Steam overlay hooks.",
+                Description = "Required by 32-bit components, legacy game binaries, and Steam overlay hooks.",
                 DownloadUrl = "https://aka.ms/vs/17/release/vc_redist.x86.exe",
                 SilentArguments = "/install /quiet /norestart",
-                IsEssential = true
+                IsEssential = true,
+                IsRecognized = true
             },
             new()
             {
@@ -71,7 +73,8 @@ public sealed class PrerequisiteService : IPrerequisiteService
                 Description = "Provides legacy DirectX 9.0c, D3DX9, D3DCompiler, and XAudio2 DLLs essential for games.",
                 DownloadUrl = "https://download.microsoft.com/download/1/7/1/1718CCC4-6315-4D8E-9543-8E28A4E18C4C/dxwebsetup.exe",
                 SilentArguments = "/Q",
-                IsEssential = true
+                IsEssential = true,
+                IsRecognized = true
             },
             new()
             {
@@ -81,17 +84,30 @@ public sealed class PrerequisiteService : IPrerequisiteService
                 Description = "Required for C# and modern Unity/.NET game frameworks and mods.",
                 DownloadUrl = "https://aka.ms/dotnet/8.0/windowsdesktop-runtime-win-x64.exe",
                 SilentArguments = "/install /quiet /norestart",
-                IsEssential = false
+                IsEssential = false,
+                IsRecognized = true
             },
             new()
             {
-                Id = "dotnet_runtime_9",
-                Name = ".NET Runtime 9.0 (x64)",
+                Id = "dotnet_runtime_8",
+                Name = ".NET Runtime 8.0 (x64)",
                 Category = ".NET Runtime",
                 Description = "Required for DepotDownloader and multi-manifest game downloads.",
-                DownloadUrl = "https://aka.ms/dotnet/9.0/dotnet-runtime-win-x64.exe",
+                DownloadUrl = "https://aka.ms/dotnet/8.0/dotnet-runtime-win-x64.exe",
                 SilentArguments = "/install /quiet /norestart",
-                IsEssential = true
+                IsEssential = true,
+                IsRecognized = true
+            },
+            new()
+            {
+                Id = "webview2_runtime",
+                Name = "Microsoft Edge WebView2 Runtime",
+                Category = "Web Browser Engine",
+                Description = "Required for embedded Steam Store, SteamDB, and web navigation panels in BlueStar.",
+                DownloadUrl = "https://go.microsoft.com/fwlink/p/?LinkId=2124703",
+                SilentArguments = "/silent /install",
+                IsEssential = true,
+                IsRecognized = true
             }
         };
 
@@ -127,15 +143,13 @@ public sealed class PrerequisiteService : IPrerequisiteService
                 DownloadUrl = null,
                 SilentArguments = "/quiet /norestart",
                 IsEssential = true,
+                IsRecognized = true,
                 Status = IsSystemInstalled(new PrerequisiteItem { Id = "ue_prereqs_x64", Name = "UE Prereqs" }) ? PrerequisiteStatus.InstalledInSystem : PrerequisiteStatus.NeedsDownload
             };
             items.Add(uePrereq);
         }
 
-        // 3. Scan the local game directory for embedded installers.
-        //    Two passes: the redistributables we know how to recognise, and then anything else
-        //    shipped in a redist folder, so a title that bundles a prerequisite we never
-        //    anticipated still shows up instead of being silently skipped.
+        // Scan the local game directory for embedded installers.
         if (!string.IsNullOrWhiteSpace(instance.InstallPath) && Directory.Exists(instance.InstallPath))
         {
             try
@@ -159,6 +173,12 @@ public sealed class PrerequisiteService : IPrerequisiteService
                                 if (vc2015_2022_x64.Status != PrerequisiteStatus.InstalledInSystem)
                                     vc2015_2022_x64.Status = PrerequisiteStatus.AvailableInGame;
                             }
+                            else
+                            {
+                                AddDiscovered(items, file, PrettyInstallerName(file), "Visual C++",
+                                    "Visual C++ Redistributable 64-bit runtime.",
+                                    silentArgs: "/install /quiet /norestart", essential: true, isRecognized: true);
+                            }
                         }
                         else if (fileName.Contains("x86") || fileName.Contains("32"))
                         {
@@ -167,6 +187,12 @@ public sealed class PrerequisiteService : IPrerequisiteService
                                 vc2015_2022_x86.LocalInstallerPath = file;
                                 if (vc2015_2022_x86.Status != PrerequisiteStatus.InstalledInSystem)
                                     vc2015_2022_x86.Status = PrerequisiteStatus.AvailableInGame;
+                            }
+                            else
+                            {
+                                AddDiscovered(items, file, PrettyInstallerName(file), "Visual C++",
+                                    "Visual C++ Redistributable 32-bit runtime.",
+                                    silentArgs: "/install /quiet /norestart", essential: true, isRecognized: true);
                             }
                         }
                     }
@@ -189,35 +215,52 @@ public sealed class PrerequisiteService : IPrerequisiteService
                         }
                         else
                         {
-                            // The engine was not detected but the package ships the UE prereqs anyway.
                             AddDiscovered(items, file, "Unreal Engine Prerequisites", "Unreal Engine",
-                                "Visual C++, DirectX and Epic runtime components shipped with this Unreal Engine title.");
+                                "Visual C++, DirectX and Epic runtime components shipped with this Unreal Engine title.",
+                                silentArgs: "/quiet /norestart", essential: true, isRecognized: true);
                         }
                     }
                     else if (fileName.Contains("physx"))
                     {
+                        var isMsi = file.EndsWith(".msi", StringComparison.OrdinalIgnoreCase);
                         AddDiscovered(items, file, "NVIDIA PhysX System Software", "PhysX",
-                            "Hardware-accelerated physics engine for legacy and Unreal games.", id: "nvidia_physx");
+                            "Hardware-accelerated physics engine for legacy and Unreal games.",
+                            id: "nvidia_physx",
+                            silentArgs: isMsi ? "/qn /norestart" : "/quiet /norestart",
+                            isRecognized: true);
                     }
                     else if (fileName.Contains("oalinst") || fileName.Contains("openal"))
                     {
                         AddDiscovered(items, file, "OpenAL 3D Audio Runtime", "OpenAL",
-                            "Cross-platform 3D positional audio API.", id: "openal_runtime", silentArgs: "/s");
+                            "Cross-platform 3D positional audio API.",
+                            id: "openal_runtime",
+                            silentArgs: "/s",
+                            isRecognized: true);
                     }
                     else if (fileName.Contains("xnafx") || fileName.Contains("xna"))
                     {
+                        var isMsi = file.EndsWith(".msi", StringComparison.OrdinalIgnoreCase);
                         AddDiscovered(items, file, "Microsoft XNA Framework Redistributable", "XNA",
-                            "Runtime required by XNA / MonoGame titles.", id: "xna_framework");
+                            "Runtime required by XNA / MonoGame titles.",
+                            id: "xna_framework",
+                            silentArgs: isMsi ? "/qn /norestart" : "/quiet /norestart",
+                            isRecognized: true);
                     }
                     else if (fileName.Contains("dotnetfx") || fileName.StartsWith("ndp") || fileName.Contains("netfx"))
                     {
                         AddDiscovered(items, file, ".NET Framework Redistributable", ".NET Runtime",
-                            "Legacy .NET Framework runtime shipped with this title.", id: "dotnet_framework_legacy");
+                            "Legacy .NET Framework runtime shipped with this title.",
+                            id: "dotnet_framework_legacy",
+                            silentArgs: "/q /norestart",
+                            isRecognized: true);
                     }
                     else if (fileName.Contains("directx") || fileName.Contains("d3d"))
                     {
                         AddDiscovered(items, file, "DirectX Redistributable (bundled)", "DirectX",
-                            "DirectX runtime files shipped inside the game package.", id: "directx_bundled");
+                            "DirectX runtime files shipped inside the game package.",
+                            id: "directx_bundled",
+                            silentArgs: "/silent",
+                            isRecognized: true);
                     }
                     else
                     {
@@ -226,14 +269,15 @@ public sealed class PrerequisiteService : IPrerequisiteService
 
                     if (claimed) continue;
 
-                    // ── Unanticipated prerequisites ──
-                    // Anything left that lives in a redistributable folder is treated as a
-                    // prerequisite of this specific game, whatever it happens to be.
+                    // Unanticipated installers: require informed user consent before execution
                     if (IsInRedistributableFolder(file, instance.InstallPath))
                     {
-                        AddDiscovered(items, file, PrettyInstallerName(file), "Game Package",
-                            "Bundled with this game as a required runtime component.",
-                            essential: false);
+                        AddDiscovered(items, file, PrettyInstallerName(file), "Unverified Package",
+                            "Discovered third-party installer bundled with game package. Requires manual confirmation before execution.",
+                            silentArgs: string.Empty,
+                            essential: false,
+                            isRecognized: false,
+                            requiresExplicitConsent: true);
                     }
                 }
             }
@@ -246,10 +290,6 @@ public sealed class PrerequisiteService : IPrerequisiteService
         return items;
     }
 
-    /// <summary>
-    /// Folder names publishers use for the runtimes they ship next to the game. Anything found
-    /// inside one is a prerequisite by intent, even when its file name means nothing to us.
-    /// </summary>
     private static readonly string[] RedistFolderNames =
     [
         "_commonredist", "commonredist", "_redist", "redist", "redists", "redistributable",
@@ -257,10 +297,6 @@ public sealed class PrerequisiteService : IPrerequisiteService
         "directx", "vcredist", "installers", "install", "support", "extras", "runtime", "runtimes"
     ];
 
-    /// <summary>
-    /// Executable names that are the game itself, an uninstaller or a crash reporter rather than
-    /// a runtime, and which must never be launched as a "prerequisite".
-    /// </summary>
     private static readonly string[] NonPrerequisiteNames =
     [
         "unins", "uninstall", "setup.exe", "launcher", "crashreport", "crashhandler",
@@ -275,7 +311,6 @@ public sealed class PrerequisiteService : IPrerequisiteService
         var fileName = Path.GetFileName(file).ToLowerInvariant();
         if (NonPrerequisiteNames.Any(n => fileName.Contains(n, StringComparison.Ordinal))) return false;
 
-        // The game root itself is not a redist folder: only nested redist folders count.
         var relative = Path.GetRelativePath(installRoot, directory);
         if (string.IsNullOrWhiteSpace(relative) || relative == ".") return false;
 
@@ -284,7 +319,6 @@ public sealed class PrerequisiteService : IPrerequisiteService
             .Any(segment => RedistFolderNames.Contains(segment.ToLowerInvariant()));
     }
 
-    /// <summary>Turns "vcredist_x64_2013.exe" into something a person can read in the list.</summary>
     private static string PrettyInstallerName(string file)
     {
         var raw = Path.GetFileNameWithoutExtension(file).Replace('_', ' ').Replace('-', ' ').Trim();
@@ -306,7 +340,9 @@ public sealed class PrerequisiteService : IPrerequisiteService
         string description,
         string? id = null,
         string? silentArgs = null,
-        bool essential = false)
+        bool essential = false,
+        bool isRecognized = true,
+        bool requiresExplicitConsent = false)
     {
         id ??= "pkg_" + Path.GetFileNameWithoutExtension(file).ToLowerInvariant()
             .Replace(' ', '_').Replace('-', '_').Replace('.', '_');
@@ -326,7 +362,9 @@ public sealed class PrerequisiteService : IPrerequisiteService
             LocalInstallerPath = file,
             Status = PrerequisiteStatus.AvailableInGame,
             SilentArguments = silentArgs,
-            IsEssential = essential
+            IsEssential = essential,
+            IsRecognized = isRecognized,
+            RequiresExplicitConsent = requiresExplicitConsent
         });
     }
 
@@ -339,45 +377,91 @@ public sealed class PrerequisiteService : IPrerequisiteService
             {
                 using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64")
                              ?? Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\X64");
-                if (key?.GetValue("Installed") is int val && val == 1) return true;
+                if (key != null)
+                {
+                    var installed = key.GetValue("Installed");
+                    var major = key.GetValue("Major");
+                    var bld = key.GetValue("Bld");
 
-                // Also check if msvcp140.dll and vcruntime140.dll exist in System32
-                var sys32 = Environment.GetFolderPath(Environment.SpecialFolder.System);
-                if (File.Exists(Path.Combine(sys32, "msvcp140.dll")) && File.Exists(Path.Combine(sys32, "vcruntime140.dll")))
-                    return true;
+                    if (installed is int instVal && instVal == 1 &&
+                        major is int majVal && majVal >= 14 &&
+                        bld is int bldVal && bldVal >= 24215)
+                    {
+                        return true;
+                    }
+                }
+                return false;
             }
             else if (item.Id == "vcredist_2015_2022_x86")
             {
-                using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X86")
-                             ?? Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\X86");
-                if (key?.GetValue("Installed") is int val && val == 1) return true;
-
-                var sysWow64 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "SysWOW64");
-                if (File.Exists(Path.Combine(sysWow64, "msvcp140.dll")) && File.Exists(Path.Combine(sysWow64, "vcruntime140.dll")))
-                    return true;
+                using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\X86")
+                             ?? Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X86");
+                if (key != null)
+                {
+                    var installed = key.GetValue("Installed");
+                    var major = key.GetValue("Major");
+                    if (installed is int instVal && instVal == 1 && major is int majVal && majVal >= 14)
+                    {
+                        return true;
+                    }
+                }
+                return false;
             }
             else if (item.Id == "directx_enduser")
             {
-                // Verify presence of critical DirectX libraries (d3dx9_43.dll, d3dcompiler_47.dll, xaudio2_7.dll)
                 var sys32 = Environment.GetFolderPath(Environment.SpecialFolder.System);
-                if (File.Exists(Path.Combine(sys32, "d3dx9_43.dll")) && File.Exists(Path.Combine(sys32, "d3dcompiler_47.dll")))
-                    return true;
+                if (File.Exists(Path.Combine(sys32, "d3dx9_43.dll")) && File.Exists(Path.Combine(sys32, "d3dcompiler_43.dll")))
+                {
+                    using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\DirectX");
+                    if (key?.GetValue("Version") is string version && !string.IsNullOrWhiteSpace(version))
+                        return true;
+                    if (key != null) return true;
+                }
+                return false;
             }
             else if (item.Id == "dotnet_desktop_8")
             {
+                using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\dotnet\Setup\InstalledVersions\x64\sharedfx\Microsoft.WindowsDesktop.App");
+                if (key?.GetValue("Version") is string ver && ver.StartsWith("8."))
+                    return true;
+
                 var dotnetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "shared", "Microsoft.WindowsDesktop.App");
                 if (Directory.Exists(dotnetDir) && Directory.GetDirectories(dotnetDir, "8.*").Length > 0)
                     return true;
             }
-            else if (item.Id == "dotnet_runtime_9")
+            else if (item.Id == "dotnet_runtime_8")
             {
-                var dotnetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "shared", "Microsoft.NETCore.App");
-                if (Directory.Exists(dotnetDir) && Directory.GetDirectories(dotnetDir, "9.*").Length > 0)
+                using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\dotnet\Setup\InstalledVersions\x64\sharedfx\Microsoft.NETCore.App");
+                if (key?.GetValue("Version") is string ver && ver.StartsWith("8."))
                     return true;
+
+                var dotnetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "shared", "Microsoft.NETCore.App");
+                if (Directory.Exists(dotnetDir) && Directory.GetDirectories(dotnetDir, "8.*").Length > 0)
+                    return true;
+            }
+            else if (item.Id == "webview2_runtime")
+            {
+                const string clientGuid = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
+                using var keyWow64 = Registry.LocalMachine.OpenSubKey($@"SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{clientGuid}");
+                if (keyWow64?.GetValue("pv") is string pv1 && !string.IsNullOrWhiteSpace(pv1) && pv1 != "0.0.0.0")
+                    return true;
+
+                using var keyHklm = Registry.LocalMachine.OpenSubKey($@"SOFTWARE\Microsoft\EdgeUpdate\Clients\{clientGuid}");
+                if (keyHklm?.GetValue("pv") is string pv2 && !string.IsNullOrWhiteSpace(pv2) && pv2 != "0.0.0.0")
+                    return true;
+
+                using var keyHkcu = Registry.CurrentUser.OpenSubKey($@"SOFTWARE\Microsoft\EdgeUpdate\Clients\{clientGuid}");
+                if (keyHkcu?.GetValue("pv") is string pv3 && !string.IsNullOrWhiteSpace(pv3) && pv3 != "0.0.0.0")
+                    return true;
+
+                return false;
             }
             else if (item.Id == "ue_prereqs_x64")
             {
-                // Check if VC++ 2015-2022 and DirectX are installed (which covers UE prereqs)
+                using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Epic Games\Unreal Engine Prerequisites (x64)")
+                             ?? Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Epic Games\Unreal Engine Prerequisites (x64)");
+                if (key != null) return true;
+
                 var sys32 = Environment.GetFolderPath(Environment.SpecialFolder.System);
                 if (File.Exists(Path.Combine(sys32, "msvcp140.dll")) && File.Exists(Path.Combine(sys32, "d3dcompiler_47.dll")))
                     return true;
@@ -448,42 +532,86 @@ public sealed class PrerequisiteService : IPrerequisiteService
             }
         }
 
-        // Execute installer interactively so user can complete the installation wizard
         try
         {
-            progress?.Report($"🖥️ Opening installer for {item.Name}... Please complete the wizard on screen.");
-            _logger.LogInformation("Launching interactive prerequisite installer: {Path}", installerPath);
+            bool isMsi = installerPath.EndsWith(".msi", StringComparison.OrdinalIgnoreCase);
+            string exeName;
+            string args;
+
+            if (item.RequiresExplicitConsent && !item.IsRecognized)
+            {
+                // Unrecognized installer: launch interactively without forcing silent flags
+                progress?.Report($"🖥️ Launching installer for {item.Name}. Please complete the setup wizard.");
+                _logger.LogInformation("Launching unverified installer interactively: {Path}", installerPath);
+
+                if (isMsi)
+                {
+                    exeName = "msiexec.exe";
+                    args = $"/i \"{installerPath}\"";
+                }
+                else
+                {
+                    exeName = installerPath;
+                    args = string.Empty;
+                }
+            }
+            else
+            {
+                // Verified prerequisite: apply appropriate silent unattended arguments
+                progress?.Report($"⚙️ Installing {item.Name} silently...");
+                _logger.LogInformation("Launching verified prerequisite installer: {Path} with arguments: {Args}", installerPath, item.SilentArguments);
+
+                if (isMsi)
+                {
+                    exeName = "msiexec.exe";
+                    var silentArgs = string.IsNullOrWhiteSpace(item.SilentArguments) ? "/qn /norestart" : item.SilentArguments;
+                    args = $"/i \"{installerPath}\" {silentArgs}";
+                }
+                else
+                {
+                    exeName = installerPath;
+                    args = item.SilentArguments ?? string.Empty;
+                }
+            }
 
             var psi = new ProcessStartInfo
             {
-                FileName = installerPath,
-                Arguments = string.Empty,
+                FileName = exeName,
+                Arguments = args,
                 UseShellExecute = true,
-                CreateNoWindow = false
+                Verb = "runas"
             };
 
             using var process = Process.Start(psi);
             if (process == null)
             {
-                progress?.Report($"❌ Could not start installer for {item.Name}.");
+                progress?.Report($"❌ Could not start installer process for {item.Name}.");
                 item.Status = PrerequisiteStatus.InstallFailed;
                 return false;
             }
 
             await process.WaitForExitAsync(ct).ConfigureAwait(false);
 
-            // Exit code 0 = Success, 3010 / 1641 = Success with reboot required
+            // Exit code check:
+            // 0 = Success
+            // 3010 = Success, reboot required
+            // 1641 = Success, reboot initiated
+            // 1638 = Newer/same version already installed
+            // 5100 = Newer version installed
             var isInstalled = IsSystemInstalled(item);
-            if (process.ExitCode == 0 || process.ExitCode == 3010 || process.ExitCode == 1641 || isInstalled)
+            bool isSuccessCode = process.ExitCode is 0 or 3010 or 1641 or 1638 or 5100;
+
+            if (isSuccessCode || isInstalled)
             {
-                progress?.Report($"✅ {item.Name} installed successfully (Exit code: {process.ExitCode}).");
+                var rebootNote = process.ExitCode == 3010 ? " (Reboot required)" : string.Empty;
+                progress?.Report($"✅ {item.Name} installed successfully{rebootNote} (Exit code: {process.ExitCode}).");
                 item.Status = PrerequisiteStatus.InstalledSuccess;
                 return true;
             }
             else
             {
-                progress?.Report($"⚠️ Wizard for {item.Name} exited with code {process.ExitCode}.");
-                item.Status = isInstalled ? PrerequisiteStatus.InstalledSuccess : PrerequisiteStatus.AvailableInGame;
+                progress?.Report($"⚠️ Installer for {item.Name} finished with exit code {process.ExitCode}.");
+                item.Status = isInstalled ? PrerequisiteStatus.InstalledSuccess : PrerequisiteStatus.InstallFailed;
                 return item.Status == PrerequisiteStatus.InstalledSuccess;
             }
         }
@@ -500,14 +628,26 @@ public sealed class PrerequisiteService : IPrerequisiteService
     public async Task<int> InstallAllPrerequisitesAsync(IEnumerable<PrerequisiteItem> items, IProgress<string>? progress = null, CancellationToken ct = default)
     {
         int installedCount = 0;
+        int skippedUnverified = 0;
 
         foreach (var p in items)
         {
+            if (p.RequiresExplicitConsent && !p.IsRecognized)
+            {
+                skippedUnverified++;
+                continue;
+            }
+
             if (p.Status != PrerequisiteStatus.InstalledInSystem && p.Status != PrerequisiteStatus.InstalledSuccess)
             {
                 var success = await InstallPrerequisiteAsync(p, progress, ct).ConfigureAwait(false);
                 if (success) installedCount++;
             }
+        }
+
+        if (skippedUnverified > 0)
+        {
+            progress?.Report($"ℹ️ Skipped {skippedUnverified} unverified third-party package(s). You can trigger them individually with manual confirmation.");
         }
 
         progress?.Report($"🎉 Prerequisite installation completed ({installedCount} component(s) configured).");

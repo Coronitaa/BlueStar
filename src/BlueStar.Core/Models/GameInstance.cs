@@ -330,6 +330,28 @@ public record GameInstance
     }
 
     /// <summary>
+    /// Gets the Steam vertical capsule (poster 600x900) or local capsule artwork path for this game instance in the poster library grid.
+    /// Prefers local capsule artwork, then falls back to Steam CDN library_600x900, Metadata.CapsuleImageUrl, or HeaderImageUrl.
+    /// </summary>
+    public string CapsuleImageUrl
+    {
+        get
+        {
+            var localCapsule = BlueStar.Core.Helpers.InstanceArtworkService.GetArtworkFilePath(Id, SteamArtworkType.Capsule);
+            if (!string.IsNullOrWhiteSpace(localCapsule) && System.IO.File.Exists(localCapsule))
+                return localCapsule;
+
+            if (AppId > 0)
+                return $"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{AppId}/library_600x900.jpg";
+
+            if (!string.IsNullOrWhiteSpace(Metadata?.CapsuleImageUrl))
+                return Metadata.CapsuleImageUrl;
+
+            return HeaderImageUrl;
+        }
+    }
+
+    /// <summary>
     /// Gets the logo or icon to display for this instance in the sidebar recent navigation tabs.
     /// Prefers CustomIconPath, then local instance_logo / icon artwork, then falls back to HeaderImageUrl.
     /// </summary>

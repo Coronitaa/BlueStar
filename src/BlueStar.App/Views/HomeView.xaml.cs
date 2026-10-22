@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using System;
 using System.ComponentModel;
 using System.IO;
@@ -54,21 +54,59 @@ public partial class HomeView : UserControl
         _ = LoadStorePageAsync(url);
     }
 
+    private string? _pendingStoreUrl;
+
     private async System.Threading.Tasks.Task LoadStorePageAsync(string url)
     {
+        _pendingStoreUrl = url;
         try
         {
-            await EnsureWebViewAsync().ConfigureAwait(true);
-            if (string.Equals(StorePageView.CoreWebView2.Source?.TrimEnd('/'), url.TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
+            if (!BlueStar.App.Services.WebView2AvailabilityService.IsAvailable())
             {
+                ShowWebViewFallback();
                 return;
             }
-            StorePageView.CoreWebView2.Navigate(url);
+
+            await EnsureWebViewAsync().ConfigureAwait(true);
+            WebViewFallbackOverlay.Visibility = Visibility.Collapsed;
+            StorePageView.Visibility = Visibility.Visible;
+
+            if (StorePageView.CoreWebView2 != null)
+            {
+                if (string.Equals(StorePageView.CoreWebView2.Source?.TrimEnd('/'), url.TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+                StorePageView.CoreWebView2.Navigate(url);
+            }
         }
         catch (Exception)
         {
-            // A missing WebView2 runtime must not take the dashboard down: the SteamDB button
-            // still opens the page in the person's own browser.
+            ShowWebViewFallback();
+        }
+    }
+
+    private void ShowWebViewFallback()
+    {
+        StorePageView.Visibility = Visibility.Collapsed;
+        WebViewFallbackOverlay.Visibility = Visibility.Visible;
+    }
+
+    private void OnInstallWebView2Clicked(object sender, RoutedEventArgs e)
+    {
+        BlueStar.App.Services.WebView2AvailabilityService.OpenOfficialDownloadPage();
+    }
+
+    private void OnOpenInBrowserClicked(object sender, RoutedEventArgs e)
+    {
+        var target = _pendingStoreUrl ?? (_viewModel?.DetailTarget != null && _viewModel.DetailTarget.AppId > 0 ? $"https://store.steampowered.com/app/{_viewModel.DetailTarget.AppId}" : null);
+        if (!string.IsNullOrWhiteSpace(target))
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(target) { UseShellExecute = true });
+            }
+            catch { }
         }
     }
 
@@ -93,21 +131,24 @@ public partial class HomeView : UserControl
         await StorePageView.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
 
         StorePageView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 27, 40, 56);
-        StorePageView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
-        StorePageView.CoreWebView2.Settings.IsStatusBarEnabled = false;
-        StorePageView.CoreWebView2.NewWindowRequested += (s, args) =>
+        if (StorePageView.CoreWebView2 != null)
         {
-            args.Handled = true;
-            if (!string.IsNullOrWhiteSpace(args.Uri))
+            StorePageView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+            StorePageView.CoreWebView2.Settings.IsStatusBarEnabled = false;
+            StorePageView.CoreWebView2.NewWindowRequested += (s, args) =>
             {
-                StorePageView.CoreWebView2.Navigate(args.Uri);
-            }
-        };
+                args.Handled = true;
+                if (!string.IsNullOrWhiteSpace(args.Uri))
+                {
+                    StorePageView.CoreWebView2.Navigate(args.Uri);
+                }
+            };
 
-        StorePageView.CoreWebView2.SourceChanged += OnStorePageNavigated;
-        StorePageView.NavigationCompleted += OnStorePageNavigationCompleted;
+            StorePageView.CoreWebView2.SourceChanged += OnStorePageNavigated;
+            StorePageView.NavigationCompleted += OnStorePageNavigationCompleted;
 
-        _ = BlueStar.App.Services.SteamWebSessionHelper.TrySyncSteamCookiesAsync(StorePageView.CoreWebView2);
+            _ = BlueStar.App.Services.SteamWebSessionHelper.TrySyncSteamCookiesAsync(StorePageView.CoreWebView2);
+        }
 
         _webViewReady = true;
     }

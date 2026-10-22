@@ -16,6 +16,32 @@ public partial class LibraryView : UserControl
     public LibraryView()
     {
         InitializeComponent();
+        Loaded += OnLoaded;
+        SizeChanged += OnSizeChanged;
+        DataContextChanged += OnDataContextChanged;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        UpdateResponsiveColumns(ActualWidth);
+    }
+
+    private void OnSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        UpdateResponsiveColumns(e.NewSize.Width);
+    }
+
+    private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        UpdateResponsiveColumns(ActualWidth);
+    }
+
+    private void UpdateResponsiveColumns(double width)
+    {
+        if (width > 100 && DataContext is LibraryViewModel vm)
+        {
+            vm.UpdateResponsiveColumns(width);
+        }
     }
 
     private async void ZipDropZone_Drop(object sender, DragEventArgs e)

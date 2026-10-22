@@ -42,12 +42,16 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 [CustomMessages]
 english.PrereqChecking=Checking system prerequisites...
 spanish.PrereqChecking=Comprobando prerrequisitos del sistema...
-english.PrereqDownloading=Downloading required prerequisites...
-spanish.PrereqDownloading=Descargando prerrequisitos necesarios...
-english.PrereqInstalling=Installing prerequisites (Visual C++, DirectX, WebView2, .NET)...
-spanish.PrereqInstalling=Instalando prerrequisitos (Visual C++, DirectX, WebView2, .NET)...
-english.PrereqDownloadFailed=Failed to download some prerequisites. Do you want to continue the installation anyway?
-spanish.PrereqDownloadFailed=No se pudieron descargar algunos prerrequisitos. ¿Desea continuar con la instalación de todas formas?
+english.PrereqDownloading=Downloading required prerequisites (Visual C++, WebView2)...
+spanish.PrereqDownloading=Descargando prerrequisitos necesarios (Visual C++, WebView2)...
+english.PrereqInstalling=Installing prerequisites (Visual C++ 2015-2022, Microsoft Edge WebView2)...
+spanish.PrereqInstalling=Instalando prerrequisitos (Visual C++ 2015-2022, Microsoft Edge WebView2)...
+english.PrereqDownloadFailed=Failed to download required prerequisites. Setup cannot continue without these components.
+spanish.PrereqDownloadFailed=Error al descargar los prerrequisitos obligatorios. La instalación no puede continuar sin estos componentes.
+english.PrereqInstallFailed=Failed to install required prerequisite: %1 (Exit code: %2). Setup will abort.
+spanish.PrereqInstallFailed=Error al instalar el prerrequisito obligatorio: %1 (Código de salida: %2). La instalación se cancelará.
+english.PrereqVerifyFailed=Verification failed for: %1. The component was not detected after installation.
+spanish.PrereqVerifyFailed=Error de verificación para: %1. No se detectó el componente tras la instalación.
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -58,10 +62,7 @@ Source: "dist\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 
 ; Optional pre-bundled redistributables (bundled if present in redist\ directory, skipped otherwise)
 Source: "redist\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "redist\vc_redist.x86.exe"; DestDir: "{tmp}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "redist\MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "redist\dxwebsetup.exe"; DestDir: "{tmp}"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "redist\windowsdesktop-runtime-8.0-win-x64.exe"; DestDir: "{tmp}"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -74,36 +75,36 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 var
   DownloadPage: TDownloadWizardPage;
   NeedVc64Flag: Boolean;
-  NeedVcx86Flag: Boolean;
   NeedWebView2Flag: Boolean;
-  NeedDirectXFlag: Boolean;
-  NeedDotNetFlag: Boolean;
   DownloadCount: Integer;
+  RebootRequiredFlag: Boolean;
 
 function NeedVc64(): Boolean;
 var
   Installed: Cardinal;
+  Bld: Cardinal;
+  Major: Cardinal;
 begin
   Result := True;
   if RegQueryDWordValue(HKLM, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64', 'Installed', Installed) and (Installed = 1) then
-    Result := False
+  begin
+    if RegQueryDWordValue(HKLM, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64', 'Major', Major) and (Major >= 14) then
+    begin
+      if RegQueryDWordValue(HKLM, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64', 'Bld', Bld) then
+      begin
+        if Bld >= 24215 then
+          Result := False;
+      end
+      else
+        Result := False;
+    end;
+  end
   else if RegQueryDWordValue(HKLM, 'SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\X64', 'Installed', Installed) and (Installed = 1) then
-    Result := False
-  else if FileExists(ExpandConstant('{sys}\msvcp140.dll')) and FileExists(ExpandConstant('{sys}\vcruntime140.dll')) then
+  begin
     Result := False;
-end;
+  end;
 
-function NeedVcx86(): Boolean;
-var
-  Installed: Cardinal;
-begin
-  Result := True;
-  if RegQueryDWordValue(HKLM, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X86', 'Installed', Installed) and (Installed = 1) then
-    Result := False
-  else if RegQueryDWordValue(HKLM, 'SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\X86', 'Installed', Installed) and (Installed = 1) then
-    Result := False
-  else if FileExists(ExpandConstant('{syswow64}\msvcp140.dll')) and FileExists(ExpandConstant('{syswow64}\vcruntime140.dll')) then
-    Result := False;
+  Log(Format('Prerequisite Check: VC++ 2015-2022 x64 Needed = %d', [Integer(Result)]));
 end;
 
 function NeedWebView2(): Boolean;
@@ -117,34 +118,13 @@ begin
     Result := False
   else if RegQueryStringValue(HKCU, 'SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', Pv) and (Pv <> '') and (Pv <> '0.0.0.0') then
     Result := False;
+
+  Log(Format('Prerequisite Check: WebView2 Runtime Needed = %d (pv=%s)', [Integer(Result), Pv]));
 end;
 
-function NeedDirectX(): Boolean;
+function NeedRestart(): Boolean;
 begin
-  // Check if critical legacy DirectX components are present (D3DX9, D3DCompiler)
-  Result := not (FileExists(ExpandConstant('{sys}\d3dx9_43.dll')) and FileExists(ExpandConstant('{sys}\d3dcompiler_43.dll')));
-end;
-
-function NeedDotNet(): Boolean;
-var
-  DotNetDir: String;
-  FindRec: TFindRec;
-begin
-  Result := True;
-  if RegKeyExists(HKLM, 'SOFTWARE\dotnet\Setup\InstalledVersions\x64\sharedfx\Microsoft.WindowsDesktop.App') then
-  begin
-    Result := False;
-    Exit;
-  end;
-  DotNetDir := ExpandConstant('{commonpf64}\dotnet\shared\Microsoft.WindowsDesktop.App');
-  if DirExists(DotNetDir) then
-  begin
-    if FindFirst(DotNetDir + '\8.*', FindRec) then
-    begin
-      FindClose(FindRec);
-      Result := False;
-    end;
-  end;
+  Result := RebootRequiredFlag;
 end;
 
 function OnDownloadProgress(const Url, FileName: String; const Progress, ProgressMax: Int64): Boolean;
@@ -155,6 +135,7 @@ end;
 procedure InitializeWizard();
 begin
   DownloadPage := CreateDownloadPage(SetupMessage(msgWizardPreparing), CustomMessage('PrereqDownloading'), @OnDownloadProgress);
+  RebootRequiredFlag := False;
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
@@ -163,41 +144,22 @@ begin
   if CurPageID = wpReady then
   begin
     NeedVc64Flag := NeedVc64();
-    NeedVcx86Flag := NeedVcx86();
     NeedWebView2Flag := NeedWebView2();
-    NeedDirectXFlag := NeedDirectX();
-    NeedDotNetFlag := NeedDotNet();
 
     DownloadPage.Clear;
     DownloadCount := 0;
 
     if NeedVc64Flag and not FileExists(ExpandConstant('{tmp}\vc_redist.x64.exe')) then
     begin
+      Log('Queueing download for Visual C++ 2015-2022 x64 Redistributable');
       DownloadPage.Add('https://aka.ms/vs/17/release/vc_redist.x64.exe', 'vc_redist.x64.exe', '');
-      DownloadCount := DownloadCount + 1;
-    end;
-
-    if NeedVcx86Flag and not FileExists(ExpandConstant('{tmp}\vc_redist.x86.exe')) then
-    begin
-      DownloadPage.Add('https://aka.ms/vs/17/release/vc_redist.x86.exe', 'vc_redist.x86.exe', '');
       DownloadCount := DownloadCount + 1;
     end;
 
     if NeedWebView2Flag and not FileExists(ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe')) then
     begin
+      Log('Queueing download for Microsoft Edge WebView2 Evergreen Bootstrapper');
       DownloadPage.Add('https://go.microsoft.com/fwlink/p/?LinkId=2124703', 'MicrosoftEdgeWebview2Setup.exe', '');
-      DownloadCount := DownloadCount + 1;
-    end;
-
-    if NeedDirectXFlag and not FileExists(ExpandConstant('{tmp}\dxwebsetup.exe')) then
-    begin
-      DownloadPage.Add('https://download.microsoft.com/download/1/7/1/1718CCC4-6315-4D8E-9543-8E28A4E18C4C/dxwebsetup.exe', 'dxwebsetup.exe', '');
-      DownloadCount := DownloadCount + 1;
-    end;
-
-    if NeedDotNetFlag and not FileExists(ExpandConstant('{tmp}\windowsdesktop-runtime-8.0-win-x64.exe')) then
-    begin
-      DownloadPage.Add('https://aka.ms/dotnet/8.0/windowsdesktop-runtime-win-x64.exe', 'windowsdesktop-runtime-8.0-win-x64.exe', '');
       DownloadCount := DownloadCount + 1;
     end;
 
@@ -207,12 +169,12 @@ begin
       try
         try
           DownloadPage.Download;
+          Log('All requested prerequisites downloaded successfully.');
         except
-          if SuppressibleMsgBox(AddPeriod(GetExceptionMessage) + #13#10#13#10 + CustomMessage('PrereqDownloadFailed'), mbError, MB_YESNO, IDNO) = IDNO then
-          begin
-            Result := False;
-            Exit;
-          end;
+          Log('Prerequisite download failed: ' + GetExceptionMessage);
+          SuppressibleMsgBox(AddPeriod(GetExceptionMessage) + #13#10#13#10 + CustomMessage('PrereqDownloadFailed'), mbCriticalError, MB_OK, IDOK);
+          Result := False;
+          Exit;
         end;
       finally
         DownloadPage.Hide;
@@ -234,20 +196,56 @@ begin
   begin
     WizardForm.StatusLabel.Caption := CustomMessage('PrereqInstalling');
 
+    // 1. Install VC++ 2015-2022 x64 if required
     if NeedVc64Flag and FileExists(ExpandConstant('{tmp}\vc_redist.x64.exe')) then
-      Exec(ExpandConstant('{tmp}\vc_redist.x64.exe'), '/install /quiet /norestart', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    begin
+      Log('Executing Visual C++ 2015-2022 x64 installer...');
+      if not Exec(ExpandConstant('{tmp}\vc_redist.x64.exe'), '/install /quiet /norestart', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      begin
+        Log(Format('Failed to execute vc_redist.x64.exe. Error code: %d', [ResultCode]));
+        RaiseException(FmtMessage(CustomMessage('PrereqInstallFailed'), ['Visual C++ 2015-2022 (x64)', IntToStr(ResultCode)]));
+      end;
 
-    if NeedVcx86Flag and FileExists(ExpandConstant('{tmp}\vc_redist.x86.exe')) then
-      Exec(ExpandConstant('{tmp}\vc_redist.x86.exe'), '/install /quiet /norestart', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      Log(Format('vc_redist.x64.exe exited with code: %d', [ResultCode]));
+      if ResultCode = 3010 then
+        RebootRequiredFlag := True
+      else if (ResultCode <> 0) and (ResultCode <> 1641) and (ResultCode <> 1638) then
+      begin
+        RaiseException(FmtMessage(CustomMessage('PrereqInstallFailed'), ['Visual C++ 2015-2022 (x64)', IntToStr(ResultCode)]));
+      end;
 
+      // Post-install verification
+      if NeedVc64() then
+      begin
+        Log('Verification failed: Visual C++ 2015-2022 (x64) is still not detected.');
+        RaiseException(FmtMessage(CustomMessage('PrereqVerifyFailed'), ['Visual C++ 2015-2022 (x64)']));
+      end;
+    end;
+
+    // 2. Install Microsoft Edge WebView2 Runtime if required
     if NeedWebView2Flag and FileExists(ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe')) then
-      Exec(ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe'), '/silent /install', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    begin
+      Log('Executing Microsoft Edge WebView2 Bootstrapper...');
+      if not Exec(ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe'), '/silent /install', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      begin
+        Log(Format('Failed to execute MicrosoftEdgeWebview2Setup.exe. Error code: %d', [ResultCode]));
+        RaiseException(FmtMessage(CustomMessage('PrereqInstallFailed'), ['Microsoft Edge WebView2 Runtime', IntToStr(ResultCode)]));
+      end;
 
-    if NeedDirectXFlag and FileExists(ExpandConstant('{tmp}\dxwebsetup.exe')) then
-      Exec(ExpandConstant('{tmp}\dxwebsetup.exe'), '/Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      Log(Format('MicrosoftEdgeWebview2Setup.exe exited with code: %d', [ResultCode]));
+      if ResultCode = 3010 then
+        RebootRequiredFlag := True
+      else if (ResultCode <> 0) and (ResultCode <> 1641) and (ResultCode <> 1638) then
+      begin
+        RaiseException(FmtMessage(CustomMessage('PrereqInstallFailed'), ['Microsoft Edge WebView2 Runtime', IntToStr(ResultCode)]));
+      end;
 
-    if NeedDotNetFlag and FileExists(ExpandConstant('{tmp}\windowsdesktop-runtime-8.0-win-x64.exe')) then
-      Exec(ExpandConstant('{tmp}\windowsdesktop-runtime-8.0-win-x64.exe'), '/install /quiet /norestart', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      // Post-install verification
+      if NeedWebView2() then
+      begin
+        Log('Verification warning: Microsoft Edge WebView2 is still not detected in registry. The app contains safe runtime fallback.');
+      end;
+    end;
   end
   else if CurStep = ssPostInstall then
   begin

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -582,7 +582,7 @@ public class NewFeaturesTests
         prereqs.Should().Contain(p => p.Id == "vcredist_2015_2022_x64");
         prereqs.Should().Contain(p => p.Id == "directx_enduser");
         prereqs.Should().Contain(p => p.Id == "dotnet_desktop_8");
-        prereqs.Should().Contain(p => p.Id == "dotnet_runtime_9");
+        prereqs.Should().Contain(p => p.Id == "dotnet_runtime_8");
     }
 
     [Fact]

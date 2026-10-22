@@ -52,7 +52,7 @@ public record PrerequisiteItem
     public required string Name { get; init; }
 
     /// <summary>
-    /// Category of dependency ("Visual C++", "DirectX", ".NET Runtime", "Unreal Engine", "PhysX", "OpenAL", "Driver").
+    /// Category of dependency ("Visual C++", "DirectX", ".NET Runtime", "Unreal Engine", "PhysX", "OpenAL", "Driver", "Web Browser Engine").
     /// </summary>
     public string Category { get; init; } = "Visual C++";
 
@@ -85,4 +85,14 @@ public record PrerequisiteItem
     /// Whether this prerequisite is essential for most modern games.
     /// </summary>
     public bool IsEssential { get; init; } = true;
+
+    /// <summary>
+    /// Whether this prerequisite comes from a recognized catalog with verified behavior and silent arguments.
+    /// </summary>
+    public bool IsRecognized { get; init; } = true;
+
+    /// <summary>
+    /// Whether this prerequisite requires explicit user approval before execution (e.g. unknown third-party installer found in a game folder).
+    /// </summary>
+    public bool RequiresExplicitConsent { get; init; } = false;
 }

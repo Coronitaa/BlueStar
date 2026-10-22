@@ -182,6 +182,9 @@
                                             <DataTrigger Binding="{Binding ColumnCount}" Value="0">
                                                 <Setter Property="Data" Value="{StaticResource IconListView}"/>
                                             </DataTrigger>
+                                            <DataTrigger Binding="{Binding ColumnCount}" Value="-1">
+                                                <Setter Property="Data" Value="{StaticResource IconPosterGrid}"/>
+                                            </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
                                 </Path.Style>
@@ -1030,13 +1033,251 @@
                             </Border>
                         </Viewbox>
                         </DataTemplate>
+                        <!-- ════ POSTER CARD TEMPLATE (Vertical Capsule 2:3, hover reveal, no AppId or Tags) ════ -->
+                        <DataTemplate x:Key="InstancePosterCardTemplate">
+                            <Viewbox Stretch="Uniform" HorizontalAlignment="Stretch" VerticalAlignment="Top" Margin="8,0,8,16">
+                                <Border x:Name="PosterCardBorder"
+                                        Width="200" Height="300"
+                                        Padding="0"
+                                        ClipToBounds="True"
+                                        Cursor="Hand"
+                                        CornerRadius="{StaticResource RadiusMd}">
+                                    <Border.Style>
+                                        <Style TargetType="Border" BasedOn="{StaticResource InteractiveCard}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                    <Setter Property="BorderBrush" Value="#10B981"/>
+                                                    <Setter Property="Background" Value="#1410B981"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <Border.InputBindings>
+                                        <MouseBinding MouseAction="LeftClick"
+                                                      Command="{Binding DataContext.ManageInstanceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                      CommandParameter="{Binding}"/>
+                                    </Border.InputBindings>
+                                    <Grid>
+                                        <!-- ── SELECTION CIRCLE (Top-left, visible in selection mode) ── -->
+                                        <Border HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                Margin="10,10,0,0"
+                                                Width="28" Height="28"
+                                                CornerRadius="14"
+                                                Panel.ZIndex="52"
+                                                IsHitTestVisible="False"
+                                                Visibility="{Binding DataContext.IsSelectionModeActive, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <Border.Effect>
+                                                <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="2" Opacity="0.6"/>
+                                            </Border.Effect>
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="#D9161822"/>
+                                                    <Setter Property="BorderBrush" Value="#80FFFFFF"/>
+                                                    <Setter Property="BorderThickness" Value="2"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                            <Setter Property="Background" Value="#10B981"/>
+                                                            <Setter Property="BorderBrush" Value="#FFFFFF"/>
+                                                            <Setter Property="BorderThickness" Value="2"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <Path Data="{StaticResource IconCheck}" Fill="#FFFFFF"
+                                                  Stretch="Uniform" Width="13" Height="13"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                        </Border>
+
+                                        <!-- ── FULL-CARD SELECTION CLICK INTERCEPTOR OVERLAY ── -->
+                                        <Button Margin="0"
+                                                Cursor="Hand"
+                                                Panel.ZIndex="50"
+                                                ToolTip="{Binding Name}"
+                                                Command="{Binding DataContext.ToggleInstanceSelectionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                Visibility="{Binding DataContext.IsSelectionModeActive, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="Transparent"/>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
+
+                                        <!-- ── POSTER ARTWORK BACKGROUND (Vertical Capsule) ── -->
+                                        <Grid Panel.ZIndex="1">
+                                            <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}"
+                                                  Stretch="Uniform" Width="36" Height="36"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            <Border CornerRadius="{StaticResource RadiusMd}">
+                                                <Border.Background>
+                                                    <ImageBrush ImageSource="{Binding CapsuleImageUrl, Converter={StaticResource CachedImageConverter}}"
+                                                                Stretch="UniformToFill"
+                                                                RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                </Border.Background>
+                                            </Border>
+                                        </Grid>
+
+                                        <!-- ── HOVER OVERLAY (Visible ONLY on mouse hover) ── -->
+                                        <Border x:Name="HoverInfoOverlay"
+                                                Panel.ZIndex="10"
+                                                CornerRadius="{StaticResource RadiusMd}">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                    <GradientStop Color="#B3090B10" Offset="0.0"/>
+                                                    <GradientStop Color="#CC0D0F17" Offset="0.35"/>
+                                                    <GradientStop Color="#F50D0F17" Offset="0.7"/>
+                                                    <GradientStop Color="#FA0D0F17" Offset="1.0"/>
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Opacity" Value="0"/>
+                                                    <Setter Property="IsHitTestVisible" Value="False"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsMouseOver, ElementName=PosterCardBorder}" Value="True">
+                                                            <Setter Property="IsHitTestVisible" Value="True"/>
+                                                            <DataTrigger.EnterActions>
+                                                                <BeginStoryboard>
+                                                                    <Storyboard>
+                                                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                                         To="1"
+                                                                                         Duration="{StaticResource DurationFast}"
+                                                                                         EasingFunction="{StaticResource EaseOutCubic}"/>
+                                                                    </Storyboard>
+                                                                </BeginStoryboard>
+                                                            </DataTrigger.EnterActions>
+                                                            <DataTrigger.ExitActions>
+                                                                <BeginStoryboard>
+                                                                    <Storyboard>
+                                                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                                         To="0"
+                                                                                         Duration="{StaticResource DurationFast}"
+                                                                                         EasingFunction="{StaticResource EaseOutCubic}"/>
+                                                                    </Storyboard>
+                                                                </BeginStoryboard>
+                                                            </DataTrigger.ExitActions>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="*"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+
+                                                <!-- Top row: Origin icons & Update badge -->
+                                                <DockPanel Grid.Row="0" Margin="10,10,10,0" LastChildFill="False">
+                                                    <!-- Update Available Badge -->
+                                                    <Border DockPanel.Dock="Right"
+                                                            Background="#EA580C"
+                                                            BorderBrush="#F59E0B"
+                                                            BorderThickness="1"
+                                                            CornerRadius="{StaticResource RadiusSm}"
+                                                            Padding="6,2"
+                                                            Visibility="{Binding HasUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                            ToolTip="{DynamicResource String_UpdateAvailableDownloadTooltip}">
+                                                        <Border.Effect>
+                                                            <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="2" Opacity="0.6"/>
+                                                        </Border.Effect>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <Path Data="{StaticResource IconRefresh}" Fill="#FFFFFF" Stretch="Uniform" Width="9" Height="9" Margin="0,0,3,0" VerticalAlignment="Center"/>
+                                                            <TextBlock Text="Update" FontSize="9" FontWeight="Bold" Foreground="#FFFFFF"/>
+                                                        </StackPanel>
+                                                    </Border>
+
+                                                    <!-- Origin Icons docked left -->
+                                                    <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <Path Data="{StaticResource IconSteam}" Fill="#66C0F4"
+                                                              Stretch="Uniform" Width="14" Height="14"
+                                                              VerticalAlignment="Center"
+                                                              Visibility="{Binding IsSteamGame, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                              ToolTip="{DynamicResource String_SteamGameImportedTooltip}"/>
+                                                        <Path Data="{StaticResource IconFolder}" Fill="#10B981"
+                                                              Stretch="Uniform" Width="14" Height="14"
+                                                              VerticalAlignment="Center"
+                                                              Visibility="{Binding IsImportedFolder, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                              ToolTip="{DynamicResource String_ImportedFolderTooltip}"/>
+                                                    </StackPanel>
+                                                </DockPanel>
+
+                                                <!-- Row 2: Game Title (No AppId, No Tags) -->
+                                                <StackPanel Grid.Row="2" Margin="12,0,12,10">
+                                                    <TextBlock Text="{Binding Name}"
+                                                               Style="{StaticResource H3}"
+                                                               FontSize="13"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="#FFFFFF"
+                                                               TextWrapping="Wrap"
+                                                               MaxHeight="36"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               ToolTip="{Binding Name}"/>
+                                                </StackPanel>
+
+                                                <!-- Row 3: Action Buttons (Play/Install, Update, Folder) -->
+                                                <DockPanel Grid.Row="3" Margin="12,0,12,14" LastChildFill="False">
+                                                    <!-- Play or Install Button (Right-aligned) -->
+                                                    <Button DockPanel.Dock="Right"
+                                                            Padding="14,6"
+                                                            Command="{Binding DataContext.PlayInstanceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            CommandParameter="{Binding}"
+                                                            ToolTip="{DynamicResource String_PlayTooltip}">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button" BasedOn="{StaticResource PlayButton}">
+                                                                <Setter Property="Content" Value="▶ Play"/>
+                                                                <Setter Property="FontSize" Value="11"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsNotInstalled}" Value="True">
+                                                                        <Setter Property="Content" Value="📥 Install"/>
+                                                                        <Setter Property="Background" Value="{StaticResource AccentHoverBrush}"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
+
+                                                    <!-- Left Action Buttons (Update + Folder) -->
+                                                    <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <!-- Update Available Button -->
+                                                        <Button Style="{StaticResource UpdateActionButton}"
+                                                                Padding="6"
+                                                                Margin="0,0,5,0"
+                                                                ToolTip="{DynamicResource String_UpdateAvailableDownloadTooltip}"
+                                                                Visibility="{Binding HasUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                                Command="{Binding DataContext.CheckDepotBoxUpdatesCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                CommandParameter="{Binding}">
+                                                            <Path Data="{StaticResource IconDownload}"
+                                                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                  Stretch="Uniform" Width="12" Height="12"/>
+                                                        </Button>
+
+                                                        <!-- Open Game Folder Button -->
+                                                        <Button Style="{StaticResource IconButton}"
+                                                                Padding="6"
+                                                                ToolTip="{DynamicResource String_OpenFolderTooltip}"
+                                                                Command="{Binding DataContext.OpenFolderCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                CommandParameter="{Binding}">
+                                                            <Path Data="{StaticResource IconFolder}" Fill="{StaticResource SecondaryTextBrush}"
+                                                                  Stretch="Uniform" Width="13" Height="13"/>
+                                                        </Button>
+                                                    </StackPanel>
+                                                </DockPanel>
+                                            </Grid>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </Viewbox>
+                        </DataTemplate>
                     </ItemsControl.Resources>
                     <ItemsControl.Style>
                         <Style TargetType="ItemsControl">
                             <Setter Property="ItemsPanel">
                                 <Setter.Value>
                                     <ItemsPanelTemplate>
-                                        <UniformGrid Columns="{Binding ColumnCount}" HorizontalAlignment="Stretch" VerticalAlignment="Top"/>
+                                        <UniformGrid Columns="{Binding EffectiveColumnCount}" HorizontalAlignment="Stretch" VerticalAlignment="Top"/>
                                     </ItemsPanelTemplate>
                                 </Setter.Value>
                             </Setter>
@@ -1063,6 +1304,9 @@
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding DataContext.ColumnCount, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="0">
                                                 <Setter Property="ContentTemplate" Value="{DynamicResource InstanceListRowTemplate}"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding DataContext.ColumnCount, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Value="-1">
+                                                <Setter Property="ContentTemplate" Value="{DynamicResource InstancePosterCardTemplate}"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>

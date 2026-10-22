@@ -33,35 +33,17 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# 2.1 Inject bundled configuration and API keys into publish directory (dynamically retrieved, NEVER committed to git)
-Write-Host "  Configuring bundled release settings and API key from local environment..." -ForegroundColor Gray
-$appDataSettingsPath = Join-Path $env:APPDATA "BlueStar\settings.json"
-$discoveredApiKey = $null
-$discoveredApiUrl = "https://depotbox.org"
+# Release locks from compiler daemons and remove non-shipping debug symbols
+& dotnet build-server shutdown | Out-Null
+Start-Sleep -Milliseconds 500
+Get-ChildItem -Path $publishDir -Filter "*.pdb" -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
 
-if (Test-Path $appDataSettingsPath) {
-    try {
-        $existingConfig = Get-Content $appDataSettingsPath -Raw | ConvertFrom-Json
-        if ($existingConfig.defaultApiKey -and $existingConfig.defaultApiKey -ne "YOUR-API-KEY") {
-            $discoveredApiKey = $existingConfig.defaultApiKey
-        }
-        if ($existingConfig.defaultApiUrl) {
-            $discoveredApiUrl = $existingConfig.defaultApiUrl
-        }
-    } catch { }
-}
-
-if ([string]::IsNullOrWhiteSpace($discoveredApiKey)) {
-    $discoveredApiKey = $env:BLUESTAR_DEPOTBOX_API_KEY
-    if ([string]::IsNullOrWhiteSpace($discoveredApiKey)) {
-        $discoveredApiKey = $env:DEPOTBOX_API_KEY
-    }
-}
-
+# 2.1 Configure default release settings (strictly public defaults, NEVER leak local API keys or secrets)
+Write-Host "  Configuring clean public release settings (no local secrets)..." -ForegroundColor Gray
 $releaseSettings = [ordered]@{
     language = "en"
-    defaultApiUrl = $discoveredApiUrl
-    defaultApiKey = $discoveredApiKey
+    defaultApiUrl = "https://depotbox.org"
+    defaultApiKey = $null
     deleteDepotsAfterInstall = $true
     showNsfwContent = $false
     showDrmContent = $true
@@ -72,89 +54,29 @@ $releaseSettings = [ordered]@{
 $settingsJsonPath = Join-Path $publishDir "settings.json"
 $releaseSettings | ConvertTo-Json -Depth 5 | Set-Content -Path $settingsJsonPath -Encoding UTF8
 
-# 2.2 Bundle Visual C++, DirectX, and Windows system runtime dependencies for zero-dependency portable mode
-Write-Host "  Bundling VC++, DirectX runtimes and system dependencies for zero-dependency execution..." -ForegroundColor Gray
-$sys32 = "$env:WINDIR\System32"
-$systemDlls = @(
-    "msvcp140.dll",
-    "msvcp140_1.dll",
-    "msvcp140_2.dll",
-    "msvcp140_atomic_wait.dll",
-    "msvcp140_codecvt_ids.dll",
-    "vcruntime140.dll",
-    "vcruntime140_1.dll",
-    "vcruntime140_threads.dll",
-    "vcomp140.dll",
-    "ucrtbase.dll",
-    "d3dcompiler_47.dll",
-    "d3dcompiler_43.dll",
-    "d3dx9_43.dll",
-    "d3dx11_43.dll",
-    "xaudio2_7.dll",
-    "xinput1_3.dll",
-    "xinput1_4.dll"
-)
-$toolsDir = Join-Path $publishDir "tools"
-foreach ($dll in $systemDlls) {
-    $srcPath = Join-Path $sys32 $dll
-    if (Test-Path $srcPath) {
-        Copy-Item -Path $srcPath -Destination $publishDir -Force
-        if (Test-Path $toolsDir) {
-            Copy-Item -Path $srcPath -Destination $toolsDir -Force
-        }
-    }
-}
-
-# 2.3 Copy complete .NET host runtime and core libraries to tools directory for DepotDownloaderMod standalone operation
-Write-Host "  Bundling complete .NET host runtime and dependencies for DepotDownloaderMod standalone execution..." -ForegroundColor Gray
-$runtimeDlls = Get-ChildItem -Path $publishDir -Filter "*.dll" | Where-Object {
-    $_.Name -like "System.*.dll" -or
-    $_.Name -like "Microsoft.Win32.*.dll" -or
-    $_.Name -like "Microsoft.Extensions.*.dll" -or
-    $_.Name -in @("coreclr.dll", "clrjit.dll", "hostfxr.dll", "hostpolicy.dll", "System.Private.CoreLib.dll", "mscorlib.dll", "netstandard.dll")
-}
-foreach ($rDll in $runtimeDlls) {
-    Copy-Item -Path $rDll.FullName -Destination $toolsDir -Force
-}
-
-# Ensure DepotDownloaderMod.runtimeconfig.json is self-contained aware
-$ddmRuntimeConfig = Join-Path $toolsDir "DepotDownloaderMod.runtimeconfig.json"
-$ddmConfigContent = @{
-    runtimeOptions = @{
-        tfm = "net8.0"
-        rollForward = "LatestMajor"
-        includedFrameworks = @(
-            @{
-                name = "Microsoft.NETCore.App"
-                version = "8.0.0"
-            }
-        )
-        configProperties = @{
-            "System.Globalization.Invariant" = $true
-            "System.Globalization.PredefinedCulturesOnly" = $true
-            "System.Reflection.Metadata.MetadataUpdater.IsSupported" = $false
-            "System.Runtime.Serialization.EnableUnsafeBinaryFormatterSerialization" = $false
-        }
-    }
-}
-$ddmConfigContent | ConvertTo-Json -Depth 5 | Set-Content -Path $ddmRuntimeConfig -Encoding UTF8
-
-# 3. Setup Code Signing Certificate ("BlueStar Devs")
+# 3. Setup Code Signing Certificate ("BlueStar Devs" for local verification)
 Write-Host "[3/6] Configuring code signing certificate ('BlueStar Devs')..." -ForegroundColor Yellow
 $certSubject = "CN=BlueStar Devs"
 $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -eq $certSubject -or $_.Subject -like "*BlueStar*Devs*" } | Select-Object -First 1
 
 if (-not $cert) {
-    Write-Host "  Creating new Code Signing Certificate '$certSubject'..." -ForegroundColor Gray
+    Write-Host "  Creating new Code Signing Certificate '$certSubject' for local verification..." -ForegroundColor Gray
     $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject $certSubject -CertStoreLocation "Cert:\CurrentUser\My" -NotAfter (Get-Date).AddYears(5) -FriendlyName "BlueStar Developers"
 }
 
 if ($cert) {
+    $isSelfSigned = ($cert.Issuer -eq $cert.Subject)
     Write-Host "  Using Certificate: $($cert.Subject) [Thumbprint: $($cert.Thumbprint)]" -ForegroundColor Green
+    if ($isSelfSigned) {
+        Write-Host "  [Certificate Notice] Self-signed certificate for local testing/development." -ForegroundColor Yellow
+        Write-Host "  Public distribution requires a commercial Code Signing certificate from a trusted public CA (or Microsoft Store signing)." -ForegroundColor Yellow
+    } else {
+        Write-Host "  [Certificate Notice] Trusted CA-issued certificate: $($cert.Issuer)" -ForegroundColor Green
+    }
     
-    # Sign main executable and key libraries
-    Write-Host "  Signing application binaries with DigiCert timestamp..." -ForegroundColor Gray
-    $filesToSign = Get-ChildItem -Path $publishDir -Include *.exe, *.dll -Recurse
+    # Sign primary application binaries and libraries (PE files only)
+    Write-Host "  Signing primary application binaries..." -ForegroundColor Gray
+    $filesToSign = Get-ChildItem -Path $publishDir -File | Where-Object { $_.Extension -in @(".exe", ".dll") -and ($_.Name -like "BlueStar*" -or $_.Extension -eq ".exe") }
     foreach ($file in $filesToSign) {
         try {
             Set-AuthenticodeSignature -FilePath $file.FullName -Certificate $cert -TimestampServer $timestampServer -HashAlgorithm SHA256 -ErrorAction SilentlyContinue | Out-Null
