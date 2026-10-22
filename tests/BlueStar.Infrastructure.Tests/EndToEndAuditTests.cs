@@ -517,6 +517,64 @@ public class EndToEndAuditTests : IDisposable
         uncuratedRecommended.Should().BeNull();
     }
 
+    [Fact]
+    public async Task Audit_07b_BuildResolver_HandlesDuplicateDepotManifestsAcrossProvidersWithoutException()
+    {
+        var steamCmdJson = @"{
+            ""status"": ""success"",
+            ""data"": {
+                ""892970"": {
+                    ""depots"": {
+                        ""branches"": {
+                            ""public"": { ""buildid"": ""123456"", ""timeupdated"": ""1655000000"" }
+                        },
+                        ""892971"": {
+                            ""name"": ""Valheim Content"",
+                            ""manifests"": {
+                                ""public"": { ""gid"": ""3697849816338933525"" }
+                            }
+                        }
+                    }
+                }
+            }
+        }";
+
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(steamCmdJson, Encoding.UTF8, "application/json")
+            });
+
+        var steamClient = new SteamStoreApiClient(new HttpClient(handlerMock.Object), NullLogger<SteamStoreApiClient>.Instance);
+
+        var mockRegistry = new Mock<IManifestRegistry>();
+        // ManifestHub discovers manifests across branches for depot 892971 (multiple manifests for same depot ID)
+        mockRegistry.Setup(r => r.DiscoverManifestsAsync(892970, It.IsAny<CancellationToken>())).ReturnsAsync([
+            new ManifestArtifact { DepotId = 892971, ManifestId = 1111111111111111111, SizeBytes = 1000 },
+            new ManifestArtifact { DepotId = 892971, ManifestId = 3697849816338933525, SizeBytes = 2000 },
+            new ManifestArtifact { DepotId = 892972, ManifestId = 4727603473733837288, SizeBytes = 3000 }
+        ]);
+
+        var resolver = new BuildResolver(
+            steamClient,
+            mockRegistry.Object,
+            NullLogger<BuildResolver>.Instance);
+
+        var versions = await resolver.GetAvailableVersionsAsync(892970);
+        versions.Should().NotBeNull();
+        versions.Should().NotBeEmpty();
+
+        var recommended = await resolver.ResolveRecommendedVersionAsync(892970);
+        recommended.Should().NotBeNull();
+        recommended!.Depots.Should().Contain(d => d.DepotId == 892971 && d.ManifestId == 3697849816338933525);
+    }
+
     #endregion
 
     #region 8. COMPONENT / FIX COEXISTENCE

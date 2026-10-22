@@ -85,7 +85,6 @@ public sealed class BuildResolver : IBuildResolver
 
                 // 2. Discover manifests across all registered providers
                 var discoveredManifests = await _manifestRegistry.DiscoverManifestsAsync(appId, innerCt).ConfigureAwait(false);
-                var manifestMap = discoveredManifests.ToDictionary(m => m.DepotId, m => m.ManifestId);
 
                 // 3. Resolve depot keys if key repository is available
                 var allDepotIds = steamBuilds.SelectMany(b => b.DepotManifests.Keys)

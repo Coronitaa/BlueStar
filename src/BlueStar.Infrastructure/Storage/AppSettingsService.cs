@@ -35,8 +35,33 @@ public sealed class AppSettingsService
             var appDataPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "BlueStar", "settings.json");
+            var portableMarker = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".portable");
 
-            _settingsPath = File.Exists(localPath) ? localPath : appDataPath;
+            if (File.Exists(portableMarker))
+            {
+                _settingsPath = localPath;
+            }
+            else if (File.Exists(appDataPath))
+            {
+                _settingsPath = appDataPath;
+            }
+            else if (File.Exists(localPath))
+            {
+                try
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(appDataPath)!);
+                    File.Copy(localPath, appDataPath, overwrite: false);
+                    _settingsPath = appDataPath;
+                }
+                catch
+                {
+                    _settingsPath = localPath;
+                }
+            }
+            else
+            {
+                _settingsPath = appDataPath;
+            }
         }
 
         Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);

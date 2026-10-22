@@ -98,8 +98,13 @@ if (Test-Path $portableZip) {
     Remove-Item $portableZip -Force
 }
 
+$portableMarkerPath = Join-Path $publishDir ".portable"
+New-Item -ItemType File -Path $portableMarkerPath -Force | Out-Null
+
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.IO.Compression.ZipFile]::CreateFromDirectory($publishDir, $portableZip, [System.IO.Compression.CompressionLevel]::Optimal, $false)
+
+Remove-Item -Path $portableMarkerPath -Force -ErrorAction SilentlyContinue
 
 $zipItem = Get-Item $portableZip
 $zipMb = [math]::Round($zipItem.Length / 1048576, 2)
