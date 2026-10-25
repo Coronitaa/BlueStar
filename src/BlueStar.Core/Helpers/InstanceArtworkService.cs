@@ -488,8 +488,9 @@ public static class InstanceArtworkService
             }
 
             case SteamArtworkType.Header:
+            case SteamArtworkType.InstanceBanner:
             {
-                // Wide grid 460x215 or 920x430 (~2.14:1)
+                // Wide horizontal banner (main capsule 616x353 / 1232x706 or legacy header 460x215 / 920x430)
                 if (height >= width)
                 {
                     return new ArtworkDimensionValidation(
@@ -500,10 +501,10 @@ public static class InstanceArtworkService
                         RecommendedWidth: recW,
                         RecommendedHeight: recH,
                         RatioDescription: ratioDesc,
-                        WarningMessage: $"La portada ancha debe ser horizontal ({recW}×{recH} o 920×430 px), pero la imagen seleccionada es vertical ({width}×{height}).");
+                        WarningMessage: $"La imagen debe ser horizontal ({recW}×{recH} px / main capsule), pero la imagen seleccionada es vertical ({width}×{height}).");
                 }
 
-                if (ratio < 1.6 || ratio > 2.6)
+                if (ratio < 1.5 || ratio > 2.6)
                 {
                     return new ArtworkDimensionValidation(
                         IsValid: false,
@@ -513,7 +514,7 @@ public static class InstanceArtworkService
                         RecommendedWidth: recW,
                         RecommendedHeight: recH,
                         RatioDescription: ratioDesc,
-                        WarningMessage: $"La relación de aspecto ({width}×{height}) difiere del formato horizontal 460×215 / 920×430 px.");
+                        WarningMessage: $"La relación de aspecto ({width}×{height}) difiere del formato horizontal recomendado (616×353 o 460×215 px).");
                 }
 
                 break;
@@ -612,7 +613,8 @@ public static class InstanceArtworkService
         string? cmdCapsuleRel = null;
         string? cmdHeroRel = null;
         string? cmdLogoRel = null;
-        string? cmdHeaderRel = null;
+        string? cmdMainCapsuleRel = null;
+        string? cmdHeaderImageRel = null;
         string? cmdClientIcon = null;
 
         // 1. Query SteamCMD PICS API
@@ -651,16 +653,24 @@ public static class InstanceArtworkService
                             if (string.IsNullOrWhiteSpace(cmdLogoRel) && ll.TryGetProperty("image", out var i1x)) cmdLogoRel = ExtractAssetRelPath(i1x);
                         }
 
-                        if (laf.TryGetProperty("library_header", out var lhd))
+                        if (laf.TryGetProperty("main_capsule", out var lmc))
                         {
-                            if (lhd.TryGetProperty("image2x", out var i2x)) cmdHeaderRel = ExtractAssetRelPath(i2x);
-                            if (string.IsNullOrWhiteSpace(cmdHeaderRel) && lhd.TryGetProperty("image", out var i1x)) cmdHeaderRel = ExtractAssetRelPath(i1x);
+                            if (lmc.TryGetProperty("image2x", out var i2x)) cmdMainCapsuleRel = ExtractAssetRelPath(i2x);
+                            if (string.IsNullOrWhiteSpace(cmdMainCapsuleRel) && lmc.TryGetProperty("image", out var i1x)) cmdMainCapsuleRel = ExtractAssetRelPath(i1x);
+                            if (string.IsNullOrWhiteSpace(cmdMainCapsuleRel)) cmdMainCapsuleRel = ExtractAssetRelPath(lmc);
                         }
                     }
 
-                    if (string.IsNullOrWhiteSpace(cmdHeaderRel) && commonEl.TryGetProperty("header_image", out var hi))
+                    if (string.IsNullOrWhiteSpace(cmdMainCapsuleRel) && commonEl.TryGetProperty("main_capsule", out var mc))
                     {
-                        cmdHeaderRel = ExtractAssetRelPath(hi);
+                        if (mc.TryGetProperty("image2x", out var i2x)) cmdMainCapsuleRel = ExtractAssetRelPath(i2x);
+                        if (string.IsNullOrWhiteSpace(cmdMainCapsuleRel) && mc.TryGetProperty("image", out var i1x)) cmdMainCapsuleRel = ExtractAssetRelPath(i1x);
+                        if (string.IsNullOrWhiteSpace(cmdMainCapsuleRel)) cmdMainCapsuleRel = ExtractAssetRelPath(mc);
+                    }
+
+                    if (commonEl.TryGetProperty("header_image", out var hi))
+                    {
+                        cmdHeaderImageRel = ExtractAssetRelPath(hi);
                     }
 
                     if (commonEl.TryGetProperty("clienticon", out var ci) && ci.ValueKind == JsonValueKind.String)
@@ -745,18 +755,27 @@ public static class InstanceArtworkService
             ArtworkChanged?.Invoke(null, (instanceId, SteamArtworkType.Logo));
         }
 
-        // 5. Download and save Header (wide grid)
+        // 5. Download and save Header & Instance Banner (main_capsule 616x353 / 1232x706, fallback to header)
         var headerUrls = new List<string?>();
-        if (!string.IsNullOrWhiteSpace(cmdHeaderRel))
+        if (!string.IsNullOrWhiteSpace(cmdMainCapsuleRel))
         {
-            foreach (var cdn in cdns) headerUrls.Add($"{cdn}/{cmdHeaderRel}");
+            foreach (var cdn in cdns) headerUrls.Add($"{cdn}/{cmdMainCapsuleRel}");
+        }
+        foreach (var cdn in cdns)
+        {
+            headerUrls.Add($"{cdn}/capsule_616x353_2x.jpg");
+            headerUrls.Add($"{cdn}/capsule_616x353.jpg");
+            headerUrls.Add($"{cdn}/main_capsule_2x.jpg");
+            headerUrls.Add($"{cdn}/main_capsule.jpg");
+        }
+        if (!string.IsNullOrWhiteSpace(cmdHeaderImageRel))
+        {
+            foreach (var cdn in cdns) headerUrls.Add($"{cdn}/{cmdHeaderImageRel}");
         }
         foreach (var cdn in cdns)
         {
             headerUrls.Add($"{cdn}/header_2x.jpg");
             headerUrls.Add($"{cdn}/header.jpg");
-            headerUrls.Add($"{cdn}/library_header_2x.jpg");
-            headerUrls.Add($"{cdn}/library_header.jpg");
         }
         if (!string.IsNullOrWhiteSpace(customHeaderUrl)) headerUrls.Add(customHeaderUrl);
 
@@ -765,6 +784,14 @@ public static class InstanceArtworkService
         {
             await SaveSlotFileAsync(artworkDir, SteamArtworkType.Header, headerData, ".jpg", ct).ConfigureAwait(false);
             ArtworkChanged?.Invoke(null, (instanceId, SteamArtworkType.Header));
+
+            // Also populate InstanceBanner slot with the downloaded main_capsule if not already present
+            var existingBanner = GetArtworkFilePath(instanceId, SteamArtworkType.InstanceBanner);
+            if (string.IsNullOrWhiteSpace(existingBanner))
+            {
+                await SaveSlotFileAsync(artworkDir, SteamArtworkType.InstanceBanner, headerData, ".jpg", ct).ConfigureAwait(false);
+                ArtworkChanged?.Invoke(null, (instanceId, SteamArtworkType.InstanceBanner));
+            }
         }
 
         // 6. Download and save Icon (.ico / .png / .jpg)
@@ -792,6 +819,14 @@ public static class InstanceArtworkService
                     : (iconData.Length > 8 && iconData[0] == 0x89 && iconData[1] == 0x50) ? ".png" : ".jpg";
             await SaveSlotFileAsync(artworkDir, SteamArtworkType.Icon, iconData, ext, ct).ConfigureAwait(false);
             ArtworkChanged?.Invoke(null, (instanceId, SteamArtworkType.Icon));
+
+            // Also populate InstanceLogo slot if not present
+            var existingLogo = GetArtworkFilePath(instanceId, SteamArtworkType.InstanceLogo);
+            if (string.IsNullOrWhiteSpace(existingLogo))
+            {
+                await SaveSlotFileAsync(artworkDir, SteamArtworkType.InstanceLogo, iconData, ext, ct).ConfigureAwait(false);
+                ArtworkChanged?.Invoke(null, (instanceId, SteamArtworkType.InstanceLogo));
+            }
         }
         else if (!string.IsNullOrWhiteSpace(targetExePath) && File.Exists(targetExePath) && ExecutableIconExtractor != null)
         {
@@ -801,6 +836,18 @@ public static class InstanceArtworkService
                 if (ExecutableIconExtractor(targetExePath, icoPath))
                 {
                     ArtworkChanged?.Invoke(null, (instanceId, SteamArtworkType.Icon));
+
+                    var existingLogo = GetArtworkFilePath(instanceId, SteamArtworkType.InstanceLogo);
+                    if (string.IsNullOrWhiteSpace(existingLogo))
+                    {
+                        var pngPath = Path.Combine(artworkDir, "icon.png");
+                        if (File.Exists(pngPath))
+                        {
+                            var logoPath = Path.Combine(artworkDir, "instance_logo.png");
+                            File.Copy(pngPath, logoPath, overwrite: true);
+                            ArtworkChanged?.Invoke(null, (instanceId, SteamArtworkType.InstanceLogo));
+                        }
+                    }
                 }
             }
             catch { }

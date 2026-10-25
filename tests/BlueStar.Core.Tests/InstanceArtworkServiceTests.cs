@@ -63,6 +63,22 @@ public class InstanceArtworkServiceTests
     }
 
     [Theory]
+    [InlineData(616, 353, true)] // Main capsule resolution
+    [InlineData(1232, 706, true)] // 2x Main capsule resolution
+    [InlineData(460, 215, true)] // Classic header resolution
+    [InlineData(920, 430, true)] // 2x Classic header resolution
+    [InlineData(300, 450, false)] // Vertical image -> invalid
+    [InlineData(100, 100, false)] // Square image -> invalid
+    public void ValidateDimensions_HeaderAndInstanceBanner_ValidatesMainCapsuleCorrectly(int width, int height, bool expectedValid)
+    {
+        var headerResult = InstanceArtworkService.ValidateDimensions(SteamArtworkType.Header, width, height, ".jpg");
+        headerResult.IsValid.Should().Be(expectedValid);
+
+        var bannerResult = InstanceArtworkService.ValidateDimensions(SteamArtworkType.InstanceBanner, width, height, ".jpg");
+        bannerResult.IsValid.Should().Be(expectedValid);
+    }
+
+    [Theory]
     [InlineData(256, 256, true, true)]
     [InlineData(512, 512, true, false)]
     [InlineData(1920, 1080, false, false)] // Non-square for icon -> invalid

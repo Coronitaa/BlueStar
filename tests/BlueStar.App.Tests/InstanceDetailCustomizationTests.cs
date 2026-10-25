@@ -674,4 +674,140 @@ public class InstanceDetailCustomizationTests
         var withGridBanner = instance with { CustomGridBannerPath = @"C:\dummy\grid_header.jpg" };
         Assert.Equal(@"C:\dummy\grid_header.jpg", withGridBanner.HeaderImageUrl);
     }
+
+    [Fact]
+    public void InstanceStatusChange_NotifiesIsInstalledAndButtons()
+    {
+        var instance = new GameInstance
+        {
+            Id = Guid.NewGuid(),
+            Name = "Status Notification Game",
+            AppId = 440,
+            InstallPath = @"C:\Games\TF2",
+            Origin = InstanceOrigin.Steam,
+            Status = InstanceStatus.NotInstalled
+        };
+
+        var vm = CreateViewModel(instance);
+        Assert.False(vm.IsInstalled);
+
+        var changedProperties = new List<string>();
+        vm.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName != null) changedProperties.Add(e.PropertyName);
+        };
+
+        vm.Instance = instance with { Status = InstanceStatus.Ready };
+
+        Assert.True(vm.IsInstalled);
+        Assert.Contains(nameof(vm.IsInstalled), changedProperties);
+        Assert.Contains(nameof(vm.CanDeployEmulator), changedProperties);
+        Assert.Contains(nameof(vm.ShowDownloadButton), changedProperties);
+        Assert.Contains(nameof(vm.DownloadButtonText), changedProperties);
+    }
+
+    [Fact]
+    public async Task LoadArtworksAsync_InitializesInstanceBannerFromHeaderIfMissing()
+    {
+        var instanceId = Guid.NewGuid();
+        var artworkDir = BlueStar.Core.Helpers.InstanceArtworkService.GetArtworkDirectory(instanceId);
+        System.IO.Directory.CreateDirectory(artworkDir);
+
+        var headerPath = System.IO.Path.Combine(artworkDir, "header.jpg");
+        var bannerPath = System.IO.Path.Combine(artworkDir, "instance_banner.jpg");
+
+        try
+        {
+            // Create a valid 200x100 dummy JPEG for header.jpg
+            var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap(200, 100, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+            var encoder = new System.Windows.Media.Imaging.JpegBitmapEncoder();
+            encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+            using (var fs = System.IO.File.Create(headerPath))
+            {
+                encoder.Save(fs);
+            }
+
+            var instance = new GameInstance
+            {
+                Id = instanceId,
+                Name = "Artwork Test Game",
+                AppId = 440,
+                InstallPath = @"C:\Games\TF2",
+                Origin = InstanceOrigin.Steam,
+                Status = InstanceStatus.Ready
+            };
+
+            var vm = CreateViewModel(instance);
+
+            // Prior to loading, InstanceBannerArtwork has no image
+            Assert.False(vm.InstanceBannerArtwork?.HasImage);
+
+            await vm.LoadArtworksAsync();
+
+            // InstanceBannerArtwork is initialized from header and has image loaded
+            Assert.True(System.IO.File.Exists(bannerPath));
+            Assert.True(vm.InstanceBannerArtwork?.HasImage);
+            Assert.NotNull(vm.CoverBannerImage);
+        }
+        finally
+        {
+            if (System.IO.Directory.Exists(artworkDir))
+            {
+                try { System.IO.Directory.Delete(artworkDir, recursive: true); } catch { }
+            }
+        }
+    }
+
+    [Fact]
+    public async Task LoadArtworksAsync_InitializesHeaderFromInstanceBannerIfMissing()
+    {
+        var instanceId = Guid.NewGuid();
+        var artworkDir = BlueStar.Core.Helpers.InstanceArtworkService.GetArtworkDirectory(instanceId);
+        System.IO.Directory.CreateDirectory(artworkDir);
+
+        var headerPath = System.IO.Path.Combine(artworkDir, "header.jpg");
+        var bannerPath = System.IO.Path.Combine(artworkDir, "instance_banner.jpg");
+
+        try
+        {
+            // Create a valid dummy JPEG for instance_banner.jpg (616x353 main capsule)
+            var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap(616, 353, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+            var encoder = new System.Windows.Media.Imaging.JpegBitmapEncoder();
+            encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+            using (var fs = System.IO.File.Create(bannerPath))
+            {
+                encoder.Save(fs);
+            }
+
+            var instance = new GameInstance
+            {
+                Id = instanceId,
+                Name = "Artwork Test Game",
+                AppId = 440,
+                InstallPath = @"C:\Games\TF2",
+                Origin = InstanceOrigin.Steam,
+                Status = InstanceStatus.Ready
+            };
+
+            var vm = CreateViewModel(instance);
+
+            // Prior to loading, HeaderArtwork has no image
+            Assert.False(vm.HeaderArtwork?.HasImage);
+
+            await vm.LoadArtworksAsync();
+
+            // HeaderArtwork is initialized from instance_banner and has image loaded
+            Assert.True(System.IO.File.Exists(headerPath));
+            Assert.True(vm.HeaderArtwork?.HasImage);
+            Assert.True(vm.InstanceBannerArtwork?.HasImage);
+            Assert.NotNull(vm.CoverBannerImage);
+        }
+        finally
+        {
+            if (System.IO.Directory.Exists(artworkDir))
+            {
+                try { System.IO.Directory.Delete(artworkDir, recursive: true); } catch { }
+            }
+        }
+    }
 }

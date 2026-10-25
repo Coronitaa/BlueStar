@@ -12,6 +12,7 @@ namespace BlueStar.App.ViewModels;
 public partial class DownloadsViewModel : ObservableObject
 {
     private readonly DownloadQueueManager _queueManager;
+    private readonly BlueStar.Core.Interfaces.IInstanceManager? _instanceManager;
 
     /// <summary>Access to the queue manager for controls and telemetry.</summary>
     public DownloadQueueManager QueueManager => _queueManager;
@@ -25,9 +26,10 @@ public partial class DownloadsViewModel : ObservableObject
     /// <summary>Callback to navigate to an instance detail view.</summary>
     public Action<BlueStar.Core.Models.GameInstance>? OnOpenInstanceRequested { get; set; }
 
-    public DownloadsViewModel(DownloadQueueManager queueManager)
+    public DownloadsViewModel(DownloadQueueManager queueManager, BlueStar.Core.Interfaces.IInstanceManager? instanceManager = null)
     {
         _queueManager = queueManager;
+        _instanceManager = instanceManager;
     }
 
     [ObservableProperty]
@@ -72,11 +74,14 @@ public partial class DownloadsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void OpenInstance(BlueStar.Core.Models.GameInstance? instance)
+    private async Task OpenInstanceAsync(BlueStar.Core.Models.GameInstance? instance)
     {
         if (instance != null)
         {
-            OnOpenInstanceRequested?.Invoke(instance);
+            var target = _instanceManager != null
+                ? (await _instanceManager.GetByIdAsync(instance.Id).ConfigureAwait(true) ?? instance)
+                : instance;
+            OnOpenInstanceRequested?.Invoke(target);
         }
     }
 
@@ -148,11 +153,14 @@ public partial class DownloadsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void PlayHistoryEntry(DownloadLogEntry? entry)
+    private async Task PlayHistoryEntryAsync(DownloadLogEntry? entry)
     {
         if (entry?.Instance != null)
         {
-            OnOpenInstanceRequested?.Invoke(entry.Instance);
+            var target = _instanceManager != null
+                ? (await _instanceManager.GetByIdAsync(entry.Instance.Id).ConfigureAwait(true) ?? entry.Instance)
+                : entry.Instance;
+            OnOpenInstanceRequested?.Invoke(target);
         }
     }
 }

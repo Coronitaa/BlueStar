@@ -325,7 +325,7 @@ public record GameInstance
 
             return !string.IsNullOrWhiteSpace(Metadata?.HeaderImageUrl)
                 ? Metadata.HeaderImageUrl
-                : (AppId > 0 ? $"https://cdn.cloudflare.steamstatic.com/steam/apps/{AppId}/header.jpg" : string.Empty);
+                : (AppId > 0 ? $"https://cdn.cloudflare.steamstatic.com/steam/apps/{AppId}/capsule_616x353.jpg" : string.Empty);
         }
     }
 

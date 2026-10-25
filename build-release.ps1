@@ -1,49 +1,294 @@
-param(
-    [string]$Version = "1.4.6"
+﻿param(
+    [string]$Version = "",
+    [string]$ApiKey = "",
+    [switch]$Interactive = $false
 )
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "==========================================" -ForegroundColor Cyan
-Write-Host "  BlueStar Release Builder (v$Version)   " -ForegroundColor Cyan
-Write-Host "==========================================" -ForegroundColor Cyan
-
 $rootDir = $PSScriptRoot
 $distDir = Join-Path $rootDir "dist"
 $publishDir = Join-Path $distDir "publish"
-$portableZip = Join-Path $distDir ('BlueStar-v' + $Version + '-Portable-win-x64.zip')
-$setupExe = Join-Path $distDir ('BlueStar-v' + $Version + '-Setup-win-x64.exe')
 $timestampServer = "http://timestamp.digicert.com"
 
-# 1. Clean previous dist output
+# ============================================================================
+# 0. Interaccion con el usuario (si se ejecuta en modo interactivo o sin parametros)
+# ============================================================================
+$currentVer = "1.4.6"
+$propsPath = Join-Path $rootDir "Directory.Build.props"
+if (Test-Path $propsPath) {
+    $propsContent = [System.IO.File]::ReadAllText($propsPath)
+    $match = [regex]::Match($propsContent, '(?<=<Version>)[^<]+')
+    if ($match.Success) { $currentVer = $match.Value.Trim() }
+}
+
+if ($Interactive -or [string]::IsNullOrWhiteSpace($Version)) {
+    Write-Host "========================================================================" -ForegroundColor Cyan
+    Write-Host "  BlueStar - Compilador Multi-Formato (Portable + Instalador + MSIX)   " -ForegroundColor Cyan
+    Write-Host "========================================================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "[PASO 1/2] VERSION DE EXPORTACION" -ForegroundColor Yellow
+    Write-Host "------------------------------------------------------------------------" -ForegroundColor Gray
+    Write-Host "  Version actual detectada en el proyecto: " -NoNewline -ForegroundColor Gray
+    Write-Host "$currentVer" -ForegroundColor Green
+    $inputVer = Read-Host "  Introduce la version para exportar los binarios [ENTER para $currentVer]"
+    if (![string]::IsNullOrWhiteSpace($inputVer)) {
+        $Version = $inputVer.Trim()
+    } else {
+        $Version = $currentVer
+    }
+    Write-Host ""
+}
+
+# Normalizar cadenas de version:
+# 3 partes: Major.Minor.Build (e.g. 1.4.6) - Utilizada por semver, tags y GitHub Releases
+# 4 partes: Major.Minor.Build.Revision (e.g. 1.4.6.0) - Requerida por Windows PE / MSIX AppXManifest
+$vClean = $Version.Trim().TrimStart('v').Trim()
+$vParts = $vClean.Split('.')
+while ($vParts.Count -lt 3) { $vParts += "0" }
+$threePartVersion = $vParts[0..2] -join '.'
+$rev = if ($vParts.Count -gt 3) { $vParts[3] } else { "0" }
+$fourPartVersion = ($vParts[0..2] -join '.') + "." + $rev
+
+if ($Interactive -or [string]::IsNullOrWhiteSpace($ApiKey)) {
+    # Descubrir claves API grabadas / configuradas en el sistema
+    $recordedKeys = [System.Collections.Generic.List[PSCustomObject]]::new()
+    
+    # 1. depotbox.key en la raiz
+    $keyFile = Join-Path $rootDir "depotbox.key"
+    if (Test-Path $keyFile) {
+        Get-Content $keyFile | ForEach-Object {
+            $k = $_.Trim()
+            if ($k -and $k -ne "YOUR-API-KEY" -and -not ($recordedKeys | Where-Object { $_.Key -eq $k })) {
+                $recordedKeys.Add([PSCustomObject]@{ Key = $k; Source = "depotbox.key (Archivo local)" })
+            }
+        }
+    }
+    
+    # 2. AppData settings.json
+    $appDataJson = Join-Path $env:APPDATA "BlueStar\settings.json"
+    if (Test-Path $appDataJson) {
+        try {
+            $k = (Get-Content $appDataJson -Raw | ConvertFrom-Json).defaultApiKey
+            if ($k -and $k -ne "YOUR-API-KEY" -and -not ($recordedKeys | Where-Object { $_.Key -eq $k })) {
+                $recordedKeys.Add([PSCustomObject]@{ Key = $k.Trim(); Source = "%AppData%\BlueStar\settings.json" })
+            }
+        } catch { }
+    }
+
+    # 3. Variables de entorno
+    if ($env:BLUESTAR_DEPOTBOX_API_KEY) {
+        $k = $env:BLUESTAR_DEPOTBOX_API_KEY.Trim()
+        if ($k -and -not ($recordedKeys | Where-Object { $_.Key -eq $k })) {
+            $recordedKeys.Add([PSCustomObject]@{ Key = $k; Source = "Variable de entorno BLUESTAR_DEPOTBOX_API_KEY" })
+        }
+    }
+    if ($env:DEPOTBOX_API_KEY) {
+        $k = $env:DEPOTBOX_API_KEY.Trim()
+        if ($k -and -not ($recordedKeys | Where-Object { $_.Key -eq $k })) {
+            $recordedKeys.Add([PSCustomObject]@{ Key = $k; Source = "Variable de entorno DEPOTBOX_API_KEY" })
+        }
+    }
+
+    Write-Host "[PASO 2/2] CLAVES DE AUTENTICACION (DEPOTBOX API KEY)" -ForegroundColor Yellow
+    Write-Host "------------------------------------------------------------------------" -ForegroundColor Gray
+
+    if ($recordedKeys.Count -gt 0) {
+        Write-Host "  Claves API grabadas / detectadas en el sistema:" -ForegroundColor Gray
+        for ($i = 0; $i -lt $recordedKeys.Count; $i++) {
+            $idx = $i + 1
+            $item = $recordedKeys[$i]
+            Write-Host "    [$idx] $($item.Key)" -ForegroundColor Green -NoNewline
+            Write-Host "  (Origen: $($item.Source))" -ForegroundColor DarkGray
+        }
+        Write-Host "    [N] Ingresar una nueva clave manualmente" -ForegroundColor Cyan
+        Write-Host "    [0] Compilar sin clave (Release publica predeterminada)" -ForegroundColor Gray
+        Write-Host ""
+
+        $keyChoice = Read-Host "  Selecciona una opcion [1-$($recordedKeys.Count), N, 0] [ENTER para 1]"
+        if ([string]::IsNullOrWhiteSpace($keyChoice)) { $keyChoice = "1" }
+
+        if ($keyChoice -match '^\d+$' -and [int]$keyChoice -ge 1 -and [int]$keyChoice -le $recordedKeys.Count) {
+            $ApiKey = $recordedKeys[[int]$keyChoice - 1].Key
+        } elseif ($keyChoice -eq "0") {
+            $ApiKey = ""
+        } elseif ($keyChoice -ieq "N") {
+            $ApiKey = (Read-Host "  Introduce la nueva API Key de DepotBox").Trim()
+            if ($ApiKey) {
+                $saveChoice = Read-Host "  Deseas guardar esta clave en depotbox.key para que aparezca grabada en el menu? [S/N] [ENTER = S]"
+                if ([string]::IsNullOrWhiteSpace($saveChoice) -or $saveChoice -ieq "S") {
+                    $ApiKey | Set-Content -Path (Join-Path $rootDir "depotbox.key") -Force
+                    Write-Host "  [OK] Clave guardada en depotbox.key" -ForegroundColor Green
+                }
+            }
+        } else {
+            $ApiKey = $keyChoice.Trim()
+        }
+    } else {
+        Write-Host "  No se encontraron claves grabadas previamente." -ForegroundColor Yellow
+        $ApiKey = (Read-Host "  Introduce tu API Key de DepotBox [ENTER para compilar sin clave]").Trim()
+        if ($ApiKey) {
+            $saveChoice = Read-Host "  Deseas guardar esta clave en depotbox.key para que aparezca grabada en el menu? [S/N] [ENTER = S]"
+            if ([string]::IsNullOrWhiteSpace($saveChoice) -or $saveChoice -ieq "S") {
+                $ApiKey | Set-Content -Path (Join-Path $rootDir "depotbox.key") -Force
+                Write-Host "  [OK] Clave guardada en depotbox.key" -ForegroundColor Green
+            }
+        }
+    }
+    Write-Host ""
+}
+
+# Definicion de nombres de artefactos exportados
+$portableZip = Join-Path $distDir ('BlueStar-v' + $threePartVersion + '-Portable-win-x64.zip')
+$setupExe    = Join-Path $distDir ('BlueStar-v' + $threePartVersion + '-Setup-win-x64.exe')
+$msixFile    = Join-Path $distDir ('BlueStar-v' + $threePartVersion + '-win-x64.msix')
+
+Write-Host "========================================================================" -ForegroundColor Cyan
+Write-Host "  Iniciando proceso de compilacion para v$threePartVersion" -ForegroundColor Cyan
+Write-Host "  Formatos objetivo: Portable (.zip) + Instalador (.exe) + MSIX (.msix)" -ForegroundColor Gray
+Write-Host "========================================================================" -ForegroundColor Cyan
+
+# ============================================================================
+# 1. Sincronizacion exhaustiva de versiones para proteger el sistema de updates
+# ============================================================================
+Write-Host "[1/7] Sincronizando referencias de version en todo el proyecto..." -ForegroundColor Yellow
+
+# 1.1 Directory.Build.props
+if (Test-Path $propsPath) {
+    $propsContent = [System.IO.File]::ReadAllText($propsPath)
+    $propsContent = [regex]::Replace($propsContent, '(?<=<Version>)[^<]+', $threePartVersion)
+    $propsContent = [regex]::Replace($propsContent, '(?<=<AssemblyVersion>)[^<]+', $fourPartVersion)
+    $propsContent = [regex]::Replace($propsContent, '(?<=<FileVersion>)[^<]+', $fourPartVersion)
+    $propsContent = [regex]::Replace($propsContent, '(?<=<InformationalVersion>)[^<]+', $threePartVersion)
+    [System.IO.File]::WriteAllText($propsPath, $propsContent)
+    Write-Host "  [OK] Directory.Build.props sincronizado ($threePartVersion / $fourPartVersion)" -ForegroundColor Gray
+}
+
+# 1.2 BlueStar.App.csproj
+$appCsprojPath = Join-Path $rootDir "src\BlueStar.App\BlueStar.App.csproj"
+if (Test-Path $appCsprojPath) {
+    $content = [System.IO.File]::ReadAllText($appCsprojPath)
+    $content = [regex]::Replace($content, '(?<=<Version>)[^<]+', $threePartVersion)
+    $content = [regex]::Replace($content, '(?<=<AssemblyVersion>)[^<]+', $fourPartVersion)
+    $content = [regex]::Replace($content, '(?<=<FileVersion>)[^<]+', $fourPartVersion)
+    [System.IO.File]::WriteAllText($appCsprojPath, $content)
+    Write-Host "  [OK] BlueStar.App.csproj sincronizado" -ForegroundColor Gray
+}
+
+# 1.3 installer.iss
+$issPath = Join-Path $rootDir "installer.iss"
+if (Test-Path $issPath) {
+    $content = [System.IO.File]::ReadAllText($issPath)
+    $content = [regex]::Replace($content, '(?<=#define MyAppVersion ")[^"]+', $threePartVersion)
+    [System.IO.File]::WriteAllText($issPath, $content)
+    Write-Host "  [OK] installer.iss sincronizado (#define MyAppVersion $threePartVersion)" -ForegroundColor Gray
+}
+
+# 1.4 Package.appxmanifest
+$manifestPath = Join-Path $rootDir "src\BlueStar.Package\Package.appxmanifest"
+if (Test-Path $manifestPath) {
+    $content = [System.IO.File]::ReadAllText($manifestPath)
+    $content = [regex]::Replace($content, '(?<=<Identity\b[^>]*?\bVersion=")[^"]+', $fourPartVersion)
+    [System.IO.File]::WriteAllText($manifestPath, $content)
+    Write-Host "  [OK] Package.appxmanifest sincronizado (Version $fourPartVersion)" -ForegroundColor Gray
+}
+
+# 1.5 SplashWindow.xaml
+$splashPath = Join-Path $rootDir "src\BlueStar.App\Views\SplashWindow.xaml"
+if (Test-Path $splashPath) {
+    $content = [System.IO.File]::ReadAllText($splashPath)
+    $content = [regex]::Replace($content, '(?<=x:Name="VersionText"\s+Text=")[^"]+', $threePartVersion)
+    [System.IO.File]::WriteAllText($splashPath, $content)
+    Write-Host "  [OK] SplashWindow.xaml sincronizado" -ForegroundColor Gray
+}
+
+# 1.6 GitHubUpdateService.cs (actualizar fallback hardcodeado y cabecera UserAgent)
+$updateServicePath = Join-Path $rootDir "src\BlueStar.Infrastructure\Update\GitHubUpdateService.cs"
+if (Test-Path $updateServicePath) {
+    $content = [System.IO.File]::ReadAllText($updateServicePath)
+    $content = [regex]::Replace($content, 'rawCurrent \?\?=\s*new Version\(\d+,\s*\d+,\s*\d+\);', "rawCurrent ??= new Version($($vParts[0]), $($vParts[1]), $($vParts[2]));")
+    $content = [regex]::Replace($content, 'BlueStar-Updater/\d+\.\d+\.\d+', "BlueStar-Updater/$threePartVersion")
+    [System.IO.File]::WriteAllText($updateServicePath, $content)
+    Write-Host "  [OK] GitHubUpdateService.cs sincronizado (v$threePartVersion)" -ForegroundColor Gray
+}
+
+# 1.7 ViewModels y DebugLog fallback strings
+$aboutVm = Join-Path $rootDir "src\BlueStar.App\ViewModels\AboutViewModel.cs"
+if (Test-Path $aboutVm) {
+    $content = [System.IO.File]::ReadAllText($aboutVm)
+    $content = [regex]::Replace($content, '(?<=\?\?\s*")[0-9]+\.[0-9]+\.[0-9]+(?=";)', $threePartVersion)
+    [System.IO.File]::WriteAllText($aboutVm, $content)
+}
+
+$settingsVm = Join-Path $rootDir "src\BlueStar.App\ViewModels\SettingsViewModel.cs"
+if (Test-Path $settingsVm) {
+    $content = [System.IO.File]::ReadAllText($settingsVm)
+    $content = [regex]::Replace($content, '(?<=\?\?\s*")[0-9]+\.[0-9]+\.[0-9]+(?=";)', $threePartVersion)
+    [System.IO.File]::WriteAllText($settingsVm, $content)
+}
+
+$debugLog = Join-Path $rootDir "src\BlueStar.Infrastructure\Services\DebugLogService.cs"
+if (Test-Path $debugLog) {
+    $content = [System.IO.File]::ReadAllText($debugLog)
+    $content = [regex]::Replace($content, '(?<=\?\?\s*")[0-9]+\.[0-9]+\.[0-9]+(?=";)', $threePartVersion)
+    [System.IO.File]::WriteAllText($debugLog, $content)
+}
+
+# ============================================================================
+# 2. Limpieza de salida previa
+# ============================================================================
+Write-Host "[2/7] Limpiando carpeta de salida 'dist'..." -ForegroundColor Yellow
 if (Test-Path $distDir) {
-    Write-Host "[1/6] Cleaning previous dist output..." -ForegroundColor Yellow
     Get-ChildItem -Path $distDir | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 }
 New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
 
-# 2. Publish Self-Contained Win-x64
-Write-Host "[2/6] Publishing self-contained win-x64 release build..." -ForegroundColor Yellow
+# ============================================================================
+# 3. Compilacion y publicacion .NET Self-Contained Win-x64
+# ============================================================================
+Write-Host "[3/7] Compilando y publicando binarios (win-x64 self-contained)..." -ForegroundColor Yellow
 $projectPath = Join-Path $rootDir "src\BlueStar.App\BlueStar.App.csproj"
 
-& dotnet publish $projectPath -c Release -r win-x64 --self-contained true -p:PublishReadyToRun=true -p:PublishSingleFile=false -o $publishDir
+& dotnet publish $projectPath `
+    -c Release `
+    -r win-x64 `
+    --self-contained true `
+    -p:PublishReadyToRun=true `
+    -p:PublishSingleFile=false `
+    -p:Version=$threePartVersion `
+    -p:AssemblyVersion=$fourPartVersion `
+    -p:FileVersion=$fourPartVersion `
+    -p:InformationalVersion=$threePartVersion `
+    -o $publishDir
 
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "dotnet publish failed!"
+    Write-Error "Error durante 'dotnet publish'!"
     exit 1
 }
 
-# Release locks from compiler daemons and remove non-shipping debug symbols
+# Liberar bloqueos de daemons de compilacion y limpiar simbolos de depuracion
 & dotnet build-server shutdown | Out-Null
 Start-Sleep -Milliseconds 500
 Get-ChildItem -Path $publishDir -Filter "*.pdb" -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
 
-# 2.1 Configure default release settings (strictly public defaults, NEVER leak local API keys or secrets)
-Write-Host "  Configuring clean public release settings (no local secrets)..." -ForegroundColor Gray
+# Inyectar configuracion de backend con la DepotBox API Key
+$resolvedApiKey = if (![string]::IsNullOrWhiteSpace($ApiKey)) { $ApiKey.Trim() } else { $null }
+
+if ($resolvedApiKey) {
+    $maskedKey = if ($resolvedApiKey.Length -gt 8) {
+        $resolvedApiKey.Substring(0, 4) + "..." + $resolvedApiKey.Substring($resolvedApiKey.Length - 4)
+    } else {
+        "****"
+    }
+    Write-Host "  [DepotBox] Clave API incrustada en backend: $maskedKey" -ForegroundColor Green
+} else {
+    Write-Host "  [DepotBox] Sin clave de backend (defaultApiKey = null)." -ForegroundColor Yellow
+}
+
 $releaseSettings = [ordered]@{
     language = "en"
     defaultApiUrl = "https://depotbox.org"
-    defaultApiKey = $null
+    defaultApiKey = $resolvedApiKey
     deleteDepotsAfterInstall = $true
     showNsfwContent = $false
     showDrmContent = $true
@@ -54,28 +299,19 @@ $releaseSettings = [ordered]@{
 $settingsJsonPath = Join-Path $publishDir "settings.json"
 $releaseSettings | ConvertTo-Json -Depth 5 | Set-Content -Path $settingsJsonPath -Encoding UTF8
 
-# 3. Setup Code Signing Certificate ("BlueStar Devs" for local verification)
-Write-Host "[3/6] Configuring code signing certificate ('BlueStar Devs')..." -ForegroundColor Yellow
+# ============================================================================
+# 4. Firma de codigo de los binarios
+# ============================================================================
+Write-Host "[4/7] Firmando binarios con certificado 'BlueStar Devs'..." -ForegroundColor Yellow
 $certSubject = "CN=BlueStar Devs"
 $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -eq $certSubject -or $_.Subject -like "*BlueStar*Devs*" } | Select-Object -First 1
 
 if (-not $cert) {
-    Write-Host "  Creating new Code Signing Certificate '$certSubject' for local verification..." -ForegroundColor Gray
+    Write-Host "  Creando nuevo certificado de firma de codigo '$certSubject'..." -ForegroundColor Gray
     $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject $certSubject -CertStoreLocation "Cert:\CurrentUser\My" -NotAfter (Get-Date).AddYears(5) -FriendlyName "BlueStar Developers"
 }
 
 if ($cert) {
-    $isSelfSigned = ($cert.Issuer -eq $cert.Subject)
-    Write-Host "  Using Certificate: $($cert.Subject) [Thumbprint: $($cert.Thumbprint)]" -ForegroundColor Green
-    if ($isSelfSigned) {
-        Write-Host "  [Certificate Notice] Self-signed certificate for local testing/development." -ForegroundColor Yellow
-        Write-Host "  Public distribution requires a commercial Code Signing certificate from a trusted public CA (or Microsoft Store signing)." -ForegroundColor Yellow
-    } else {
-        Write-Host "  [Certificate Notice] Trusted CA-issued certificate: $($cert.Issuer)" -ForegroundColor Green
-    }
-    
-    # Sign primary application binaries and libraries (PE files only)
-    Write-Host "  Signing primary application binaries..." -ForegroundColor Gray
     $filesToSign = Get-ChildItem -Path $publishDir -File | Where-Object { $_.Extension -in @(".exe", ".dll") -and ($_.Name -like "BlueStar*" -or $_.Extension -eq ".exe") }
     foreach ($file in $filesToSign) {
         try {
@@ -86,17 +322,15 @@ if ($cert) {
     $mainExe = Join-Path $publishDir "BlueStar.exe"
     if (Test-Path $mainExe) {
         $sig = Get-AuthenticodeSignature -FilePath $mainExe
-        Write-Host "  Verification for BlueStar.exe: $($sig.Status) (Signer: $($sig.SignerCertificate.Subject), Timestamp: $($sig.TimeStamperCertificate -ne $null))" -ForegroundColor Cyan
+        Write-Host "  Firma verificada para BlueStar.exe (Signer: $($sig.SignerCertificate.Subject))" -ForegroundColor Cyan
     }
-} else {
-    Write-Warning "Could not obtain code signing certificate for '$certSubject'."
 }
 
-# 4. Create Portable Zip
-Write-Host "[4/6] Packaging Portable Zip archive..." -ForegroundColor Yellow
-if (Test-Path $portableZip) {
-    Remove-Item $portableZip -Force
-}
+# ============================================================================
+# 5. Formato 1: Generar archivo Portable (.zip)
+# ============================================================================
+Write-Host "[5/7] Generando paquete Portable (.zip)..." -ForegroundColor Yellow
+if (Test-Path $portableZip) { Remove-Item $portableZip -Force }
 
 $portableMarkerPath = Join-Path $publishDir ".portable"
 New-Item -ItemType File -Path $portableMarkerPath -Force | Out-Null
@@ -108,10 +342,12 @@ Remove-Item -Path $portableMarkerPath -Force -ErrorAction SilentlyContinue
 
 $zipItem = Get-Item $portableZip
 $zipMb = [math]::Round($zipItem.Length / 1048576, 2)
-Write-Host "  Portable Zip created: $portableZip ($zipMb MB)" -ForegroundColor Green
+Write-Host "  [OK] Portable Zip generado: $portableZip ($zipMb MB)" -ForegroundColor Green
 
-# 5. Compile Inno Setup Installer
-Write-Host "[5/6] Compiling Windows Installer with Inno Setup..." -ForegroundColor Yellow
+# ============================================================================
+# 6. Formato 2: Generar instalador Windows (.exe) con Inno Setup
+# ============================================================================
+Write-Host "[6/7] Compilando Instalador de Windows con Inno Setup..." -ForegroundColor Yellow
 $isccPaths = @(
     "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
     "C:\Users\Valen\AppData\Local\Programs\Inno Setup 6\ISCC.exe",
@@ -122,41 +358,65 @@ $isccPaths = @(
 $isccExe = $isccPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
 
 if (-not $isccExe) {
-    Write-Warning "ISCC.exe not found! Please check Inno Setup installation."
+    Write-Warning "No se encontro ISCC.exe. Por favor verifica la instalacion de Inno Setup 6."
 } else {
-    $issFile = Join-Path $rootDir "installer.iss"
-    & $isccExe "/Qp" ('/DMyAppVersion=' + $Version) $issFile
+    & $isccExe "/Qp" ('/DMyAppVersion=' + $threePartVersion) $issPath
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Inno Setup compilation failed!"
+        Write-Error "La compilacion con Inno Setup fallo!"
         exit 1
     }
 
     if (Test-Path $setupExe) {
-        # Sign the generated installer executable with RFC 3161 Timestamp
         if ($cert) {
-            Write-Host "  Signing Installer executable ($setupExe) with DigiCert timestamp..." -ForegroundColor Gray
+            Write-Host "  Firmando ejecutable del instalador con timestamp..." -ForegroundColor Gray
             Set-AuthenticodeSignature -FilePath $setupExe -Certificate $cert -TimestampServer $timestampServer -HashAlgorithm SHA256 -ErrorAction SilentlyContinue | Out-Null
-            $setupSig = Get-AuthenticodeSignature -FilePath $setupExe
-            Write-Host "  Verification for Installer: $($setupSig.Status) (Signer: $($setupSig.SignerCertificate.Subject), Timestamp: $($setupSig.TimeStamperCertificate -ne $null))" -ForegroundColor Cyan
         }
-        
         $setupItem = Get-Item $setupExe
         $setupMb = [math]::Round($setupItem.Length / 1048576, 2)
-        Write-Host "  Setup Installer created: $setupExe ($setupMb MB)" -ForegroundColor Green
+        Write-Host "  [OK] Instalador Setup generado: $setupExe ($setupMb MB)" -ForegroundColor Green
     }
 }
 
-# 6. Summary and Artifact Verification
-Write-Host "==========================================" -ForegroundColor Cyan
-Write-Host "  Release artifacts generated successfully! " -ForegroundColor Green
-Write-Host "==========================================" -ForegroundColor Cyan
+# ============================================================================
+# 7. Formato 3: Generar paquete MSIX (.msix)
+# ============================================================================
+Write-Host "[7/7] Empaquetando distribucion MSIX (Windows App Package)..." -ForegroundColor Yellow
+$msixScript = Join-Path $rootDir "src\BlueStar.Package\build-msix.ps1"
+if (Test-Path $msixScript) {
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $msixScript -Target LocalTest -Version $threePartVersion -Configuration Release -SkipPublish
+    
+    $generatedMsix = Get-ChildItem -Path (Join-Path $distDir "msix") -Filter "*.msix" -Recurse | Select-Object -First 1
+    if ($generatedMsix) {
+        Copy-Item -Path $generatedMsix.FullName -Destination $msixFile -Force
+        $msixMb = [math]::Round((Get-Item $msixFile).Length / 1048576, 2)
+        Write-Host "  [OK] Paquete MSIX generado: $msixFile ($msixMb MB)" -ForegroundColor Green
+    } else {
+        Write-Warning "No se encontro el archivo .msix generado en dist\msix."
+    }
+} else {
+    Write-Warning "No se encontro el script build-msix.ps1 en src\BlueStar.Package."
+}
 
-Get-ChildItem -Path $distDir -File | ForEach-Object {
+# ============================================================================
+# Resumen y Verificacion de Integridad de Artefactos Exportados
+# ============================================================================
+Write-Host ""
+Write-Host "========================================================================" -ForegroundColor Cyan
+Write-Host "  Compilados generados exitosamente! (v$threePartVersion)               " -ForegroundColor Green
+Write-Host "========================================================================" -ForegroundColor Cyan
+
+Get-ChildItem -Path $distDir -File | Where-Object { $_.Extension -in @(".zip", ".exe", ".msix") } | ForEach-Object {
     $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash
     [PSCustomObject]@{
-        Name = $_.Name
-        SizeMB = [math]::Round($_.Length / 1MB, 2)
+        Formato = switch ($_.Extension) {
+            ".zip"  { "Portable (.zip)" }
+            ".exe"  { "Instalador (.exe)" }
+            ".msix" { "Paquete MSIX (.msix)" }
+            default { $_.Extension }
+        }
+        Archivo = $_.Name
+        TamanoMB = [math]::Round($_.Length / 1MB, 2)
         SHA256 = $hash
     }
 } | Format-Table -AutoSize

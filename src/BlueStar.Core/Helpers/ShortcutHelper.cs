@@ -528,7 +528,8 @@ public static class ShortcutHelper
             string? cmdCapsuleRel = null;
             string? cmdHeroRel = null;
             string? cmdLogoRel = null;
-            string? cmdHeaderRel = null;
+            string? cmdMainCapsuleRel = null;
+            string? cmdHeaderImageRel = null;
             string? cmdClientIcon = null;
 
             // Query Steam PICS / SteamDB data for exact library_assets_full relative paths and clienticon
@@ -569,16 +570,24 @@ public static class ShortcutHelper
                                     if (string.IsNullOrWhiteSpace(cmdLogoRel) && ll.TryGetProperty("image", out var i1x)) cmdLogoRel = ExtractAssetRelPath(i1x);
                                 }
 
-                                if (laf.TryGetProperty("library_header", out var lhd))
+                                if (laf.TryGetProperty("main_capsule", out var lmc))
                                 {
-                                    if (lhd.TryGetProperty("image2x", out var i2x)) cmdHeaderRel = ExtractAssetRelPath(i2x);
-                                    if (string.IsNullOrWhiteSpace(cmdHeaderRel) && lhd.TryGetProperty("image", out var i1x)) cmdHeaderRel = ExtractAssetRelPath(i1x);
+                                    if (lmc.TryGetProperty("image2x", out var i2x)) cmdMainCapsuleRel = ExtractAssetRelPath(i2x);
+                                    if (string.IsNullOrWhiteSpace(cmdMainCapsuleRel) && lmc.TryGetProperty("image", out var i1x)) cmdMainCapsuleRel = ExtractAssetRelPath(i1x);
+                                    if (string.IsNullOrWhiteSpace(cmdMainCapsuleRel)) cmdMainCapsuleRel = ExtractAssetRelPath(lmc);
                                 }
                             }
 
-                            if (string.IsNullOrWhiteSpace(cmdHeaderRel) && commonEl.TryGetProperty("header_image", out var hi))
+                            if (string.IsNullOrWhiteSpace(cmdMainCapsuleRel) && commonEl.TryGetProperty("main_capsule", out var mc))
                             {
-                                cmdHeaderRel = ExtractAssetRelPath(hi);
+                                if (mc.TryGetProperty("image2x", out var i2x)) cmdMainCapsuleRel = ExtractAssetRelPath(i2x);
+                                if (string.IsNullOrWhiteSpace(cmdMainCapsuleRel) && mc.TryGetProperty("image", out var i1x)) cmdMainCapsuleRel = ExtractAssetRelPath(i1x);
+                                if (string.IsNullOrWhiteSpace(cmdMainCapsuleRel)) cmdMainCapsuleRel = ExtractAssetRelPath(mc);
+                            }
+
+                            if (commonEl.TryGetProperty("header_image", out var hi))
+                            {
+                                cmdHeaderImageRel = ExtractAssetRelPath(hi);
                             }
 
                             if (commonEl.TryGetProperty("clienticon", out var ci) && ci.ValueKind == JsonValueKind.String)
@@ -666,18 +675,27 @@ public static class ShortcutHelper
                 $"{id64}_logo.png", $"{id64}logo.png", $"{id64}_logo.jpg", $"{id64}logo.jpg"
             ]).ConfigureAwait(false);
 
-            // 4. Portada Ancha (header from Assets section)
+            // 4. Portada Ancha / Main Capsule (616x353 / 1232x706, fallback to header)
             var headerUrls = new List<string?>();
-            if (!string.IsNullOrWhiteSpace(cmdHeaderRel))
+            if (!string.IsNullOrWhiteSpace(cmdMainCapsuleRel))
             {
-                foreach (var cdn in cdns) headerUrls.Add($"{cdn}/{cmdHeaderRel}");
+                foreach (var cdn in cdns) headerUrls.Add($"{cdn}/{cmdMainCapsuleRel}");
+            }
+            foreach (var cdn in cdns)
+            {
+                headerUrls.Add($"{cdn}/capsule_616x353_2x.jpg");
+                headerUrls.Add($"{cdn}/capsule_616x353.jpg");
+                headerUrls.Add($"{cdn}/main_capsule_2x.jpg");
+                headerUrls.Add($"{cdn}/main_capsule.jpg");
+            }
+            if (!string.IsNullOrWhiteSpace(cmdHeaderImageRel))
+            {
+                foreach (var cdn in cdns) headerUrls.Add($"{cdn}/{cmdHeaderImageRel}");
             }
             foreach (var cdn in cdns)
             {
                 headerUrls.Add($"{cdn}/header_2x.jpg");
                 headerUrls.Add($"{cdn}/header.jpg");
-                headerUrls.Add($"{cdn}/library_header_2x.jpg");
-                headerUrls.Add($"{cdn}/library_header.jpg");
             }
             if (!string.IsNullOrWhiteSpace(customHeaderUrl)) headerUrls.Add(customHeaderUrl);
 

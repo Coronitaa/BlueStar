@@ -534,6 +534,12 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(ForceInstallAllDlcs))]
     [NotifyPropertyChangedFor(nameof(CanDownloadAndInstallDlcs))]
     [NotifyPropertyChangedFor(nameof(CoverBannerImage))]
+    [NotifyPropertyChangedFor(nameof(IsInstalled))]
+    [NotifyPropertyChangedFor(nameof(CanDeployEmulator))]
+    [NotifyPropertyChangedFor(nameof(ShowDownloadButton))]
+    [NotifyPropertyChangedFor(nameof(DownloadButtonText))]
+    [NotifyPropertyChangedFor(nameof(AreAllSelectedDepotsDownloaded))]
+    [NotifyPropertyChangedFor(nameof(CanStartDownload))]
     private GameInstance _instance = null!;
 
     public IReadOnlyList<GameTag> HeroTags => _tagsService?.GetInstanceDetailHeroTags(Instance, HasGameUpdateAvailable) ?? [];
@@ -2682,8 +2688,42 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     private void OnQueueChanged(object? sender, EventArgs e)
     {
         if (_isDisposed || Instance is null) return;
-        ActiveJob = _downloadQueueManager.Queue.FirstOrDefault(j => j.Instance.Id == Instance.Id);
-        _uiContext.Post(async _ =>
+        Action updateAction = async () =>
+        {
+            if (_isDisposed || Instance is null) return;
+            ActiveJob = _downloadQueueManager.Queue.FirstOrDefault(j => j.Instance.Id == Instance.Id);
+            var refreshed = await _instanceManager.GetByIdAsync(Instance.Id, CancellationToken.None).ConfigureAwait(true);
+            if (refreshed != null)
+            {
+                HasGameUpdateAvailable = refreshed.HasUpdateAvailable;
+                if (refreshed.Status != Instance.Status || refreshed.Depots.Any(d => d.IsDownloaded != Instance.Depots.FirstOrDefault(x => x.DepotId == d.DepotId)?.IsDownloaded))
+                {
+                    await LoadInstanceAsync(refreshed).ConfigureAwait(true);
+                }
+                else
+                {
+                    Instance = refreshed;
+                }
+            }
+            ActiveJob = _downloadQueueManager.Queue.FirstOrDefault(j => j.Instance.Id == Instance.Id);
+            NotifyDownloadProps();
+            OnPropertyChanged(nameof(HeroTags));
+        };
+
+        if (App.Current?.Dispatcher != null && !App.Current.Dispatcher.CheckAccess())
+        {
+            App.Current.Dispatcher.InvokeAsync(updateAction);
+        }
+        else
+        {
+            _uiContext.Post(_ => updateAction(), null);
+        }
+    }
+
+    private void OnInstanceManagerInstancesChanged(object? sender, EventArgs e)
+    {
+        if (_isDisposed || Instance is null) return;
+        Action updateAction = async () =>
         {
             if (_isDisposed || Instance is null) return;
             var refreshed = await _instanceManager.GetByIdAsync(Instance.Id, CancellationToken.None).ConfigureAwait(true);
@@ -2699,38 +2739,19 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                     Instance = refreshed;
                 }
             }
+            ActiveJob = _downloadQueueManager.Queue.FirstOrDefault(j => j.Instance.Id == Instance.Id);
             NotifyDownloadProps();
-            OnPropertyChanged(nameof(HasActiveJob));
-            OnPropertyChanged(nameof(IsInstalled));
-            OnPropertyChanged(nameof(CanDeployEmulator));
-            OnPropertyChanged(nameof(ShowDownloadButton));
-            OnPropertyChanged(nameof(InstanceDownloadPercentage));
-            OnPropertyChanged(nameof(InstanceDownloadLabel));
-            OnPropertyChanged(nameof(IsInstanceDownloading));
             OnPropertyChanged(nameof(HeroTags));
-        }, null);
-    }
+        };
 
-    private void OnInstanceManagerInstancesChanged(object? sender, EventArgs e)
-    {
-        if (_isDisposed || Instance is null) return;
-        _uiContext.Post(async _ =>
+        if (App.Current?.Dispatcher != null && !App.Current.Dispatcher.CheckAccess())
         {
-            if (_isDisposed || Instance is null) return;
-            var refreshed = await _instanceManager.GetByIdAsync(Instance.Id, CancellationToken.None).ConfigureAwait(true);
-            if (refreshed != null)
-            {
-                HasGameUpdateAvailable = refreshed.HasUpdateAvailable;
-                if (refreshed.Status != Instance.Status)
-                {
-                    await LoadInstanceAsync(refreshed).ConfigureAwait(true);
-                }
-                else
-                {
-                    Instance = refreshed;
-                }
-            }
-        }, null);
+            App.Current.Dispatcher.InvokeAsync(updateAction);
+        }
+        else
+        {
+            _uiContext.Post(_ => updateAction(), null);
+        }
     }
 
     private void OnGameRunningStateChanged(object? sender, (Guid InstanceId, bool IsRunning) e)
@@ -9802,7 +9823,53 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 }
             }
 
-            App.Current?.Dispatcher?.Invoke(() =>
+            // Fallback: If instance banner is missing but grid header exists, initialize instance banner from header
+            if (string.IsNullOrWhiteSpace(instanceBannerPath) && !string.IsNullOrWhiteSpace(headerPath) && File.Exists(headerPath))
+            {
+                try
+                {
+                    var artworkDir = InstanceArtworkService.GetArtworkDirectory(id);
+                    var ext = Path.GetExtension(headerPath);
+                    if (string.IsNullOrWhiteSpace(ext)) ext = ".jpg";
+                    var destBanner = Path.Combine(artworkDir, $"instance_banner{ext}");
+                    File.Copy(headerPath, destBanner, overwrite: true);
+                    instanceBannerPath = destBanner;
+                }
+                catch { }
+            }
+            // Fallback: If grid banner is missing but instance banner exists, initialize grid banner from instance banner
+            else if (string.IsNullOrWhiteSpace(headerPath) && !string.IsNullOrWhiteSpace(instanceBannerPath) && File.Exists(instanceBannerPath))
+            {
+                try
+                {
+                    var artworkDir = InstanceArtworkService.GetArtworkDirectory(id);
+                    var ext = Path.GetExtension(instanceBannerPath);
+                    if (string.IsNullOrWhiteSpace(ext)) ext = ".jpg";
+                    var destHeader = Path.Combine(artworkDir, $"header{ext}");
+                    File.Copy(instanceBannerPath, destHeader, overwrite: true);
+                    headerPath = destHeader;
+                }
+                catch { }
+            }
+
+            // Fallback: If instance logo is missing but icon exists, initialize instance logo
+            if (string.IsNullOrWhiteSpace(instanceLogoPath) && !string.IsNullOrWhiteSpace(iconPath) && File.Exists(iconPath))
+            {
+                try
+                {
+                    var artworkDir = InstanceArtworkService.GetArtworkDirectory(id);
+                    var pngCandidate = Path.Combine(artworkDir, "icon.png");
+                    var src = File.Exists(pngCandidate) ? pngCandidate : iconPath;
+                    var ext = Path.GetExtension(src);
+                    if (string.IsNullOrWhiteSpace(ext)) ext = ".png";
+                    var destLogo = Path.Combine(artworkDir, $"instance_logo{ext}");
+                    File.Copy(src, destLogo, overwrite: true);
+                    instanceLogoPath = destLogo;
+                }
+                catch { }
+            }
+
+            Action updateSlots = () =>
             {
                 CapsuleArtwork?.LoadFromFile(capsulePath);
                 HeroArtwork?.LoadFromFile(heroPath);
@@ -9812,7 +9879,16 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 InstanceBannerArtwork?.LoadFromFile(instanceBannerPath);
                 InstanceLogoArtwork?.LoadFromFile(instanceLogoPath);
                 OnPropertyChanged(nameof(CoverBannerImage));
-            });
+            };
+
+            if (App.Current?.Dispatcher != null)
+            {
+                App.Current.Dispatcher.Invoke(updateSlots);
+            }
+            else
+            {
+                updateSlots();
+            }
         }).ConfigureAwait(false);
     }
 

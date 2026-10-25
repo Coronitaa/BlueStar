@@ -118,6 +118,30 @@ public sealed class AppSettingsService
                 return envKey.Trim();
             }
 
+            if (!string.IsNullOrEmpty(_settingsPath))
+            {
+                try
+                {
+                    var localSettingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
+                    if (File.Exists(localSettingsPath) && !string.Equals(Path.GetFullPath(localSettingsPath), Path.GetFullPath(_settingsPath), StringComparison.OrdinalIgnoreCase))
+                    {
+                        var localJson = File.ReadAllText(localSettingsPath);
+                        using var doc = JsonDocument.Parse(localJson);
+                        if (doc.RootElement.TryGetProperty("defaultApiKey", out var keyElem) && keyElem.ValueKind == JsonValueKind.String)
+                        {
+                            var keyVal = keyElem.GetString();
+                            if (!string.IsNullOrWhiteSpace(keyVal) && keyVal != "YOUR-API-KEY")
+                            {
+                                return keyVal.Trim();
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                }
+            }
+
             return _current.DefaultApiKey;
         }
     }
@@ -245,10 +269,39 @@ public sealed class AppSettingsService
         _lock.Wait();
         try
         {
-            if (!File.Exists(_settingsPath)) return;
-            var json = File.ReadAllText(_settingsPath);
-            _current = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new();
-            _logger.LogDebug("Loaded app settings from {Path}", _settingsPath);
+            if (File.Exists(_settingsPath))
+            {
+                var json = File.ReadAllText(_settingsPath);
+                _current = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new();
+                _logger.LogDebug("Loaded app settings from {Path}", _settingsPath);
+            }
+
+            // Fallback: inherit bundled backend defaultApiKey if current settings have null or default placeholder
+            if (string.IsNullOrWhiteSpace(_current.DefaultApiKey) || _current.DefaultApiKey == "YOUR-API-KEY")
+            {
+                var localSettingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
+                if (File.Exists(localSettingsPath) && !string.Equals(Path.GetFullPath(localSettingsPath), Path.GetFullPath(_settingsPath), StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        var localJson = File.ReadAllText(localSettingsPath);
+                        using var doc = JsonDocument.Parse(localJson);
+                        if (doc.RootElement.TryGetProperty("defaultApiKey", out var keyElem) && keyElem.ValueKind == JsonValueKind.String)
+                        {
+                            var bundledKey = keyElem.GetString();
+                            if (!string.IsNullOrWhiteSpace(bundledKey) && bundledKey != "YOUR-API-KEY")
+                            {
+                                _current = _current with { DefaultApiKey = bundledKey.Trim() };
+                                _logger.LogInformation("Inherited backend DepotBox API key from bundled settings");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Could not read bundled settings.json for default API key fallback");
+                    }
+                }
+            }
         }
         catch (Exception ex)
         {

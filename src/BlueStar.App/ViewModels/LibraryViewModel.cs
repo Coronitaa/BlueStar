@@ -378,7 +378,7 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
     private void OnInstancesChanged(object? sender, EventArgs e)
     {
         if (_isDisposed) return;
-        _uiContext.Post(async _ =>
+        Action refreshAction = async () =>
         {
             if (_isDisposed) return;
             try
@@ -391,6 +391,18 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
                     {
                         status = InstanceStatus.Running;
                     }
+                    else if (status == InstanceStatus.NotInstalled && !string.IsNullOrWhiteSpace(i.InstallPath) && Directory.Exists(i.InstallPath))
+                    {
+                        bool hasDepots = i.Depots.Count > 0;
+                        bool allDepotsDownloaded = hasDepots && i.Depots.All(d => d.IsDownloaded);
+                        bool hasExe = !string.IsNullOrWhiteSpace(i.ExecutablePath) && File.Exists(i.ExecutablePath);
+
+                        if (allDepotsDownloaded || hasExe)
+                        {
+                            status = InstanceStatus.Ready;
+                        }
+                    }
+
                     return i with
                     {
                         Name = CleanName(i.Name) ?? i.Name,
@@ -404,28 +416,46 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Failed to refresh instances on InstancesChanged event");
+                _logger.LogWarning(ex, "Failed to refresh instances on InstancesChanged event");
             }
-        }, null);
+        };
+
+        if (App.Current?.Dispatcher != null && !App.Current.Dispatcher.CheckAccess())
+        {
+            App.Current.Dispatcher.InvokeAsync(refreshAction);
+        }
+        else
+        {
+            _uiContext.Post(_ => refreshAction(), null);
+        }
     }
 
     private void OnLanguageChanged(object? sender, EventArgs e)
     {
         if (_isDisposed) return;
-        _uiContext.Post(_ =>
+        Action action = () =>
         {
             if (_isDisposed) return;
             OnPropertyChanged(nameof(SelectedSortDisplayName));
             OnPropertyChanged(nameof(SelectedGroupDisplayName));
             OnPropertyChanged(nameof(SelectedInstancesCountText));
             OnPropertyChanged(nameof(BulkDeleteModalSubtitle));
-        }, null);
+        };
+
+        if (App.Current?.Dispatcher != null && !App.Current.Dispatcher.CheckAccess())
+        {
+            App.Current.Dispatcher.Invoke(action);
+        }
+        else
+        {
+            _uiContext.Post(_ => action(), null);
+        }
     }
 
     private void OnRunningStateChanged(object? sender, (Guid InstanceId, bool IsRunning) e)
     {
         if (_isDisposed) return;
-        _uiContext.Post(_ =>
+        Action action = () =>
         {
             if (_isDisposed) return;
             var inst = Instances.FirstOrDefault(i => i.Id == e.InstanceId);
@@ -436,7 +466,16 @@ public partial class LibraryViewModel : ObservableObject, IDisposable
                 if (idx >= 0) Instances[idx] = updated;
                 ApplyFilters();
             }
-        }, null);
+        };
+
+        if (App.Current?.Dispatcher != null && !App.Current.Dispatcher.CheckAccess())
+        {
+            App.Current.Dispatcher.Invoke(action);
+        }
+        else
+        {
+            _uiContext.Post(_ => action(), null);
+        }
     }
 
     [RelayCommand]

@@ -29,7 +29,8 @@ param(
     [ValidateSet("Store", "LocalTest", "All")]
     [string]$Target = "Store",
     [string]$Version = "1.4.6.0",
-    [string]$Configuration = "Release"
+    [string]$Configuration = "Release",
+    [switch]$SkipPublish
 )
 
 $ErrorActionPreference = "Stop"
@@ -78,19 +79,23 @@ if (-not (Test-Path $msixOutputDir)) {
 }
 
 $appPublishDir = Join-Path $rootDir "dist\publish"
-Write-Host "[3/4] Publishing application binaries (self-contained win-x64)..." -ForegroundColor Yellow
-& dotnet publish $appProject `
-    -c $Configuration `
-    -r win-x64 `
-    --self-contained true `
-    -p:PublishReadyToRun=true `
-    -p:PublishSingleFile=false `
-    -p:Version=$Version `
-    -o $appPublishDir
+if (-not $SkipPublish) {
+    Write-Host "[3/4] Publishing application binaries (self-contained win-x64)..." -ForegroundColor Yellow
+    & dotnet publish $appProject `
+        -c $Configuration `
+        -r win-x64 `
+        --self-contained true `
+        -p:PublishReadyToRun=true `
+        -p:PublishSingleFile=false `
+        -p:Version=$Version `
+        -o $appPublishDir
 
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "dotnet publish failed!"
-    exit 1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "dotnet publish failed!"
+        exit 1
+    }
+} else {
+    Write-Host "[3/4] Skipping publish (reusing existing binaries in dist\publish)..." -ForegroundColor Gray
 }
 
 # 4. Packaging execution

@@ -1163,19 +1163,20 @@ public class DownloadQueueManager
 
             lock (job)
             {
-                job.JobStatus = DownloadJobStatus.Completed;
                 job.Percentage = 100;
-                job.Phase = "Completed";
-                job.StatusMessage = "Completed ✅";
-                job.CompletedAt = DateTimeOffset.Now;
+                job.Phase = "Installing";
+                job.StatusMessage = "Finalizing installation...";
+                job.SpeedBytesPerSec = 0;
+                job.WriteBytesPerSec = 0;
             }
 
             RunOnUi(() =>
             {
                 job.NotifyMetricsChanged();
-                Queue.Remove(job);
                 NotifyQueueChanged();
             });
+
+            var finalInstance = instance;
 
             // Update game instance status and depot installed flags in storage
             if (_instanceManager is not null)
@@ -1183,21 +1184,28 @@ public class DownloadQueueManager
                 try
                 {
                     // 1. Commit staged manifests from DepotWork/{id} to instances/{id}/manifests
-                    var workingDir = Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                        "BlueStar", "DepotWork", instance.Id.ToString());
-                    var instanceManifestDir = Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                        "BlueStar", "instances", instance.Id.ToString(), "manifests");
-                    Directory.CreateDirectory(instanceManifestDir);
-
-                    if (Directory.Exists(workingDir))
+                    try
                     {
-                        foreach (var mf in Directory.GetFiles(workingDir, "*.manifest"))
+                        var workingDir = Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                            "BlueStar", "DepotWork", instance.Id.ToString());
+                        var instanceManifestDir = Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                            "BlueStar", "instances", instance.Id.ToString(), "manifests");
+                        Directory.CreateDirectory(instanceManifestDir);
+
+                        if (Directory.Exists(workingDir))
                         {
-                            var dest = Path.Combine(instanceManifestDir, Path.GetFileName(mf));
-                            File.Copy(mf, dest, overwrite: true);
+                            foreach (var mf in Directory.GetFiles(workingDir, "*.manifest"))
+                            {
+                                var dest = Path.Combine(instanceManifestDir, Path.GetFileName(mf));
+                                File.Copy(mf, dest, overwrite: true);
+                            }
                         }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to commit some manifests for {Game}", instance.Name);
                     }
 
                     var existing = await _instanceManager.GetByIdAsync(instance.Id, CancellationToken.None).ConfigureAwait(false) ?? instance;
@@ -1248,11 +1256,24 @@ public class DownloadQueueManager
                     var installedManifestDate = BlueStar.Infrastructure.Services.GameUpdateDetectionHelper.GetInstalledManifestDate(existing);
                     var versionDate = installedManifestDate ?? existing.InstalledVersionDate ?? DateTimeOffset.UtcNow;
 
+                    var exePath = existing.ExecutablePath;
+                    if ((string.IsNullOrWhiteSpace(exePath) || !File.Exists(exePath)) &&
+                        !string.IsNullOrWhiteSpace(existing.InstallPath) && Directory.Exists(existing.InstallPath))
+                    {
+                        var cleanName = BlueStar.Core.Helpers.PathHelper.SanitizeFolderName(existing.Name);
+                        var detected = BlueStar.Core.Helpers.ShortcutHelper.FindGameExecutables(existing.InstallPath, cleanName).FirstOrDefault();
+                        if (!string.IsNullOrWhiteSpace(detected))
+                        {
+                            exePath = detected;
+                        }
+                    }
+
                     var updatedInstance = existing with
                     {
                         Status = InstanceStatus.Ready,
                         Depots = updatedDepots.AsReadOnly(),
                         Dlcs = updatedDlcs.AsReadOnly(),
+                        ExecutablePath = exePath,
                         InstalledManifestMap = updatedManifestMap,
                         HasUpdateAvailable = anyDepotNotDownloaded && existing.HasUpdateAvailable,
                         UpdateDescription = anyDepotNotDownloaded ? existing.UpdateDescription : null,
@@ -1264,6 +1285,8 @@ public class DownloadQueueManager
                     };
 
                     await _instanceManager.UpdateAsync(updatedInstance, CancellationToken.None).ConfigureAwait(false);
+                    job.Instance = updatedInstance;
+                    finalInstance = updatedInstance;
 
                     // If all depots finished and instance is Ready, execute post-install actions in order
                     if (updatedInstance.Status == InstanceStatus.Ready)
@@ -1292,6 +1315,8 @@ public class DownloadQueueManager
                                     .RestoreAfterGameUpdateAsync(updatedInstance, redeployProgress, CancellationToken.None)
                                     .ConfigureAwait(false);
 
+                                finalInstance = updatedInstance;
+                                job.Instance = updatedInstance;
                                 _logger.LogInformation("Post-update redeploy completed for {Game}", instance.Name);
                             }
                             catch (Exception ex)
@@ -1341,10 +1366,6 @@ public class DownloadQueueManager
                                         job.NotifyMetricsChanged();
                                     }));
 
-                                // Every layer the install modal asked for, in the order it chose.
-                                // PendingRedeployFixLayerIds used to be written and never read,
-                                // so a bypass ticked alongside an online fix was silently
-                                // dropped; only the single PendingRedeployGameFixId was deployed.
                                 var layerIds = updatedInstance.PendingRedeployFixLayerIds is { Count: > 0 } declared
                                     ? declared.ToList()
                                     : new List<string> { updatedInstance.PendingRedeployGameFixId! };
@@ -1373,7 +1394,6 @@ public class DownloadQueueManager
                                     }
                                     catch (Exception ex)
                                     {
-                                        // One layer failing must not cost the ones after it.
                                         _logger.LogError(ex, "Failed to deploy fix layer {FixId} for {Game}", layerId, updatedInstance.Name);
                                     }
                                 }
@@ -1389,6 +1409,8 @@ public class DownloadQueueManager
                                             PendingRedeployFixLayerIds = []
                                         };
                                         await _instanceManager.UpdateAsync(updatedInstance, CancellationToken.None).ConfigureAwait(false);
+                                        finalInstance = updatedInstance;
+                                        job.Instance = updatedInstance;
                                     }
                                 }
 
@@ -1443,6 +1465,8 @@ public class DownloadQueueManager
                                         ExecutablePath = targetExe
                                     };
                                     await _instanceManager.UpdateAsync(updatedInstance, CancellationToken.None).ConfigureAwait(false);
+                                    finalInstance = updatedInstance;
+                                    job.Instance = updatedInstance;
                                 }
                             }
                             catch (Exception ex)
@@ -1452,23 +1476,48 @@ public class DownloadQueueManager
                         }
                     }
 
-                    job.Instance = updatedInstance;
+                    job.Instance = finalInstance;
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Failed to update instance status to Ready for {Game}", instance.Name);
+                    try
+                    {
+                        var fallback = await _instanceManager.GetByIdAsync(instance.Id, CancellationToken.None).ConfigureAwait(false) ?? instance;
+                        var fallbackUpdated = fallback with { Status = InstanceStatus.Ready, UpdatedAt = DateTimeOffset.UtcNow };
+                        await _instanceManager.UpdateAsync(fallbackUpdated, CancellationToken.None).ConfigureAwait(false);
+                        finalInstance = fallbackUpdated;
+                        job.Instance = fallbackUpdated;
+                    }
+                    catch { }
                 }
             }
+
+            lock (job)
+            {
+                job.JobStatus = DownloadJobStatus.Completed;
+                job.Percentage = 100;
+                job.Phase = "Completed";
+                job.StatusMessage = "Completed ✅";
+                job.CompletedAt = DateTimeOffset.Now;
+            }
+
+            RunOnUi(() =>
+            {
+                job.NotifyMetricsChanged();
+                Queue.Remove(job);
+                NotifyQueueChanged();
+            });
 
             // Clear persistent download state since download has completed successfully
             _stateManager?.ClearState(instance.Id);
 
             AddToLog(new DownloadLogEntry
             {
-                GameName = instance.Name,
+                GameName = finalInstance.Name,
                 Status = DownloadJobStatus.Completed,
                 Message = $"Downloaded successfully ({job.FormattedTotalSize})",
-                Instance = instance
+                Instance = finalInstance
             });
 
             _logger.LogInformation("Download finished for {Game}", instance.Name);
