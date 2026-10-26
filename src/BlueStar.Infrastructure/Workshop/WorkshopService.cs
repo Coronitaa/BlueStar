@@ -890,12 +890,16 @@ public sealed class WorkshopService : IWorkshopService
 
         string? lastError = null;
         var accessDenied = false;
+        var needsAccount = false;
         using var proc = new System.Diagnostics.Process { StartInfo = psi };
         proc.OutputDataReceived += (_, e) =>
         {
             if (string.IsNullOrEmpty(e.Data)) return;
             if (e.Data.Contains("AccessDenied", StringComparison.OrdinalIgnoreCase) ||
                 e.Data.Contains("No valid depot key", StringComparison.OrdinalIgnoreCase)) accessDenied = true;
+            // With the depot key Steam names the item's manifest, but only a signed-in session gets the request code to fetch it.
+            if (e.Data.Contains("No manifest request code", StringComparison.OrdinalIgnoreCase) ||
+                e.Data.Contains("Encountered 401", StringComparison.OrdinalIgnoreCase)) needsAccount = true;
             if (e.Data.Contains("error", StringComparison.OrdinalIgnoreCase) ||
                 e.Data.Contains("denied", StringComparison.OrdinalIgnoreCase)) lastError = e.Data.Trim();
 
@@ -932,6 +936,12 @@ public sealed class WorkshopService : IWorkshopService
         }
 
         // DepotDownloader exits with 0 even when Steam refuses the depot key, so the output decides.
+        if (needsAccount)
+        {
+            _logger.LogWarning("Steam would not issue a manifest request code for Workshop item {Id} of AppID {AppId} anonymously", publishedFileId, appId);
+            return (false, "Steam only gives this item's download code to a signed-in Steam account. Anonymous downloads are not allowed for this game's Workshop.");
+        }
+
         if (accessDenied)
         {
             _logger.LogWarning("Steam denied the Workshop depot key of AppID {AppId} for item {Id}", appId, publishedFileId);

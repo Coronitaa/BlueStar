@@ -113,6 +113,6 @@ public sealed class WorkshopModFetcherTests : IDisposable
         // Assert
         result.Succeeded.Should().BeFalse();
         result.Error.Should().Be("Access denied");
-        Directory.Exists(Path.Combine(_cacheRoot, AppId.ToString(), ItemId.ToString())).Should().BeFalse();
+        Directory.Exists(Path.Combine(_cacheRoot, AppId.ToString())).Should().BeFalse();
     }
 }

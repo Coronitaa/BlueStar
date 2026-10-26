@@ -12,18 +12,37 @@ public sealed class DepotBoxArchiveParser : IDepotBoxArchiveParser
 {
     private readonly ILogger<DepotBoxArchiveParser> _logger;
     private readonly DepotBoxLuaParser _luaParser;
+    private readonly DepotBoxKeyImporter? _keyImporter;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DepotBoxArchiveParser"/> class.
     /// </summary>
     /// <param name="logger">Logger instance.</param>
     /// <param name="luaParser">Lua metadata parser.</param>
+    /// <param name="keyImporter">When given, the keys the lua lists are stored in the depot key repository.</param>
     public DepotBoxArchiveParser(
         ILogger<DepotBoxArchiveParser> logger,
-        DepotBoxLuaParser luaParser)
+        DepotBoxLuaParser luaParser,
+        DepotBoxKeyImporter? keyImporter = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _luaParser = luaParser ?? throw new ArgumentNullException(nameof(luaParser));
+        _keyImporter = keyImporter;
+    }
+
+    /// <summary>Stores the lua's keys; a failure here must not break the import itself.</summary>
+    private async Task ImportKeysAsync(DepotBoxArchive archive, CancellationToken ct)
+    {
+        if (_keyImporter == null) return;
+
+        try
+        {
+            await _keyImporter.ImportAsync(archive, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Could not store the depot keys of AppId {AppId}", archive.AppId);
+        }
     }
 
     /// <inheritdoc />
@@ -87,17 +106,19 @@ public sealed class DepotBoxArchiveParser : IDepotBoxArchiveParser
         _logger.LogInformation("Successfully parsed archive: AppId={AppId}, {GameCount} games, {DepotCount} total depots",
             result.AppId, result.Games.Count, result.Games.Sum(g => g.Depots.Count));
 
+        await ImportKeysAsync(result, ct).ConfigureAwait(false);
         return result;
     }
 
     /// <inheritdoc />
-    public Task<DepotBoxArchive> ParseLuaAsync(string luaContent, CancellationToken ct = default)
+    public async Task<DepotBoxArchive> ParseLuaAsync(string luaContent, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(luaContent);
         ct.ThrowIfCancellationRequested();
 
         var result = _luaParser.Parse(luaContent);
-        return Task.FromResult(result);
+        await ImportKeysAsync(result, ct).ConfigureAwait(false);
+        return result;
     }
 
     /// <inheritdoc />

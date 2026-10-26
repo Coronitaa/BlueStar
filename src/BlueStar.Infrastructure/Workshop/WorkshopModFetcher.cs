@@ -68,13 +68,22 @@ public sealed class WorkshopModFetcher : IWorkshopModFetcher
         if (!download.Success)
         {
             if (Directory.Exists(contentDir)) Directory.Delete(contentDir, recursive: true);
-            if (Directory.Exists(itemDir) && !Directory.EnumerateFileSystemEntries(itemDir).Any()) Directory.Delete(itemDir);
+            DeleteIfEmpty(itemDir);
+            DeleteIfEmpty(Path.GetDirectoryName(itemDir));
             return new WorkshopFetchResult(null, details, download.Error);
         }
 
         var marker = new CacheMarker(publishedFileId, effectiveAppId, details.Title, details.UpdatedAt?.ToUnixTimeSeconds());
         await File.WriteAllTextAsync(markerPath, JsonSerializer.Serialize(marker), ct).ConfigureAwait(false);
         return new WorkshopFetchResult(ToPackage(details, contentDir), details);
+    }
+
+    private static void DeleteIfEmpty(string? directory)
+    {
+        if (directory != null && Directory.Exists(directory) && !Directory.EnumerateFileSystemEntries(directory).Any())
+        {
+            Directory.Delete(directory);
+        }
     }
 
     private static bool IsCacheCurrent(string markerPath, string contentDir, WorkshopItemInfo details)

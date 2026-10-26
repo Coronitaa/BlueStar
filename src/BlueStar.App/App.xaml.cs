@@ -152,6 +152,7 @@ public partial class App : Application
         services.AddSingleton<ICacheService, FileCacheService>();
         services.AddSingleton<IInstanceManager, InstanceManager>();
         services.AddSingleton<DepotBoxLuaParser>();
+        services.AddSingleton<BlueStar.Infrastructure.DepotBox.DepotBoxKeyImporter>();
 
         services.AddSingleton<IDepotBoxArchiveParser, DepotBoxArchiveParser>();
         services.AddSingleton<IDlcInstaller, BlueStar.Infrastructure.Dlc.CreamInstallerService>();
@@ -319,6 +320,27 @@ public partial class App : Application
         services.AddTransient<ViewModels.AboutViewModel>();
         services.AddTransient<ViewModels.DebugConsoleViewModel>();
         Services = services.BuildServiceProvider();
+
+        // Games imported before depot keys were collected still have their DepotBox archive on disk; store its keys
+        // (including the app-level one that decrypts Workshop content) without slowing down startup.
+        var depotKeyImporter = Services.GetService<BlueStar.Infrastructure.DepotBox.DepotBoxKeyImporter>();
+        var depotLuaParser = Services.GetService<DepotBoxLuaParser>();
+        if (depotKeyImporter != null && depotLuaParser != null)
+        {
+            var archivesDir = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BlueStar", "archives");
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await depotKeyImporter.ImportFolderAsync(archivesDir, depotLuaParser).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Could not collect depot keys from stored DepotBox archives");
+                }
+            });
+        }
 
         // Attach runtime dependencies to DebugLogService for enriched diagnostics
         debugLogService.AttachServices(
