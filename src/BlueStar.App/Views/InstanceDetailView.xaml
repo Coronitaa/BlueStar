@@ -2049,27 +2049,15 @@
 
                             <!-- Modrinth Header Action Buttons -->
                             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                <!-- Thunderstore Button (only visible if Thunderstore is supported) -->
+                                <!-- Unified "Explorar Mods" Button (visible if any mod provider is supported) -->
                                 <Button Style="{StaticResource PrimaryButton}" Margin="0,0,8,0"
-                                        Command="{Binding OpenThunderstoreCommand}"
-                                        Visibility="{Binding HasThunderstoreSupport, Converter={StaticResource BoolToVisibilityConverter}}"
-                                        ToolTip="{DynamicResource String_BrowseThunderstoreBtn}">
+                                        Command="{Binding OpenContentBrowserCommand}"
+                                        Visibility="{Binding HasModBrowserSupport, Converter={StaticResource BoolToVisibilityConverter}}"
+                                        ToolTip="{DynamicResource String_ModBrowseContentBtn}">
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <Path Data="{StaticResource IconBolt}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                        <Path Data="{StaticResource IconSearch}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                               Width="12" Height="12" Stretch="Uniform" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                        <TextBlock Text="Thunderstore" FontWeight="SemiBold"/>
-                                    </StackPanel>
-                                </Button>
-
-                                <!-- Steam Workshop Button (only visible if Workshop is supported) -->
-                                <Button Style="{StaticResource PrimaryButton}" Margin="0,0,8,0"
-                                        Command="{Binding OpenWorkshopCommand}"
-                                        Visibility="{Binding HasWorkshopSupport, Converter={StaticResource BoolToVisibilityConverter}}"
-                                        ToolTip="{DynamicResource String_BrowseWorkshopBtn}">
-                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <Path Data="{StaticResource IconSteam}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                              Width="13" Height="13" Stretch="Uniform" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                        <TextBlock Text="Workshop" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{DynamicResource String_ModBrowseContentBtn}" FontWeight="SemiBold"/>
                                     </StackPanel>
                                 </Button>
 
@@ -2210,25 +2198,14 @@
 
                                     <!-- Action buttons for empty state -->
                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,18">
-                                        <!-- Thunderstore button -->
+                                        <!-- Explorar Mods button (visible when any provider is supported) -->
                                         <Button Style="{StaticResource PrimaryButton}" Margin="0,0,10,0"
-                                                Command="{Binding OpenThunderstoreCommand}"
-                                                Visibility="{Binding HasThunderstoreSupport, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                Command="{Binding OpenContentBrowserCommand}"
+                                                Visibility="{Binding HasModBrowserSupport, Converter={StaticResource BoolToVisibilityConverter}}">
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <Path Data="{StaticResource IconBolt}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                <Path Data="{StaticResource IconSearch}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                                       Width="13" Height="13" Stretch="Uniform" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                                <TextBlock Text="{DynamicResource String_BrowseThunderstoreBtn}" FontWeight="SemiBold"/>
-                                            </StackPanel>
-                                        </Button>
-
-                                        <!-- Workshop button -->
-                                        <Button Style="{StaticResource PrimaryButton}" Margin="0,0,10,0"
-                                                Command="{Binding OpenWorkshopCommand}"
-                                                Visibility="{Binding HasWorkshopSupport, Converter={StaticResource BoolToVisibilityConverter}}">
-                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <Path Data="{StaticResource IconSteam}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                                      Width="14" Height="14" Stretch="Uniform" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                                <TextBlock Text="{DynamicResource String_BrowseWorkshopBtn}" FontWeight="SemiBold"/>
+                                                <TextBlock Text="{DynamicResource String_ModBrowseContentBtn}" FontWeight="SemiBold"/>
                                             </StackPanel>
                                         </Button>
 
@@ -3540,26 +3517,15 @@
             </Border>
         </controls:ModalOverlay>
 
-        <!-- ═══ STEAM WORKSHOP BROWSER MODAL (embedded Workshop, installs through the mod pipeline) ═══ -->
-        <controls:ModalOverlay IsOpen="{Binding ModsTab.Workshop.IsOpen}"
-                               CloseCommand="{Binding ModsTab.Workshop.CloseCommand}"
+        <!-- ═══ UNIFIED MOD BROWSER MODAL (Modrinth & Explore style) ═══ -->
+        <controls:ModalOverlay IsOpen="{Binding ModsTab.ModBrowser.IsOpen}"
+                               CloseCommand="{Binding ModsTab.ModBrowser.CloseCommand}"
                                CloseOnEscape="True"
                                Panel.ZIndex="1000">
             <!-- The overlay centres its content, so this host takes the page's size and the panel fills it minus a margin. -->
             <Grid Width="{Binding ActualWidth, ElementName=RootInstanceDetailView}"
                   Height="{Binding ActualHeight, ElementName=RootInstanceDetailView}">
-                <local:WorkshopBrowserPanel DataContext="{Binding ModsTab.Workshop}" Margin="40,28"/>
-            </Grid>
-        </controls:ModalOverlay>
-
-        <!-- ═══ THUNDERSTORE BROWSER MODAL (Modrinth inspired) ═══ -->
-        <controls:ModalOverlay IsOpen="{Binding ModsTab.Thunderstore.IsOpen}"
-                               CloseCommand="{Binding ModsTab.Thunderstore.CloseCommand}"
-                               CloseOnEscape="True"
-                               Panel.ZIndex="1000">
-            <Grid Width="{Binding ActualWidth, ElementName=RootInstanceDetailView}"
-                  Height="{Binding ActualHeight, ElementName=RootInstanceDetailView}">
-                <local:ThunderstoreBrowserPanel DataContext="{Binding ModsTab.Thunderstore}" Margin="40,28"/>
+                <local:ModBrowserPanel DataContext="{Binding ModsTab.ModBrowser}" Margin="40,28"/>
             </Grid>
         </controls:ModalOverlay>
 

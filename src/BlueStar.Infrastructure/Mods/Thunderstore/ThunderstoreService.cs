@@ -243,28 +243,51 @@ public sealed class ThunderstoreService : IThunderstoreService
                 var versions = new List<ThunderstorePackageVersion>();
                 if (elem.TryGetProperty("versions", out var vers) && vers.ValueKind == JsonValueKind.Array)
                 {
+                    var isLatest = true;
                     foreach (var v in vers.EnumerateArray())
                     {
                         var vName = v.GetProperty("name").GetString() ?? string.Empty;
                         var vFull = v.GetProperty("full_name").GetString() ?? string.Empty;
                         var vNum = v.GetProperty("version_number").GetString() ?? string.Empty;
-                        var vDesc = v.TryGetProperty("description", out var desc) ? desc.GetString() ?? string.Empty : string.Empty;
-                        var vIcon = v.TryGetProperty("icon", out var icon) ? icon.GetString() ?? string.Empty : string.Empty;
                         var vDlUrl = v.TryGetProperty("download_url", out var dl) ? dl.GetString() ?? string.Empty : string.Empty;
                         var vDownloads = v.TryGetProperty("downloads", out var vdls) ? vdls.GetInt32() : 0;
                         var vDate = v.TryGetProperty("date_created", out var vdc) && vdc.TryGetDateTimeOffset(out var vdto) ? vdto : DateTimeOffset.MinValue;
-                        var vWebsite = v.TryGetProperty("website_url", out var web) ? web.GetString() : null;
-                        var vActive = !v.TryGetProperty("is_active", out var act) || act.GetBoolean();
                         var vFileSize = v.TryGetProperty("file_size", out var fs) ? fs.GetInt64() : 0;
 
-                        var deps = new List<string>();
-                        if (v.TryGetProperty("dependencies", out var depArr) && depArr.ValueKind == JsonValueKind.Array)
+                        string vDesc;
+                        string vIcon;
+                        string? vWebsite;
+                        bool vActive;
+                        IReadOnlyList<string> deps;
+
+                        if (isLatest)
                         {
-                            foreach (var dep in depArr.EnumerateArray())
+                            // First / latest version: full parse for package card presentation
+                            vDesc = v.TryGetProperty("description", out var desc) ? desc.GetString() ?? string.Empty : string.Empty;
+                            vIcon = v.TryGetProperty("icon", out var icon) ? icon.GetString() ?? string.Empty : string.Empty;
+                            vWebsite = v.TryGetProperty("website_url", out var web) ? web.GetString() : null;
+                            vActive = !v.TryGetProperty("is_active", out var act) || act.GetBoolean();
+
+                            var depList = new List<string>();
+                            if (v.TryGetProperty("dependencies", out var depArr) && depArr.ValueKind == JsonValueKind.Array)
                             {
-                                var ds = dep.GetString();
-                                if (!string.IsNullOrWhiteSpace(ds)) deps.Add(ds);
+                                foreach (var dep in depArr.EnumerateArray())
+                                {
+                                    var ds = dep.GetString();
+                                    if (!string.IsNullOrWhiteSpace(ds)) depList.Add(ds);
+                                }
                             }
+                            deps = depList;
+                            isLatest = false;
+                        }
+                        else
+                        {
+                            // Older versions: lightweight parse for dropdown selection & installation
+                            vDesc = string.Empty;
+                            vIcon = string.Empty;
+                            vWebsite = null;
+                            vActive = true;
+                            deps = [];
                         }
 
                         versions.Add(new ThunderstorePackageVersion

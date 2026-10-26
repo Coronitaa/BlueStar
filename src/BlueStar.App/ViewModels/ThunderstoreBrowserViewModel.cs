@@ -65,6 +65,18 @@ public sealed partial class ThunderstoreBrowserViewModel : ObservableObject
     [ObservableProperty]
     private bool _hasWorkshopSupport;
 
+    public const int PageSize = 40;
+    private List<ThunderstorePackage> _allFilteredPackages = [];
+
+    [ObservableProperty]
+    private int _totalPackagesCount;
+
+    [ObservableProperty]
+    private bool _hasMorePackages;
+
+    [ObservableProperty]
+    private bool _isLoadingMore;
+
     public ObservableCollection<ThunderstorePackageItem> Packages { get; } = [];
     public ObservableCollection<string> AvailableCategories { get; } = ["All"];
     public ObservableCollection<string> SortOptions { get; } = ["Downloads", "Rating", "Updated", "Name"];
@@ -79,6 +91,9 @@ public sealed partial class ThunderstoreBrowserViewModel : ObservableObject
 
     /// <summary>Called after a package successfully installs, e.g. to reload the Mods tab.</summary>
     public Func<Task>? OnModInstalledCallback { get; set; }
+
+    /// <summary>Notification callback when the user or an action requests closing the modal.</summary>
+    public Action? OnCloseRequested { get; set; }
 
     public void Open(
         GameInstance instance,
@@ -96,6 +111,8 @@ public sealed partial class ThunderstoreBrowserViewModel : ObservableObject
         SelectedSort = "Downloads";
         StatusMessage = null;
         IsStatusError = false;
+        TotalPackagesCount = 0;
+        HasMorePackages = false;
         IsOpen = true;
 
         _ = LoadPackagesAsync();
@@ -105,7 +122,15 @@ public sealed partial class ThunderstoreBrowserViewModel : ObservableObject
     public void Close()
     {
         _searchCts?.Cancel();
+        if (!IsOpen) return;
         IsOpen = false;
+        OnCloseRequested?.Invoke();
+    }
+
+    [RelayCommand]
+    public void ClearSearch()
+    {
+        SearchText = string.Empty;
     }
 
     [RelayCommand]
@@ -145,7 +170,12 @@ public sealed partial class ThunderstoreBrowserViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(Community)) return;
 
+        _searchCts?.Cancel();
+        _searchCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var token = _searchCts.Token;
+
         IsLoading = true;
+        StatusMessage = null;
         OnPropertyChanged(nameof(HasNoResults));
 
         try
@@ -155,14 +185,17 @@ public sealed partial class ThunderstoreBrowserViewModel : ObservableObject
                 SearchText,
                 SelectedCategory,
                 SelectedSort,
-                ct).ConfigureAwait(true);
+                token).ConfigureAwait(true);
 
-            if (ct.IsCancellationRequested) return;
+            if (token.IsCancellationRequested) return;
+
+            _allFilteredPackages = results.ToList();
+            TotalPackagesCount = _allFilteredPackages.Count;
 
             // Populate categories once if needed
-            if (AvailableCategories.Count <= 1 && results.Count > 0)
+            if (AvailableCategories.Count <= 1 && _allFilteredPackages.Count > 0)
             {
-                var cats = results
+                var cats = _allFilteredPackages
                     .SelectMany(p => p.Categories)
                     .Where(c => !string.IsNullOrWhiteSpace(c))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -178,17 +211,13 @@ public sealed partial class ThunderstoreBrowserViewModel : ObservableObject
             }
 
             Packages.Clear();
-            foreach (var pkg in results)
+            var firstPage = _allFilteredPackages.Take(PageSize);
+            foreach (var pkg in firstPage)
             {
-                var item = new ThunderstorePackageItem(pkg, InstallItemAsync);
-                if (CheckInstalledStatus != null)
-                {
-                    var (isInst, ver) = CheckInstalledStatus(pkg);
-                    item.IsInstalled = isInst;
-                    item.InstalledVersion = ver;
-                }
-                Packages.Add(item);
+                Packages.Add(CreatePackageItem(pkg));
             }
+
+            HasMorePackages = Packages.Count < _allFilteredPackages.Count;
         }
         catch (OperationCanceledException)
         {
@@ -204,6 +233,43 @@ public sealed partial class ThunderstoreBrowserViewModel : ObservableObject
             IsLoading = false;
             OnPropertyChanged(nameof(HasNoResults));
         }
+    }
+
+    [RelayCommand]
+    public void LoadMore()
+    {
+        if (!HasMorePackages || IsLoadingMore || IsLoading) return;
+
+        IsLoadingMore = true;
+        try
+        {
+            var nextBatch = _allFilteredPackages
+                .Skip(Packages.Count)
+                .Take(PageSize);
+
+            foreach (var pkg in nextBatch)
+            {
+                Packages.Add(CreatePackageItem(pkg));
+            }
+
+            HasMorePackages = Packages.Count < _allFilteredPackages.Count;
+        }
+        finally
+        {
+            IsLoadingMore = false;
+        }
+    }
+
+    private ThunderstorePackageItem CreatePackageItem(ThunderstorePackage pkg)
+    {
+        var item = new ThunderstorePackageItem(pkg, InstallItemAsync);
+        if (CheckInstalledStatus != null)
+        {
+            var (isInst, ver) = CheckInstalledStatus(pkg);
+            item.IsInstalled = isInst;
+            item.InstalledVersion = ver;
+        }
+        return item;
     }
 
     public async Task InstallItemAsync(ThunderstorePackageItem item)

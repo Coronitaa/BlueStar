@@ -51,76 +51,50 @@ public sealed partial class ModsTabViewModel : ObservableObject
         _bepInExService = bepInExService;
         _thunderstoreService = thunderstoreService;
 
-        Workshop = new WorkshopBrowserViewModel(InstallWorkshopItemAsync);
+        var workshop = new WorkshopBrowserViewModel(InstallWorkshopItemAsync);
+        ThunderstoreBrowserViewModel? thunderstore = null;
         if (_thunderstoreService != null)
         {
-            Thunderstore = new ThunderstoreBrowserViewModel(
+            thunderstore = new ThunderstoreBrowserViewModel(
                 _thunderstoreService,
                 package => InstallPackageAsync(package),
                 localization,
                 logger);
-            Thunderstore.CheckInstalledStatus = CheckIfThunderstorePackageInstalled;
-            Thunderstore.OnModInstalledCallback = async () => await LoadAsync().ConfigureAwait(true);
+            thunderstore.CheckInstalledStatus = CheckIfThunderstorePackageInstalled;
+            thunderstore.OnModInstalledCallback = async () => await LoadAsync().ConfigureAwait(true);
         }
 
-        // Cross-modal switching between providers if both are available
-        Workshop.SwitchToThunderstoreAction = () =>
-        {
-            if (Instance != null && HasThunderstoreSupport && !string.IsNullOrWhiteSpace(ThunderstoreCommunity))
-            {
-                Thunderstore?.Open(Instance, ThunderstoreCommunity, HasWorkshopSupport, () => OpenWorkshop());
-            }
-        };
-        if (Thunderstore != null)
-        {
-            Thunderstore.SwitchToWorkshopAction = () => OpenWorkshop();
-        }
+        ModBrowser = new ModBrowserViewModel(workshop, thunderstore, localization, logger);
     }
 
+    /// <summary>Unified Mod Explorer modal coordinator.</summary>
+    public ModBrowserViewModel ModBrowser { get; }
+
     /// <summary>Steam Workshop browser modal of this tab.</summary>
-    public WorkshopBrowserViewModel Workshop { get; }
+    public WorkshopBrowserViewModel Workshop => ModBrowser.Workshop;
 
     /// <summary>Thunderstore package browser modal of this tab.</summary>
-    public ThunderstoreBrowserViewModel? Thunderstore { get; }
+    public ThunderstoreBrowserViewModel? Thunderstore => ModBrowser.Thunderstore;
 
     [RelayCommand]
     public void OpenWorkshop()
     {
-        if (Instance == null) return;
-        Workshop.Open(Instance.AppId, HasThunderstoreSupport, () =>
-        {
-            if (Instance != null && HasThunderstoreSupport && !string.IsNullOrWhiteSpace(ThunderstoreCommunity))
-            {
-                Thunderstore?.Open(Instance, ThunderstoreCommunity, HasWorkshopSupport, () => OpenWorkshop());
-            }
-        });
+        if (Instance == null || !HasWorkshopSupport) return;
+        ModBrowser.Open(Instance, HasWorkshopSupport, HasThunderstoreSupport, ThunderstoreCommunity, preferredProvider: "Workshop");
     }
 
     [RelayCommand]
     public void OpenThunderstore()
     {
         if (Instance == null || !HasThunderstoreSupport || string.IsNullOrWhiteSpace(ThunderstoreCommunity)) return;
-        Thunderstore?.Open(Instance, ThunderstoreCommunity, HasWorkshopSupport, () => OpenWorkshop());
+        ModBrowser.Open(Instance, HasWorkshopSupport, HasThunderstoreSupport, ThunderstoreCommunity, preferredProvider: "Thunderstore");
     }
 
     [RelayCommand]
     public void OpenContentBrowser()
     {
-        if (Instance == null) return;
-
-        if (HasThunderstoreSupport && !HasWorkshopSupport)
-        {
-            OpenThunderstore();
-        }
-        else if (!HasThunderstoreSupport && HasWorkshopSupport)
-        {
-            OpenWorkshop();
-        }
-        else if (HasThunderstoreSupport && HasWorkshopSupport)
-        {
-            // Both are supported: default to Thunderstore with option to switch to Workshop
-            OpenThunderstore();
-        }
+        if (Instance == null || !HasModBrowserSupport) return;
+        ModBrowser.Open(Instance, HasWorkshopSupport, HasThunderstoreSupport, ThunderstoreCommunity);
     }
 
     /// <summary>
@@ -243,11 +217,13 @@ public sealed partial class ModsTabViewModel : ObservableObject
     // ── Online Mod Providers Availability ──
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasAnyProvider))]
+    [NotifyPropertyChangedFor(nameof(HasModBrowserSupport))]
     [NotifyPropertyChangedFor(nameof(CanShowWorkshopFilter))]
     private bool _hasWorkshopSupport;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasAnyProvider))]
+    [NotifyPropertyChangedFor(nameof(HasModBrowserSupport))]
     [NotifyPropertyChangedFor(nameof(CanShowThunderstoreFilter))]
     private bool _hasThunderstoreSupport;
 
@@ -258,6 +234,7 @@ public sealed partial class ModsTabViewModel : ObservableObject
     private bool _isCheckingProviders;
 
     public bool HasAnyProvider => HasWorkshopSupport || HasThunderstoreSupport;
+    public bool HasModBrowserSupport => HasWorkshopSupport || HasThunderstoreSupport;
     public bool CanShowWorkshopFilter => HasWorkshopSupport || WorkshopModsCount > 0;
     public bool CanShowThunderstoreFilter => HasThunderstoreSupport || ThunderstoreModsCount > 0;
     public bool CanShowLocalFilter => LocalModsCount > 0;
@@ -286,6 +263,9 @@ public sealed partial class ModsTabViewModel : ObservableObject
             {
                 HasThunderstoreSupport = false;
             }
+
+            ModBrowser.HasWorkshopSupport = HasWorkshopSupport;
+            ModBrowser.HasThunderstoreSupport = HasThunderstoreSupport;
         }
         catch (Exception ex)
         {
@@ -295,6 +275,7 @@ public sealed partial class ModsTabViewModel : ObservableObject
         {
             IsCheckingProviders = false;
             OnPropertyChanged(nameof(HasAnyProvider));
+            OnPropertyChanged(nameof(HasModBrowserSupport));
             OnPropertyChanged(nameof(CanShowWorkshopFilter));
             OnPropertyChanged(nameof(CanShowThunderstoreFilter));
             OnPropertyChanged(nameof(CanShowLocalFilter));

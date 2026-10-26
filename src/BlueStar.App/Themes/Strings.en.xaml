@@ -391,8 +391,13 @@
     <sys:String x:Key="String_WorkshopWebViewMissingTitle">WebView2 is required</sys:String>
     <sys:String x:Key="String_WorkshopWebViewMissingDesc">Showing the Workshop inside BlueStar needs Microsoft Edge WebView2. Meanwhile, paste the item's link or ID above.</sys:String>
     <sys:String x:Key="String_WorkshopInstallWebViewBtn">Install WebView2</sys:String>
-    <sys:String x:Key="String_ModBrowseContentBtn">Browse content</sys:String>
-    <sys:String x:Key="String_BrowseThunderstoreBtn">Browse Thunderstore</sys:String>
+    <sys:String x:Key="String_ModBrowseContentBtn">Browse Mods</sys:String>
+    <sys:String x:Key="String_BrowseThunderstoreBtn">Browse Mods</sys:String>
+    <sys:String x:Key="String_ModBrowserTitle">Browse Mods</sys:String>
+    <sys:String x:Key="String_ModBrowserSubtitle">Discover and install community mods for this game.</sys:String>
+    <sys:String x:Key="String_ModBrowserTotalMods">{0:N0} mods available</sys:String>
+    <sys:String x:Key="String_ModLoadMore">Load more mods</sys:String>
+    <sys:String x:Key="String_ModLoadingMore">Loading more mods...</sys:String>
     <sys:String x:Key="String_DragDropModHint">Drag and drop .zip, .dll, or .7z files here to install automatically</sys:String>
     <sys:String x:Key="String_UnsupportedModFile">❌ Unsupported file type. Please drop a .zip, .dll, or .7z mod file.</sys:String>
     <sys:String x:Key="String_ModSearchPlaceholder">Search installed mods...</sys:String>

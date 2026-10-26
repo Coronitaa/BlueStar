@@ -391,8 +391,13 @@
     <sys:String x:Key="String_WorkshopWebViewMissingTitle">Se necesita WebView2</sys:String>
     <sys:String x:Key="String_WorkshopWebViewMissingDesc">Para ver Workshop dentro de BlueStar hace falta Microsoft Edge WebView2. Mientras tanto, pega el enlace o el ID del ítem arriba.</sys:String>
     <sys:String x:Key="String_WorkshopInstallWebViewBtn">Instalar WebView2</sys:String>
-    <sys:String x:Key="String_ModBrowseContentBtn">Explorar contenido</sys:String>
-    <sys:String x:Key="String_BrowseThunderstoreBtn">Explorar Thunderstore</sys:String>
+    <sys:String x:Key="String_ModBrowseContentBtn">Explorar Mods</sys:String>
+    <sys:String x:Key="String_BrowseThunderstoreBtn">Explorar Mods</sys:String>
+    <sys:String x:Key="String_ModBrowserTitle">Explorar Mods</sys:String>
+    <sys:String x:Key="String_ModBrowserSubtitle">Descubre e instala mods comunitarios para este juego.</sys:String>
+    <sys:String x:Key="String_ModBrowserTotalMods">{0:N0} mods disponibles</sys:String>
+    <sys:String x:Key="String_ModLoadMore">Cargar más mods</sys:String>
+    <sys:String x:Key="String_ModLoadingMore">Cargando más mods...</sys:String>
     <sys:String x:Key="String_DragDropModHint">Arrastra y suelta aquí archivos .zip, .dll o .7z para instalarlos automáticamente</sys:String>
     <sys:String x:Key="String_UnsupportedModFile">❌ Formato de archivo no compatible. Arrastra un archivo de mod .zip, .dll o .7z.</sys:String>
     <sys:String x:Key="String_ModSearchPlaceholder">Buscar mods instalados...</sys:String>

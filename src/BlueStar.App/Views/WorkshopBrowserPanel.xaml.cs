@@ -14,6 +14,15 @@ namespace BlueStar.App.Views;
 /// </summary>
 public partial class WorkshopBrowserPanel : UserControl
 {
+    public static readonly DependencyProperty ShowHeaderProperty = DependencyProperty.Register(
+        nameof(ShowHeader), typeof(bool), typeof(WorkshopBrowserPanel), new PropertyMetadata(true));
+
+    public bool ShowHeader
+    {
+        get => (bool)GetValue(ShowHeaderProperty);
+        set => SetValue(ShowHeaderProperty, value);
+    }
+
     private WorkshopBrowserViewModel? _viewModel;
     private Task? _webViewInit;
 
