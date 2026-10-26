@@ -7,7 +7,9 @@ namespace BlueStar.Core.Interfaces;
 /// <summary>
 /// Result of turning a Workshop item into an installable package.
 /// </summary>
-public sealed record WorkshopFetchResult(ModPackage? Package, WorkshopItemInfo? Details = null, string? Error = null)
+/// <param name="RequiresOwnedAccount">Steam only serves this item to a signed-in account that owns the game.</param>
+public sealed record WorkshopFetchResult(
+    ModPackage? Package, WorkshopItemInfo? Details = null, string? Error = null, bool RequiresOwnedAccount = false)
 {
     public bool Succeeded => Package != null;
 }

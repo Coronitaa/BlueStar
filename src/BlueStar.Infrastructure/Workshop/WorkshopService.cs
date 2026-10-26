@@ -777,7 +777,7 @@ public sealed class WorkshopService : IWorkshopService
         }
 
         // 2. Everything else is a depot-style item that DepotDownloader fetches with -pubfile.
-        var (ok, error) = await RunDepotDownloaderAsync(effectiveAppId, publishedFileId, destinationDirectory, progress, ct).ConfigureAwait(false);
+        var (ok, error, needsOwnedAccount) = await RunDepotDownloaderAsync(effectiveAppId, publishedFileId, destinationDirectory, progress, ct).ConfigureAwait(false);
         var ddMetadata = Path.Combine(destinationDirectory, ".DepotDownloader");
         if (Directory.Exists(ddMetadata))
         {
@@ -794,7 +794,7 @@ public sealed class WorkshopService : IWorkshopService
         if (_steamCmd != null)
         {
             _logger.LogInformation("DepotDownloader could not fetch Workshop item {Id} ({Error}); trying SteamCMD", publishedFileId, error);
-            var (cmdOk, cmdError) = await _steamCmd.DownloadAsync(effectiveAppId, publishedFileId, destinationDirectory, progress, ct)
+            var (cmdOk, cmdError, cmdNeedsOwnedAccount) = await _steamCmd.DownloadAsync(effectiveAppId, publishedFileId, destinationDirectory, progress, ct)
                 .ConfigureAwait(false);
             if (cmdOk && Directory.EnumerateFiles(destinationDirectory, "*", SearchOption.AllDirectories).Any())
             {
@@ -803,7 +803,11 @@ public sealed class WorkshopService : IWorkshopService
             }
 
             error = cmdError ?? error;
+            needsOwnedAccount |= cmdNeedsOwnedAccount;
         }
+
+        if (needsOwnedAccount)
+            return new WorkshopDownloadResult(false, details, OwnedAccountRequiredMessage, RequiresOwnedAccount: true);
 
         return new WorkshopDownloadResult(false, details, error ?? "Steam returned no files for this item.");
     }
@@ -861,11 +865,14 @@ public sealed class WorkshopService : IWorkshopService
         }
     }
 
-    private async Task<(bool Ok, string? Error)> RunDepotDownloaderAsync(
+    public const string OwnedAccountRequiredMessage =
+        "This Workshop item can only be downloaded by a Steam account that owns the game.";
+
+    private async Task<(bool Ok, string? Error, bool NeedsOwnedAccount)> RunDepotDownloaderAsync(
         uint appId, ulong publishedFileId, string destinationDirectory, IProgress<double>? progress, CancellationToken ct)
     {
         var ddPath = GetDepotDownloaderPath();
-        if (string.IsNullOrEmpty(ddPath)) return (false, "DepotDownloader is missing from the tools folder.");
+        if (string.IsNullOrEmpty(ddPath)) return (false, "DepotDownloader is missing from the tools folder.", false);
 
         // Workshop content is encrypted with the key of the depot that shares the game's AppID. Steam does not hand it
         // to anonymous accounts, so pass it in when BlueStar knows it (DepotBox lua files list it as addappid(appid, 1, key)).
@@ -889,7 +896,7 @@ public sealed class WorkshopService : IWorkshopService
         }
     }
 
-    private async Task<(bool Ok, string? Error)> RunDepotDownloaderProcessAsync(
+    private async Task<(bool Ok, string? Error, bool NeedsOwnedAccount)> RunDepotDownloaderProcessAsync(
         string ddPath, string arguments, ulong publishedFileId, uint appId, IProgress<double>? progress, CancellationToken ct)
     {
         var psi = new System.Diagnostics.ProcessStartInfo
@@ -954,29 +961,29 @@ public sealed class WorkshopService : IWorkshopService
         if (proc.ExitCode is unchecked((int)0x80008083) or unchecked((int)0x80008096))
         {
             _logger.LogWarning("DepotDownloader could not start for Workshop item {Id}: no .NET runtime found", publishedFileId);
-            return (false, "The Workshop downloader needs the .NET runtime (8 or newer), which is not installed.");
+            return (false, "The Workshop downloader needs the .NET runtime (8 or newer), which is not installed.", false);
         }
 
         // DepotDownloader exits with 0 even when Steam refuses the depot key, so the output decides.
         if (needsAccount)
         {
             _logger.LogWarning("Steam would not issue a manifest request code for Workshop item {Id} of AppID {AppId} anonymously", publishedFileId, appId);
-            return (false, "Steam only gives this item's download code to a signed-in Steam account. Anonymous downloads are not allowed for this game's Workshop.");
+            return (false, OwnedAccountRequiredMessage, true);
         }
 
         if (accessDenied)
         {
             _logger.LogWarning("Steam denied the Workshop depot key of AppID {AppId} for item {Id}", appId, publishedFileId);
-            return (false, $"Steam only serves this game's Workshop to accounts that own it. BlueStar needs the depot key of AppID {appId} to download it.");
+            return (false, OwnedAccountRequiredMessage, true);
         }
 
         if (proc.ExitCode != 0)
         {
             _logger.LogWarning("DepotDownloader exited with {Code} for Workshop item {Id}: {Error}", proc.ExitCode, publishedFileId, lastError);
-            return (false, lastError ?? $"DepotDownloader exited with code {proc.ExitCode}.");
+            return (false, lastError ?? $"DepotDownloader exited with code {proc.ExitCode}.", false);
         }
 
-        return (true, null);
+        return (true, null, false);
     }
 
     private static string? GetDepotDownloaderPath()

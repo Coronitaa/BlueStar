@@ -42,14 +42,14 @@ public sealed partial class SteamCmdWorkshopClient
     /// Downloads the item into SteamCMD's workshop folder and moves it to <paramref name="destinationDirectory"/>.
     /// SteamCMD runs one download at a time.
     /// </summary>
-    public async Task<(bool Ok, string? Error)> DownloadAsync(
+    public async Task<(bool Ok, string? Error, bool NeedsOwnedAccount)> DownloadAsync(
         uint appId, ulong publishedFileId, string destinationDirectory, IProgress<double>? progress, CancellationToken ct)
     {
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             var ready = await EnsureSteamCmdAsync(progress, ct).ConfigureAwait(false);
-            if (!ready.Ok) return ready;
+            if (!ready.Ok) return (false, ready.Error, false);
 
             progress?.Report(30.0);
             var output = await RunAsync(
@@ -59,12 +59,12 @@ public sealed partial class SteamCmdWorkshopClient
             if (!result.Ok || result.ContentPath == null)
             {
                 _logger.LogWarning("SteamCMD could not download Workshop item {Id} of AppID {AppId}: {Error}", publishedFileId, appId, result.Error);
-                return (false, result.Error);
+                return (false, result.Error, result.NeedsOwnedAccount);
             }
 
             MoveContent(result.ContentPath, destinationDirectory);
             progress?.Report(95.0);
-            return (true, null);
+            return (true, null, false);
         }
         finally
         {
@@ -77,22 +77,25 @@ public sealed partial class SteamCmdWorkshopClient
     /// <c>Success. Downloaded item 123 to "C:\...\content\480\123" (4096 bytes)</c> or
     /// <c>ERROR! Download item 123 failed (Access Denied).</c>
     /// </summary>
-    public static (bool Ok, string? ContentPath, string? Error) ParseDownloadResult(string output, ulong publishedFileId)
+    public static (bool Ok, string? ContentPath, string? Error, bool NeedsOwnedAccount) ParseDownloadResult(string output, ulong publishedFileId)
     {
         var success = Regex.Match(output, $@"Success\. Downloaded item {publishedFileId} to ""([^""]+)""", RegexOptions.IgnoreCase);
-        if (success.Success) return (true, success.Groups[1].Value, null);
+        if (success.Success) return (true, success.Groups[1].Value, null, false);
 
         var failure = Regex.Match(output, $@"ERROR! Download item {publishedFileId} failed \(([^)]+)\)", RegexOptions.IgnoreCase);
         if (failure.Success)
         {
             var reason = failure.Groups[1].Value.Trim();
-            var message = reason.Equals("Access Denied", StringComparison.OrdinalIgnoreCase) || reason.Equals("Failure", StringComparison.OrdinalIgnoreCase)
-                ? $"Steam does not allow anonymous Workshop downloads for this game ({reason})."
+            // Anonymous logins get "Access Denied" or a bare "Failure" for games whose Workshop needs a license.
+            var needsOwnedAccount = reason.Equals("Access Denied", StringComparison.OrdinalIgnoreCase) ||
+                                    reason.Equals("Failure", StringComparison.OrdinalIgnoreCase);
+            var message = needsOwnedAccount
+                ? $"Steam only serves this item to an account that owns the game ({reason})."
                 : $"SteamCMD could not download the item ({reason}).";
-            return (false, null, message);
+            return (false, null, message, needsOwnedAccount);
         }
 
-        return (false, null, "SteamCMD did not report a result for this item.");
+        return (false, null, "SteamCMD did not report a result for this item.", false);
     }
 
     private async Task<(bool Ok, string? Error)> EnsureSteamCmdAsync(IProgress<double>? progress, CancellationToken ct)

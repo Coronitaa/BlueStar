@@ -23,7 +23,9 @@ public record WorkshopItemInfo(
 /// <summary>
 /// Outcome of downloading a Workshop item's content.
 /// </summary>
-public sealed record WorkshopDownloadResult(bool Success, WorkshopItemInfo? Details = null, string? Error = null);
+/// <param name="RequiresOwnedAccount">Steam refused every anonymous route: only a signed-in account that owns the game can download it.</param>
+public sealed record WorkshopDownloadResult(
+    bool Success, WorkshopItemInfo? Details = null, string? Error = null, bool RequiresOwnedAccount = false);
 
 /// <summary>
 /// Service for checking Steam Workshop availability, querying item metadata, and downloading Workshop mods.

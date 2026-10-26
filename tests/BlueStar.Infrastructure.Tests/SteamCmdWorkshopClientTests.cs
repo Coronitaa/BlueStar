@@ -17,27 +17,29 @@ public sealed class SteamCmdWorkshopClientTests
             """;
 
         // Act
-        var (ok, path, error) = SteamCmdWorkshopClient.ParseDownloadResult(output, 3821122707);
+        var (ok, path, error, needsAccount) = SteamCmdWorkshopClient.ParseDownloadResult(output, 3821122707);
 
         // Assert
         ok.Should().BeTrue();
         path.Should().EndWith(@"content\4704690\3821122707");
         error.Should().BeNull();
+        needsAccount.Should().BeFalse();
     }
 
     [Theory]
-    [InlineData("ERROR! Download item 3821122707 failed (Access Denied).", "anonymous")]
-    [InlineData("ERROR! Download item 3821122707 failed (Failure).", "anonymous")]
-    [InlineData("ERROR! Download item 3821122707 failed (Timeout).", "Timeout")]
-    public void ParseDownloadResult_ExplainsFailures(string line, string expectedFragment)
+    [InlineData("ERROR! Download item 3821122707 failed (Access Denied).", "owns the game", true)]
+    [InlineData("ERROR! Download item 3821122707 failed (Failure).", "owns the game", true)]
+    [InlineData("ERROR! Download item 3821122707 failed (Timeout).", "Timeout", false)]
+    public void ParseDownloadResult_ExplainsFailures(string line, string expectedFragment, bool expectedNeedsAccount)
     {
         // Act
-        var (ok, path, error) = SteamCmdWorkshopClient.ParseDownloadResult($"Logging in...\n{line}\n", 3821122707);
+        var (ok, path, error, needsAccount) = SteamCmdWorkshopClient.ParseDownloadResult($"Logging in...\n{line}\n", 3821122707);
 
         // Assert
         ok.Should().BeFalse();
         path.Should().BeNull();
         error.Should().Contain(expectedFragment);
+        needsAccount.Should().Be(expectedNeedsAccount);
     }
 
     [Fact]
@@ -67,10 +69,11 @@ public sealed class SteamCmdWorkshopClientTests
         const string output = "Success. Downloaded item 111 to \"C:\\x\\111\" (5 bytes)";
 
         // Act
-        var (ok, _, error) = SteamCmdWorkshopClient.ParseDownloadResult(output, 3821122707);
+        var (ok, _, error, needsAccount) = SteamCmdWorkshopClient.ParseDownloadResult(output, 3821122707);
 
         // Assert
         ok.Should().BeFalse();
         error.Should().Contain("did not report");
+        needsAccount.Should().BeFalse();
     }
 }

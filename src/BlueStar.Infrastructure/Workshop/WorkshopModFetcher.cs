@@ -70,7 +70,7 @@ public sealed class WorkshopModFetcher : IWorkshopModFetcher
             if (Directory.Exists(contentDir)) Directory.Delete(contentDir, recursive: true);
             DeleteIfEmpty(itemDir);
             DeleteIfEmpty(Path.GetDirectoryName(itemDir));
-            return new WorkshopFetchResult(null, details, download.Error);
+            return new WorkshopFetchResult(null, details, download.Error, download.RequiresOwnedAccount);
         }
 
         var marker = new CacheMarker(publishedFileId, effectiveAppId, details.Title, details.UpdatedAt?.ToUnixTimeSeconds());

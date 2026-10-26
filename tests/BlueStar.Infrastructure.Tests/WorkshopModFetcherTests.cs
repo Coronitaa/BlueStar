@@ -115,4 +115,21 @@ public sealed class WorkshopModFetcherTests : IDisposable
         result.Error.Should().Be("Access denied");
         Directory.Exists(Path.Combine(_cacheRoot, AppId.ToString())).Should().BeFalse();
     }
+
+    [Fact]
+    public async Task FetchAsync_OwnedAccountRequired_PropagatesFlag()
+    {
+        // Arrange
+        _workshop.Setup(w => w.DownloadItemContentAsync(It.IsAny<uint>(), ItemId, It.IsAny<string>(),
+                It.IsAny<IProgress<double>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkshopDownloadResult(false, Details(AppId), "Account required", RequiresOwnedAccount: true));
+
+        // Act
+        var result = await CreateFetcher().FetchAsync(AppId, ItemId);
+
+        // Assert
+        result.Succeeded.Should().BeFalse();
+        result.RequiresOwnedAccount.Should().BeTrue();
+        result.Error.Should().Be("Account required");
+    }
 }
