@@ -28,24 +28,24 @@ public class SystemPrerequisiteTests
 
         // Assert
         prereqs.Should().NotBeNull();
-        prereqs.Should().HaveCount(6);
+        prereqs.Should().HaveCount(5);
 
         var ids = prereqs.Select(p => p.Id).ToList();
         ids.Should().Contain("vcredist_2015_2022_x64");
         ids.Should().Contain("vcredist_2015_2022_x86");
         ids.Should().Contain("directx_enduser");
         ids.Should().Contain("dotnet_desktop_8");
-        ids.Should().Contain("dotnet_runtime_8");
+        // BlueStar hosts DepotDownloader on its own runtime, so no system .NET Runtime is needed
+        ids.Should().NotContain("dotnet_runtime_8");
         ids.Should().Contain("webview2_runtime");
 
         // Essential runtimes
         prereqs.First(p => p.Id == "vcredist_2015_2022_x64").IsEssential.Should().BeTrue();
         prereqs.First(p => p.Id == "vcredist_2015_2022_x86").IsEssential.Should().BeTrue();
-        prereqs.First(p => p.Id == "directx_enduser").IsEssential.Should().BeTrue();
-        prereqs.First(p => p.Id == "dotnet_runtime_8").IsEssential.Should().BeTrue();
         prereqs.First(p => p.Id == "webview2_runtime").IsEssential.Should().BeTrue();
 
-        // Must not contain dotnet 9 as DepotDownloaderMod targets .NET 8
+        // Optional: BlueStar is self-contained; these only matter for some games or the Workshop downloader
+        prereqs.First(p => p.Id == "directx_enduser").IsEssential.Should().BeFalse();
         ids.Should().NotContain("dotnet_runtime_9");
     }
 

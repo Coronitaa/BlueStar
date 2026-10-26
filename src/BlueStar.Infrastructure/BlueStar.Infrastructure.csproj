@@ -7,6 +7,10 @@
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
+  <!-- Per-build key for the encrypted API keys file (bluestar.dat). Passed only by build-release.ps1; never committed. -->
+  <ItemGroup Condition="'$(BundledSecretsKey)' != ''">
+    <AssemblyMetadata Include="BundledSecretsKey" Value="$(BundledSecretsKey)" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />

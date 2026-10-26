@@ -1147,7 +1147,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                     SystemPrerequisites.Add(item);
                 }
 
-                var missing = items.Where(i => i.Status != PrerequisiteStatus.InstalledInSystem && i.Status != PrerequisiteStatus.InstalledSuccess).ToList();
+                var missing = items.Where(i => i.IsMissingEssential).ToList();
                 MissingPrerequisitesCount = missing.Count;
                 HasMissingRequirements = missing.Count > 0;
 

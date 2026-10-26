@@ -91,6 +91,9 @@ public partial class App : Application
         }
 
 
+        // DepotDownloaderMod runs on BlueStar's own runtime through Program.Main, so no system .NET is needed
+        BlueStar.Infrastructure.Workshop.DepotDownloaderHost.HostExecutablePath = Environment.ProcessPath;
+
         // Initialize Debug & Diagnostics Service
         var debugLogService = new BlueStar.Infrastructure.Services.DebugLogService();
 

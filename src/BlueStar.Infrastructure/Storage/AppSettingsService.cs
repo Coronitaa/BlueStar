@@ -21,12 +21,15 @@ public sealed class AppSettingsService
     };
 
     private AppSettings _current = new();
-    private readonly Lazy<ModApiKeys?> _bundledModApiKeys;
+    private readonly Lazy<BundledSecrets?> _bundledSecrets;
 
-    public AppSettingsService(ILogger<AppSettingsService> logger, string? settingsPath = null)
+    public AppSettingsService(ILogger<AppSettingsService> logger, string? settingsPath = null, BundledSecrets? bundledSecrets = null)
     {
         _logger = logger;
-        _bundledModApiKeys = new Lazy<ModApiKeys?>(ReadBundledModApiKeys);
+        // An explicit settings path means tests or tools: only use secrets they pass in, never the build's own
+        _bundledSecrets = bundledSecrets != null
+            ? new Lazy<BundledSecrets?>(bundledSecrets)
+            : new Lazy<BundledSecrets?>(() => settingsPath == null ? BundledSecrets.Load() : null);
 
         if (settingsPath != null)
         {
@@ -121,33 +124,17 @@ public sealed class AppSettingsService
                 return envKey.Trim();
             }
 
-            if (!string.IsNullOrEmpty(_settingsPath))
-            {
-                try
-                {
-                    var localSettingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
-                    if (File.Exists(localSettingsPath) && !string.Equals(Path.GetFullPath(localSettingsPath), Path.GetFullPath(_settingsPath), StringComparison.OrdinalIgnoreCase))
-                    {
-                        var localJson = File.ReadAllText(localSettingsPath);
-                        using var doc = JsonDocument.Parse(localJson);
-                        if (doc.RootElement.TryGetProperty("defaultApiKey", out var keyElem) && keyElem.ValueKind == JsonValueKind.String)
-                        {
-                            var keyVal = keyElem.GetString();
-                            if (!string.IsNullOrWhiteSpace(keyVal) && keyVal != "YOUR-API-KEY")
-                            {
-                                return keyVal.Trim();
-                            }
-                        }
-                    }
-                }
-                catch
-                {
-                }
-            }
-
-            return _current.DefaultApiKey;
+            // Built-in key: decrypted in memory only, never copied into the user's settings
+            var bundledKey = _bundledSecrets.Value?.DefaultApiKey;
+            return IsRealApiKey(bundledKey) ? bundledKey!.Trim() : null;
         }
     }
+
+    /// <summary>
+    /// The key the user entered in Settings, or null when BlueStar uses its built-in one. The Settings page shows
+    /// this instead of <see cref="DefaultApiKey"/> so the built-in key is never displayed.
+    /// </summary>
+    public string? UserDefaultApiKey => IsRealApiKey(_current.DefaultApiKey) ? _current.DefaultApiKey!.Trim() : null;
 
     /// <summary>Whether to show NSFW / adult content in catalogs and searches (default false).</summary>
     public bool ShowNsfwContent => _current.ShowNsfwContent;
@@ -291,7 +278,7 @@ public sealed class AppSettingsService
         var envUrl = Environment.GetEnvironmentVariable(ModIoApiUrlEnvironmentVariable);
         if (!string.IsNullOrWhiteSpace(envUrl)) return envUrl.Trim();
 
-        var bundledUrl = _bundledModApiKeys.Value?.ModIoApiUrl;
+        var bundledUrl = _bundledSecrets.Value?.ModIoApiUrl;
         if (!string.IsNullOrWhiteSpace(bundledUrl)) return bundledUrl.Trim();
 
         var userUrl = _current.ModApiKeys?.ModIoApiUrl;
@@ -299,15 +286,15 @@ public sealed class AppSettingsService
     }
 
     /// <summary>
-    /// Built-in key for a mod provider. Looks at the environment variable first, then the settings.json
-    /// shipped next to the executable (fresh on every release), then the user's own settings.json.
+    /// Built-in key for a mod provider. Looks at the environment variable first, then the encrypted keys shipped
+    /// with the release (<see cref="BundledSecrets"/>), then the user's own settings.json.
     /// </summary>
     public string? GetBuiltInModApiKey(ModApiProvider provider)
     {
         var envKey = Environment.GetEnvironmentVariable(ModApiKeyEnvironmentVariable(provider));
         if (IsRealApiKey(envKey)) return envKey!.Trim();
 
-        var bundledKey = _bundledModApiKeys.Value?.Get(provider);
+        var bundledKey = BundledModApiKey(provider);
         if (IsRealApiKey(bundledKey)) return bundledKey!.Trim();
 
         var userKey = _current.ModApiKeys?.Get(provider);
@@ -317,26 +304,17 @@ public sealed class AppSettingsService
     private static bool IsRealApiKey(string? key) =>
         !string.IsNullOrWhiteSpace(key) && key.Trim() != "YOUR-API-KEY";
 
-    private ModApiKeys? ReadBundledModApiKeys()
+    private string? BundledModApiKey(ModApiProvider provider)
     {
-        var localSettingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
-        if (!File.Exists(localSettingsPath)) return null;
-
-        try
+        var secrets = _bundledSecrets.Value;
+        return provider switch
         {
-            using var doc = JsonDocument.Parse(File.ReadAllText(localSettingsPath));
-            if (!doc.RootElement.TryGetProperty("modApiKeys", out var keysElem) || keysElem.ValueKind != JsonValueKind.Object)
-            {
-                return null;
-            }
-
-            return keysElem.Deserialize<ModApiKeys>(JsonOptions);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Could not read bundled settings.json for mod provider API keys");
-            return null;
-        }
+            ModApiProvider.CurseForge => secrets?.CurseForge,
+            ModApiProvider.NexusMods => secrets?.NexusMods,
+            ModApiProvider.ModIo => secrets?.ModIo,
+            ModApiProvider.Thunderstore => secrets?.Thunderstore,
+            _ => null
+        };
     }
 
     private void LoadSettings()
@@ -351,31 +329,14 @@ public sealed class AppSettingsService
                 _logger.LogDebug("Loaded app settings from {Path}", _settingsPath);
             }
 
-            // Fallback: inherit bundled backend defaultApiKey if current settings have null or default placeholder
-            if (string.IsNullOrWhiteSpace(_current.DefaultApiKey) || _current.DefaultApiKey == "YOUR-API-KEY")
+            // Releases up to 1.4.8 copied the built-in key into the user's settings.json in plain text. Remove it:
+            // BlueStar now reads it from the encrypted bundle, so it no longer has to live there.
+            var bundledKey = _bundledSecrets.Value?.DefaultApiKey;
+            if (IsRealApiKey(bundledKey) && string.Equals(_current.DefaultApiKey?.Trim(), bundledKey!.Trim(), StringComparison.Ordinal))
             {
-                var localSettingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
-                if (File.Exists(localSettingsPath) && !string.Equals(Path.GetFullPath(localSettingsPath), Path.GetFullPath(_settingsPath), StringComparison.OrdinalIgnoreCase))
-                {
-                    try
-                    {
-                        var localJson = File.ReadAllText(localSettingsPath);
-                        using var doc = JsonDocument.Parse(localJson);
-                        if (doc.RootElement.TryGetProperty("defaultApiKey", out var keyElem) && keyElem.ValueKind == JsonValueKind.String)
-                        {
-                            var bundledKey = keyElem.GetString();
-                            if (!string.IsNullOrWhiteSpace(bundledKey) && bundledKey != "YOUR-API-KEY")
-                            {
-                                _current = _current with { DefaultApiKey = bundledKey.Trim() };
-                                _logger.LogInformation("Inherited backend DepotBox API key from bundled settings");
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogDebug(ex, "Could not read bundled settings.json for default API key fallback");
-                    }
-                }
+                _current = _current with { DefaultApiKey = null };
+                File.WriteAllText(_settingsPath, JsonSerializer.Serialize(_current, JsonOptions));
+                _logger.LogInformation("Removed the built-in DepotBox API key from the user's settings file");
             }
         }
         catch (Exception ex)

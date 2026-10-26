@@ -200,7 +200,15 @@ if ($Target -in @("LocalTest", "All")) {
             $mappingContent += "`"$($_.FullName)`" `"Images\$($_.Name)`""
         }
 
-        Get-ChildItem -Path $appPublishDir -Recurse -File | ForEach-Object {
+        # prerequisites\ (VC++/WebView2 installers) is left out: they need admin rights, so a Store app cannot run
+        # them, and they made the package ~240 MB bigger. The app downloads a missing one on demand instead.
+        # .portable must never reach the package (it would make BlueStar write settings into WindowsApps).
+        $excludedFolders = @("prerequisites", "WebView2Runtime")
+        Get-ChildItem -Path $appPublishDir -Recurse -File | Where-Object {
+            $relative = $_.FullName.Substring($appPublishDir.Length + 1)
+            $topFolder = $relative.Split('\')[0]
+            $_.Name -ne ".portable" -and -not ($relative.Contains('\') -and $excludedFolders -contains $topFolder)
+        } | ForEach-Object {
             $relativePath = $_.FullName.Substring($appPublishDir.Length + 1)
             $mappingContent += "`"$($_.FullName)`" `"BlueStar.App\$relativePath`""
         }

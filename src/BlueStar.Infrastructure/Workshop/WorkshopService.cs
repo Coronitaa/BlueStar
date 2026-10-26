@@ -408,20 +408,12 @@ public sealed class WorkshopService : IWorkshopService
             }
 
             // 2. DepotDownloader with Workshop pubfile
-            if (!downloaded && !string.IsNullOrEmpty(ddPath) && File.Exists(ddPath))
+            if (!downloaded && DepotDownloaderHost.IsAvailable(ddPath))
             {
                 try
                 {
-                    var psi = new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = ddPath,
-                        Arguments = $"-app {effectiveAppId} -pubfile {publishedFileId} -dir \"{stagingFolder}\"",
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        WorkingDirectory = Path.GetDirectoryName(ddPath)
-                    };
+                    var psi = DepotDownloaderHost.CreateStartInfo(ddPath,
+                        $"-app {effectiveAppId} -pubfile {publishedFileId} -dir \"{stagingFolder}\"");
 
                     using var proc = new System.Diagnostics.Process { StartInfo = psi };
                     proc.OutputDataReceived += (_, e) =>
@@ -650,19 +642,10 @@ public sealed class WorkshopService : IWorkshopService
             var effectiveAppId = details.AppId > 0 ? details.AppId : appId;
             var ddPath = GetDepotDownloaderPath();
 
-            if (!string.IsNullOrEmpty(ddPath) && File.Exists(ddPath))
+            if (DepotDownloaderHost.IsAvailable(ddPath))
             {
-                var psi = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = ddPath,
-                    Arguments = $"-app {effectiveAppId} -pubfile {publishedFileId} -dir \"{modFolder}\"",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    WorkingDirectory = Path.GetDirectoryName(ddPath)
-                };
-                psi.EnvironmentVariables["DOTNET_ROOT"] = AppContext.BaseDirectory;
+                var psi = DepotDownloaderHost.CreateStartInfo(ddPath,
+                    $"-app {effectiveAppId} -pubfile {publishedFileId} -dir \"{modFolder}\"");
 
                 using var proc = new System.Diagnostics.Process { StartInfo = psi };
                 proc.OutputDataReceived += (_, e) =>
@@ -875,7 +858,7 @@ public sealed class WorkshopService : IWorkshopService
         uint appId, ulong publishedFileId, string destinationDirectory, IProgress<double>? progress, CancellationToken ct)
     {
         var ddPath = GetDepotDownloaderPath();
-        if (string.IsNullOrEmpty(ddPath)) return (false, "DepotDownloader is missing from the tools folder.", false);
+        if (!DepotDownloaderHost.IsAvailable(ddPath)) return (false, "DepotDownloader is not available.", false);
 
         // Workshop content is encrypted with the key of the depot that shares the game's AppID. Steam does not hand it
         // to anonymous accounts, so pass it in when BlueStar knows it (DepotBox lua files list it as addappid(appid, 1, key)).
@@ -900,25 +883,9 @@ public sealed class WorkshopService : IWorkshopService
     }
 
     private async Task<(bool Ok, string? Error, bool NeedsOwnedAccount)> RunDepotDownloaderProcessAsync(
-        string ddPath, string arguments, ulong publishedFileId, uint appId, IProgress<double>? progress, CancellationToken ct)
+        string? ddPath, string arguments, ulong publishedFileId, uint appId, IProgress<double>? progress, CancellationToken ct)
     {
-        var psi = new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = ddPath,
-            Arguments = arguments,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            WorkingDirectory = Path.GetDirectoryName(ddPath)
-        };
-
-        // DepotDownloaderMod.exe is framework-dependent. Point it at a runtime shipped next to BlueStar only if one
-        // really is there (host/fxr layout); otherwise let it find the .NET installed on the machine.
-        if (Directory.Exists(Path.Combine(AppContext.BaseDirectory, "host", "fxr")))
-        {
-            psi.EnvironmentVariables["DOTNET_ROOT"] = AppContext.BaseDirectory;
-        }
+        var psi = DepotDownloaderHost.CreateStartInfo(ddPath, arguments);
 
         string? lastError = null;
         var accessDenied = false;

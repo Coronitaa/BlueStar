@@ -112,7 +112,7 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     [ObservableProperty]
-    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.4.8";
+    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.4.9";
 
     [ObservableProperty]
     private string _defaultApiUrl = "https://depotbox.org";
@@ -353,7 +353,7 @@ public partial class SettingsViewModel : ObservableObject
         CheckSystemRequirementsOnStartup = _appSettings.CheckSystemRequirementsOnStartup;
 
         DefaultApiUrl = _appSettings.DefaultApiUrl;
-        DefaultApiKey = _appSettings.DefaultApiKey ?? string.Empty;
+        DefaultApiKey = _appSettings.UserDefaultApiKey ?? string.Empty;
         DefaultDownloadDirectory = _appSettings.DefaultDownloadDirectory;
 
         InstanceRoot = System.IO.Path.Combine(
@@ -432,7 +432,7 @@ public partial class SettingsViewModel : ObservableObject
         try
         {
             DefaultApiUrl = _appSettings.DefaultApiUrl;
-            DefaultApiKey = _appSettings.DefaultApiKey ?? string.Empty;
+            DefaultApiKey = _appSettings.UserDefaultApiKey ?? string.Empty;
 
             var customKey = await _authService.GetCustomApiKeyAsync(CancellationToken.None).ConfigureAwait(true);
             if (!string.IsNullOrWhiteSpace(customKey))
@@ -637,7 +637,7 @@ public partial class SettingsViewModel : ObservableObject
             var items = await _prerequisiteService.DetectSystemPrerequisitesAsync(CancellationToken.None).ConfigureAwait(true);
             SystemPrerequisites = new System.Collections.ObjectModel.ObservableCollection<PrerequisiteItem>(items);
 
-            var missing = items.Where(i => i.Status != PrerequisiteStatus.InstalledInSystem && i.Status != PrerequisiteStatus.InstalledSuccess).ToList();
+            var missing = items.Where(i => i.IsMissingEssential).ToList();
             MissingRequirementsCount = missing.Count;
             HasMissingRequirements = missing.Count > 0;
         }

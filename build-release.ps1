@@ -249,6 +249,12 @@ New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
 Write-Host "[3/7] Compilando y publicando binarios (win-x64 self-contained)..." -ForegroundColor Yellow
 $projectPath = Join-Path $rootDir "src\BlueStar.App\BlueStar.App.csproj"
 
+# Clave aleatoria de esta build para cifrar las API keys (bluestar.dat). Solo vive dentro de
+# BlueStar.Infrastructure.dll (AssemblyMetadata); no se guarda en disco ni en el repositorio.
+$secretsKeyBytes = New-Object byte[] 64
+[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($secretsKeyBytes)
+$secretsKey = [Convert]::ToBase64String($secretsKeyBytes)
+
 & dotnet publish $projectPath `
     -c Release `
     -r win-x64 `
@@ -259,6 +265,7 @@ $projectPath = Join-Path $rootDir "src\BlueStar.App\BlueStar.App.csproj"
     -p:AssemblyVersion=$fourPartVersion `
     -p:FileVersion=$fourPartVersion `
     -p:InformationalVersion=$threePartVersion `
+    "-p:BundledSecretsKey=$secretsKey" `
     -o $publishDir
 
 if ($LASTEXITCODE -ne 0) {
@@ -312,22 +319,64 @@ foreach ($name in @("curseForge", "nexusMods", "modIo", "thunderstore", "modIoAp
     }
 }
 
+# Las claves NO van en settings.json (texto plano, y el instalador lo copia a AppData): se cifran en bluestar.dat
+# con AES-256-CBC + HMAC-SHA256 (formato de BundledSecrets.cs) y BlueStar las descifra solo en memoria.
+function Protect-BundledSecrets([string]$Json, [byte[]]$Key) {
+    $aes = [System.Security.Cryptography.Aes]::Create()
+    try {
+        $aes.Mode = [System.Security.Cryptography.CipherMode]::CBC
+        $aes.Padding = [System.Security.Cryptography.PaddingMode]::PKCS7
+        $aes.Key = [byte[]]$Key[0..31]
+        $aes.GenerateIV()
+        $plain = [System.Text.Encoding]::UTF8.GetBytes($Json)
+        $cipher = $aes.CreateEncryptor().TransformFinalBlock($plain, 0, $plain.Length)
+        $signed = [byte[]]($aes.IV + $cipher)
+        $hmac = New-Object System.Security.Cryptography.HMACSHA256 -ArgumentList (,[byte[]]$Key[32..63])
+        try { $mac = $hmac.ComputeHash($signed) } finally { $hmac.Dispose() }
+        return [Convert]::ToBase64String([byte[]]($signed + $mac))
+    } finally {
+        $aes.Dispose()
+    }
+}
+
+$bundledSecrets = [ordered]@{
+    defaultApiKey = $resolvedApiKey
+    curseForge = $modKeys["curseForge"]
+    nexusMods = $modKeys["nexusMods"]
+    modIo = $modKeys["modIo"]
+    thunderstore = $modKeys["thunderstore"]
+    modIoApiUrl = $modKeys["modIoApiUrl"]
+}
+$secretsPath = Join-Path $publishDir "bluestar.dat"
+$encryptedSecrets = Protect-BundledSecrets ($bundledSecrets | ConvertTo-Json -Compress) $secretsKeyBytes
+[System.IO.File]::WriteAllText($secretsPath, $encryptedSecrets, [System.Text.UTF8Encoding]::new($false))
+Write-Host "  [Claves] Cifradas en bluestar.dat (clave por build dentro de BlueStar.Infrastructure.dll)" -ForegroundColor Green
+
 $releaseSettings = [ordered]@{
     # "system": BlueStar usa el idioma de Windows en el primer inicio (Espanol -> es, resto -> en).
     # El instalador lo reemplaza por el idioma elegido en el asistente.
     language = "system"
     defaultApiUrl = "https://depotbox.org"
-    defaultApiKey = $resolvedApiKey
     deleteDepotsAfterInstall = $true
     showNsfwContent = $false
     showDrmContent = $true
     enableAdvancedBuildOptions = $false
     enableExperimentalMods = $false
     checkSystemRequirementsOnStartup = $true
-    modApiKeys = $modKeys
 }
 $settingsJsonPath = Join-Path $publishDir "settings.json"
 $releaseSettings | ConvertTo-Json -Depth 5 | Set-Content -Path $settingsJsonPath -Encoding UTF8
+
+# Verificacion: ninguna clave puede quedar en texto plano en los archivos de texto publicados
+$plainKeys = @($resolvedApiKey) + @($modKeys.Values) | Where-Object { $_ -and $_.Length -ge 8 -and $_ -notlike "https://*" }
+$textFiles = Get-ChildItem -Path $publishDir -Recurse -File | Where-Object { $_.Extension -in @(".json", ".txt", ".config", ".xml", ".dat", ".ini") }
+foreach ($file in $textFiles) {
+    $text = [System.IO.File]::ReadAllText($file.FullName)
+    foreach ($k in $plainKeys) {
+        if ($text.Contains($k)) { throw "Una API key quedo en texto plano en $($file.FullName)" }
+    }
+}
+Write-Host "  [Claves] Verificado: ninguna clave en texto plano en la publicacion" -ForegroundColor Green
 
 # ============================================================================
 # 4. Firma de codigo de los binarios
@@ -358,8 +407,10 @@ if ($cert) {
 
 # ============================================================================
 # 4.5 Runtimes y prerrequisitos del sistema (descargados de Microsoft y cacheados en build-cache\)
-#     - Todos los formatos: instaladores offline en {app}\prerequisites (VC++ x64/x86, WebView2)
+#     - Setup/Portable: {app}\prerequisites con VC++ x64/x86 (offline) y el bootstrapper de WebView2 (~2 MB,
+#       solo descarga WebView2 si falta; Windows 11 y Windows 10 actualizado ya lo traen)
 #     - Portable: ademas WebView2 Fixed Version en {app}\WebView2Runtime (no requiere instalar nada)
+#     - MSIX: ninguno (ver paso 7); la app los descarga solo si hacen falta
 #     .NET 8 ya va incluido porque la publicacion es self-contained.
 # ============================================================================
 Write-Host "[4.5/7] Preparando runtimes y prerrequisitos del sistema..." -ForegroundColor Yellow
@@ -370,7 +421,7 @@ $webView2FixedUrl = "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamin
 $prerequisites = [ordered]@{
     "vc_redist.x64.exe" = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
     "vc_redist.x86.exe" = "https://aka.ms/vs/17/release/vc_redist.x86.exe"
-    "MicrosoftEdgeWebView2RuntimeInstallerX64.exe" = "https://go.microsoft.com/fwlink/?linkid=2124701"
+    "MicrosoftEdgeWebview2Setup.exe" = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
 }
 
 function Get-MicrosoftFile([string]$Url, [string]$Destination) {
@@ -394,7 +445,7 @@ foreach ($name in $prerequisites.Keys) {
     Get-MicrosoftFile $prerequisites[$name] $cached
     Copy-Item -LiteralPath $cached -Destination $publishPrereqDir -Force
 }
-Write-Host "  [OK] Instaladores offline copiados a prerequisites\ ($($prerequisites.Count))" -ForegroundColor Gray
+Write-Host "  [OK] Instaladores copiados a prerequisites\ ($($prerequisites.Count))" -ForegroundColor Gray
 
 $fixedCacheDir = Join-Path $cacheDir "webview2-fixed"
 $fixedCab = Join-Path $fixedCacheDir "Microsoft.WebView2.FixedVersionRuntime.$webView2FixedVersion.x64.cab"
@@ -407,6 +458,28 @@ if (-not (Test-Path -LiteralPath (Join-Path $fixedRuntimeDir "msedgewebview2.exe
     if (-not (Test-Path -LiteralPath (Join-Path $fixedRuntimeDir "msedgewebview2.exe"))) { throw "No se pudo extraer WebView2 Fixed Version" }
 }
 Write-Host "  [OK] WebView2 Fixed Version $webView2FixedVersion listo para el Portable" -ForegroundColor Gray
+
+# DLLs del runtime de Visual C++ 2015-2022 para el Portable (despliegue app-local, sin instalar nada):
+# x64 junto a BlueStar.exe y x86 en vcruntime\x86. Salen de la carpeta Redist oficial de Visual Studio / Build Tools.
+$vswhereExe = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+$vcRedistRoot = $null
+if (Test-Path $vswhereExe) {
+    $vsInstall = & $vswhereExe -latest -products * -property installationPath
+    if ($vsInstall) {
+        $vcRedistRoot = Get-ChildItem (Join-Path $vsInstall "VC\Redist\MSVC") -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '^\d+\.\d+\.\d+$' -and (Test-Path (Join-Path $_.FullName "x64\Microsoft.VC143.CRT\vcruntime140.dll")) } |
+            Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
+    }
+}
+if (-not $vcRedistRoot) { throw "No se encontraron las DLLs de Visual C++ (VC\Redist\MSVC) de Visual Studio / Build Tools" }
+$vcCrtX64Dir = Join-Path $vcRedistRoot.FullName "x64\Microsoft.VC143.CRT"
+$vcCrtX86Dir = Join-Path $vcRedistRoot.FullName "x86\Microsoft.VC143.CRT"
+foreach ($dll in Get-ChildItem -Path $vcCrtX64Dir, $vcCrtX86Dir -Filter "*.dll") {
+    $sig = Get-AuthenticodeSignature -LiteralPath $dll.FullName
+    # Las DLLs del CRT las firma "Microsoft Windows" / "Microsoft Windows Software Compatibility Publisher"
+    if ($sig.Status -ne "Valid" -or $sig.SignerCertificate.Subject -notmatch '^CN=Microsoft [^,]+, O=Microsoft Corporation,') { throw "Firma de Microsoft invalida en $($dll.FullName)" }
+}
+Write-Host "  [OK] Runtime Visual C++ $($vcRedistRoot.Name) (x64 + x86) listo para el Portable" -ForegroundColor Gray
 
 # ============================================================================
 # 5. Formato 1: Generar archivo Portable (.zip)
@@ -422,15 +495,22 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 Remove-Item -Path $portableMarkerPath -Force -ErrorAction SilentlyContinue
 
-# WebView2 Fixed Version solo en el Portable (Setup y MSIX llevan su instalador, que el Portable no necesita)
+# WebView2 Fixed Version solo en el Portable (el Setup lleva el bootstrapper, que el Portable no necesita)
 $zipArchive = [System.IO.Compression.ZipFile]::Open($portableZip, [System.IO.Compression.ZipArchiveMode]::Update)
 try {
     # Windows PowerShell 5.1 escribe las entradas con '\'; usar el mismo separador que el resto del zip
     $sep = if ($zipArchive.Entries | Where-Object { $_.FullName.Contains('/') } | Select-Object -First 1) { '/' } else { '\' }
-    $webView2InstallerEntry = $zipArchive.GetEntry("prerequisites${sep}MicrosoftEdgeWebView2RuntimeInstallerX64.exe")
+    $webView2InstallerEntry = $zipArchive.GetEntry("prerequisites${sep}MicrosoftEdgeWebview2Setup.exe")
     if ($webView2InstallerEntry) { $webView2InstallerEntry.Delete() }
     Get-ChildItem -LiteralPath $fixedRuntimeDir -Recurse -File | ForEach-Object {
         $entryName = "WebView2Runtime$sep" + $_.FullName.Substring($fixedRuntimeDir.Length + 1).Replace('\', $sep)
+        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zipArchive, $_.FullName, $entryName, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+    }
+    Get-ChildItem -LiteralPath $vcCrtX64Dir -Filter "*.dll" | ForEach-Object {
+        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zipArchive, $_.FullName, $_.Name, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+    }
+    Get-ChildItem -LiteralPath $vcCrtX86Dir -Filter "*.dll" | ForEach-Object {
+        $entryName = "vcruntime${sep}x86${sep}" + $_.Name
         [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zipArchive, $_.FullName, $entryName, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
     }
 } finally {

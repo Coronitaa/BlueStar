@@ -6,12 +6,14 @@
     <UseWPF>true</UseWPF>
     <OutputType>WinExe</OutputType>
     <RootNamespace>BlueStar.App</RootNamespace>
+    <!-- Program.Main also hosts DepotDownloaderMod on BlueStar's runtime (see Program.cs) -->
+    <StartupObject>BlueStar.App.Program</StartupObject>
     <AssemblyName>BlueStar</AssemblyName>
     <ApplicationIcon>Assets\bluestar.ico</ApplicationIcon>
     <Description>BlueStar — Universal Steam Game Instance Manager, Depot Staging, Manifest Resolver, and Multi-Engine Launcher</Description>
-    <Version>1.4.8</Version>
-    <AssemblyVersion>1.4.8.0</AssemblyVersion>
-    <FileVersion>1.4.8.0</FileVersion>
+    <Version>1.4.9</Version>
+    <AssemblyVersion>1.4.9.0</AssemblyVersion>
+    <FileVersion>1.4.9.0</FileVersion>
     <SatelliteResourceLanguages>en-US;en</SatelliteResourceLanguages>
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>

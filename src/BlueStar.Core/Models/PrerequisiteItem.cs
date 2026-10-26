@@ -87,6 +87,13 @@ public record PrerequisiteItem
     public bool IsEssential { get; init; } = true;
 
     /// <summary>
+    /// Whether this is an essential component that is not installed. Only these trigger the startup warning;
+    /// optional ones are still listed with their status.
+    /// </summary>
+    public bool IsMissingEssential =>
+        IsEssential && Status is not (PrerequisiteStatus.InstalledInSystem or PrerequisiteStatus.InstalledSuccess);
+
+    /// <summary>
     /// Whether this prerequisite comes from a recognized catalog with verified behavior and silent arguments.
     /// </summary>
     public bool IsRecognized { get; init; } = true;

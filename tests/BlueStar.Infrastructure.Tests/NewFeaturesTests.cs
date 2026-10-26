@@ -583,7 +583,8 @@ public class NewFeaturesTests
         prereqs.Should().Contain(p => p.Id == "vcredist_2015_2022_x64");
         prereqs.Should().Contain(p => p.Id == "directx_enduser");
         prereqs.Should().Contain(p => p.Id == "dotnet_desktop_8");
-        prereqs.Should().Contain(p => p.Id == "dotnet_runtime_8");
+        // BlueStar hosts DepotDownloader on its own runtime, so no system .NET Runtime is listed
+        prereqs.Should().NotContain(p => p.Id == "dotnet_runtime_8");
     }
 
     [Fact]

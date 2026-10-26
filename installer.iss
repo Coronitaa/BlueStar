@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "BlueStar"
-#define MyAppVersion "1.4.8"
+#define MyAppVersion "1.4.9"
 #define MyAppPublisher "BlueStar Devs"
 #define MyAppURL "https://github.com/Coronitaa/BlueStar"
 #define MyAppExeName "BlueStar.exe"
@@ -56,8 +56,22 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "dist\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
-; Offline installers for VC++ 2015-2022 (x64/x86) and WebView2 ship in dist\publish\prerequisites
-; (staged by build-release.ps1) and run from {app}\prerequisites when a component is missing.
+; Offline installers for VC++ 2015-2022 (x64/x86) and the WebView2 Evergreen bootstrapper ship in
+; dist\publish\prerequisites (staged by build-release.ps1) and run from {app}\prerequisites when a component
+; is missing. The bootstrapper (~2 MB) only downloads WebView2 on the rare system that lacks it (Windows 11 and
+; updated Windows 10 already have it), instead of carrying the ~200 MB offline installer in every Setup.
+
+[InstallDelete]
+; Leftovers from 1.4.8 and earlier when updating in place: the ~200 MB WebView2 offline installer (now a bootstrapper)
+; and the standalone DepotDownloaderMod (BlueStar.exe now hosts it on its own runtime)
+Type: files; Name: "{app}\prerequisites\MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
+Type: files; Name: "{app}\tools\DepotDownloaderMod.*"
+Type: files; Name: "{app}\tools\QRCoder.dll"
+Type: files; Name: "{app}\tools\SteamKit2.dll"
+Type: files; Name: "{app}\tools\System.IO.Hashing.dll"
+Type: files; Name: "{app}\tools\ZstdSharp.dll"
+Type: files; Name: "{app}\tools\protobuf-net.dll"
+Type: files; Name: "{app}\tools\protobuf-net.Core.dll"
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -125,7 +139,7 @@ begin
 end;
 
 // Runs a bundled offline installer from {app}\prerequisites. VC++ is required (setup aborts on failure);
-// WebView2 is not, because BlueStar can still offer its bundled installer from inside the app.
+// WebView2 is not, because BlueStar can still offer it from inside the app.
 procedure InstallPrerequisite(const FileName, DisplayName, Params: String; Required: Boolean);
 var
   Installer: String;

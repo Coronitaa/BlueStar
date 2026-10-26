@@ -90,18 +90,6 @@ public sealed class PrerequisiteService : IPrerequisiteService
             },
             new()
             {
-                Id = "dotnet_runtime_8",
-                Name = ".NET Runtime 8.0 (x64)",
-                Category = ".NET Runtime",
-                Description = "Required for Steam Workshop downloads through DepotDownloader.",
-                DownloadUrl = "https://aka.ms/dotnet/8.0/dotnet-runtime-win-x64.exe",
-                SilentArguments = "/install /quiet /norestart",
-                // BlueStar ships its own .NET runtime; only the Workshop downloader tool needs a system one.
-                IsEssential = false,
-                IsRecognized = true
-            },
-            new()
-            {
                 Id = "webview2_runtime",
                 Name = "Microsoft Edge WebView2 Runtime",
                 Category = "Web Browser Engine",
@@ -390,7 +378,9 @@ public sealed class PrerequisiteService : IPrerequisiteService
                            @"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64",
                            @"SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\X64")
                        || AllFilesExist(Environment.GetFolderPath(Environment.SpecialFolder.System),
-                           "vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll");
+                           "vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll")
+                       // Portable build: app-local copy next to BlueStar.exe
+                       || AllFilesExist(AppContext.BaseDirectory, "vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll");
             }
             else if (item.Id == "vcredist_2015_2022_x86")
             {
@@ -398,6 +388,9 @@ public sealed class PrerequisiteService : IPrerequisiteService
                            @"SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\X86",
                            @"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X86")
                        || AllFilesExist(Environment.GetFolderPath(Environment.SpecialFolder.SystemX86),
+                           "vcruntime140.dll", "msvcp140.dll")
+                       // Portable build: 32-bit copy shipped in {app}\vcruntime\x86
+                       || AllFilesExist(Path.Combine(AppContext.BaseDirectory, PortableVcRuntimeX86Folder),
                            "vcruntime140.dll", "msvcp140.dll");
             }
             else if (item.Id == "directx_enduser")
@@ -419,16 +412,6 @@ public sealed class PrerequisiteService : IPrerequisiteService
                     return true;
 
                 var dotnetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "shared", "Microsoft.WindowsDesktop.App");
-                if (Directory.Exists(dotnetDir) && Directory.GetDirectories(dotnetDir, "8.*").Length > 0)
-                    return true;
-            }
-            else if (item.Id == "dotnet_runtime_8")
-            {
-                using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\dotnet\Setup\InstalledVersions\x64\sharedfx\Microsoft.NETCore.App");
-                if (key?.GetValue("Version") is string ver && ver.StartsWith("8."))
-                    return true;
-
-                var dotnetDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "shared", "Microsoft.NETCore.App");
                 if (Directory.Exists(dotnetDir) && Directory.GetDirectories(dotnetDir, "8.*").Length > 0)
                     return true;
             }
@@ -472,6 +455,9 @@ public sealed class PrerequisiteService : IPrerequisiteService
 
         return false;
     }
+
+    /// <summary>Where the Portable build ships the 32-bit Visual C++ runtime DLLs (x64 ones sit next to BlueStar.exe).</summary>
+    public const string PortableVcRuntimeX86Folder = @"vcruntime\x86";
 
     private static bool VcRuntimeRegistered(params string[] subKeys)
     {
