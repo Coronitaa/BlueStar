@@ -285,6 +285,33 @@ if ($resolvedApiKey) {
     Write-Host "  [DepotBox] Sin clave de backend (defaultApiKey = null)." -ForegroundColor Yellow
 }
 
+# Claves de proveedores de mods (CurseForge, Nexus Mods, mod.io, Thunderstore) y la ruta de API de mod.io.
+# Se leen de modkeys.json en la raiz (ignorado por git) y las variables de entorno tienen prioridad.
+# Los usuarios pueden reemplazarlas desde Ajustes si la clave integrada se satura.
+$modKeys = [ordered]@{ curseForge = $null; nexusMods = $null; modIo = $null; thunderstore = $null; modIoApiUrl = $null }
+$modKeysFile = Join-Path $rootDir "modkeys.json"
+if (Test-Path $modKeysFile) {
+    try {
+        $fileKeys = Get-Content $modKeysFile -Raw | ConvertFrom-Json
+        foreach ($name in @("curseForge", "nexusMods", "modIo", "thunderstore", "modIoApiUrl")) {
+            $v = $fileKeys.$name
+            if ($v -and $v.Trim() -and $v.Trim() -ne "YOUR-API-KEY") { $modKeys[$name] = $v.Trim() }
+        }
+    } catch {
+        Write-Host "  [Mods] modkeys.json no es un JSON valido; se ignora." -ForegroundColor Yellow
+    }
+}
+$modKeyEnvVars = @{ curseForge = "BLUESTAR_CURSEFORGE_API_KEY"; nexusMods = "BLUESTAR_NEXUSMODS_API_KEY"; modIo = "BLUESTAR_MODIO_API_KEY"; thunderstore = "BLUESTAR_THUNDERSTORE_API_KEY"; modIoApiUrl = "BLUESTAR_MODIO_API_URL" }
+foreach ($name in @("curseForge", "nexusMods", "modIo", "thunderstore", "modIoApiUrl")) {
+    $envValue = [Environment]::GetEnvironmentVariable($modKeyEnvVars[$name])
+    if ($envValue -and $envValue.Trim()) { $modKeys[$name] = $envValue.Trim() }
+    if ($modKeys[$name]) {
+        Write-Host "  [Mods] $name incrustado." -ForegroundColor Green
+    } else {
+        Write-Host "  [Mods] Sin valor para $name (los usuarios pueden poner el suyo en Ajustes)." -ForegroundColor Yellow
+    }
+}
+
 $releaseSettings = [ordered]@{
     # "system": BlueStar usa el idioma de Windows en el primer inicio (Espanol -> es, resto -> en).
     # El instalador lo reemplaza por el idioma elegido en el asistente.
@@ -297,6 +324,7 @@ $releaseSettings = [ordered]@{
     enableAdvancedBuildOptions = $false
     enableExperimentalMods = $false
     checkSystemRequirementsOnStartup = $true
+    modApiKeys = $modKeys
 }
 $settingsJsonPath = Join-Path $publishDir "settings.json"
 $releaseSettings | ConvertTo-Json -Depth 5 | Set-Content -Path $settingsJsonPath -Encoding UTF8

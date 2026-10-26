@@ -1,4 +1,5 @@
 using System.Text.Json;
+using BlueStar.Core.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace BlueStar.Infrastructure.Storage;
@@ -20,10 +21,12 @@ public sealed class AppSettingsService
     };
 
     private AppSettings _current = new();
+    private readonly Lazy<ModApiKeys?> _bundledModApiKeys;
 
     public AppSettingsService(ILogger<AppSettingsService> logger, string? settingsPath = null)
     {
         _logger = logger;
+        _bundledModApiKeys = new Lazy<ModApiKeys?>(ReadBundledModApiKeys);
 
         if (settingsPath != null)
         {
@@ -264,6 +267,78 @@ public sealed class AppSettingsService
         await SaveAsync().ConfigureAwait(false);
     }
 
+    /// <summary>Environment variable that supplies the built-in key for a mod provider.</summary>
+    public static string ModApiKeyEnvironmentVariable(ModApiProvider provider) => provider switch
+    {
+        ModApiProvider.CurseForge => "BLUESTAR_CURSEFORGE_API_KEY",
+        ModApiProvider.NexusMods => "BLUESTAR_NEXUSMODS_API_KEY",
+        ModApiProvider.ModIo => "BLUESTAR_MODIO_API_KEY",
+        ModApiProvider.Thunderstore => "BLUESTAR_THUNDERSTORE_API_KEY",
+        _ => throw new ArgumentOutOfRangeException(nameof(provider), provider, null)
+    };
+
+    /// <summary>Environment variable that supplies the built-in mod.io API path.</summary>
+    public const string ModIoApiUrlEnvironmentVariable = "BLUESTAR_MODIO_API_URL";
+
+    /// <summary>
+    /// Built-in API base URL for a mod provider, or null when it has none configured.
+    /// Only mod.io uses one today (its per-account API path). Same lookup order as the keys.
+    /// </summary>
+    public string? GetBuiltInModApiBaseUrl(ModApiProvider provider)
+    {
+        if (provider != ModApiProvider.ModIo) return null;
+
+        var envUrl = Environment.GetEnvironmentVariable(ModIoApiUrlEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(envUrl)) return envUrl.Trim();
+
+        var bundledUrl = _bundledModApiKeys.Value?.ModIoApiUrl;
+        if (!string.IsNullOrWhiteSpace(bundledUrl)) return bundledUrl.Trim();
+
+        var userUrl = _current.ModApiKeys?.ModIoApiUrl;
+        return string.IsNullOrWhiteSpace(userUrl) ? null : userUrl.Trim();
+    }
+
+    /// <summary>
+    /// Built-in key for a mod provider. Looks at the environment variable first, then the settings.json
+    /// shipped next to the executable (fresh on every release), then the user's own settings.json.
+    /// </summary>
+    public string? GetBuiltInModApiKey(ModApiProvider provider)
+    {
+        var envKey = Environment.GetEnvironmentVariable(ModApiKeyEnvironmentVariable(provider));
+        if (IsRealApiKey(envKey)) return envKey!.Trim();
+
+        var bundledKey = _bundledModApiKeys.Value?.Get(provider);
+        if (IsRealApiKey(bundledKey)) return bundledKey!.Trim();
+
+        var userKey = _current.ModApiKeys?.Get(provider);
+        return IsRealApiKey(userKey) ? userKey!.Trim() : null;
+    }
+
+    private static bool IsRealApiKey(string? key) =>
+        !string.IsNullOrWhiteSpace(key) && key.Trim() != "YOUR-API-KEY";
+
+    private ModApiKeys? ReadBundledModApiKeys()
+    {
+        var localSettingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
+        if (!File.Exists(localSettingsPath)) return null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(localSettingsPath));
+            if (!doc.RootElement.TryGetProperty("modApiKeys", out var keysElem) || keysElem.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            return keysElem.Deserialize<ModApiKeys>(JsonOptions);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not read bundled settings.json for mod provider API keys");
+            return null;
+        }
+    }
+
     private void LoadSettings()
     {
         _lock.Wait();
@@ -418,5 +493,25 @@ public sealed class AppSettingsService
     public string? DefaultApiKey { get; init; } = "YOUR-API-KEY";
     public bool HideForceDlcWarning { get; init; } = false;
     public int InstancesColumnCount { get; init; } = 3;
+    public ModApiKeys? ModApiKeys { get; init; }
 }
+
+    /// <summary>Built-in mod provider keys as written to settings.json under "modApiKeys".</summary>
+    private sealed record ModApiKeys
+    {
+        public string? CurseForge { get; init; }
+        public string? NexusMods { get; init; }
+        public string? ModIo { get; init; }
+        public string? Thunderstore { get; init; }
+        public string? ModIoApiUrl { get; init; }
+
+        public string? Get(ModApiProvider provider) => provider switch
+        {
+            ModApiProvider.CurseForge => CurseForge,
+            ModApiProvider.NexusMods => NexusMods,
+            ModApiProvider.ModIo => ModIo,
+            ModApiProvider.Thunderstore => Thunderstore,
+            _ => null
+        };
+    }
 }

@@ -83,6 +83,7 @@ src/BlueStar.App/tools/depots/
 *.log
 settings.json
 **/settings.json
+modkeys.json
 *.env
 *.env.*
 *.token

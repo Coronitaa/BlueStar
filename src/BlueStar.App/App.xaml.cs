@@ -235,6 +235,10 @@ public partial class App : Application
         services.AddSingleton<IEngineDetector, BlueStar.Infrastructure.Engine.EngineDetector>();
         services.AddHttpClient<IBepInExService, BlueStar.Infrastructure.Mods.BepInExService>();
         services.AddHttpClient<IWorkshopService, BlueStar.Infrastructure.Workshop.WorkshopService>();
+        services.AddHttpClient<IModApiKeyService, BlueStar.Infrastructure.Mods.ModApiKeyService>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(20);
+        });
         services.AddSingleton<ISteamStatusService, BlueStar.Infrastructure.Steam.SteamStatusService>();
         services.AddSingleton<IModManager, BlueStar.Infrastructure.Mods.UnrealModManager>();
         services.AddSingleton<IModManager, BlueStar.Infrastructure.Mods.UnityModManager>();

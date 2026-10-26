@@ -142,6 +142,9 @@ public partial class SettingsViewModel : ObservableObject
 
     public bool CanTestConnection => !IsTestingConnection;
 
+    /// <summary>CurseForge, Nexus Mods and mod.io keys, each with its own personal override.</summary>
+    public ObservableCollection<ModApiKeyItemViewModel> ModApiKeys { get; } = [];
+
     [ObservableProperty]
     private string _instanceRoot = string.Empty;
 
@@ -323,7 +326,8 @@ public partial class SettingsViewModel : ObservableObject
         IDebugLogService? debugLogService = null,
         IInstanceManager? instanceManager = null,
         ICacheService? cacheService = null,
-        IUpdateService? updateService = null)
+        IUpdateService? updateService = null,
+        IModApiKeyService? modApiKeyService = null)
     {
         _authService = authService ?? throw new ArgumentNullException(nameof(authService));
         _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
@@ -355,6 +359,18 @@ public partial class SettingsViewModel : ObservableObject
         InstanceRoot = System.IO.Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "BlueStar", "instances");
+
+        if (modApiKeyService != null)
+        {
+            ModApiKeys.Add(new ModApiKeyItemViewModel(ModApiProvider.CurseForge, "CurseForge", "String_ModApiKeyCurseForgeDesc",
+                "https://console.curseforge.com/", modApiKeyService, _localizationService, _notificationService, _logger));
+            ModApiKeys.Add(new ModApiKeyItemViewModel(ModApiProvider.NexusMods, "Nexus Mods", "String_ModApiKeyNexusDesc",
+                "https://next.nexusmods.com/settings/api-keys", modApiKeyService, _localizationService, _notificationService, _logger));
+            ModApiKeys.Add(new ModApiKeyItemViewModel(ModApiProvider.ModIo, "mod.io", "String_ModApiKeyModIoDesc",
+                "https://mod.io/me/access", modApiKeyService, _localizationService, _notificationService, _logger));
+            ModApiKeys.Add(new ModApiKeyItemViewModel(ModApiProvider.Thunderstore, "Thunderstore", "String_ModApiKeyThunderstoreDesc",
+                "https://thunderstore.io/settings/teams/", modApiKeyService, _localizationService, _notificationService, _logger));
+        }
 
         PopulateDefaultExploreOptions();
         _localizationService.LanguageChanged += (_, _) =>
@@ -429,6 +445,11 @@ public partial class SettingsViewModel : ObservableObject
             {
                 HasCustomKey = false;
                 AuthStatusMessage = "🌐 Built-in backend API active and operational. Personal API key is optional.";
+            }
+
+            foreach (var item in ModApiKeys)
+            {
+                await item.LoadAsync().ConfigureAwait(true);
             }
         }
         catch (Exception ex)

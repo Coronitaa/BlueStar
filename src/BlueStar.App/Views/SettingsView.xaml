@@ -152,6 +152,90 @@
                                             </StackPanel>
                                         </Expander>
 
+                        <!-- ═══ MOD PROVIDER API KEYS SECTION ═══ -->
+                                        <Expander Style="{StaticResource SettingsExpanderCard}">
+                                            <Expander.Header>
+                                                <Grid Margin="0,0,12,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0" Background="#16A78BFA"
+                                                            BorderBrush="#35A78BFA" BorderThickness="1"
+                                                            Width="40" Height="40" CornerRadius="{StaticResource RadiusSm}"
+                                                            VerticalAlignment="Center" Margin="0,0,14,0">
+                                                        <Viewbox Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <Canvas Width="24" Height="24">
+                                                                <Path Fill="#A78BFA" Data="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4z"/>
+                                                                <Path Fill="#FFFFFF" Data="M16.5 13l1.2 2.3 2.3 1.2-2.3 1.2-1.2 2.3-1.2-2.3-2.3-1.2 2.3-1.2z"/>
+                                                            </Canvas>
+                                                        </Viewbox>
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="{DynamicResource String_ModApiKeysHeader}" Style="{StaticResource H2}" Margin="0,0,0,3"/>
+                                                        <TextBlock Text="{DynamicResource String_ModApiKeysDesc}"
+                                                                   Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Expander.Header>
+                                            <ItemsControl ItemsSource="{Binding ModApiKeys}" Margin="0,4,0,0">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Background="{StaticResource SurfaceInputBrush}"
+                                                                BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                                                                CornerRadius="{StaticResource RadiusMd}" Padding="14,12" Margin="0,0,0,12">
+                                                            <StackPanel>
+                                                                <Grid Margin="0,0,0,6">
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <TextBlock Grid.Column="0" Text="{Binding DisplayName}" Style="{StaticResource CaptionBold}" FontSize="14" VerticalAlignment="Center"/>
+                                                                    <Button Grid.Column="1" Content="{DynamicResource String_ModApiKeyGetLink}"
+                                                                            Style="{StaticResource GhostButton}"
+                                                                            Command="{Binding OpenPortalCommand}"/>
+                                                                </Grid>
+                                                                <TextBlock Text="{Binding Description}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                                                <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource BodySmall}" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                                                                <TextBlock Text="{DynamicResource String_ApiKeyLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                                                                <TextBox Style="{StaticResource DarkTextBox}"
+                                                                         Text="{Binding KeyText, UpdateSourceTrigger=PropertyChanged}"
+                                                                         Margin="0,0,0,12"/>
+
+                                                                <StackPanel Visibility="{Binding SupportsCustomApiUrl, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                                    <TextBlock Text="{DynamicResource String_ModApiUrlLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                                                                    <TextBlock Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,6"
+                                                                               Text="{Binding ActiveApiUrl, StringFormat={}{0}}"/>
+                                                                    <TextBox Style="{StaticResource DarkTextBox}"
+                                                                             Text="{Binding ApiUrlText, UpdateSourceTrigger=PropertyChanged}"
+                                                                             Margin="0,0,0,12"/>
+                                                                </StackPanel>
+
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <Button Content="{DynamicResource String_SavePersonalKeyBtn}"
+                                                                            Style="{StaticResource PrimaryButton}"
+                                                                            Command="{Binding SaveCommand}"
+                                                                            Margin="0,0,10,0"/>
+                                                                    <Button Content="{DynamicResource String_TestConnectionBtn}"
+                                                                            Style="{StaticResource SecondaryButton}"
+                                                                            Command="{Binding TestCommand}"
+                                                                            Margin="0,0,10,0"/>
+                                                                    <Button Content="{DynamicResource String_ClearPersonalOverrideBtn}"
+                                                                            Style="{StaticResource GhostButton}"
+                                                                            Command="{Binding ClearCommand}"
+                                                                            Visibility="{Binding HasCustomKey, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                                </StackPanel>
+
+                                                                <TextBlock Text="{Binding TestResult}" Style="{StaticResource Body}" TextWrapping="Wrap" Margin="0,10,0,0"
+                                                                           Visibility="{Binding TestResult, Converter={StaticResource NullToVisibilityConverter}}"/>
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </Expander>
+
                         <!-- ═══ PATHS & STORAGE SECTION ═══ -->
                                         <Expander Style="{StaticResource SettingsExpanderCard}">
                                             <Expander.Header>
