@@ -286,7 +286,9 @@ if ($resolvedApiKey) {
 }
 
 $releaseSettings = [ordered]@{
-    language = "en"
+    # "system": BlueStar usa el idioma de Windows en el primer inicio (Espanol -> es, resto -> en).
+    # El instalador lo reemplaza por el idioma elegido en el asistente.
+    language = "system"
     defaultApiUrl = "https://depotbox.org"
     defaultApiKey = $resolvedApiKey
     deleteDepotsAfterInstall = $true

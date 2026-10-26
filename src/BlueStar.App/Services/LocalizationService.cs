@@ -51,14 +51,24 @@ public sealed class LocalizationService : ILocalizationService, INotifyPropertyC
         _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        var initialLang = _settingsService.Language;
+        var initialLang = _settingsService.ConfiguredLanguage;
         if (string.IsNullOrWhiteSpace(initialLang) || !SupportedLanguages.ContainsKey(initialLang))
         {
-            initialLang = "en";
+            // First launch (or "system" from a release build): follow Windows and remember the choice
+            var systemLang = ResolveSystemLanguage(CultureInfo.CurrentUICulture);
+            _logger.LogInformation("No language configured; using system language {Culture} -> {Lang}", CultureInfo.CurrentUICulture.Name, systemLang);
+            SetLanguage(systemLang, persist: true);
+            return;
         }
 
         SetLanguage(initialLang, persist: false);
     }
+
+    /// <summary>
+    /// Spanish for any Spanish Windows display language; English for every other language.
+    /// </summary>
+    public static string ResolveSystemLanguage(CultureInfo uiCulture) =>
+        uiCulture.TwoLetterISOLanguageName.Equals("es", StringComparison.OrdinalIgnoreCase) ? "es" : "en";
 
     public void SetLanguage(string languageCode) => SetLanguage(languageCode, persist: true);
 

@@ -153,6 +153,22 @@ begin
     RaiseException(FmtMessage(CustomMessage('PrereqInstallFailed'), [DisplayName, IntToStr(ResultCode)]));
 end;
 
+// settings.json comes from PowerShell's ConvertTo-Json, which writes '"key":  value' with two spaces.
+procedure SetJsonLanguage(var ContentStr: String; const Lang: String);
+var
+  Values: array[0..2] of String;
+  I: Integer;
+begin
+  Values[0] := 'system';
+  Values[1] := 'en';
+  Values[2] := 'es';
+  for I := 0 to 2 do
+  begin
+    StringChange(ContentStr, '"language":  "' + Values[I] + '"', '"language": "' + Lang + '"');
+    StringChange(ContentStr, '"language": "' + Values[I] + '"', '"language": "' + Lang + '"');
+  end;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   SettingsFile: String;
@@ -197,8 +213,7 @@ begin
       if LoadStringFromFile(SettingsFile, FileContent) then
       begin
         ContentStr := String(FileContent);
-        StringChange(ContentStr, '"language": "en"', '"language": "' + SelectedLang + '"');
-        StringChange(ContentStr, '"language": "es"', '"language": "' + SelectedLang + '"');
+        SetJsonLanguage(ContentStr, SelectedLang);
         SaveStringToFile(SettingsFile, AnsiString(ContentStr), False);
       end;
     end;
@@ -212,8 +227,7 @@ begin
       if LoadStringFromFile(AppDataFile, FileContent) then
       begin
         ContentStr := String(FileContent);
-        StringChange(ContentStr, '"language": "en"', '"language": "' + SelectedLang + '"');
-        StringChange(ContentStr, '"language": "es"', '"language": "' + SelectedLang + '"');
+        SetJsonLanguage(ContentStr, SelectedLang);
         SaveStringToFile(AppDataFile, AnsiString(ContentStr), False);
       end;
     end

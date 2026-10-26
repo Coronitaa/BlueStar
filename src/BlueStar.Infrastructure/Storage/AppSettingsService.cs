@@ -335,6 +335,9 @@ public sealed class AppSettingsService
     /// <summary>Application language code ("en" or "es").</summary>
     public string Language => string.IsNullOrWhiteSpace(_current.Language) ? "en" : _current.Language;
 
+    /// <summary>Language exactly as stored: null or "system" until BlueStar picks one on first launch.</summary>
+    public string? ConfiguredLanguage => _current.Language;
+
     /// <summary>Persists the language setting.</summary>
     public async Task SetLanguageAsync(string language)
     {
@@ -394,7 +397,7 @@ public sealed class AppSettingsService
 
     private sealed record AppSettings
     {
-        public string? Language { get; init; } = "en";
+        public string? Language { get; init; }
         public string? LastInstallDirectory { get; init; }
         public string? DefaultDownloadDirectory { get; init; }
         public bool DeleteDepotsAfterInstall { get; init; } = true;
