@@ -197,7 +197,7 @@ begin
 
     if NeedWebView2() then
     begin
-      InstallPrerequisite('MicrosoftEdgeWebView2RuntimeInstallerX64.exe', 'Microsoft Edge WebView2 Runtime', '/silent /install', False);
+      InstallPrerequisite('MicrosoftEdgeWebview2Setup.exe', 'Microsoft Edge WebView2 Runtime', '/silent /install', False);
       if NeedWebView2() then
         Log('Verification warning: Microsoft Edge WebView2 is still not detected. BlueStar offers its bundled installer at startup.');
     end;

@@ -73,7 +73,8 @@ public sealed class PrerequisiteService : IPrerequisiteService
                 Description = "Provides legacy DirectX 9.0c, D3DX9, D3DCompiler, and XAudio2 DLLs essential for games.",
                 DownloadUrl = "https://download.microsoft.com/download/1/7/1/1718CCC4-6315-4D8E-9543-8E28A4E18C4C/dxwebsetup.exe",
                 SilentArguments = "/Q",
-                IsEssential = true,
+                // Only some older games need it; BlueStar itself does not.
+                IsEssential = false,
                 IsRecognized = true
             },
             new()
@@ -92,10 +93,11 @@ public sealed class PrerequisiteService : IPrerequisiteService
                 Id = "dotnet_runtime_8",
                 Name = ".NET Runtime 8.0 (x64)",
                 Category = ".NET Runtime",
-                Description = "Required for DepotDownloader and multi-manifest game downloads.",
+                Description = "Required for Steam Workshop downloads through DepotDownloader.",
                 DownloadUrl = "https://aka.ms/dotnet/8.0/dotnet-runtime-win-x64.exe",
                 SilentArguments = "/install /quiet /norestart",
-                IsEssential = true,
+                // BlueStar ships its own .NET runtime; only the Workshop downloader tool needs a system one.
+                IsEssential = false,
                 IsRecognized = true
             },
             new()
@@ -371,41 +373,32 @@ public sealed class PrerequisiteService : IPrerequisiteService
     /// <inheritdoc />
     public bool IsSystemInstalled(PrerequisiteItem item)
     {
+        var installed = DetectInstalled(item);
+        _logger.LogDebug("Prerequisite check: {Id} installed = {Installed}", item.Id, installed);
+        return installed;
+    }
+
+    // Each check has a registry probe and a file-system fallback: inside an MSIX container, or when a registry
+    // value is missing or malformed, the registry alone reported runtimes that are present as missing.
+    private bool DetectInstalled(PrerequisiteItem item)
+    {
         try
         {
             if (item.Id == "vcredist_2015_2022_x64")
             {
-                using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64")
-                             ?? Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\X64");
-                if (key != null)
-                {
-                    var installed = key.GetValue("Installed");
-                    var major = key.GetValue("Major");
-                    var bld = key.GetValue("Bld");
-
-                    if (installed is int instVal && instVal == 1 &&
-                        major is int majVal && majVal >= 14 &&
-                        bld is int bldVal && bldVal >= 24215)
-                    {
-                        return true;
-                    }
-                }
-                return false;
+                return VcRuntimeRegistered(
+                           @"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64",
+                           @"SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\X64")
+                       || AllFilesExist(Environment.GetFolderPath(Environment.SpecialFolder.System),
+                           "vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll");
             }
             else if (item.Id == "vcredist_2015_2022_x86")
             {
-                using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\X86")
-                             ?? Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X86");
-                if (key != null)
-                {
-                    var installed = key.GetValue("Installed");
-                    var major = key.GetValue("Major");
-                    if (installed is int instVal && instVal == 1 && major is int majVal && majVal >= 14)
-                    {
-                        return true;
-                    }
-                }
-                return false;
+                return VcRuntimeRegistered(
+                           @"SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\X86",
+                           @"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X86")
+                       || AllFilesExist(Environment.GetFolderPath(Environment.SpecialFolder.SystemX86),
+                           "vcruntime140.dll", "msvcp140.dll");
             }
             else if (item.Id == "directx_enduser")
             {
@@ -454,7 +447,12 @@ public sealed class PrerequisiteService : IPrerequisiteService
                 if (keyHkcu?.GetValue("pv") is string pv3 && !string.IsNullOrWhiteSpace(pv3) && pv3 != "0.0.0.0")
                     return true;
 
-                return false;
+                return HasVersionedExecutable(
+                           Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Microsoft", "EdgeWebView", "Application"),
+                           "msedgewebview2.exe")
+                       || HasVersionedExecutable(
+                           Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "EdgeWebView", "Application"),
+                           "msedgewebview2.exe");
             }
             else if (item.Id == "ue_prereqs_x64")
             {
@@ -467,9 +465,57 @@ public sealed class PrerequisiteService : IPrerequisiteService
                     return true;
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Prerequisite check failed for {Id}", item.Id);
+        }
 
         return false;
+    }
+
+    private static bool VcRuntimeRegistered(params string[] subKeys)
+    {
+        foreach (var subKey in subKeys)
+        {
+            try
+            {
+                using var key = Registry.LocalMachine.OpenSubKey(subKey);
+                if (key == null) continue;
+
+                // 'Bld' is absent on some older 2015 installs; treat Installed=1 + Major>=14 as enough then.
+                if (key.GetValue("Installed") is int installed && installed == 1 &&
+                    key.GetValue("Major") is int major && major >= 14 &&
+                    (key.GetValue("Bld") is not int bld || bld >= 24215))
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+                // Fall through to the next view / the file-system check.
+            }
+        }
+
+        return false;
+    }
+
+    internal static bool AllFilesExist(string directory, params string[] fileNames) =>
+        !string.IsNullOrWhiteSpace(directory) && fileNames.All(f => File.Exists(Path.Combine(directory, f)));
+
+    /// <summary>
+    /// True when <paramref name="root"/> holds a version folder (e.g. 141.0.3537.71) containing <paramref name="exeName"/>.
+    /// </summary>
+    internal static bool HasVersionedExecutable(string root, string exeName)
+    {
+        try
+        {
+            return Directory.Exists(root) &&
+                   Directory.EnumerateDirectories(root).Any(d => File.Exists(Path.Combine(d, exeName)));
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <inheritdoc />
@@ -478,13 +524,14 @@ public sealed class PrerequisiteService : IPrerequisiteService
 
     /// <inheritdoc />
     /// <summary>
-    /// Offline installers bundled with release builds, by prerequisite id.
+    /// Installers bundled with the Setup build, by prerequisite id (VC++ offline installers, WebView2 bootstrapper).
+    /// The MSIX/Store package ships none of them and downloads on demand instead.
     /// </summary>
     private static readonly Dictionary<string, string> BundledInstallers = new(StringComparer.OrdinalIgnoreCase)
     {
         ["vcredist_2015_2022_x64"] = "vc_redist.x64.exe",
         ["vcredist_2015_2022_x86"] = "vc_redist.x86.exe",
-        ["webview2_runtime"] = "MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
+        ["webview2_runtime"] = "MicrosoftEdgeWebview2Setup.exe"
     };
 
     internal static string? BundledInstallerPath(string? id, string? baseDirectory = null)

@@ -393,7 +393,6 @@
     <sys:String x:Key="String_WorkshopInstallWebViewBtn">Instalar WebView2</sys:String>
     <sys:String x:Key="String_ModBrowseContentBtn">Explorar contenido</sys:String>
     <sys:String x:Key="String_BrowseThunderstoreBtn">Explorar Thunderstore</sys:String>
-    <sys:String x:Key="String_BrowseWorkshopBtn">Explorar Steam Workshop</sys:String>
     <sys:String x:Key="String_DragDropModHint">Arrastra y suelta aquí archivos .zip, .dll o .7z para instalarlos automáticamente</sys:String>
     <sys:String x:Key="String_UnsupportedModFile">❌ Formato de archivo no compatible. Arrastra un archivo de mod .zip, .dll o .7z.</sys:String>
     <sys:String x:Key="String_ModSearchPlaceholder">Buscar mods instalados...</sys:String>

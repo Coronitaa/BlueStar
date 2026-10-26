@@ -14,7 +14,7 @@ namespace BlueStar.App.Services;
 public static class WebView2AvailabilityService
 {
     private const string BundledRuntimeFolderName = "WebView2Runtime";
-    private const string BundledInstallerName = "MicrosoftEdgeWebView2RuntimeInstallerX64.exe";
+    private const string BundledInstallerName = "MicrosoftEdgeWebview2Setup.exe";
     private const string SandboxAclMarker = ".acl-granted";
 
     private static bool? _isCachedAvailable;
@@ -106,7 +106,7 @@ public static class WebView2AvailabilityService
     }
 
     /// <summary>
-    /// Runs the bundled WebView2 Runtime offline installer when present; otherwise opens the official download page.
+    /// Runs the bundled WebView2 Runtime installer (Evergreen bootstrapper) when present; otherwise opens the official download page.
     /// </summary>
     public static void OpenOfficialDownloadPage()
     {

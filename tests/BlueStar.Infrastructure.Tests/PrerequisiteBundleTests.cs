@@ -24,7 +24,7 @@ public class PrerequisiteBundleTests : IDisposable
     [Theory]
     [InlineData("vcredist_2015_2022_x64", "vc_redist.x64.exe")]
     [InlineData("vcredist_2015_2022_x86", "vc_redist.x86.exe")]
-    [InlineData("webview2_runtime", "MicrosoftEdgeWebView2RuntimeInstallerX64.exe")]
+    [InlineData("webview2_runtime", "MicrosoftEdgeWebview2Setup.exe")]
     public void Bundled_offline_installer_is_used_when_shipped_with_the_app(string id, string fileName)
     {
         var installer = Path.Combine(_appDir, "prerequisites", fileName);
