@@ -28,8 +28,10 @@ public sealed record ModListItem
     /// <summary>Formatted file size or count summary (e.g. "4.2 MB · 12 files").</summary>
     public string? FormattedSize { get; init; }
 
-    /// <summary>Geometry resource key for the icon (IconSteam, IconMod, etc.).</summary>
+    /// <summary>Geometry resource key for the icon (IconSteam, IconBolt, IconMod, etc.).</summary>
     public string IconGeometryKey => SourceLabel.Contains("Workshop", System.StringComparison.OrdinalIgnoreCase)
         ? "IconSteam"
-        : "IconMod";
+        : SourceLabel.Contains("Thunderstore", System.StringComparison.OrdinalIgnoreCase)
+            ? "IconBolt"
+            : "IconMod";
 }

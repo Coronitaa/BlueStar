@@ -2615,10 +2615,18 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         ICacheService? cacheService = null,
         IRecommendationProvider? recommendationProvider = null,
         IModInstallPipeline? modInstallPipeline = null,
-        IWorkshopModFetcher? workshopModFetcher = null)
+        IWorkshopModFetcher? workshopModFetcher = null,
+        IThunderstoreService? thunderstoreService = null)
     {
-        ModsTab = new ModsTabViewModel(modInstallPipeline, modManagerRegistry, localizationService, logger,
-            workshopModFetcher, workshopService);
+        ModsTab = new ModsTabViewModel(
+            modInstallPipeline,
+            modManagerRegistry,
+            localizationService,
+            logger,
+            workshopModFetcher,
+            workshopService,
+            bepInExService,
+            thunderstoreService);
         ModsTab.ModsChanged += (_, _) => OnPropertyChanged(nameof(ModsSummaryText));
         ModsTab.InstallEngineAction = async () => await InstallOrUpdateBepInExAsync().ConfigureAwait(true);
 
@@ -5850,13 +5858,11 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         IsLoadingBepInEx = true;
         try
         {
-            IsBepInExInstalled = _bepInExService.IsInstalled(Instance.InstallPath);
-            InstalledBepInExVersion = await _bepInExService.GetInstalledVersionAsync(Instance.InstallPath, CancellationToken.None).ConfigureAwait(true);
-            ModsTab.UpdateEngineStatus(IsUnityEngine ? "BepInEx" : null, InstalledBepInExVersion, IsBepInExInstalled, isSupported: IsUnityEngine);
-
-            var releases = await _bepInExService.GetAvailableReleasesAsync(false, CancellationToken.None).ConfigureAwait(true);
-            AvailableBepInExVersions = new ObservableCollection<BepInExRelease>(releases);
-            SelectedBepInExVersion = AvailableBepInExVersions.FirstOrDefault();
+            await ModsTab.CheckAndLoadEngineAsync().ConfigureAwait(true);
+            IsBepInExInstalled = ModsTab.IsEngineInstalled;
+            InstalledBepInExVersion = ModsTab.EngineVersion;
+            AvailableBepInExVersions = ModsTab.AvailableEngineReleases;
+            SelectedBepInExVersion = ModsTab.SelectedEngineRelease;
         }
         catch (Exception ex)
         {
@@ -5882,17 +5888,11 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
         try
         {
-            var success = await _bepInExService.InstallAsync(Instance.InstallPath, SelectedBepInExVersion, null, CancellationToken.None).ConfigureAwait(true);
-            if (success)
-            {
-                StatusMessage = $"✅ BepInEx {SelectedBepInExVersion.Version} installed successfully!";
-                await CheckAndLoadBepInExAsync().ConfigureAwait(true);
-                await LoadModsAsync().ConfigureAwait(true);
-            }
-            else
-            {
-                StatusMessage = "❌ Failed to install BepInEx.";
-            }
+            ModsTab.SelectedEngineRelease = SelectedBepInExVersion;
+            await ModsTab.InstallOrUpdateEngineAsync().ConfigureAwait(true);
+            IsBepInExInstalled = ModsTab.IsEngineInstalled;
+            InstalledBepInExVersion = ModsTab.EngineVersion;
+            StatusMessage = ModsTab.StatusMessage;
         }
         catch (Exception ex)
         {
@@ -5915,17 +5915,10 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
         try
         {
-            var success = await _bepInExService.UninstallAsync(Instance.InstallPath, keepPluginsFolder: true, CancellationToken.None).ConfigureAwait(true);
-            if (success)
-            {
-                StatusMessage = "✅ BepInEx uninstalled successfully (plugins folder preserved).";
-                await CheckAndLoadBepInExAsync().ConfigureAwait(true);
-                await LoadModsAsync().ConfigureAwait(true);
-            }
-            else
-            {
-                StatusMessage = "❌ Failed to uninstall BepInEx.";
-            }
+            await ModsTab.UninstallEngineAsync().ConfigureAwait(true);
+            IsBepInExInstalled = ModsTab.IsEngineInstalled;
+            InstalledBepInExVersion = ModsTab.EngineVersion;
+            StatusMessage = ModsTab.StatusMessage;
         }
         catch (Exception ex)
         {
@@ -5939,15 +5932,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    public void OpenBepInExFolder()
-    {
-        if (Instance == null || string.IsNullOrWhiteSpace(Instance.InstallPath)) return;
-        var bepDir = Path.Combine(Instance.InstallPath, "BepInEx");
-        if (Directory.Exists(bepDir))
-        {
-            Process.Start(new ProcessStartInfo { FileName = bepDir, UseShellExecute = true });
-        }
-    }
+    public void OpenBepInExFolder() => ModsTab.OpenEngineFolder();
 
     // ── Steam Workshop Integration ──
     private async Task CheckWorkshopSupportAsync()

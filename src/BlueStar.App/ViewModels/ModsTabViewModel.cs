@@ -26,6 +26,10 @@ public sealed partial class ModsTabViewModel : ObservableObject
     private readonly IModManagerRegistry? _legacyRegistry;
     private readonly ILocalizationService? _localization;
     private readonly ILogger _logger;
+    private readonly IWorkshopModFetcher? _workshopFetcher;
+    private readonly IWorkshopService? _workshopService;
+    private readonly IBepInExService? _bepInExService;
+    private readonly IThunderstoreService? _thunderstoreService;
     private ModPackage? _pendingPackage;
 
     public ModsTabViewModel(
@@ -34,7 +38,9 @@ public sealed partial class ModsTabViewModel : ObservableObject
         ILocalizationService? localization,
         ILogger logger,
         IWorkshopModFetcher? workshopFetcher = null,
-        IWorkshopService? workshopService = null)
+        IWorkshopService? workshopService = null,
+        IBepInExService? bepInExService = null,
+        IThunderstoreService? thunderstoreService = null)
     {
         _pipeline = pipeline;
         _legacyRegistry = legacyRegistry;
@@ -42,20 +48,79 @@ public sealed partial class ModsTabViewModel : ObservableObject
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _workshopFetcher = workshopFetcher;
         _workshopService = workshopService;
-        Workshop = new WorkshopBrowserViewModel(InstallWorkshopItemAsync);
-    }
+        _bepInExService = bepInExService;
+        _thunderstoreService = thunderstoreService;
 
-    private readonly IWorkshopModFetcher? _workshopFetcher;
-    private readonly IWorkshopService? _workshopService;
+        Workshop = new WorkshopBrowserViewModel(InstallWorkshopItemAsync);
+        if (_thunderstoreService != null)
+        {
+            Thunderstore = new ThunderstoreBrowserViewModel(
+                _thunderstoreService,
+                package => InstallPackageAsync(package),
+                localization,
+                logger);
+            Thunderstore.CheckInstalledStatus = CheckIfThunderstorePackageInstalled;
+            Thunderstore.OnModInstalledCallback = async () => await LoadAsync().ConfigureAwait(true);
+        }
+
+        // Cross-modal switching between providers if both are available
+        Workshop.SwitchToThunderstoreAction = () =>
+        {
+            if (Instance != null && HasThunderstoreSupport && !string.IsNullOrWhiteSpace(ThunderstoreCommunity))
+            {
+                Thunderstore?.Open(Instance, ThunderstoreCommunity, HasWorkshopSupport, () => OpenWorkshop());
+            }
+        };
+        if (Thunderstore != null)
+        {
+            Thunderstore.SwitchToWorkshopAction = () => OpenWorkshop();
+        }
+    }
 
     /// <summary>Steam Workshop browser modal of this tab.</summary>
     public WorkshopBrowserViewModel Workshop { get; }
+
+    /// <summary>Thunderstore package browser modal of this tab.</summary>
+    public ThunderstoreBrowserViewModel? Thunderstore { get; }
 
     [RelayCommand]
     public void OpenWorkshop()
     {
         if (Instance == null) return;
-        Workshop.Open(Instance.AppId);
+        Workshop.Open(Instance.AppId, HasThunderstoreSupport, () =>
+        {
+            if (Instance != null && HasThunderstoreSupport && !string.IsNullOrWhiteSpace(ThunderstoreCommunity))
+            {
+                Thunderstore?.Open(Instance, ThunderstoreCommunity, HasWorkshopSupport, () => OpenWorkshop());
+            }
+        });
+    }
+
+    [RelayCommand]
+    public void OpenThunderstore()
+    {
+        if (Instance == null || !HasThunderstoreSupport || string.IsNullOrWhiteSpace(ThunderstoreCommunity)) return;
+        Thunderstore?.Open(Instance, ThunderstoreCommunity, HasWorkshopSupport, () => OpenWorkshop());
+    }
+
+    [RelayCommand]
+    public void OpenContentBrowser()
+    {
+        if (Instance == null) return;
+
+        if (HasThunderstoreSupport && !HasWorkshopSupport)
+        {
+            OpenThunderstore();
+        }
+        else if (!HasThunderstoreSupport && HasWorkshopSupport)
+        {
+            OpenWorkshop();
+        }
+        else if (HasThunderstoreSupport && HasWorkshopSupport)
+        {
+            // Both are supported: default to Thunderstore with option to switch to Workshop
+            OpenThunderstore();
+        }
     }
 
     /// <summary>
@@ -175,18 +240,256 @@ public sealed partial class ModsTabViewModel : ObservableObject
     [ObservableProperty]
     private string _selectedFilter = "All";
 
+    // ── Online Mod Providers Availability ──
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasAnyProvider))]
+    [NotifyPropertyChangedFor(nameof(CanShowWorkshopFilter))]
+    private bool _hasWorkshopSupport;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasAnyProvider))]
+    [NotifyPropertyChangedFor(nameof(CanShowThunderstoreFilter))]
+    private bool _hasThunderstoreSupport;
+
+    [ObservableProperty]
+    private string? _thunderstoreCommunity;
+
+    [ObservableProperty]
+    private bool _isCheckingProviders;
+
+    public bool HasAnyProvider => HasWorkshopSupport || HasThunderstoreSupport;
+    public bool CanShowWorkshopFilter => HasWorkshopSupport || WorkshopModsCount > 0;
+    public bool CanShowThunderstoreFilter => HasThunderstoreSupport || ThunderstoreModsCount > 0;
+    public bool CanShowLocalFilter => LocalModsCount > 0;
+
+    public async Task CheckProvidersAsync(GameInstance instance)
+    {
+        if (instance == null) return;
+        IsCheckingProviders = true;
+        try
+        {
+            if (_workshopService != null && instance.AppId > 0)
+            {
+                HasWorkshopSupport = await _workshopService.HasWorkshopSupportAsync(instance.AppId).ConfigureAwait(true);
+            }
+            else
+            {
+                HasWorkshopSupport = false;
+            }
+
+            if (_thunderstoreService != null)
+            {
+                ThunderstoreCommunity = await _thunderstoreService.ResolveCommunityAsync(instance).ConfigureAwait(true);
+                HasThunderstoreSupport = !string.IsNullOrWhiteSpace(ThunderstoreCommunity);
+            }
+            else
+            {
+                HasThunderstoreSupport = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to check mod providers support for {Name}", instance.Name);
+        }
+        finally
+        {
+            IsCheckingProviders = false;
+            OnPropertyChanged(nameof(HasAnyProvider));
+            OnPropertyChanged(nameof(CanShowWorkshopFilter));
+            OnPropertyChanged(nameof(CanShowThunderstoreFilter));
+            OnPropertyChanged(nameof(CanShowLocalFilter));
+        }
+    }
+
     // ── Mod Engine / Loader info (e.g. BepInEx, UE4SS, Native) ──
     [ObservableProperty]
     private string? _engineName;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVersionDifferent))]
+    [NotifyPropertyChangedFor(nameof(EngineActionButtonText))]
     private string? _engineVersion;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(EngineActionButtonText))]
     private bool _isEngineInstalled;
 
     [ObservableProperty]
     private bool _isEngineSupported;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(InstallOrUpdateEngineCommand))]
+    [NotifyCanExecuteChangedFor(nameof(UninstallEngineCommand))]
+    private bool _isLoadingEngine;
+
+    public ObservableCollection<BepInExRelease> AvailableEngineReleases { get; } = [];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVersionDifferent))]
+    [NotifyPropertyChangedFor(nameof(EngineActionButtonText))]
+    [NotifyCanExecuteChangedFor(nameof(InstallOrUpdateEngineCommand))]
+    private BepInExRelease? _selectedEngineRelease;
+
+    public bool IsVersionDifferent =>
+        IsEngineInstalled &&
+        SelectedEngineRelease != null &&
+        !string.IsNullOrWhiteSpace(EngineVersion) &&
+        !string.Equals(SelectedEngineRelease.Version, EngineVersion, StringComparison.OrdinalIgnoreCase);
+
+    public string EngineActionButtonText
+    {
+        get
+        {
+            if (!IsEngineInstalled)
+            {
+                return SelectedEngineRelease != null
+                    ? string.Format(T("String_EngineInstallBtn", "Install v{0}"), SelectedEngineRelease.Version)
+                    : T("String_InstallEngineBtn", "Install Loader");
+            }
+            if (IsVersionDifferent && SelectedEngineRelease != null)
+            {
+                return string.Format(T("String_EngineSwitchBtn", "Switch to v{0}"), SelectedEngineRelease.Version);
+            }
+            return T("String_EngineReinstallBtn", "Reinstall");
+        }
+    }
+
+    [RelayCommand]
+    public async Task CheckAndLoadEngineAsync()
+    {
+        var instance = Instance;
+        if (instance == null || string.IsNullOrWhiteSpace(instance.InstallPath)) return;
+
+        var isUnity = instance.Engine?.Supports(EngineCapabilities.BepInExSupported) == true;
+        IsEngineSupported = isUnity;
+        EngineName = isUnity ? "BepInEx" : null;
+
+        if (!isUnity || _bepInExService == null)
+        {
+            IsEngineInstalled = false;
+            EngineVersion = null;
+            return;
+        }
+
+        try
+        {
+            IsLoadingEngine = true;
+            IsEngineInstalled = _bepInExService.IsInstalled(instance.InstallPath);
+            EngineVersion = await _bepInExService.GetInstalledVersionAsync(instance.InstallPath, CancellationToken.None).ConfigureAwait(true);
+
+            if (AvailableEngineReleases.Count == 0)
+            {
+                var releases = await _bepInExService.GetAvailableReleasesAsync(false, CancellationToken.None).ConfigureAwait(true);
+                AvailableEngineReleases.Clear();
+                foreach (var r in releases)
+                {
+                    AvailableEngineReleases.Add(r);
+                }
+            }
+
+            if (SelectedEngineRelease == null && AvailableEngineReleases.Count > 0)
+            {
+                SelectedEngineRelease = !string.IsNullOrWhiteSpace(EngineVersion)
+                    ? AvailableEngineReleases.FirstOrDefault(r => r.Version.Equals(EngineVersion, StringComparison.OrdinalIgnoreCase)) ?? AvailableEngineReleases[0]
+                    : AvailableEngineReleases[0];
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to inspect BepInEx status for {Instance}", instance.Name);
+        }
+        finally
+        {
+            IsLoadingEngine = false;
+            OnPropertyChanged(nameof(IsVersionDifferent));
+            OnPropertyChanged(nameof(EngineActionButtonText));
+        }
+    }
+
+    [RelayCommand]
+    public async Task InstallOrUpdateEngineAsync()
+    {
+        var instance = Instance;
+        if (instance == null || string.IsNullOrWhiteSpace(instance.InstallPath) || SelectedEngineRelease == null || _bepInExService == null)
+            return;
+
+        IsLoadingEngine = true;
+        ShowStatus(string.Format(T("String_EngineInstalling", "⏳ Installing BepInEx {0}..."), SelectedEngineRelease.Version), isError: false);
+        try
+        {
+            var ok = await _bepInExService.InstallAsync(instance.InstallPath, SelectedEngineRelease, null, CancellationToken.None).ConfigureAwait(true);
+            if (ok)
+            {
+                ShowStatus(string.Format(T("String_EngineInstalledSuccess", "✅ BepInEx {0} installed successfully!"), SelectedEngineRelease.Version), isError: false);
+                await CheckAndLoadEngineAsync().ConfigureAwait(true);
+                await LoadAsync().ConfigureAwait(true);
+            }
+            else
+            {
+                ShowStatus(T("String_EngineInstallFailed", "❌ Failed to install BepInEx."), isError: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to install BepInEx for {Instance}", instance.Name);
+            ShowStatus(string.Format(T("String_EngineInstallFailed", "❌ Failed to install BepInEx: {0}"), ex.Message), isError: true);
+        }
+        finally
+        {
+            IsLoadingEngine = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task UninstallEngineAsync()
+    {
+        var instance = Instance;
+        if (instance == null || string.IsNullOrWhiteSpace(instance.InstallPath) || _bepInExService == null)
+            return;
+
+        IsLoadingEngine = true;
+        ShowStatus(T("String_EngineUninstalling", "⏳ Uninstalling BepInEx..."), isError: false);
+        try
+        {
+            var ok = await _bepInExService.UninstallAsync(instance.InstallPath, keepPluginsFolder: true, CancellationToken.None).ConfigureAwait(true);
+            if (ok)
+            {
+                ShowStatus(T("String_EngineUninstallSuccess", "✅ BepInEx uninstalled (plugins folder preserved)."), isError: false);
+                await CheckAndLoadEngineAsync().ConfigureAwait(true);
+                await LoadAsync().ConfigureAwait(true);
+            }
+            else
+            {
+                ShowStatus(T("String_EngineUninstallFailed", "❌ Failed to uninstall BepInEx."), isError: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to uninstall BepInEx for {Instance}", instance.Name);
+            ShowStatus(string.Format(T("String_EngineUninstallFailed", "❌ Failed to uninstall BepInEx: {0}"), ex.Message), isError: true);
+        }
+        finally
+        {
+            IsLoadingEngine = false;
+        }
+    }
+
+    [RelayCommand]
+    public void OpenEngineFolder()
+    {
+        var instance = Instance;
+        if (instance == null || string.IsNullOrWhiteSpace(instance.InstallPath)) return;
+        var bepFolder = Path.Combine(instance.InstallPath, "BepInEx");
+        var target = Directory.Exists(bepFolder) ? bepFolder : instance.InstallPath;
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = target, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to open BepInEx folder {Path}", target);
+        }
+    }
 
     /// <summary>Invokes engine installation from parent ViewModel if available.</summary>
     public Func<Task>? InstallEngineAction { get; set; }
@@ -197,6 +500,10 @@ public sealed partial class ModsTabViewModel : ObservableObject
         if (InstallEngineAction != null)
         {
             await InstallEngineAction().ConfigureAwait(true);
+        }
+        else
+        {
+            await InstallOrUpdateEngineAsync().ConfigureAwait(true);
         }
     }
 
@@ -225,7 +532,10 @@ public sealed partial class ModsTabViewModel : ObservableObject
     public int ActiveModsCount => Items.Count(i => i.IsEnabled);
     public int DisabledModsCount => Items.Count(i => !i.IsEnabled);
     public int WorkshopModsCount => Items.Count(i => i.SourceLabel.Contains("Workshop", StringComparison.OrdinalIgnoreCase));
-    public int LocalModsCount => Items.Count(i => !i.SourceLabel.Contains("Workshop", StringComparison.OrdinalIgnoreCase));
+    public int ThunderstoreModsCount => Items.Count(i => i.SourceLabel.Contains("Thunderstore", StringComparison.OrdinalIgnoreCase));
+    public int LocalModsCount => Items.Count(i =>
+        !i.SourceLabel.Contains("Workshop", StringComparison.OrdinalIgnoreCase) &&
+        !i.SourceLabel.Contains("Thunderstore", StringComparison.OrdinalIgnoreCase));
     public bool HasNoSearchResults => FilteredItems.Count == 0 && Items.Count > 0;
 
     public string StatsSummary
@@ -250,7 +560,9 @@ public sealed partial class ModsTabViewModel : ObservableObject
                 "Enabled" => item.IsEnabled,
                 "Disabled" => !item.IsEnabled,
                 "Workshop" => item.SourceLabel.Contains("Workshop", StringComparison.OrdinalIgnoreCase),
-                "Local" => !item.SourceLabel.Contains("Workshop", StringComparison.OrdinalIgnoreCase),
+                "Thunderstore" => item.SourceLabel.Contains("Thunderstore", StringComparison.OrdinalIgnoreCase),
+                "Local" => !item.SourceLabel.Contains("Workshop", StringComparison.OrdinalIgnoreCase) &&
+                           !item.SourceLabel.Contains("Thunderstore", StringComparison.OrdinalIgnoreCase),
                 _ => true
             };
             if (!matchesCategory) return false;
@@ -271,10 +583,24 @@ public sealed partial class ModsTabViewModel : ObservableObject
             OnPropertyChanged(nameof(ActiveModsCount));
             OnPropertyChanged(nameof(DisabledModsCount));
             OnPropertyChanged(nameof(WorkshopModsCount));
+            OnPropertyChanged(nameof(ThunderstoreModsCount));
             OnPropertyChanged(nameof(LocalModsCount));
+            OnPropertyChanged(nameof(CanShowWorkshopFilter));
+            OnPropertyChanged(nameof(CanShowThunderstoreFilter));
+            OnPropertyChanged(nameof(CanShowLocalFilter));
             OnPropertyChanged(nameof(HasNoSearchResults));
             OnPropertyChanged(nameof(StatsSummary));
         });
+    }
+
+    private (bool IsInstalled, string? Version) CheckIfThunderstorePackageInstalled(ThunderstorePackage package)
+    {
+        if (package == null) return (false, null);
+        var match = Items.FirstOrDefault(i =>
+            i.Name.Equals(package.Name, StringComparison.OrdinalIgnoreCase) ||
+            i.Id.EndsWith($":{package.Name}", StringComparison.OrdinalIgnoreCase));
+
+        return (match != null, match?.Version);
     }
 
     /// <summary>
@@ -297,6 +623,13 @@ public sealed partial class ModsTabViewModel : ObservableObject
         StatusMessage = null;
         IsStatusError = false;
         CancelPendingPlan();
+
+        if (instance != null)
+        {
+            _ = CheckProvidersAsync(instance);
+            _ = CheckAndLoadEngineAsync();
+            _ = LoadAsync();
+        }
     }
 
     [RelayCommand]
@@ -579,7 +912,11 @@ public sealed partial class ModsTabViewModel : ObservableObject
         Detail = string.Format(T("String_ModManagedDetail", "{0} files · {1}"), record.Files.Count, FormatSize(record.TotalSizeBytes)),
         Author = record.Source.Provider.Equals("workshop", StringComparison.OrdinalIgnoreCase)
             ? $"Steam Workshop #{record.Source.LedgerId.Replace("workshop:", "")}"
-            : ProviderLabel(record.Source.Provider),
+            : record.Source.Provider.Equals("thunderstore", StringComparison.OrdinalIgnoreCase)
+                ? (record.Source.RemoteId.Split(':').ElementAtOrDefault(1) is { } owner && !string.IsNullOrWhiteSpace(owner)
+                    ? $"by {owner} · Thunderstore"
+                    : "Thunderstore")
+                : ProviderLabel(record.Source.Provider),
         SizeBytes = record.TotalSizeBytes,
         FormattedSize = FormatSize(record.TotalSizeBytes),
         IsEnabled = record.IsEnabled,

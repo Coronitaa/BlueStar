@@ -257,6 +257,149 @@ public sealed class ModsTabViewModelTests : IDisposable
         // Act: filter by Local
         tab.SetFilter("Local");
         tab.FilteredItems.Should().ContainSingle(i => i.Name == "Local Texture Pack");
+
+        // Act: add Thunderstore mod
+        tab.Items.Add(new ModListItem
+        {
+            Id = "ts_morecompany",
+            Name = "MoreCompany",
+            SourceLabel = "Thunderstore",
+            IsEnabled = true,
+            IsManaged = true
+        });
+        tab.ThunderstoreModsCount.Should().Be(1);
+        tab.CanShowThunderstoreFilter.Should().BeTrue();
+        tab.Items.Last().IconGeometryKey.Should().Be("IconBolt");
+
+        // Act: filter by Thunderstore
+        tab.SetFilter("Thunderstore");
+        tab.FilteredItems.Should().ContainSingle(i => i.Name == "MoreCompany");
+    }
+
+    [Fact]
+    public async Task CheckProvidersAsync_ChecksAvailability_BeforeShowingProviders()
+    {
+        // Arrange
+        var mockWorkshop = new Mock<IWorkshopService>();
+        mockWorkshop.Setup(w => w.HasWorkshopSupportAsync(12345, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        mockWorkshop.Setup(w => w.HasWorkshopSupportAsync(99999, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var mockThunderstore = new Mock<IThunderstoreService>();
+        var instSupported = new GameInstance { Id = Guid.NewGuid(), AppId = 12345, Name = "Lethal Company", InstallPath = _gameDir };
+        var instUnsupported = new GameInstance { Id = Guid.NewGuid(), AppId = 99999, Name = "Unknown Game", InstallPath = _gameDir };
+
+        mockThunderstore.Setup(t => t.ResolveCommunityAsync(instSupported, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("lethal-company");
+        mockThunderstore.Setup(t => t.ResolveCommunityAsync(instUnsupported, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
+
+        var tab = new ModsTabViewModel(
+            _pipeline,
+            _registry.Object,
+            null,
+            NullLogger.Instance,
+            null,
+            mockWorkshop.Object,
+            null,
+            mockThunderstore.Object);
+
+        // Act 1: Game with both Workshop and Thunderstore
+        await tab.CheckProvidersAsync(instSupported);
+        tab.HasWorkshopSupport.Should().BeTrue();
+        tab.HasThunderstoreSupport.Should().BeTrue();
+        tab.ThunderstoreCommunity.Should().Be("lethal-company");
+        tab.HasAnyProvider.Should().BeTrue();
+        tab.CanShowWorkshopFilter.Should().BeTrue();
+        tab.CanShowThunderstoreFilter.Should().BeTrue();
+
+        // Act 2: Game with neither Workshop nor Thunderstore
+        await tab.CheckProvidersAsync(instUnsupported);
+        tab.HasWorkshopSupport.Should().BeFalse();
+        tab.HasThunderstoreSupport.Should().BeFalse();
+        tab.ThunderstoreCommunity.Should().BeNull();
+        tab.HasAnyProvider.Should().BeFalse();
+        tab.CanShowWorkshopFilter.Should().BeFalse();
+        tab.CanShowThunderstoreFilter.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task UnifiedBepInExManagement_InstallSwitchUninstall_UpdatesStateAndReloads()
+    {
+        // Arrange
+        var mockBepInEx = new Mock<IBepInExService>();
+        var releases = new List<BepInExRelease>
+        {
+            new("v5.4.23.2", "5.4.23.2", "url2", "x64", 1000, DateTimeOffset.UtcNow),
+            new("v5.4.21", "5.4.21", "url1", "x64", 1000, DateTimeOffset.UtcNow)
+        };
+        mockBepInEx.Setup(b => b.GetAvailableReleasesAsync(false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(releases);
+        mockBepInEx.Setup(b => b.IsInstalled(It.IsAny<string>()))
+            .Returns(false);
+        mockBepInEx.Setup(b => b.InstallAsync(It.IsAny<string>(), It.IsAny<BepInExRelease>(), null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        mockBepInEx.Setup(b => b.UninstallAsync(It.IsAny<string>(), true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var unityInstance = new GameInstance
+        {
+            Id = Guid.NewGuid(),
+            Name = "Unity Game",
+            InstallPath = _gameDir,
+            Engine = new EngineInfo
+            {
+                Id = "unity",
+                Name = "Unity",
+                Type = EngineType.Unity,
+                Capabilities = EngineCapabilities.BepInExSupported
+            }
+        };
+
+        var tab = new ModsTabViewModel(
+            _pipeline,
+            _registry.Object,
+            null,
+            NullLogger.Instance,
+            null,
+            null,
+            mockBepInEx.Object);
+
+        tab.SetInstance(unityInstance);
+
+        // Act 1: Initial state (Not installed)
+        await tab.CheckAndLoadEngineAsync();
+        tab.IsEngineSupported.Should().BeTrue();
+        tab.IsEngineInstalled.Should().BeFalse();
+        tab.AvailableEngineReleases.Should().HaveCount(2);
+        tab.SelectedEngineRelease = releases[0];
+        tab.EngineActionButtonText.Should().Contain("5.4.23.2");
+
+        // Act 2: Install BepInEx
+        mockBepInEx.Setup(b => b.IsInstalled(It.IsAny<string>())).Returns(true);
+        mockBepInEx.Setup(b => b.GetInstalledVersionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("5.4.23.2");
+
+        await tab.InstallOrUpdateEngineAsync();
+        tab.IsEngineInstalled.Should().BeTrue();
+        tab.EngineVersion.Should().Be("5.4.23.2");
+        tab.IsVersionDifferent.Should().BeFalse();
+        tab.EngineActionButtonText.Should().Be("Reinstall");
+
+        // Act 3: Select older version (5.4.21) -> switch button
+        tab.SelectedEngineRelease = releases[1];
+        tab.IsVersionDifferent.Should().BeTrue();
+        tab.EngineActionButtonText.Should().Contain("Switch to v5.4.21");
+
+        // Act 4: Uninstall BepInEx
+        mockBepInEx.Setup(b => b.IsInstalled(It.IsAny<string>())).Returns(false);
+        mockBepInEx.Setup(b => b.GetInstalledVersionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
+
+        await tab.UninstallEngineAsync();
+        tab.IsEngineInstalled.Should().BeFalse();
+        tab.EngineVersion.Should().BeNull();
     }
 
     [Fact]

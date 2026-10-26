@@ -55,22 +55,38 @@ public sealed partial class WorkshopBrowserViewModel : ObservableObject
     [ObservableProperty]
     private bool _isStatusError;
 
+    [ObservableProperty]
+    private bool _hasThunderstoreSupport;
+
+    /// <summary>Allows switching to Thunderstore from the browser header if the game supports both.</summary>
+    public Action? SwitchToThunderstoreAction { get; set; }
+
     public bool HasItem => CurrentItemId.HasValue;
 
     public bool CanDownload => CurrentItemId.HasValue && !IsDownloading;
 
     /// <summary>Opens the modal on the game's Workshop front page.</summary>
-    public void Open(uint appId)
+    public void Open(uint appId, bool hasThunderstore = false, Action? switchToThunderstore = null)
     {
         StatusMessage = null;
         IsStatusError = false;
         Progress = 0;
         ManualInput = string.Empty;
         CurrentItemId = null;
+        HasThunderstoreSupport = hasThunderstore;
+        SwitchToThunderstoreAction = switchToThunderstore;
         StartUrl = appId > 0
             ? $"https://steamcommunity.com/app/{appId}/workshop/"
             : "https://steamcommunity.com/workshop/";
         IsOpen = true;
+    }
+
+    [RelayCommand]
+    public void SwitchToThunderstore()
+    {
+        if (IsDownloading) return;
+        IsOpen = false;
+        SwitchToThunderstoreAction?.Invoke();
     }
 
     [RelayCommand]

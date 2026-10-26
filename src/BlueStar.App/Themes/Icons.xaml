@@ -76,6 +76,8 @@
 
     <!-- Filter / Tune -->
     <Geometry x:Key="IconFilter">M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z</Geometry>
+    <!-- Switch / Version swap (opposite horizontal arrows) -->
+    <Geometry x:Key="IconSwitchVersion">M6.99 11L3 15l3.99 4v-3H14v-2H6.99v-3zM21 9l-3.99-4v3H10v2h7.01v3L21 9z</Geometry>
 
     <!-- ── Capability & Section Icons ── -->
     <!-- Puzzle / Mods -->

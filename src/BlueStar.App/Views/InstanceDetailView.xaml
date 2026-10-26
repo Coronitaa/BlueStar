@@ -1912,38 +1912,122 @@
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding Instance.Name, FallbackValue='Mod content'}" Style="{StaticResource H2}" VerticalAlignment="Center"/>
 
-                                    <!-- Mod Engine Badge (Only if required / supported) -->
-                                    <Grid Margin="12,0,0,0" VerticalAlignment="Center">
-                                        <!-- Engine is supported & installed (e.g. BepInEx active) -->
-                                        <Border CornerRadius="{StaticResource RadiusSm}" Padding="8,3" BorderThickness="1"
-                                                Background="{StaticResource SuccessBgBrush}" BorderBrush="{StaticResource SuccessBrush}"
-                                                Visibility="{Binding IsEngineInstalled, Converter={StaticResource BoolToVisibilityConverter}}">
-                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <Path Data="{StaticResource IconEngine}" Fill="{StaticResource SuccessBrush}" Width="12" Height="12" Margin="0,0,6,0" Stretch="Uniform" VerticalAlignment="Center"/>
-                                                <TextBlock Text="{Binding EngineName}" FontWeight="Bold" FontSize="11" Foreground="{StaticResource SuccessBrush}" VerticalAlignment="Center"/>
-                                                <TextBlock Text="{Binding EngineVersion, StringFormat='  v{0}'}" FontSize="11" Foreground="{StaticResource SuccessBrush}" VerticalAlignment="Center"/>
-                                            </StackPanel>
-                                        </Border>
-
-                                        <!-- Engine is supported but NOT installed (e.g. BepInEx required) -->
-                                        <Button Style="{StaticResource GhostButton}" Command="{Binding InstallEngineCommand}" Padding="0"
-                                                ToolTip="Click to install required mod loader"
-                                                Visibility="{Binding IsEngineInstalled, Converter={StaticResource InverseBoolToVisibilityConverter}}">
-                                            <Border CornerRadius="{StaticResource RadiusSm}" Padding="8,3" BorderThickness="1"
-                                                    Background="{StaticResource WarningBgBrush}" BorderBrush="{StaticResource WarningBrush}"
+                                    <!-- ═══ MOD ENGINE CONTROL (UNIFIED: STATUS, VERSION PICKER, INSTALL/SWITCH/REINSTALL, UNINSTALL) ═══ -->
+                                    <Grid Margin="14,0,0,0" VerticalAlignment="Center">
+                                        <!-- Engine IS Supported (e.g. Unity -> BepInEx) -->
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
                                                     Visibility="{Binding IsEngineSupported, Converter={StaticResource BoolToVisibilityConverter}}">
+
+                                            <!-- Status Chip -->
+                                            <Border CornerRadius="{StaticResource RadiusSm}" Padding="8,4" BorderThickness="1" Margin="0,0,8,0" VerticalAlignment="Center">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="{StaticResource WarningBgBrush}"/>
+                                                        <Setter Property="BorderBrush" Value="{StaticResource WarningBrush}"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsEngineInstalled}" Value="True">
+                                                                <Setter Property="Background" Value="{StaticResource SuccessBgBrush}"/>
+                                                                <Setter Property="BorderBrush" Value="{StaticResource SuccessBrush}"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
                                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <Path Data="{StaticResource IconEngine}" Fill="{StaticResource WarningBrush}" Width="12" Height="12" Margin="0,0,6,0" Stretch="Uniform" VerticalAlignment="Center"/>
-                                                    <TextBlock Text="{Binding EngineName, StringFormat='⚡ {0} required (Install)'}" FontWeight="Bold" FontSize="11" Foreground="{StaticResource WarningBrush}" VerticalAlignment="Center"/>
+                                                    <Path Data="{StaticResource IconEngine}" Width="12" Height="12" Stretch="Uniform" Margin="0,0,6,0" VerticalAlignment="Center">
+                                                        <Path.Style>
+                                                            <Style TargetType="Path">
+                                                                <Setter Property="Fill" Value="{StaticResource WarningBrush}"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsEngineInstalled}" Value="True">
+                                                                        <Setter Property="Fill" Value="{StaticResource SuccessBrush}"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Path.Style>
+                                                    </Path>
+                                                    <TextBlock Text="{Binding EngineName}" FontWeight="Bold" FontSize="11" VerticalAlignment="Center">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground" Value="{StaticResource WarningBrush}"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsEngineInstalled}" Value="True">
+                                                                        <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                    <TextBlock Text="{Binding EngineVersion, StringFormat='  v{0}'}" FontSize="11" FontWeight="SemiBold"
+                                                               Foreground="{StaticResource SuccessBrush}" VerticalAlignment="Center"
+                                                               Visibility="{Binding IsEngineInstalled, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                    <TextBlock Text=" required" FontSize="11" FontWeight="Normal"
+                                                               Foreground="{StaticResource WarningBrush}" VerticalAlignment="Center"
+                                                               Visibility="{Binding IsEngineInstalled, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
                                                 </StackPanel>
                                             </Border>
-                                        </Button>
+
+                                            <!-- Version Selector Dropdown -->
+                                            <ComboBox Width="110" Height="28" Margin="0,0,8,0" Style="{StaticResource DarkComboBox}"
+                                                      ItemsSource="{Binding AvailableEngineReleases}"
+                                                      SelectedItem="{Binding SelectedEngineRelease}"
+                                                      IsEnabled="{Binding IsLoadingEngine, Converter={StaticResource InverseBoolConverter}}"
+                                                      VerticalAlignment="Center">
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding Version, StringFormat='v{0}'}" FontSize="11"/>
+                                                    </DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
+
+                                            <!-- Unified Action Button: Install / Switch / Reinstall -->
+                                            <Button Style="{StaticResource PrimaryButton}" Height="28" Padding="12,0" Margin="0,0,6,0"
+                                                    Command="{Binding InstallOrUpdateEngineCommand}"
+                                                    IsEnabled="{Binding IsLoadingEngine, Converter={StaticResource InverseBoolConverter}}"
+                                                    VerticalAlignment="Center">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Path Data="{StaticResource IconSwitchVersion}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                          Width="11" Height="11" Stretch="Uniform" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                          Visibility="{Binding IsVersionDifferent, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                    <Path Data="{StaticResource IconDownload}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                          Width="11" Height="11" Stretch="Uniform" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                          Visibility="{Binding IsEngineInstalled, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                                    <TextBlock Text="{Binding EngineActionButtonText}" FontSize="11" FontWeight="SemiBold"/>
+                                                </StackPanel>
+                                            </Button>
+
+                                            <!-- Uninstall Button (Visible when installed) -->
+                                            <Button Style="{StaticResource DangerButton}" Height="28" Padding="10,0" Margin="0,0,6,0"
+                                                    Command="{Binding UninstallEngineCommand}"
+                                                    IsEnabled="{Binding IsLoadingEngine, Converter={StaticResource InverseBoolConverter}}"
+                                                    Visibility="{Binding IsEngineInstalled, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                    VerticalAlignment="Center">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Path Data="{StaticResource IconTrash}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                          Width="11" Height="11" Stretch="Uniform" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{DynamicResource String_EngineUninstallBtn}" FontSize="11"/>
+                                                </StackPanel>
+                                            </Button>
+
+                                            <!-- Open Engine Folder Button (Visible when installed) -->
+                                            <Button Style="{StaticResource SecondaryButton}" Width="28" Height="28" Padding="0"
+                                                    Command="{Binding OpenEngineFolderCommand}" ToolTip="{DynamicResource String_EngineOpenFolder}"
+                                                    Visibility="{Binding IsEngineInstalled, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                    VerticalAlignment="Center">
+                                                <Path Data="{StaticResource IconFolder}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                      Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                            </Button>
+
+                                            <!-- Loading spinner -->
+                                            <ProgressBar IsIndeterminate="True" Width="40" Height="3" Margin="8,0,0,0" VerticalAlignment="Center"
+                                                         Visibility="{Binding IsLoadingEngine, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                        </StackPanel>
 
                                         <!-- Engine NOT required (Native mods) -->
-                                        <Border CornerRadius="{StaticResource RadiusSm}" Padding="8,3" BorderThickness="1"
+                                        <Border CornerRadius="{StaticResource RadiusSm}" Padding="8,4" BorderThickness="1"
                                                 Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}"
-                                                Visibility="{Binding IsEngineSupported, Converter={StaticResource InverseBoolToVisibilityConverter}}">
-                                            <TextBlock Text="{DynamicResource String_ModEngineNotRequired}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center"/>
+                                                Visibility="{Binding IsEngineSupported, Converter={StaticResource InverseBoolToVisibilityConverter}}"
+                                                VerticalAlignment="Center">
+                                            <TextBlock Text="{DynamicResource String_ModEngineNotRequired}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center"/>
                                         </Border>
                                     </Grid>
                                 </StackPanel>
@@ -1958,7 +2042,8 @@
 
                             <!-- Modrinth Header Action Buttons -->
                             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                <Button Style="{StaticResource PrimaryButton}" Margin="0,0,10,0" Command="{Binding OpenWorkshopCommand}">
+                                <Button Style="{StaticResource PrimaryButton}" Margin="0,0,10,0" Command="{Binding OpenContentBrowserCommand}"
+                                        Visibility="{Binding HasAnyProvider, Converter={StaticResource BoolToVisibilityConverter}}">
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                         <Path Data="{StaticResource IconExplore}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                               Width="14" Height="14" Stretch="Uniform" Margin="0,0,8,0" VerticalAlignment="Center"/>
@@ -1985,40 +2070,6 @@
                                     <Path Data="{StaticResource IconRefresh}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                           Width="14" Height="14" Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                                 </Button>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
-
-                    <!-- ═══ OPTIONAL ENGINE ADVANCED CONTROLS (IF UNITY BEPINEX) ═══ -->
-                    <Border Style="{StaticResource Card}" Margin="0,0,0,16" Padding="14,10"
-                            Visibility="{Binding DataContext.IsUnityEngine, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibilityConverter}}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
-                                <TextBlock Text="{DynamicResource String_BepInExLoaderTitle}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <TextBlock Text="Version:" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <ComboBox Width="180" Style="{StaticResource DarkComboBox}"
-                                          ItemsSource="{Binding DataContext.AvailableBepInExVersions, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                          SelectedItem="{Binding DataContext.SelectedBepInExVersion, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Text="{Binding Version, StringFormat='v{0}'}"/>
-                                        </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
-                            </StackPanel>
-
-                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                <Button Content="{DynamicResource String_InstallUpdateVersionBtn}" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0"
-                                        Command="{Binding DataContext.InstallOrUpdateBepInExCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-                                <Button Content="{DynamicResource String_UninstallBepInExBtn}" Style="{StaticResource DangerButton}"
-                                        Command="{Binding DataContext.UninstallBepInExCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                        Visibility="{Binding IsEngineInstalled, Converter={StaticResource BoolToVisibilityConverter}}"/>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -2058,21 +2109,27 @@
                                       Stretch="Uniform" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" IsHitTestVisible="False"/>
                             </Grid>
 
-                            <!-- Category Filter Chips (Modrinth style) -->
+                            <!-- Category Filter Chips (Modrinth style: clean labels, no awkward (0)) -->
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                <RadioButton Content="{Binding TotalModsCount, StringFormat='All ({0})'}" Style="{StaticResource FilterChipRadioButton}" Margin="0,0,6,0"
+                                <RadioButton Content="{DynamicResource String_ModFilterAll}" Style="{StaticResource FilterChipRadioButton}" Margin="0,0,6,0"
                                              IsChecked="{Binding SelectedFilter, Converter={StaticResource StringMatchConverter}, ConverterParameter=All}"
                                              Command="{Binding SetFilterCommand}" CommandParameter="All"/>
-                                <RadioButton Content="{Binding ActiveModsCount, StringFormat='Enabled ({0})'}" Style="{StaticResource FilterChipGreen}" Margin="0,0,6,0"
+                                <RadioButton Content="{DynamicResource String_ModFilterEnabled}" Style="{StaticResource FilterChipGreen}" Margin="0,0,6,0"
                                              IsChecked="{Binding SelectedFilter, Converter={StaticResource StringMatchConverter}, ConverterParameter=Enabled}"
                                              Command="{Binding SetFilterCommand}" CommandParameter="Enabled"/>
-                                <RadioButton Content="{Binding DisabledModsCount, StringFormat='Disabled ({0})'}" Style="{StaticResource FilterChipRadioButton}" Margin="0,0,6,0"
+                                <RadioButton Content="{DynamicResource String_ModFilterDisabled}" Style="{StaticResource FilterChipRadioButton}" Margin="0,0,6,0"
                                              IsChecked="{Binding SelectedFilter, Converter={StaticResource StringMatchConverter}, ConverterParameter=Disabled}"
                                              Command="{Binding SetFilterCommand}" CommandParameter="Disabled"/>
-                                <RadioButton Content="{Binding WorkshopModsCount, StringFormat='Workshop ({0})'}" Style="{StaticResource FilterChipBlue}" Margin="0,0,6,0"
+                                <RadioButton Content="{DynamicResource String_ModFilterWorkshop}" Style="{StaticResource FilterChipBlue}" Margin="0,0,6,0"
+                                             Visibility="{Binding CanShowWorkshopFilter, Converter={StaticResource BoolToVisibilityConverter}}"
                                              IsChecked="{Binding SelectedFilter, Converter={StaticResource StringMatchConverter}, ConverterParameter=Workshop}"
                                              Command="{Binding SetFilterCommand}" CommandParameter="Workshop"/>
-                                <RadioButton Content="{Binding LocalModsCount, StringFormat='Local ({0})'}" Style="{StaticResource FilterChipRadioButton}"
+                                <RadioButton Content="{DynamicResource String_ModFilterThunderstore}" Style="{StaticResource FilterChipGreen}" Margin="0,0,6,0"
+                                             Visibility="{Binding CanShowThunderstoreFilter, Converter={StaticResource BoolToVisibilityConverter}}"
+                                             IsChecked="{Binding SelectedFilter, Converter={StaticResource StringMatchConverter}, ConverterParameter=Thunderstore}"
+                                             Command="{Binding SetFilterCommand}" CommandParameter="Thunderstore"/>
+                                <RadioButton Content="{DynamicResource String_ModFilterLocal}" Style="{StaticResource FilterChipRadioButton}"
+                                             Visibility="{Binding CanShowLocalFilter, Converter={StaticResource BoolToVisibilityConverter}}"
                                              IsChecked="{Binding SelectedFilter, Converter={StaticResource StringMatchConverter}, ConverterParameter=Local}"
                                              Command="{Binding SetFilterCommand}" CommandParameter="Local"/>
                             </StackPanel>
@@ -3407,6 +3464,17 @@
             <Grid Width="{Binding ActualWidth, ElementName=RootInstanceDetailView}"
                   Height="{Binding ActualHeight, ElementName=RootInstanceDetailView}">
                 <local:WorkshopBrowserPanel DataContext="{Binding ModsTab.Workshop}" Margin="40,28"/>
+            </Grid>
+        </controls:ModalOverlay>
+
+        <!-- ═══ THUNDERSTORE BROWSER MODAL (Modrinth inspired) ═══ -->
+        <controls:ModalOverlay IsOpen="{Binding ModsTab.Thunderstore.IsOpen}"
+                               CloseCommand="{Binding ModsTab.Thunderstore.CloseCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="1000">
+            <Grid Width="{Binding ActualWidth, ElementName=RootInstanceDetailView}"
+                  Height="{Binding ActualHeight, ElementName=RootInstanceDetailView}">
+                <local:ThunderstoreBrowserPanel DataContext="{Binding ModsTab.Thunderstore}" Margin="40,28"/>
             </Grid>
         </controls:ModalOverlay>
 
