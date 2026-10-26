@@ -976,7 +976,7 @@ public partial class SettingsViewModel : ObservableObject
             {
                 IsCheckingForUpdates = true;
                 UpdateButtonText = _localizationService.CurrentLanguage == "es" ? "Buscando..." : "Checking...";
-                var update = await _updateService.CheckForUpdatesAsync(CancellationToken.None).ConfigureAwait(true);
+                var update = await _updateService.CheckForUpdatesAsync(CancellationToken.None, forceRefresh: true).ConfigureAwait(true);
                 if (update != null)
                 {
                     HasUpdateAvailable = true;
@@ -1034,7 +1034,7 @@ public partial class SettingsViewModel : ObservableObject
         {
             IsCheckingForUpdates = true;
             UpdateButtonText = _localizationService.CurrentLanguage == "es" ? "Buscando..." : "Checking...";
-            var update = await _updateService.CheckForUpdatesAsync(CancellationToken.None).ConfigureAwait(true);
+            var update = await _updateService.CheckForUpdatesAsync(CancellationToken.None, forceRefresh: true).ConfigureAwait(true);
             if (update != null)
             {
                 HasUpdateAvailable = true;

@@ -79,7 +79,7 @@ public sealed class ReFixUpdateService : IReFixUpdateService
     {
         try
         {
-            _logger.LogInformation("Checking for ReFix updates from GitHub ({Url})...", GitHubApiUrl);
+            _logger.LogInformation("[ReFix Emulator] Checking for updates from GitHub ({Url})...", GitHubApiUrl);
 
             GitHubReleaseDto? release = null;
             try
@@ -118,7 +118,7 @@ public sealed class ReFixUpdateService : IReFixUpdateService
             var remoteVersionStr = release.TagName.Trim().TrimStart('v', 'V');
             var localVersionStr = GetCurrentInstalledVersion();
 
-            _logger.LogInformation("ReFix Version Check — Local: v{Local}, Remote: v{Remote}", localVersionStr, remoteVersionStr);
+            _logger.LogInformation("[ReFix Emulator] Version Check — Local: v{Local}, Remote: v{Remote}", localVersionStr, remoteVersionStr);
 
             if (IsNewerVersion(remoteVersionStr, localVersionStr))
             {
@@ -372,7 +372,7 @@ public sealed class ReFixUpdateService : IReFixUpdateService
             var update = await CheckForUpdatesAsync(ct).ConfigureAwait(false);
             if (update != null)
             {
-                _logger.LogInformation("New ReFix update detected: v{Version}. Starting background download...", update.Version);
+                _logger.LogInformation("[ReFix Emulator] New update detected: v{Version}. Starting background download...", update.Version);
                 _notificationService?.ShowInfo(
                     "ReFix Update Detected",
                     $"New version v{update.Version} found. Downloading in the background...",

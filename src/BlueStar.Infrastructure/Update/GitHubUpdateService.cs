@@ -145,9 +145,15 @@ public class GitHubUpdateService : IUpdateService
     /// </summary>
     public static Version GetCurrentVersion()
     {
-        var rawCurrent = Assembly.GetEntryAssembly()?.GetName().Version
-                      ?? Assembly.GetExecutingAssembly().GetName().Version
-                      ?? typeof(GitHubUpdateService).Assembly.GetName().Version;
+        var entryAssy = Assembly.GetEntryAssembly();
+        Version? rawCurrent = null;
+        if (entryAssy != null && entryAssy.GetName().Name?.StartsWith("BlueStar", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            rawCurrent = entryAssy.GetName().Version;
+        }
+
+        rawCurrent ??= typeof(GitHubUpdateService).Assembly.GetName().Version
+                    ?? Assembly.GetExecutingAssembly().GetName().Version;
 
         if (rawCurrent == null || rawCurrent == new Version(0, 0, 0, 0))
         {
@@ -184,7 +190,7 @@ public class GitHubUpdateService : IUpdateService
     public static bool IsNewerVersion(string? candidateVersionStr, Version currentVersion)
     {
         if (string.IsNullOrWhiteSpace(candidateVersionStr)) return false;
-        var clean = candidateVersionStr.Trim().TrimStart('v').Trim();
+        var clean = candidateVersionStr.Trim().TrimStart('v', 'V').Trim();
         if (!Version.TryParse(clean, out var candidate)) return false;
 
         var normalizedCandidate = new Version(
@@ -201,12 +207,12 @@ public class GitHubUpdateService : IUpdateService
     }
 
     /// <inheritdoc />
-    public async Task<UpdateInfo?> CheckForUpdatesAsync(CancellationToken ct)
+    public async Task<UpdateInfo?> CheckForUpdatesAsync(CancellationToken ct = default, bool forceRefresh = false)
     {
         var currentVersion = GetCurrentVersion();
         var cacheKey = $"github_update_check_v{currentVersion.Major}_{currentVersion.Minor}_{currentVersion.Build}";
 
-        if (_cacheService != null)
+        if (!forceRefresh && _cacheService != null)
         {
             try
             {
@@ -216,8 +222,11 @@ public class GitHubUpdateService : IUpdateService
                     _metrics?.OnCacheHit("GitHub", GitHubReleasesUrl);
                     if (cached.Update != null && IsNewerVersion(cached.Update.Version, currentVersion))
                     {
+                        _logger.LogInformation("[BlueStar Updater] Using cached update check: New version v{Version} available (Current: v{CurrentVersion})", cached.Update.Version, currentVersion);
                         return cached.Update;
                     }
+
+                    _logger.LogInformation("[BlueStar Updater] Using cached update check: BlueStar is up to date (v{CurrentVersion})", currentVersion);
                     return null;
                 }
             }
@@ -226,7 +235,7 @@ public class GitHubUpdateService : IUpdateService
 
         return await _coordinator.ExecuteAsync(cacheKey, async innerCt =>
         {
-            if (_cacheService != null)
+            if (!forceRefresh && _cacheService != null)
             {
                 try
                 {
@@ -236,8 +245,11 @@ public class GitHubUpdateService : IUpdateService
                         _metrics?.OnCacheHit("GitHub", GitHubReleasesUrl);
                         if (cached.Update != null && IsNewerVersion(cached.Update.Version, currentVersion))
                         {
+                            _logger.LogInformation("[BlueStar Updater] Using cached update check: New version v{Version} available (Current: v{CurrentVersion})", cached.Update.Version, currentVersion);
                             return cached.Update;
                         }
+
+                        _logger.LogInformation("[BlueStar Updater] Using cached update check: BlueStar is up to date (v{CurrentVersion})", currentVersion);
                         return null;
                     }
                 }
@@ -246,14 +258,15 @@ public class GitHubUpdateService : IUpdateService
 
             try
             {
-                _logger.LogInformation("Checking for updates from GitHub Releases...");
+                _logger.LogInformation("[BlueStar Updater] Checking for updates from GitHub Releases (Current: v{CurrentVersion})...", currentVersion);
                 _metrics?.OnProviderRequest("GitHub", GitHubReleasesUrl);
 
                 GitHubRelease? release = null;
+                const string updaterUserAgent = "BlueStar-Updater/1.4.7";
                 try
                 {
                     var request = new HttpRequestMessage(HttpMethod.Get, GitHubReleasesUrl);
-                    request.Headers.UserAgent.ParseAdd("BlueStar-Updater/1.4.7");
+                    request.Headers.UserAgent.ParseAdd(updaterUserAgent);
                     var response = await _httpClient.SendAsync(request, innerCt).ConfigureAwait(false);
                     if (response.IsSuccessStatusCode)
                     {
@@ -268,7 +281,7 @@ public class GitHubUpdateService : IUpdateService
                     {
                         const string fallbackUrl = "https://api.github.com/repos/Coronitaa/BlueStar/releases";
                         var request = new HttpRequestMessage(HttpMethod.Get, fallbackUrl);
-                        request.Headers.UserAgent.ParseAdd("BlueStar-Updater/1.4.7");
+                        request.Headers.UserAgent.ParseAdd(updaterUserAgent);
                         var response = await _httpClient.SendAsync(request, innerCt).ConfigureAwait(false);
                         if (response.IsSuccessStatusCode)
                         {
@@ -281,6 +294,7 @@ public class GitHubUpdateService : IUpdateService
 
                 if (release is null || string.IsNullOrWhiteSpace(release.TagName))
                 {
+                    _logger.LogWarning("[BlueStar Updater] Unable to retrieve releases from GitHub (rate limit or offline)");
                     if (_cacheService != null)
                     {
                         try { await _cacheService.SetAsync(cacheKey, new CachedUpdateCheck(null, false), TimeSpan.FromMinutes(2), innerCt).ConfigureAwait(false); } catch { }
@@ -288,14 +302,19 @@ public class GitHubUpdateService : IUpdateService
                     return null;
                 }
 
-                var latestVersionStr = release.TagName.Trim().TrimStart('v').Trim();
+                var latestVersionStr = release.TagName.Trim().TrimStart('v', 'V').Trim();
                 if (!Version.TryParse(latestVersionStr, out var latestVersion))
+                {
+                    _logger.LogWarning("[BlueStar Updater] Failed to parse release tag '{Tag}' as a valid version", release.TagName);
                     return null;
+                }
 
                 var normalizedLatest = new Version(
                     Math.Max(0, latestVersion.Major),
                     Math.Max(0, latestVersion.Minor),
                     Math.Max(0, latestVersion.Build));
+
+                _logger.LogInformation("[BlueStar Updater] Version Check — Local: v{Local}, Remote: v{Remote}", currentVersion, normalizedLatest);
 
                 if (normalizedLatest > currentVersion)
                 {
@@ -312,11 +331,11 @@ public class GitHubUpdateService : IUpdateService
                              ?? release.Assets?.FirstOrDefault(a => a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
                     }
 
-                    _logger.LogInformation("New update available: v{Version} (Current: v{CurrentVersion})", latestVersion, currentVersion);
+                    _logger.LogInformation("[BlueStar Updater] New update available: v{Version} (Current: v{CurrentVersion})", normalizedLatest, currentVersion);
 
                     var updateInfo = new UpdateInfo
                     {
-                        Version = latestVersion.ToString(),
+                        Version = normalizedLatest.ToString(),
                         ReleaseNotes = release.Body ?? string.Empty,
                         DownloadUrl = asset?.BrowserDownloadUrl ?? string.Empty,
                         FileSize = asset?.Size ?? 0,
@@ -325,23 +344,24 @@ public class GitHubUpdateService : IUpdateService
 
                     if (_cacheService != null)
                     {
-                        try { await _cacheService.SetAsync(cacheKey, new CachedUpdateCheck(updateInfo, true), TimeSpan.FromHours(4), innerCt).ConfigureAwait(false); } catch { }
+                        try { await _cacheService.SetAsync(cacheKey, new CachedUpdateCheck(updateInfo, true), TimeSpan.FromHours(2), innerCt).ConfigureAwait(false); } catch { }
                     }
 
                     return updateInfo;
                 }
 
-                _logger.LogInformation("BlueStar is up to date (Version: v{CurrentVersion})", currentVersion);
+                _logger.LogInformation("[BlueStar Updater] BlueStar is up to date (Version: v{CurrentVersion})", currentVersion);
                 if (_cacheService != null)
                 {
-                    try { await _cacheService.SetAsync(cacheKey, new CachedUpdateCheck(null, false), TimeSpan.FromHours(4), innerCt).ConfigureAwait(false); } catch { }
+                    // Negative cache TTL: 15 minutes so new releases are discovered promptly
+                    try { await _cacheService.SetAsync(cacheKey, new CachedUpdateCheck(null, false), TimeSpan.FromMinutes(15), innerCt).ConfigureAwait(false); } catch { }
                 }
 
                 return null;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to check for updates");
+                _logger.LogError(ex, "[BlueStar Updater] Failed to check for updates");
                 return null;
             }
         }, ct).ConfigureAwait(false);

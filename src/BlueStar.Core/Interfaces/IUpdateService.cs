@@ -14,8 +14,9 @@ public interface IUpdateService
     /// Checks if a new update is available.
     /// </summary>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
+    /// <param name="forceRefresh">Whether to bypass local cache and query remote server directly.</param>
     /// <returns>A task that represents the asynchronous operation. The task result contains the update information, or null if no update is available.</returns>
-    Task<UpdateInfo?> CheckForUpdatesAsync(CancellationToken ct);
+    Task<UpdateInfo?> CheckForUpdatesAsync(CancellationToken ct = default, bool forceRefresh = false);
 
     /// <summary>
     /// Downloads a specific update.

@@ -1,14 +1,17 @@
 using System;
 using System.Collections.Generic;
+using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
 using BlueStar.Infrastructure.Emulators;
+using BlueStar.Infrastructure.Update;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Moq.Protected;
 using Xunit;
 
 namespace BlueStar.Infrastructure.Tests;
@@ -76,11 +79,70 @@ public class ReFixUpdateServiceTests
         result.Should().Be(expected);
     }
 
+    [Theory]
+    [InlineData("1.4.7", "1.4.6", true)]
+    [InlineData("v1.4.7", "1.4.6", true)]
+    [InlineData("1.4.6", "1.4.6", false)]
+    [InlineData("1.4.5", "1.4.6", false)]
+    [InlineData("1.3.3", "1.4.6", false)]
+    [InlineData("1.4.8", "1.4.7", true)]
+    public void GitHubUpdateService_IsNewerVersion_CorrectlyCompares(string candidate, string current, bool expected)
+    {
+        var curVer = Version.Parse(current);
+        var result = GitHubUpdateService.IsNewerVersion(candidate, curVer);
+        result.Should().Be(expected);
+    }
+
     [Fact]
     public void GitHubUpdateService_IsPackaged_DoesNotThrow()
     {
         var isPackaged = BlueStar.Infrastructure.Update.GitHubUpdateService.IsRunningAsPackaged();
         // Running inside standard test runner, should be boolean without exceptions
         isPackaged.Should().Be(isPackaged);
+    }
+
+    [Fact]
+    public async Task GitHubUpdateService_ForceRefresh_BypassesCache()
+    {
+        var mockCache = new Mock<ICacheService>();
+        var handler = new Mock<HttpMessageHandler>();
+
+        var json148 = """
+        {
+            "tag_name": "v1.4.8",
+            "body": "Test release notes",
+            "assets": [
+                {
+                    "name": "BlueStar-v1.4.8-Portable-win-x64.zip",
+                    "browser_download_url": "https://example.com/BlueStar-v1.4.8-Portable-win-x64.zip",
+                    "size": 50000000
+                }
+            ]
+        }
+        """;
+
+        handler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(json148, System.Text.Encoding.UTF8, "application/json")
+            });
+
+        var client = new HttpClient(handler.Object);
+        var updateService = new GitHubUpdateService(
+            client,
+            NullLogger<GitHubUpdateService>.Instance,
+            mockCache.Object);
+
+        // When forceRefresh is true, GetAsync on cache should NEVER be called
+        var update = await updateService.CheckForUpdatesAsync(CancellationToken.None, forceRefresh: true);
+
+        update.Should().NotBeNull();
+        update!.Version.Should().Be("1.4.8");
+        mockCache.Verify(c => c.GetAsync<It.IsAnyType>(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }
