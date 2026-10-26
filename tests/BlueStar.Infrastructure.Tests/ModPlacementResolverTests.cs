@@ -177,6 +177,73 @@ public sealed class ModPlacementResolverTests : IDisposable
         Destinations(plan).Should().Equal("mods/CoolMod/data.bin");
     }
 
+    private ModInstallPlan ResolveWorkshop(string package, EngineType engine = EngineType.Generic) =>
+        _resolver.Resolve(_fx.Instance(engine), package,
+            new ModPlacementHints { ModName = "Cool Item", Layout = ModPackageLayout.SteamWorkshop, WorkshopItemId = 123456 });
+
+    [Fact]
+    public void Resolve_WorkshopItem_WithEmulatorSettings_GoesToSteamSettingsMods_AsUploaded()
+    {
+        // Arrange: emulator config next to steam_api; the item keeps its README and folder layout
+        _fx.GameFolder("Game/Binaries/Win64/steam_settings");
+        _fx.GameFolder("Game/Content/Paks");
+        var package = _fx.Package("ws", ("Item/data.pak", "x"), ("README.md", "docs"));
+
+        // Act
+        var plan = ResolveWorkshop(package, EngineType.UnrealEngine);
+
+        // Assert
+        plan.Strategy.Should().Be("SteamWorkshopEmulator");
+        plan.Confidence.Should().Be(PlacementConfidence.High);
+        Destinations(plan).Should().Equal(
+            "Game/Binaries/Win64/steam_settings/mods/123456/Item/data.pak",
+            "Game/Binaries/Win64/steam_settings/mods/123456/README.md");
+    }
+
+    [Fact]
+    public void Resolve_WorkshopItem_WithoutEmulator_UsesFileRules()
+    {
+        // Arrange
+        _fx.GameFolder("Game/Content/Paks");
+        var package = _fx.Package("ws", ("Cool_P.pak", "x"));
+
+        // Act
+        var plan = ResolveWorkshop(package, EngineType.UnrealEngine);
+
+        // Assert
+        plan.Strategy.Should().Be("UnrealPaks");
+        Destinations(plan).Should().Equal("Game/Content/Paks/~mods/Cool_P.pak");
+    }
+
+    [Fact]
+    public void Resolve_WorkshopItem_NoRuleMatches_OffersSteamSettingsNextToSteamApi_ForConfirmation()
+    {
+        // Arrange
+        _fx.GameFile("Bin/steam_api64.dll");
+        var package = _fx.Package("ws", ("level.dat", "x"));
+
+        // Act
+        var plan = ResolveWorkshop(package);
+
+        // Assert
+        plan.Strategy.Should().Be("SteamWorkshopEmulator");
+        plan.Confidence.Should().Be(PlacementConfidence.Low);
+        Destinations(plan).Should().Equal("Bin/steam_settings/mods/123456/level.dat");
+    }
+
+    [Fact]
+    public void Resolve_WorkshopItem_WithoutId_Throws()
+    {
+        // Arrange
+        var package = _fx.Package("ws", ("a.pak", "x"));
+
+        // Act
+        var act = () => _resolver.Resolve(_fx.Instance(), package, new ModPlacementHints { Layout = ModPackageLayout.SteamWorkshop });
+
+        // Assert
+        act.Should().Throw<ArgumentException>();
+    }
+
     [Fact]
     public void Resolve_EmptyPackage_Throws()
     {

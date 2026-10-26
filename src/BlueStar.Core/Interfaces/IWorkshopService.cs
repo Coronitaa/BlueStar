@@ -16,8 +16,14 @@ public record WorkshopItemInfo(
     ulong FileSizeBytes,
     string? Author,
     DateTimeOffset? UpdatedAt,
-    string? FileUrl = null
+    string? FileUrl = null,
+    string? FileName = null
 );
+
+/// <summary>
+/// Outcome of downloading a Workshop item's content.
+/// </summary>
+public sealed record WorkshopDownloadResult(bool Success, WorkshopItemInfo? Details = null, string? Error = null);
 
 /// <summary>
 /// Service for checking Steam Workshop availability, querying item metadata, and downloading Workshop mods.
@@ -62,4 +68,15 @@ public interface IWorkshopService
     /// Resolves the optimal primary mod directory for a game instance.
     /// </summary>
     string ResolveModDirectory(BlueStar.Core.Models.GameInstance instance);
+
+    /// <summary>
+    /// Downloads a Workshop item's content, as uploaded, into <paramref name="destinationDirectory"/> using only
+    /// Valve sources: the item's CDN file for single-file items, otherwise DepotDownloader. Nothing is placed in a game.
+    /// </summary>
+    Task<WorkshopDownloadResult> DownloadItemContentAsync(
+        uint appId,
+        ulong publishedFileId,
+        string destinationDirectory,
+        IProgress<double>? progress = null,
+        CancellationToken ct = default);
 }

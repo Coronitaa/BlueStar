@@ -238,6 +238,7 @@ public partial class App : Application
         services.AddSingleton<IModLedgerStore, BlueStar.Infrastructure.Mods.Installation.JsonModLedgerStore>();
         services.AddSingleton<IModPlacementResolver, BlueStar.Infrastructure.Mods.Installation.ModPlacementResolver>();
         services.AddSingleton<IModInstallPipeline, BlueStar.Infrastructure.Mods.Installation.ModInstallPipeline>();
+        services.AddSingleton<IWorkshopModFetcher, BlueStar.Infrastructure.Workshop.WorkshopModFetcher>();
         services.AddHttpClient<IModApiKeyService, BlueStar.Infrastructure.Mods.ModApiKeyService>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(20);

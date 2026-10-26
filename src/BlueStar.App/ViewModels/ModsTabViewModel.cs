@@ -32,12 +32,99 @@ public sealed partial class ModsTabViewModel : ObservableObject
         IModInstallPipeline? pipeline,
         IModManagerRegistry? legacyRegistry,
         ILocalizationService? localization,
-        ILogger logger)
+        ILogger logger,
+        IWorkshopModFetcher? workshopFetcher = null,
+        IWorkshopService? workshopService = null)
     {
         _pipeline = pipeline;
         _legacyRegistry = legacyRegistry;
         _localization = localization;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _workshopFetcher = workshopFetcher;
+        _workshopService = workshopService;
+        Workshop = new WorkshopBrowserViewModel(InstallWorkshopItemAsync);
+    }
+
+    private readonly IWorkshopModFetcher? _workshopFetcher;
+    private readonly IWorkshopService? _workshopService;
+
+    /// <summary>Steam Workshop browser modal of this tab.</summary>
+    public WorkshopBrowserViewModel Workshop { get; }
+
+    [RelayCommand]
+    public void OpenWorkshop()
+    {
+        if (Instance == null) return;
+        Workshop.Open(Instance.AppId);
+    }
+
+    /// <summary>
+    /// Downloads a Workshop item and installs it through the pipeline. Games whose Workshop content must be
+    /// converted on the way in (Tabletop Simulator saves, Klei mods) still use the dedicated legacy deployer.
+    /// </summary>
+    public async Task<bool> InstallWorkshopItemAsync(ulong publishedFileId, IProgress<double> progress)
+    {
+        var instance = Instance;
+        if (instance == null) return false;
+
+        try
+        {
+            if (_workshopService != null && NeedsLegacyWorkshopDeployment(instance))
+            {
+                Workshop.ReportStatus(T("String_WorkshopDownloading", "⏳ Downloading from Steam Workshop..."), isError: false);
+                var legacyOk = await _workshopService.DownloadAndInstallItemAsync(instance, publishedFileId, progress, CancellationToken.None)
+                    .ConfigureAwait(true);
+                Workshop.ReportStatus(legacyOk
+                    ? T("String_WorkshopInstalledLegacy", "✅ Installed with this game's own Workshop layout.")
+                    : T("String_WorkshopDownloadFailedGeneric", "❌ The item could not be downloaded."), isError: !legacyOk);
+                await LoadAsync().ConfigureAwait(true);
+                return legacyOk;
+            }
+
+            if (_workshopFetcher == null)
+            {
+                Workshop.ReportStatus(T("String_ModsPipelineUnavailable", "❌ The mod installer is not available."), isError: true);
+                return false;
+            }
+
+            Workshop.ReportStatus(T("String_WorkshopDownloading", "⏳ Downloading from Steam Workshop..."), isError: false);
+            var fetched = await _workshopFetcher.FetchAsync(instance.AppId, publishedFileId, progress, CancellationToken.None)
+                .ConfigureAwait(true);
+            if (!fetched.Succeeded)
+            {
+                Workshop.ReportStatus(string.Format(T("String_WorkshopDownloadFailed", "❌ Could not download the item: {0}"), fetched.Error), isError: true);
+                return false;
+            }
+
+            var result = await InstallPackageAsync(fetched.Package!).ConfigureAwait(true);
+            switch (result?.Status)
+            {
+                case ModInstallStatus.Installed:
+                    Workshop.ReportStatus(string.Format(T("String_ModInstalled", "✅ {0} installed ({1} files)."),
+                        fetched.Package!.Name, result.Record?.Files.Count ?? 0), isError: false);
+                    return true;
+                case ModInstallStatus.NeedsConfirmation:
+                    // The confirmation dialog cannot sit on top of the embedded browser, so the browser makes way.
+                    Workshop.IsOpen = false;
+                    return false;
+                default:
+                    Workshop.ReportStatus(StatusMessage, isError: true);
+                    return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to install Workshop item {Id}", publishedFileId);
+            Workshop.ReportStatus(string.Format(T("String_WorkshopDownloadFailed", "❌ Could not download the item: {0}"), ex.Message), isError: true);
+            return false;
+        }
+    }
+
+    /// <summary>Tabletop Simulator and Klei games convert Workshop content into their own formats.</summary>
+    private static bool NeedsLegacyWorkshopDeployment(GameInstance instance)
+    {
+        var category = BlueStar.Infrastructure.Mods.GameModPathResolver.ResolveModPaths(instance).GameCategory;
+        return category is "TabletopSimulator" or "Klei";
     }
 
     /// <summary>Raised after the list changes, so the parent can refresh its overview summary.</summary>
@@ -90,7 +177,7 @@ public sealed partial class ModsTabViewModel : ObservableObject
         Instance = instance;
         if (sameInstance) return;
 
-        Items.Clear();
+        OnUiThread(Items.Clear);
         StatusMessage = null;
         IsStatusError = false;
         CancelPendingPlan();
@@ -117,16 +204,18 @@ public sealed partial class ModsTabViewModel : ObservableObject
 
             if (Instance == null || Instance.Id != instance.Id) return;
 
-            Items.Clear();
-            foreach (var record in ledger.Mods.OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase))
-            {
-                Items.Add(FromRecord(record));
-            }
+            var rows = ledger.Mods
+                .OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(FromRecord)
+                .Concat(WithoutManagedFiles(unmanaged, ledger, instance.InstallPath).Select(FromLegacy))
+                .ToList();
 
-            foreach (var mod in WithoutManagedFiles(unmanaged, ledger, instance.InstallPath))
+            // The page may ask for a reload from a background thread; the bound collection only accepts UI-thread changes.
+            OnUiThread(() =>
             {
-                Items.Add(FromLegacy(mod));
-            }
+                Items.Clear();
+                foreach (var row in rows) Items.Add(row);
+            });
 
             ModsChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -419,6 +508,19 @@ public sealed partial class ModsTabViewModel : ObservableObject
     }
 
     private string T(string key, string fallback) => _localization?.GetString(key, fallback) ?? fallback;
+
+    /// <summary>Runs <paramref name="action"/> on the WPF dispatcher, or inline when there is none (tests) or already on it.</summary>
+    private static void OnUiThread(Action action)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher == null || dispatcher.CheckAccess())
+        {
+            action();
+            return;
+        }
+
+        dispatcher.Invoke(action);
+    }
 
     private static string? DefaultPickModFile()
     {

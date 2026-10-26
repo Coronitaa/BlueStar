@@ -5,6 +5,7 @@
              xmlns:sys="clr-namespace:System;assembly=mscorlib"
              xmlns:vm="clr-namespace:BlueStar.App.ViewModels"
              xmlns:controls="clr-namespace:BlueStar.App.Controls"
+             xmlns:local="clr-namespace:BlueStar.App.Views"
              xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
              d:DataContext="{d:DesignInstance vm:InstanceDetailViewModel}"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -2046,7 +2047,7 @@
                                 <Button Content="{DynamicResource String_BrowseWorkshopBtn}" Style="{StaticResource SecondaryButton}" Margin="0,0,10,0"
                                         Command="{Binding OpenSteamWorkshopInBrowserCommand}"/>
                                 <Button Content="{DynamicResource String_DownloadWorkshopModBtn}" Style="{StaticResource PrimaryButton}"
-                                        Command="{Binding OpenWorkshopModalCommand}"/>
+                                        Command="{Binding ModsTab.OpenWorkshopCommand}"/>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -3368,127 +3369,16 @@
             </Border>
         </controls:ModalOverlay>
 
-        <!-- ═══ STEAM WORKSHOP DOWNLOAD MODAL OVERLAY ═══ -->
-        <controls:ModalOverlay IsOpen="{Binding IsWorkshopModalOpen}"
-                               CloseCommand="{Binding CloseWorkshopModalCommand}"
+        <!-- ═══ STEAM WORKSHOP BROWSER MODAL (embedded Workshop, installs through the mod pipeline) ═══ -->
+        <controls:ModalOverlay IsOpen="{Binding ModsTab.Workshop.IsOpen}"
+                               CloseCommand="{Binding ModsTab.Workshop.CloseCommand}"
                                CloseOnEscape="True"
                                Panel.ZIndex="1000">
-            <Border Background="{StaticResource SurfaceCardElevatedBrush}"
-                    BorderBrush="{StaticResource AccentBrush}"
-                    BorderThickness="1"
-                    CornerRadius="{StaticResource RadiusLg}"
-                    Padding="28" Width="540"
-                    HorizontalAlignment="Center" VerticalAlignment="Center">
-                <StackPanel>
-                    <!-- Header -->
-                    <Grid Margin="0,0,0,16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="🌐" FontSize="18" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="{DynamicResource String_WorkshopModalTitle}" Style="{StaticResource H2}"/>
-                        </StackPanel>
-                        <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}" Command="{Binding CloseWorkshopModalCommand}"
-                                IsEnabled="{Binding IsDownloadingWorkshopMod, Converter={StaticResource InverseBoolConverter}}"/>
-                    </Grid>
-
-                    <!-- Input Box -->
-                    <TextBlock Text="{DynamicResource String_WorkshopUrlOrIdLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
-                    <Grid Margin="0,0,0,12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="10"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBox Grid.Column="0" Style="{StaticResource DarkTextBox}"
-                                 Text="{Binding WorkshopSearchInput, UpdateSourceTrigger=PropertyChanged}"
-                                 Tag="e.g. https://steamcommunity.com/sharedfiles/filedetails/?id=123456789"
-                                 IsEnabled="{Binding IsDownloadingWorkshopMod, Converter={StaticResource InverseBoolConverter}}"/>
-                        <Button Grid.Column="2" Content="{DynamicResource String_InspectBtn}"
-                                Style="{StaticResource SecondaryButton}"
-                                Command="{Binding FetchWorkshopPreviewCommand}"
-                                IsEnabled="{Binding IsLoadingWorkshopPreview, Converter={StaticResource InverseBoolConverter}}"/>
-                    </Grid>
-
-                    <!-- In-Modal Status / Error Notification Banner -->
-                    <Border Background="{StaticResource DangerBgBrush}"
-                            BorderBrush="{StaticResource DangerBorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="{StaticResource RadiusSm}"
-                            Padding="12,8" Margin="0,0,0,14"
-                            Visibility="{Binding WorkshopStatusMessage, Converter={StaticResource NullToVisibilityConverter}}">
-                        <TextBlock Text="{Binding WorkshopStatusMessage}"
-                                   Foreground="{StaticResource DangerBrush}"
-                                   FontSize="12"
-                                   TextWrapping="Wrap"/>
-                    </Border>
-
-                    <!-- Live Download Progress Section -->
-                    <Border Background="{StaticResource SurfaceInputBrush}"
-                            BorderBrush="{StaticResource AccentTranslucentBrush}"
-                            BorderThickness="1"
-                            CornerRadius="{StaticResource RadiusMd}"
-                            Padding="14" Margin="0,0,0,16"
-                            Visibility="{Binding IsDownloadingWorkshopMod, Converter={StaticResource BoolToVisibilityConverter}}">
-                        <StackPanel>
-                            <Grid Margin="0,0,0,8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{Binding WorkshopDownloadStatusText}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}"/>
-                                <TextBlock Grid.Column="1" Text="{Binding WorkshopDownloadProgress, StringFormat='{}{0:F0}%'}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource AccentBrush}"/>
-                            </Grid>
-                            <ProgressBar Value="{Binding WorkshopDownloadProgress}" Maximum="100" Height="8" Style="{StaticResource DownloadProgressBar}"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Preview Card -->
-                    <Border Background="{StaticResource SurfaceInputBrush}"
-                            BorderBrush="{StaticResource SubtleBorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="{StaticResource RadiusMd}"
-                            Padding="14" Margin="0,0,0,16"
-                            Visibility="{Binding WorkshopPreviewItem, Converter={StaticResource NullToVisibilityConverter}}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="84"/>
-                                <ColumnDefinition Width="14"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-
-                            <!-- Preview Image -->
-                            <Border Grid.Column="0" CornerRadius="6" ClipToBounds="True" Height="84" Background="{StaticResource SurfaceCardBrush}">
-                                <Image Source="{Binding WorkshopPreviewItem.PreviewUrl}" Stretch="UniformToFill"/>
-                            </Border>
-
-                            <!-- Details -->
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding WorkshopPreviewItem.Title}" Style="{StaticResource H3}" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,4"/>
-                                <TextBlock Text="{Binding WorkshopPreviewItem.Author, StringFormat='Created by: {0}'}" Style="{StaticResource Caption}" Margin="0,0,0,2"/>
-                                <TextBlock Text="{Binding WorkshopPreviewItem.PublishedFileId, StringFormat='Workshop ID: {0}'}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,4,0,0"/>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
-
-                    <!-- Action Buttons -->
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="12"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Button Grid.Column="0" Content="{DynamicResource String_Cancel}" Style="{StaticResource SecondaryButton}" Command="{Binding CloseWorkshopModalCommand}"
-                                IsEnabled="{Binding IsDownloadingWorkshopMod, Converter={StaticResource InverseBoolConverter}}"/>
-                        <Button Grid.Column="2" Content="{DynamicResource String_DownloadInstallModBtn}"
-                                Style="{StaticResource PrimaryButton}"
-                                Command="{Binding DownloadWorkshopModCommand}"
-                                IsEnabled="{Binding WorkshopPreviewItem, Converter={StaticResource NullToVisibilityConverter}}"/>
-                    </Grid>
-                </StackPanel>
-            </Border>
+            <!-- The overlay centres its content, so this host takes the page's size and the panel fills it minus a margin. -->
+            <Grid Width="{Binding ActualWidth, ElementName=RootInstanceDetailView}"
+                  Height="{Binding ActualHeight, ElementName=RootInstanceDetailView}">
+                <local:WorkshopBrowserPanel DataContext="{Binding ModsTab.Workshop}" Margin="40,28"/>
+            </Grid>
         </controls:ModalOverlay>
 
         <!-- ═══ POST-GAME EMULATOR FEEDBACK MODAL OVERLAY ═══ -->

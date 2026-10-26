@@ -25,7 +25,14 @@ public enum ModPackageLayout
     BepInExPackage,
 
     /// <summary>Archive mirrors the game folder and extracts at the install root.</summary>
-    GameRoot
+    GameRoot,
+
+    /// <summary>
+    /// Steam Workshop item content, laid out exactly as the author uploaded it. Steam itself only ever puts it in
+    /// a per-item folder and the game asks ISteamUGC where that is, so the item goes where the Steam emulator
+    /// serves Workshop items from (steam_settings/mods/&lt;id&gt;) when there is one.
+    /// </summary>
+    SteamWorkshop
 }
 
 /// <summary>One file to copy: absolute path in the staging folder to a path relative to the install folder.</summary>
@@ -50,6 +57,9 @@ public sealed record ModPlacementHints
 {
     public string? ModName { get; init; }
     public ModPackageLayout Layout { get; init; } = ModPackageLayout.Unknown;
+
+    /// <summary>PublishedFileId of a Steam Workshop item (required for <see cref="ModPackageLayout.SteamWorkshop"/>).</summary>
+    public ulong? WorkshopItemId { get; init; }
 
     public static ModPlacementHints None { get; } = new();
 }

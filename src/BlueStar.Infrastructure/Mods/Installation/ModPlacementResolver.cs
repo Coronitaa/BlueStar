@@ -44,6 +44,13 @@ public sealed class ModPlacementResolver : IModPlacementResolver
             throw new DirectoryNotFoundException($"Staging folder not found: '{stagingDirectory}'.");
 
         var tree = new InstallTree(instance.InstallPath);
+        return hints.Layout == ModPackageLayout.SteamWorkshop
+            ? ResolveWorkshopItem(instance, stagingDirectory, tree, hints)
+            : ResolveFiles(instance, stagingDirectory, tree, hints);
+    }
+
+    private static ModInstallPlan ResolveFiles(GameInstance instance, string stagingDirectory, InstallTree tree, ModPlacementHints hints)
+    {
         var payloadRoot = UnwrapSingleFolder(stagingDirectory, tree, hints.Layout);
         var files = EnumeratePayload(payloadRoot, hints.Layout);
         if (files.Count == 0)
@@ -57,6 +64,58 @@ public sealed class ModPlacementResolver : IModPlacementResolver
                ?? TryEngineRules(instance, payload, tree)
                ?? Fallback(payload, tree);
     }
+
+    // ── Steam Workshop items ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Steam never decides where a Workshop item goes inside a game: it keeps each item in its own folder and the
+    /// game asks ISteamUGC::GetItemInstallInfo for it. With a Steam emulator, that folder is steam_settings/mods/&lt;id&gt;,
+    /// so the item is kept exactly as uploaded there. Without one, the usual file rules decide.
+    /// </summary>
+    private static ModInstallPlan ResolveWorkshopItem(GameInstance instance, string stagingDirectory, InstallTree tree, ModPlacementHints hints)
+    {
+        var itemId = hints.WorkshopItemId
+            ?? throw new ArgumentException("A Steam Workshop package needs its item id.", nameof(hints));
+
+        var rawFiles = Directory.EnumerateFiles(stagingDirectory, "*", SearchOption.AllDirectories)
+            .Select(f => Path.GetRelativePath(stagingDirectory, f))
+            .OrderBy(rel => rel, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (rawFiles.Count == 0)
+            throw new InvalidOperationException("The Workshop item contains no files.");
+
+        var settingsDirs = tree.FindAll("steam_settings");
+        if (settingsDirs.Count > 0)
+        {
+            return EmulatorWorkshopPlan(stagingDirectory, rawFiles, settingsDirs, itemId, PlacementConfidence.High,
+                "The Steam emulator serves Workshop items from steam_settings/mods, the way Steam serves them from its workshop folder.");
+        }
+
+        var byFiles = ResolveFiles(instance, stagingDirectory, tree, hints with { Layout = ModPackageLayout.Unknown });
+        if (byFiles.Confidence != PlacementConfidence.Low) return byFiles;
+
+        // No emulator settings yet and no rule matched: offer the folder an emulator next to steam_api would read.
+        var steamApiDir = tree.FindDirectoryContainingFile("steam_api64.dll") ?? tree.FindDirectoryContainingFile("steam_api.dll");
+        return steamApiDir == null
+            ? byFiles
+            : EmulatorWorkshopPlan(stagingDirectory, rawFiles, [Path.Combine(steamApiDir, "steam_settings")], itemId,
+                PlacementConfidence.Low,
+                "No Steam emulator settings were found. The item will go where an emulator next to steam_api reads Workshop items.");
+    }
+
+    private static ModInstallPlan EmulatorWorkshopPlan(
+        string stagingDirectory, IReadOnlyList<string> files, IReadOnlyList<string> settingsDirs, ulong itemId,
+        PlacementConfidence confidence, string reason) => new()
+    {
+        Strategy = "SteamWorkshopEmulator",
+        Confidence = confidence,
+        Reason = reason,
+        Operations = settingsDirs
+            .SelectMany(dir => files.Select(rel => new ModFileOperation(
+                Path.Combine(stagingDirectory, rel),
+                Path.Combine(dir, "mods", itemId.ToString(), rel))))
+            .ToList()
+    };
 
     // ── 1. Provider layout ─────────────────────────────────────────────────
 

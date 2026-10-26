@@ -15,6 +15,9 @@ public sealed record ModPackage
     public required ModSourceRef Source { get; init; }
     public ModPackageLayout Layout { get; init; } = ModPackageLayout.Unknown;
     public IReadOnlyList<string> Dependencies { get; init; } = [];
+
+    /// <summary>PublishedFileId when the package is a Steam Workshop item.</summary>
+    public ulong? WorkshopItemId { get; init; }
 }
 
 public sealed record ModInstallOptions

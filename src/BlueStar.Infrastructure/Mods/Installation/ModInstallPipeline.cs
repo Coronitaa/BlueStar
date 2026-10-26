@@ -350,7 +350,8 @@ public sealed class ModInstallPipeline : IModInstallPipeline
     private static ModPlacementHints Hints(ModPackage package) => new()
     {
         ModName = package.Name,
-        Layout = package.Layout
+        Layout = package.Layout,
+        WorkshopItemId = package.WorkshopItemId
     };
 
     private static ModInstallResult Failed(ModInstallPlan? plan, string error) =>

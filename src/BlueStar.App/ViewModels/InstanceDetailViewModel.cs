@@ -2609,9 +2609,11 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         ILocalizationService? localizationService = null,
         ICacheService? cacheService = null,
         IRecommendationProvider? recommendationProvider = null,
-        IModInstallPipeline? modInstallPipeline = null)
+        IModInstallPipeline? modInstallPipeline = null,
+        IWorkshopModFetcher? workshopModFetcher = null)
     {
-        ModsTab = new ModsTabViewModel(modInstallPipeline, modManagerRegistry, localizationService, logger);
+        ModsTab = new ModsTabViewModel(modInstallPipeline, modManagerRegistry, localizationService, logger,
+            workshopModFetcher, workshopService);
         ModsTab.ModsChanged += (_, _) => OnPropertyChanged(nameof(ModsSummaryText));
 
         _instanceManager = instanceManager;

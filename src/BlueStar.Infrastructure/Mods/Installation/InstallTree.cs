@@ -57,6 +57,10 @@ internal sealed class InstallTree
         return candidates[0];
     }
 
+    /// <summary>Every folder named <paramref name="folderName"/>, shallowest first, relative to the root.</summary>
+    public IReadOnlyList<string> FindAll(string folderName) =>
+        _directories.Where(d => Path.GetFileName(d).Equals(folderName, StringComparison.OrdinalIgnoreCase)).ToList();
+
     public bool HasDirectory(string relativePath) =>
         _directories.Any(d => d.Equals(relativePath, StringComparison.OrdinalIgnoreCase));
 

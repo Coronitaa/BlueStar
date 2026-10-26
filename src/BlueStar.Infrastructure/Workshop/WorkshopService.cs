@@ -20,15 +20,17 @@ public sealed class WorkshopService : IWorkshopService
 {
     private readonly HttpClient _http;
     private readonly ILogger<WorkshopService> _logger;
+    private readonly IDepotKeyRepository? _depotKeys;
 
     private static readonly Regex WorkshopUrlRegex = new(@"[?&]id=(\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex GenericIdRegex = new(@"\b(\d{6,15})\b", RegexOptions.Compiled);
     private static readonly Regex PercentageRegex = new(@"(\d+(?:[.,]\d+)?)\s*%", RegexOptions.Compiled);
 
-    public WorkshopService(HttpClient http, ILogger<WorkshopService> logger)
+    public WorkshopService(HttpClient http, ILogger<WorkshopService> logger, IDepotKeyRepository? depotKeys = null)
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _depotKeys = depotKeys;
     }
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<uint, bool> WorkshopSupportCache = new();
@@ -247,6 +249,7 @@ public sealed class WorkshopService : IWorkshopService
                 }
 
                 var fileUrl = item.TryGetProperty("file_url", out var fu) && fu.ValueKind == JsonValueKind.String ? fu.GetString() : null;
+                var fileName = item.TryGetProperty("filename", out var fnProp) && fnProp.ValueKind == JsonValueKind.String ? fnProp.GetString() : null;
 
                 // If file_url is not directly in details, resolve direct Valve UGC CDN URL from hcontent_file
                 if (string.IsNullOrWhiteSpace(fileUrl) && hcontentFile > 0)
@@ -279,7 +282,8 @@ public sealed class WorkshopService : IWorkshopService
                     FileSizeBytes: fileSize,
                     Author: author,
                     UpdatedAt: updatedAt,
-                    FileUrl: fileUrl
+                    FileUrl: fileUrl,
+                    FileName: string.IsNullOrWhiteSpace(fileName) ? null : fileName
                 );
             }
         }
@@ -736,6 +740,211 @@ public sealed class WorkshopService : IWorkshopService
             _logger.LogError(ex, "Failed to download and install Workshop item {Id}", publishedFileId);
             return false;
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<WorkshopDownloadResult> DownloadItemContentAsync(
+        uint appId,
+        ulong publishedFileId,
+        string destinationDirectory,
+        IProgress<double>? progress = null,
+        CancellationToken ct = default)
+    {
+        if (publishedFileId == 0 || string.IsNullOrWhiteSpace(destinationDirectory))
+            return new WorkshopDownloadResult(false, Error: "Invalid Workshop item.");
+
+        var details = await GetItemDetailsAsync(publishedFileId, ct).ConfigureAwait(false);
+        if (details == null)
+            return new WorkshopDownloadResult(false, Error: "The item does not exist or is private.");
+
+        Directory.CreateDirectory(destinationDirectory);
+        progress?.Report(5.0);
+        var effectiveAppId = details.AppId > 0 ? details.AppId : appId;
+
+        // 1. Legacy single-file items expose their file on Valve's UGC CDN.
+        if (!string.IsNullOrWhiteSpace(details.FileUrl) &&
+            await TryDownloadCdnFileAsync(details, destinationDirectory, ct).ConfigureAwait(false))
+        {
+            progress?.Report(100.0);
+            return new WorkshopDownloadResult(true, details);
+        }
+
+        // 2. Everything else is a depot-style item that DepotDownloader fetches with -pubfile.
+        var (ok, error) = await RunDepotDownloaderAsync(effectiveAppId, publishedFileId, destinationDirectory, progress, ct).ConfigureAwait(false);
+        var ddMetadata = Path.Combine(destinationDirectory, ".DepotDownloader");
+        if (Directory.Exists(ddMetadata))
+        {
+            Directory.Delete(ddMetadata, recursive: true);
+        }
+
+        if (!ok || !Directory.EnumerateFiles(destinationDirectory, "*", SearchOption.AllDirectories).Any())
+        {
+            return new WorkshopDownloadResult(false, details, error ?? "Steam returned no files for this item.");
+        }
+
+        progress?.Report(100.0);
+        return new WorkshopDownloadResult(true, details);
+    }
+
+    private async Task<bool> TryDownloadCdnFileAsync(WorkshopItemInfo details, string destinationDirectory, CancellationToken ct)
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"steamws_{details.PublishedFileId}_{Guid.NewGuid():N}.bin");
+        try
+        {
+            using (var response = await _http.GetAsync(details.FileUrl, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false))
+            {
+                if (!response.IsSuccessStatusCode) return false;
+                await using var input = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+                await using var output = File.Create(tempFile);
+                await input.CopyToAsync(output, ct).ConfigureAwait(false);
+            }
+
+            var head = new byte[512];
+            int read;
+            await using (var probe = File.OpenRead(tempFile))
+            {
+                read = await probe.ReadAsync(head, ct).ConfigureAwait(false);
+            }
+
+            if (read == 0) return false;
+            var text = Encoding.UTF8.GetString(head, 0, read).TrimStart();
+            if (text.StartsWith("<!DOCTYPE", StringComparison.OrdinalIgnoreCase) || text.StartsWith("<html", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning("Workshop CDN returned an HTML page for item {Id}", details.PublishedFileId);
+                return false;
+            }
+
+            var isZip = read >= 4 && head[0] == 0x50 && head[1] == 0x4B && head[2] is 0x03 or 0x05 or 0x07;
+            if (isZip)
+            {
+                ZipFile.ExtractToDirectory(tempFile, destinationDirectory, overwriteFiles: true);
+            }
+            else
+            {
+                var name = Path.GetFileName(details.FileName ?? string.Empty);
+                if (string.IsNullOrWhiteSpace(name)) name = $"{details.PublishedFileId}.bin";
+                File.Copy(tempFile, Path.Combine(destinationDirectory, name), overwrite: true);
+            }
+
+            return true;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException)
+        {
+            _logger.LogWarning("Workshop CDN download failed for item {Id}: {Message}", details.PublishedFileId, ex.Message);
+            return false;
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
+
+    private async Task<(bool Ok, string? Error)> RunDepotDownloaderAsync(
+        uint appId, ulong publishedFileId, string destinationDirectory, IProgress<double>? progress, CancellationToken ct)
+    {
+        var ddPath = GetDepotDownloaderPath();
+        if (string.IsNullOrEmpty(ddPath)) return (false, "DepotDownloader is missing from the tools folder.");
+
+        // Workshop content is encrypted with the key of the depot that shares the game's AppID. Steam does not hand it
+        // to anonymous accounts, so pass it in when BlueStar knows it (DepotBox lua files list it as addappid(appid, 1, key)).
+        var arguments = $"-app {appId} -pubfile {publishedFileId} -dir \"{destinationDirectory}\"";
+        string? keyFile = null;
+        var appKey = _depotKeys != null ? await _depotKeys.GetKeyAsync(appId, ct).ConfigureAwait(false) : null;
+        if (!string.IsNullOrWhiteSpace(appKey))
+        {
+            keyFile = Path.Combine(Path.GetTempPath(), $"bluestar_wskeys_{Guid.NewGuid():N}.txt");
+            await File.WriteAllTextAsync(keyFile, $"{appId};{appKey.Trim()}", ct).ConfigureAwait(false);
+            arguments += $" -depotkeys \"{keyFile}\"";
+        }
+
+        try
+        {
+            return await RunDepotDownloaderProcessAsync(ddPath, arguments, publishedFileId, appId, progress, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (keyFile != null && File.Exists(keyFile)) File.Delete(keyFile);
+        }
+    }
+
+    private async Task<(bool Ok, string? Error)> RunDepotDownloaderProcessAsync(
+        string ddPath, string arguments, ulong publishedFileId, uint appId, IProgress<double>? progress, CancellationToken ct)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = ddPath,
+            Arguments = arguments,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = Path.GetDirectoryName(ddPath)
+        };
+
+        // DepotDownloaderMod.exe is framework-dependent. Point it at a runtime shipped next to BlueStar only if one
+        // really is there (host/fxr layout); otherwise let it find the .NET installed on the machine.
+        if (Directory.Exists(Path.Combine(AppContext.BaseDirectory, "host", "fxr")))
+        {
+            psi.EnvironmentVariables["DOTNET_ROOT"] = AppContext.BaseDirectory;
+        }
+
+        string? lastError = null;
+        var accessDenied = false;
+        using var proc = new System.Diagnostics.Process { StartInfo = psi };
+        proc.OutputDataReceived += (_, e) =>
+        {
+            if (string.IsNullOrEmpty(e.Data)) return;
+            if (e.Data.Contains("AccessDenied", StringComparison.OrdinalIgnoreCase) ||
+                e.Data.Contains("No valid depot key", StringComparison.OrdinalIgnoreCase)) accessDenied = true;
+            if (e.Data.Contains("error", StringComparison.OrdinalIgnoreCase) ||
+                e.Data.Contains("denied", StringComparison.OrdinalIgnoreCase)) lastError = e.Data.Trim();
+
+            var match = PercentageRegex.Match(e.Data);
+            if (match.Success && double.TryParse(match.Groups[1].Value.Replace(',', '.'),
+                    System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var pct))
+            {
+                progress?.Report(Math.Min(95.0, 5.0 + pct * 0.9));
+            }
+        };
+        proc.ErrorDataReceived += (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data)) lastError = e.Data.Trim();
+        };
+
+        proc.Start();
+        proc.BeginOutputReadLine();
+        proc.BeginErrorReadLine();
+        try
+        {
+            await proc.WaitForExitAsync(ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            try { proc.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+            throw;
+        }
+
+        // 0x80008083 / 0x80008096: the .NET host could not find a runtime for the downloader.
+        if (proc.ExitCode is unchecked((int)0x80008083) or unchecked((int)0x80008096))
+        {
+            _logger.LogWarning("DepotDownloader could not start for Workshop item {Id}: no .NET runtime found", publishedFileId);
+            return (false, "The Workshop downloader needs the .NET runtime (8 or newer), which is not installed.");
+        }
+
+        // DepotDownloader exits with 0 even when Steam refuses the depot key, so the output decides.
+        if (accessDenied)
+        {
+            _logger.LogWarning("Steam denied the Workshop depot key of AppID {AppId} for item {Id}", appId, publishedFileId);
+            return (false, $"Steam only serves this game's Workshop to accounts that own it. BlueStar needs the depot key of AppID {appId} to download it.");
+        }
+
+        if (proc.ExitCode != 0)
+        {
+            _logger.LogWarning("DepotDownloader exited with {Code} for Workshop item {Id}: {Error}", proc.ExitCode, publishedFileId, lastError);
+            return (false, lastError ?? $"DepotDownloader exited with code {proc.ExitCode}.");
+        }
+
+        return (true, null);
     }
 
     private static string? GetDepotDownloaderPath()

@@ -1,0 +1,106 @@
+<UserControl x:Class="BlueStar.App.Views.WorkshopBrowserPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf">
+    <Border Background="{StaticResource SurfaceCardElevatedBrush}"
+            BorderBrush="{StaticResource AccentBrush}"
+            BorderThickness="1"
+            CornerRadius="{StaticResource RadiusLg}"
+            Padding="18">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Grid Grid.Row="0" Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="{DynamicResource String_WorkshopBrowserTitle}" Style="{StaticResource H2}"/>
+                    <TextBlock Text="{DynamicResource String_WorkshopBrowserHint}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                </StackPanel>
+                <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}" Width="34" Height="34" Padding="0"
+                        VerticalAlignment="Top" Command="{Binding CloseCommand}"/>
+            </Grid>
+
+            <!-- Toolbar: navigation, current item, manual link/id, download -->
+            <Grid Grid.Row="1" Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" Content="←" Style="{StaticResource SecondaryButton}" Width="36" Padding="0,6" Margin="0,0,6,0"
+                        Click="OnBackClicked" ToolTip="Back"/>
+                <Button Grid.Column="1" Content="→" Style="{StaticResource SecondaryButton}" Width="36" Padding="0,6" Margin="0,0,6,0"
+                        Click="OnForwardClicked" ToolTip="Forward"/>
+                <Button Grid.Column="2" Content="⌂" Style="{StaticResource SecondaryButton}" Width="36" Padding="0,6" Margin="0,0,12,0"
+                        Click="OnHomeClicked" ToolTip="Workshop home"/>
+
+                <Grid Grid.Column="3" Margin="0,0,12,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{DynamicResource String_WorkshopManualLabel}" Style="{StaticResource CaptionBold}"
+                               VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBox Grid.Column="1" Style="{StaticResource DarkTextBox}"
+                             Text="{Binding ManualInput, UpdateSourceTrigger=PropertyChanged}"/>
+                </Grid>
+
+                <Button Grid.Column="4" Style="{StaticResource PrimaryButton}" Command="{Binding DownloadCommand}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{DynamicResource String_WorkshopDownloadInstallBtn}"/>
+                        <TextBlock Text="{Binding CurrentItemId, StringFormat='  #{0}'}" Opacity="0.8"
+                                   Visibility="{Binding HasItem, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+            <!-- Embedded Steam Workshop -->
+            <Border Grid.Row="2" CornerRadius="{StaticResource RadiusMd}" ClipToBounds="True" Background="#1B2838">
+                <Grid>
+                    <wv2:WebView2 x:Name="WorkshopView"/>
+                    <Border x:Name="WebViewFallback" Visibility="Collapsed" Padding="32" Background="#1B2838">
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="460">
+                            <TextBlock Text="{DynamicResource String_WorkshopWebViewMissingTitle}" FontSize="17" FontWeight="SemiBold"
+                                       Foreground="{StaticResource PrimaryTextBrush}" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                            <TextBlock Text="{DynamicResource String_WorkshopWebViewMissingDesc}" Style="{StaticResource BodySmall}"
+                                       TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,16"/>
+                            <Button Content="{DynamicResource String_WorkshopInstallWebViewBtn}" Style="{StaticResource PrimaryButton}"
+                                    HorizontalAlignment="Center" Click="OnInstallWebViewClicked"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- Status: progress and result -->
+            <StackPanel Grid.Row="3" Margin="0,10,0,0">
+                <ProgressBar Height="4" Minimum="0" Maximum="100" Value="{Binding Progress}" Margin="0,0,0,8"
+                             Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                <TextBlock TextWrapping="Wrap" Text="{Binding StatusMessage}"
+                           Visibility="{Binding StatusMessage, Converter={StaticResource NullToVisibilityConverter}}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource BodySmall}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsStatusError}" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource DangerBrush}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <TextBlock Text="{DynamicResource String_WorkshopNoItemHint}" Style="{StaticResource Muted}"
+                           Visibility="{Binding HasItem, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>
