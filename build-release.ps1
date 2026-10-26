@@ -327,6 +327,58 @@ if ($cert) {
 }
 
 # ============================================================================
+# 4.5 Runtimes y prerrequisitos del sistema (descargados de Microsoft y cacheados en build-cache\)
+#     - Todos los formatos: instaladores offline en {app}\prerequisites (VC++ x64/x86, WebView2)
+#     - Portable: ademas WebView2 Fixed Version en {app}\WebView2Runtime (no requiere instalar nada)
+#     .NET 8 ya va incluido porque la publicacion es self-contained.
+# ============================================================================
+Write-Host "[4.5/7] Preparando runtimes y prerrequisitos del sistema..." -ForegroundColor Yellow
+$cacheDir = Join-Path $rootDir "build-cache"
+$prereqCacheDir = Join-Path $cacheDir "prerequisites"
+$webView2FixedVersion = "156.0.4314.42"
+$webView2FixedUrl = "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/074c0930-36ad-4756-9d04-dfe0e503bd94/Microsoft.WebView2.FixedVersionRuntime.$webView2FixedVersion.x64.cab"
+$prerequisites = [ordered]@{
+    "vc_redist.x64.exe" = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+    "vc_redist.x86.exe" = "https://aka.ms/vs/17/release/vc_redist.x86.exe"
+    "MicrosoftEdgeWebView2RuntimeInstallerX64.exe" = "https://go.microsoft.com/fwlink/?linkid=2124701"
+}
+
+function Get-MicrosoftFile([string]$Url, [string]$Destination) {
+    if (-not (Test-Path -LiteralPath $Destination)) {
+        Write-Host "  Descargando $(Split-Path -Leaf $Destination)..." -ForegroundColor Gray
+        & curl.exe -sSL --fail -o $Destination $Url
+        if ($LASTEXITCODE -ne 0) { Remove-Item -LiteralPath $Destination -Force -ErrorAction SilentlyContinue; throw "Descarga fallida: $Url" }
+    }
+    $sig = Get-AuthenticodeSignature -LiteralPath $Destination
+    if ($sig.Status -ne "Valid" -or $sig.SignerCertificate.Subject -notlike "CN=Microsoft Corporation*") {
+        Remove-Item -LiteralPath $Destination -Force -ErrorAction SilentlyContinue
+        throw "Firma de Microsoft invalida en $Destination"
+    }
+}
+
+New-Item -ItemType Directory -Force -Path $prereqCacheDir | Out-Null
+$publishPrereqDir = Join-Path $publishDir "prerequisites"
+New-Item -ItemType Directory -Force -Path $publishPrereqDir | Out-Null
+foreach ($name in $prerequisites.Keys) {
+    $cached = Join-Path $prereqCacheDir $name
+    Get-MicrosoftFile $prerequisites[$name] $cached
+    Copy-Item -LiteralPath $cached -Destination $publishPrereqDir -Force
+}
+Write-Host "  [OK] Instaladores offline copiados a prerequisites\ ($($prerequisites.Count))" -ForegroundColor Gray
+
+$fixedCacheDir = Join-Path $cacheDir "webview2-fixed"
+$fixedCab = Join-Path $fixedCacheDir "Microsoft.WebView2.FixedVersionRuntime.$webView2FixedVersion.x64.cab"
+$fixedRuntimeDir = Join-Path $fixedCacheDir "x64\Microsoft.WebView2.FixedVersionRuntime.$webView2FixedVersion.x64"
+New-Item -ItemType Directory -Force -Path $fixedCacheDir | Out-Null
+Get-MicrosoftFile $webView2FixedUrl $fixedCab
+if (-not (Test-Path -LiteralPath (Join-Path $fixedRuntimeDir "msedgewebview2.exe"))) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $fixedCacheDir "x64") | Out-Null
+    & expand.exe -F:* $fixedCab (Join-Path $fixedCacheDir "x64") | Out-Null
+    if (-not (Test-Path -LiteralPath (Join-Path $fixedRuntimeDir "msedgewebview2.exe"))) { throw "No se pudo extraer WebView2 Fixed Version" }
+}
+Write-Host "  [OK] WebView2 Fixed Version $webView2FixedVersion listo para el Portable" -ForegroundColor Gray
+
+# ============================================================================
 # 5. Formato 1: Generar archivo Portable (.zip)
 # ============================================================================
 Write-Host "[5/7] Generando paquete Portable (.zip)..." -ForegroundColor Yellow
@@ -339,6 +391,21 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.IO.Compression.ZipFile]::CreateFromDirectory($publishDir, $portableZip, [System.IO.Compression.CompressionLevel]::Optimal, $false)
 
 Remove-Item -Path $portableMarkerPath -Force -ErrorAction SilentlyContinue
+
+# WebView2 Fixed Version solo en el Portable (Setup y MSIX llevan su instalador, que el Portable no necesita)
+$zipArchive = [System.IO.Compression.ZipFile]::Open($portableZip, [System.IO.Compression.ZipArchiveMode]::Update)
+try {
+    # Windows PowerShell 5.1 escribe las entradas con '\'; usar el mismo separador que el resto del zip
+    $sep = if ($zipArchive.Entries | Where-Object { $_.FullName.Contains('/') } | Select-Object -First 1) { '/' } else { '\' }
+    $webView2InstallerEntry = $zipArchive.GetEntry("prerequisites${sep}MicrosoftEdgeWebView2RuntimeInstallerX64.exe")
+    if ($webView2InstallerEntry) { $webView2InstallerEntry.Delete() }
+    Get-ChildItem -LiteralPath $fixedRuntimeDir -Recurse -File | ForEach-Object {
+        $entryName = "WebView2Runtime$sep" + $_.FullName.Substring($fixedRuntimeDir.Length + 1).Replace('\', $sep)
+        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zipArchive, $_.FullName, $entryName, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+    }
+} finally {
+    $zipArchive.Dispose()
+}
 
 $zipItem = Get-Item $portableZip
 $zipMb = [math]::Round($zipItem.Length / 1048576, 2)

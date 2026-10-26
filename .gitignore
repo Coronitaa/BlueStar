@@ -26,6 +26,9 @@ bld/
 # Project tools
 !src/BlueStar.App/tools/**
 
+# Release build cache (Microsoft runtimes downloaded by build-release.ps1)
+build-cache/
+
 # NuGet
 *.nupkg
 *.snupkg

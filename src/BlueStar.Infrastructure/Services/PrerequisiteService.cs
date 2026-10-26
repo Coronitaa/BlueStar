@@ -477,6 +477,23 @@ public sealed class PrerequisiteService : IPrerequisiteService
         => InstallPrerequisiteAsync(item, progress, ct);
 
     /// <inheritdoc />
+    /// <summary>
+    /// Offline installers bundled with release builds, by prerequisite id.
+    /// </summary>
+    private static readonly Dictionary<string, string> BundledInstallers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["vcredist_2015_2022_x64"] = "vc_redist.x64.exe",
+        ["vcredist_2015_2022_x86"] = "vc_redist.x86.exe",
+        ["webview2_runtime"] = "MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
+    };
+
+    internal static string? BundledInstallerPath(string? id, string? baseDirectory = null)
+    {
+        if (id == null || !BundledInstallers.TryGetValue(id, out var fileName)) return null;
+        var path = Path.Combine(baseDirectory ?? AppContext.BaseDirectory, "prerequisites", fileName);
+        return File.Exists(path) ? path : null;
+    }
+
     public async Task<bool> InstallPrerequisiteAsync(PrerequisiteItem item, IProgress<string>? progress = null, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(item);
@@ -485,6 +502,17 @@ public sealed class PrerequisiteService : IPrerequisiteService
         progress?.Report($"Starting installation of {item.Name}...");
 
         string? installerPath = item.LocalInstallerPath;
+
+        // Release builds ship the offline installers in {app}\prerequisites; prefer them over downloading
+        if (string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))
+        {
+            var bundled = BundledInstallerPath(item.Id);
+            if (bundled != null)
+            {
+                installerPath = bundled;
+                item.LocalInstallerPath = bundled;
+            }
+        }
 
         // Download if local installer is not available
         if (string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))

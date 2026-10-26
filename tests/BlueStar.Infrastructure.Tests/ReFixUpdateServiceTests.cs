@@ -107,14 +107,14 @@ public class ReFixUpdateServiceTests
         var mockCache = new Mock<ICacheService>();
         var handler = new Mock<HttpMessageHandler>();
 
-        var json148 = """
+        var jsonFuture = """
         {
-            "tag_name": "v1.4.8",
+            "tag_name": "v99.0.0",
             "body": "Test release notes",
             "assets": [
                 {
-                    "name": "BlueStar-v1.4.8-Portable-win-x64.zip",
-                    "browser_download_url": "https://example.com/BlueStar-v1.4.8-Portable-win-x64.zip",
+                    "name": "BlueStar-v99.0.0-Portable-win-x64.zip",
+                    "browser_download_url": "https://example.com/BlueStar-v99.0.0-Portable-win-x64.zip",
                     "size": 50000000
                 }
             ]
@@ -129,7 +129,7 @@ public class ReFixUpdateServiceTests
             .ReturnsAsync(new HttpResponseMessage
             {
                 StatusCode = HttpStatusCode.OK,
-                Content = new StringContent(json148, System.Text.Encoding.UTF8, "application/json")
+                Content = new StringContent(jsonFuture, System.Text.Encoding.UTF8, "application/json")
             });
 
         var client = new HttpClient(handler.Object);
@@ -142,7 +142,7 @@ public class ReFixUpdateServiceTests
         var update = await updateService.CheckForUpdatesAsync(CancellationToken.None, forceRefresh: true);
 
         update.Should().NotBeNull();
-        update!.Version.Should().Be("1.4.8");
+        update!.Version.Should().Be("99.0.0");
         mockCache.Verify(c => c.GetAsync<It.IsAnyType>(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

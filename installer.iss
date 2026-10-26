@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "BlueStar"
-#define MyAppVersion "1.4.7"
+#define MyAppVersion "1.4.8"
 #define MyAppPublisher "BlueStar Devs"
 #define MyAppURL "https://github.com/Coronitaa/BlueStar"
 #define MyAppExeName "BlueStar.exe"
@@ -42,12 +42,8 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 [CustomMessages]
 english.PrereqChecking=Checking system prerequisites...
 spanish.PrereqChecking=Comprobando prerrequisitos del sistema...
-english.PrereqDownloading=Downloading required prerequisites (Visual C++, WebView2)...
-spanish.PrereqDownloading=Descargando prerrequisitos necesarios (Visual C++, WebView2)...
 english.PrereqInstalling=Installing prerequisites (Visual C++ 2015-2022, Microsoft Edge WebView2)...
 spanish.PrereqInstalling=Instalando prerrequisitos (Visual C++ 2015-2022, Microsoft Edge WebView2)...
-english.PrereqDownloadFailed=Failed to download required prerequisites. Setup cannot continue without these components.
-spanish.PrereqDownloadFailed=Error al descargar los prerrequisitos obligatorios. La instalación no puede continuar sin estos componentes.
 english.PrereqInstallFailed=Failed to install required prerequisite: %1 (Exit code: %2). Setup will abort.
 spanish.PrereqInstallFailed=Error al instalar el prerrequisito obligatorio: %1 (Código de salida: %2). La instalación se cancelará.
 english.PrereqVerifyFailed=Verification failed for: %1. The component was not detected after installation.
@@ -60,9 +56,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "dist\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
-; Optional pre-bundled redistributables (bundled if present in redist\ directory, skipped otherwise)
-Source: "redist\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "redist\MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: ignoreversion skipifsourcedoesntexist
+; Offline installers for VC++ 2015-2022 (x64/x86) and WebView2 ship in dist\publish\prerequisites
+; (staged by build-release.ps1) and run from {app}\prerequisites when a component is missing.
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -73,38 +68,35 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 
 [Code]
 var
-  DownloadPage: TDownloadWizardPage;
-  NeedVc64Flag: Boolean;
-  NeedWebView2Flag: Boolean;
-  DownloadCount: Integer;
   RebootRequiredFlag: Boolean;
 
-function NeedVc64(): Boolean;
+function VcRuntimeInstalled(const SubKey: String): Boolean;
 var
   Installed: Cardinal;
   Bld: Cardinal;
   Major: Cardinal;
 begin
-  Result := True;
-  if RegQueryDWordValue(HKLM, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64', 'Installed', Installed) and (Installed = 1) then
+  Result := False;
+  if RegQueryDWordValue(HKLM64, SubKey, 'Installed', Installed) and (Installed = 1) and
+     RegQueryDWordValue(HKLM64, SubKey, 'Major', Major) and (Major >= 14) then
   begin
-    if RegQueryDWordValue(HKLM, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64', 'Major', Major) and (Major >= 14) then
-    begin
-      if RegQueryDWordValue(HKLM, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64', 'Bld', Bld) then
-      begin
-        if Bld >= 24215 then
-          Result := False;
-      end
-      else
-        Result := False;
-    end;
-  end
-  else if RegQueryDWordValue(HKLM, 'SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\X64', 'Installed', Installed) and (Installed = 1) then
-  begin
-    Result := False;
+    if RegQueryDWordValue(HKLM64, SubKey, 'Bld', Bld) then
+      Result := Bld >= 24215
+    else
+      Result := True;
   end;
+end;
 
+function NeedVc64(): Boolean;
+begin
+  Result := not VcRuntimeInstalled('SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64');
   Log(Format('Prerequisite Check: VC++ 2015-2022 x64 Needed = %d', [Integer(Result)]));
+end;
+
+function NeedVc86(): Boolean;
+begin
+  Result := not VcRuntimeInstalled('SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\X86');
+  Log(Format('Prerequisite Check: VC++ 2015-2022 x86 Needed = %d', [Integer(Result)]));
 end;
 
 function NeedWebView2(): Boolean;
@@ -127,60 +119,38 @@ begin
   Result := RebootRequiredFlag;
 end;
 
-function OnDownloadProgress(const Url, FileName: String; const Progress, ProgressMax: Int64): Boolean;
-begin
-  Result := True;
-end;
-
 procedure InitializeWizard();
 begin
-  DownloadPage := CreateDownloadPage(SetupMessage(msgWizardPreparing), CustomMessage('PrereqDownloading'), @OnDownloadProgress);
   RebootRequiredFlag := False;
 end;
 
-function NextButtonClick(CurPageID: Integer): Boolean;
+// Runs a bundled offline installer from {app}\prerequisites. VC++ is required (setup aborts on failure);
+// WebView2 is not, because BlueStar can still offer its bundled installer from inside the app.
+procedure InstallPrerequisite(const FileName, DisplayName, Params: String; Required: Boolean);
+var
+  Installer: String;
+  ResultCode: Integer;
 begin
-  Result := True;
-  if CurPageID = wpReady then
+  Installer := ExpandConstant('{app}\prerequisites\' + FileName);
+  if not FileExists(Installer) then
   begin
-    NeedVc64Flag := NeedVc64();
-    NeedWebView2Flag := NeedWebView2();
-
-    DownloadPage.Clear;
-    DownloadCount := 0;
-
-    if NeedVc64Flag and not FileExists(ExpandConstant('{tmp}\vc_redist.x64.exe')) then
-    begin
-      Log('Queueing download for Visual C++ 2015-2022 x64 Redistributable');
-      DownloadPage.Add('https://aka.ms/vs/17/release/vc_redist.x64.exe', 'vc_redist.x64.exe', '');
-      DownloadCount := DownloadCount + 1;
-    end;
-
-    if NeedWebView2Flag and not FileExists(ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe')) then
-    begin
-      Log('Queueing download for Microsoft Edge WebView2 Evergreen Bootstrapper');
-      DownloadPage.Add('https://go.microsoft.com/fwlink/p/?LinkId=2124703', 'MicrosoftEdgeWebview2Setup.exe', '');
-      DownloadCount := DownloadCount + 1;
-    end;
-
-    if DownloadCount > 0 then
-    begin
-      DownloadPage.Show;
-      try
-        try
-          DownloadPage.Download;
-          Log('All requested prerequisites downloaded successfully.');
-        except
-          Log('Prerequisite download failed: ' + GetExceptionMessage);
-          SuppressibleMsgBox(AddPeriod(GetExceptionMessage) + #13#10#13#10 + CustomMessage('PrereqDownloadFailed'), mbCriticalError, MB_OK, IDOK);
-          Result := False;
-          Exit;
-        end;
-      finally
-        DownloadPage.Hide;
-      end;
-    end;
+    Log('Bundled installer not found: ' + Installer);
+    Exit;
   end;
+
+  Log('Executing ' + DisplayName + ' installer...');
+  if not Exec(Installer, Params, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    if Required then
+      RaiseException(FmtMessage(CustomMessage('PrereqInstallFailed'), [DisplayName, IntToStr(ResultCode)]));
+    Exit;
+  end;
+
+  Log(Format('%s exited with code: %d', [FileName, ResultCode]));
+  if ResultCode = 3010 then
+    RebootRequiredFlag := True
+  else if Required and (ResultCode <> 0) and (ResultCode <> 1641) and (ResultCode <> 1638) then
+    RaiseException(FmtMessage(CustomMessage('PrereqInstallFailed'), [DisplayName, IntToStr(ResultCode)]));
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -190,65 +160,32 @@ var
   SelectedLang: String;
   FileContent: AnsiString;
   ContentStr: String;
-  ResultCode: Integer;
 begin
-  if CurStep = ssInstall then
+  if CurStep = ssPostInstall then
   begin
     WizardForm.StatusLabel.Caption := CustomMessage('PrereqInstalling');
 
-    // 1. Install VC++ 2015-2022 x64 if required
-    if NeedVc64Flag and FileExists(ExpandConstant('{tmp}\vc_redist.x64.exe')) then
+    if NeedVc64() then
     begin
-      Log('Executing Visual C++ 2015-2022 x64 installer...');
-      if not Exec(ExpandConstant('{tmp}\vc_redist.x64.exe'), '/install /quiet /norestart', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-      begin
-        Log(Format('Failed to execute vc_redist.x64.exe. Error code: %d', [ResultCode]));
-        RaiseException(FmtMessage(CustomMessage('PrereqInstallFailed'), ['Visual C++ 2015-2022 (x64)', IntToStr(ResultCode)]));
-      end;
-
-      Log(Format('vc_redist.x64.exe exited with code: %d', [ResultCode]));
-      if ResultCode = 3010 then
-        RebootRequiredFlag := True
-      else if (ResultCode <> 0) and (ResultCode <> 1641) and (ResultCode <> 1638) then
-      begin
-        RaiseException(FmtMessage(CustomMessage('PrereqInstallFailed'), ['Visual C++ 2015-2022 (x64)', IntToStr(ResultCode)]));
-      end;
-
-      // Post-install verification
+      InstallPrerequisite('vc_redist.x64.exe', 'Visual C++ 2015-2022 (x64)', '/install /quiet /norestart', True);
       if NeedVc64() then
-      begin
-        Log('Verification failed: Visual C++ 2015-2022 (x64) is still not detected.');
         RaiseException(FmtMessage(CustomMessage('PrereqVerifyFailed'), ['Visual C++ 2015-2022 (x64)']));
-      end;
     end;
 
-    // 2. Install Microsoft Edge WebView2 Runtime if required
-    if NeedWebView2Flag and FileExists(ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe')) then
+    if NeedVc86() then
     begin
-      Log('Executing Microsoft Edge WebView2 Bootstrapper...');
-      if not Exec(ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe'), '/silent /install', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-      begin
-        Log(Format('Failed to execute MicrosoftEdgeWebview2Setup.exe. Error code: %d', [ResultCode]));
-        RaiseException(FmtMessage(CustomMessage('PrereqInstallFailed'), ['Microsoft Edge WebView2 Runtime', IntToStr(ResultCode)]));
-      end;
-
-      Log(Format('MicrosoftEdgeWebview2Setup.exe exited with code: %d', [ResultCode]));
-      if ResultCode = 3010 then
-        RebootRequiredFlag := True
-      else if (ResultCode <> 0) and (ResultCode <> 1641) and (ResultCode <> 1638) then
-      begin
-        RaiseException(FmtMessage(CustomMessage('PrereqInstallFailed'), ['Microsoft Edge WebView2 Runtime', IntToStr(ResultCode)]));
-      end;
-
-      // Post-install verification
-      if NeedWebView2() then
-      begin
-        Log('Verification warning: Microsoft Edge WebView2 is still not detected in registry. The app contains safe runtime fallback.');
-      end;
+      InstallPrerequisite('vc_redist.x86.exe', 'Visual C++ 2015-2022 (x86)', '/install /quiet /norestart', True);
+      if NeedVc86() then
+        RaiseException(FmtMessage(CustomMessage('PrereqVerifyFailed'), ['Visual C++ 2015-2022 (x86)']));
     end;
-  end
-  else if CurStep = ssPostInstall then
-  begin
+
+    if NeedWebView2() then
+    begin
+      InstallPrerequisite('MicrosoftEdgeWebView2RuntimeInstallerX64.exe', 'Microsoft Edge WebView2 Runtime', '/silent /install', False);
+      if NeedWebView2() then
+        Log('Verification warning: Microsoft Edge WebView2 is still not detected. BlueStar offers its bundled installer at startup.');
+    end;
+
     if ActiveLanguage = 'spanish' then
       SelectedLang := 'es'
     else

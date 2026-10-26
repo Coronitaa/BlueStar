@@ -124,8 +124,8 @@ public partial class HomeView : UserControl
 
         Directory.CreateDirectory(profileFolder);
 
-        var environment = await CoreWebView2Environment
-            .CreateAsync(userDataFolder: profileFolder)
+        var environment = await BlueStar.App.Services.WebView2AvailabilityService
+            .CreateEnvironmentAsync(profileFolder)
             .ConfigureAwait(true);
 
         await StorePageView.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
