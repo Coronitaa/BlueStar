@@ -235,6 +235,7 @@ public partial class App : Application
         // Engine & Modding & Emulator services
         services.AddSingleton<IEngineDetector, BlueStar.Infrastructure.Engine.EngineDetector>();
         services.AddHttpClient<IBepInExService, BlueStar.Infrastructure.Mods.BepInExService>();
+        services.AddHttpClient<BlueStar.Infrastructure.Workshop.SteamCmdWorkshopClient>();
         services.AddHttpClient<IWorkshopService, BlueStar.Infrastructure.Workshop.WorkshopService>();
         services.AddSingleton<IModLedgerStore, BlueStar.Infrastructure.Mods.Installation.JsonModLedgerStore>();
         services.AddSingleton<IModPlacementResolver, BlueStar.Infrastructure.Mods.Installation.ModPlacementResolver>();

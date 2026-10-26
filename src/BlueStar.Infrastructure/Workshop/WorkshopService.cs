@@ -26,11 +26,18 @@ public sealed class WorkshopService : IWorkshopService
     private static readonly Regex GenericIdRegex = new(@"\b(\d{6,15})\b", RegexOptions.Compiled);
     private static readonly Regex PercentageRegex = new(@"(\d+(?:[.,]\d+)?)\s*%", RegexOptions.Compiled);
 
-    public WorkshopService(HttpClient http, ILogger<WorkshopService> logger, IDepotKeyRepository? depotKeys = null)
+    private readonly SteamCmdWorkshopClient? _steamCmd;
+
+    public WorkshopService(
+        HttpClient http,
+        ILogger<WorkshopService> logger,
+        IDepotKeyRepository? depotKeys = null,
+        SteamCmdWorkshopClient? steamCmd = null)
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _depotKeys = depotKeys;
+        _steamCmd = steamCmd;
     }
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<uint, bool> WorkshopSupportCache = new();
@@ -777,13 +784,28 @@ public sealed class WorkshopService : IWorkshopService
             Directory.Delete(ddMetadata, recursive: true);
         }
 
-        if (!ok || !Directory.EnumerateFiles(destinationDirectory, "*", SearchOption.AllDirectories).Any())
+        if (ok && Directory.EnumerateFiles(destinationDirectory, "*", SearchOption.AllDirectories).Any())
         {
-            return new WorkshopDownloadResult(false, details, error ?? "Steam returned no files for this item.");
+            progress?.Report(100.0);
+            return new WorkshopDownloadResult(true, details);
         }
 
-        progress?.Report(100.0);
-        return new WorkshopDownloadResult(true, details);
+        // 3. SteamCMD logged in anonymously (WorkshopDL's method). Same Steam rules, but a second, official route.
+        if (_steamCmd != null)
+        {
+            _logger.LogInformation("DepotDownloader could not fetch Workshop item {Id} ({Error}); trying SteamCMD", publishedFileId, error);
+            var (cmdOk, cmdError) = await _steamCmd.DownloadAsync(effectiveAppId, publishedFileId, destinationDirectory, progress, ct)
+                .ConfigureAwait(false);
+            if (cmdOk && Directory.EnumerateFiles(destinationDirectory, "*", SearchOption.AllDirectories).Any())
+            {
+                progress?.Report(100.0);
+                return new WorkshopDownloadResult(true, details);
+            }
+
+            error = cmdError ?? error;
+        }
+
+        return new WorkshopDownloadResult(false, details, error ?? "Steam returned no files for this item.");
     }
 
     private async Task<bool> TryDownloadCdnFileAsync(WorkshopItemInfo details, string destinationDirectory, CancellationToken ct)
