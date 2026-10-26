@@ -168,4 +168,34 @@ public partial class InstanceDetailView : UserControl
             e.Handled = true;
         }
     }
+
+    private void OnModsTabDragOver(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            e.Effects = DragDropEffects.Copy;
+            e.Handled = true;
+        }
+        else
+        {
+            e.Effects = DragDropEffects.None;
+        }
+    }
+
+    private async void OnModsTabDrop(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+
+        if (e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
+        {
+            if (DataContext is InstanceDetailViewModel vm)
+            {
+                await vm.ModsTab.InstallDroppedFilesAsync(files);
+            }
+            else if ((sender as FrameworkElement)?.DataContext is ModsTabViewModel modsTab)
+            {
+                await modsTab.InstallDroppedFilesAsync(files);
+            }
+        }
+    }
 }

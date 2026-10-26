@@ -144,6 +144,21 @@ public sealed class BepInExService : IBepInExService
     }
 
     /// <inheritdoc />
+    private static string? CleanVersionString(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var s = raw.Trim();
+        while (s.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+        {
+            s = s[1..].TrimStart();
+        }
+        var plusIdx = s.IndexOf('+');
+        if (plusIdx >= 0) s = s[..plusIdx].Trim();
+        var parenIdx = s.IndexOf('(');
+        if (parenIdx >= 0) s = s[..parenIdx].Trim();
+        return s;
+    }
+
     public Task<string?> GetInstalledVersionAsync(string gameInstallPath, CancellationToken ct = default)
     {
         if (!IsInstalled(gameInstallPath))
@@ -163,10 +178,12 @@ public sealed class BepInExService : IBepInExService
                 if (File.Exists(dll))
                 {
                     var vi = FileVersionInfo.GetVersionInfo(dll);
-                    if (!string.IsNullOrWhiteSpace(vi.ProductVersion))
-                        return Task.FromResult<string?>($"v{vi.ProductVersion.TrimStart('v', 'V')}");
-                    if (!string.IsNullOrWhiteSpace(vi.FileVersion))
-                        return Task.FromResult<string?>($"v{vi.FileVersion.TrimStart('v', 'V')}");
+                    var cleanProd = CleanVersionString(vi.ProductVersion);
+                    if (!string.IsNullOrWhiteSpace(cleanProd))
+                        return Task.FromResult<string?>(cleanProd);
+                    var cleanFile = CleanVersionString(vi.FileVersion);
+                    if (!string.IsNullOrWhiteSpace(cleanFile))
+                        return Task.FromResult<string?>(cleanFile);
                 }
             }
 
@@ -182,7 +199,7 @@ public sealed class BepInExService : IBepInExService
                 }
             }
 
-            return Task.FromResult<string?>("v5.x");
+            return Task.FromResult<string?>("5.x");
         }
         catch (Exception ex)
         {

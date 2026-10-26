@@ -308,7 +308,25 @@ public sealed partial class ModsTabViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsVersionDifferent))]
     [NotifyPropertyChangedFor(nameof(EngineActionButtonText))]
+    [NotifyPropertyChangedFor(nameof(FormattedEngineVersion))]
     private string? _engineVersion;
+
+    public static string? CleanVersion(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var s = raw.Trim();
+        while (s.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+        {
+            s = s[1..].TrimStart();
+        }
+        var plusIdx = s.IndexOf('+');
+        if (plusIdx >= 0) s = s[..plusIdx].Trim();
+        var parenIdx = s.IndexOf('(');
+        if (parenIdx >= 0) s = s[..parenIdx].Trim();
+        return s;
+    }
+
+    public string? FormattedEngineVersion => CleanVersion(EngineVersion);
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EngineActionButtonText))]
@@ -334,21 +352,22 @@ public sealed partial class ModsTabViewModel : ObservableObject
         IsEngineInstalled &&
         SelectedEngineRelease != null &&
         !string.IsNullOrWhiteSpace(EngineVersion) &&
-        !string.Equals(SelectedEngineRelease.Version, EngineVersion, StringComparison.OrdinalIgnoreCase);
+        !string.Equals(CleanVersion(SelectedEngineRelease.Version), CleanVersion(EngineVersion), StringComparison.OrdinalIgnoreCase);
 
     public string EngineActionButtonText
     {
         get
         {
+            var targetVer = CleanVersion(SelectedEngineRelease?.Version);
             if (!IsEngineInstalled)
             {
-                return SelectedEngineRelease != null
-                    ? string.Format(T("String_EngineInstallBtn", "Install v{0}"), SelectedEngineRelease.Version)
+                return targetVer != null
+                    ? string.Format(T("String_EngineInstallBtn", "Install v{0}"), targetVer)
                     : T("String_InstallEngineBtn", "Install Loader");
             }
-            if (IsVersionDifferent && SelectedEngineRelease != null)
+            if (IsVersionDifferent && targetVer != null)
             {
-                return string.Format(T("String_EngineSwitchBtn", "Switch to v{0}"), SelectedEngineRelease.Version);
+                return string.Format(T("String_EngineSwitchBtn", "Switch to v{0}"), targetVer);
             }
             return T("String_EngineReinstallBtn", "Reinstall");
         }
@@ -389,8 +408,9 @@ public sealed partial class ModsTabViewModel : ObservableObject
 
             if (SelectedEngineRelease == null && AvailableEngineReleases.Count > 0)
             {
-                SelectedEngineRelease = !string.IsNullOrWhiteSpace(EngineVersion)
-                    ? AvailableEngineReleases.FirstOrDefault(r => r.Version.Equals(EngineVersion, StringComparison.OrdinalIgnoreCase)) ?? AvailableEngineReleases[0]
+                var cleanCurrent = CleanVersion(EngineVersion);
+                SelectedEngineRelease = !string.IsNullOrWhiteSpace(cleanCurrent)
+                    ? AvailableEngineReleases.FirstOrDefault(r => string.Equals(CleanVersion(r.Version), cleanCurrent, StringComparison.OrdinalIgnoreCase)) ?? AvailableEngineReleases[0]
                     : AvailableEngineReleases[0];
             }
         }
@@ -526,6 +546,44 @@ public sealed partial class ModsTabViewModel : ObservableObject
     public void SetFilter(string? filter)
     {
         SelectedFilter = string.IsNullOrWhiteSpace(filter) ? "All" : filter;
+    }
+
+    [RelayCommand]
+    public void ClearStatus()
+    {
+        StatusMessage = null;
+    }
+
+    public async Task InstallDroppedFileAsync(string filePath)
+    {
+        if (Instance == null || string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return;
+
+        var ext = Path.GetExtension(filePath);
+        if (!string.Equals(ext, ".zip", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(ext, ".dll", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(ext, ".7z", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(ext, ".rar", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(ext, ".tar", StringComparison.OrdinalIgnoreCase))
+        {
+            ShowStatus(T("String_UnsupportedModFile", "❌ Unsupported file type. Please drop a .zip, .dll, or .7z mod file."), isError: true);
+            return;
+        }
+
+        var name = Path.GetFileNameWithoutExtension(filePath);
+        await InstallPackageAsync(new ModPackage
+        {
+            Path = filePath,
+            Name = name,
+            Source = ModSourceRef.Local(name)
+        }).ConfigureAwait(true);
+    }
+
+    public async Task InstallDroppedFilesAsync(IEnumerable<string> filePaths)
+    {
+        foreach (var path in filePaths)
+        {
+            await InstallDroppedFileAsync(path).ConfigureAwait(true);
+        }
     }
 
     public int TotalModsCount => Items.Count;

@@ -413,6 +413,7 @@ public class NewFeaturesTests
         var dataFolder = Path.Combine(tempFolder, "Game_Data", "Plugins", "x86_64");
         Directory.CreateDirectory(dataFolder);
         File.WriteAllText(Path.Combine(tempFolder, "Game.exe"), "dummy exe");
+        File.WriteAllText(Path.Combine(dataFolder, "steam_api64.dll"), "dummy original dll");
 
         var emulator = new ReFixEmulator(NullLogger<ReFixEmulator>.Instance);
 

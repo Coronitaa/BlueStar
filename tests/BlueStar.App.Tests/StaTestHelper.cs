@@ -61,11 +61,15 @@ public static class StaTestHelper
                 app.Resources["SubtleBorderBrush"] ??= new SolidColorBrush(Color.FromRgb(30, 30, 40));
                 app.Resources["SurfaceCardBrush"] ??= new SolidColorBrush(Color.FromRgb(20, 20, 28));
                 app.Resources["SurfaceCardHoverBrush"] ??= new SolidColorBrush(Color.FromRgb(30, 30, 42));
-                app.Resources["SurfaceCardElevatedBrush"] ??= new SolidColorBrush(Color.FromRgb(26, 26, 36));
-                app.Resources["SurfaceInputBrush"] ??= new SolidColorBrush(Color.FromRgb(20, 20, 28));
+                app.Resources["SurfaceCardElevatedBrush"] ??= new SolidColorBrush(Color.FromRgb(26, 26, 36));
+
+                app.Resources["SurfaceInputBrush"] ??= new SolidColorBrush(Color.FromRgb(20, 20, 28));
+
                 app.Resources["AccentTranslucentBrush"] ??= new SolidColorBrush(Color.FromArgb(40, 59, 130, 246));
                 app.Resources["AccentBrush"] ??= new SolidColorBrush(Color.FromRgb(59, 130, 246));
                 app.Resources["MainFontFamily"] ??= new FontFamily("Segoe UI");
+                app.Resources["String_InstallModalDiskWarning"] ??= "⚠️ Warning: Free space on the selected drive is less than required ({0}).";
+                app.Resources["String_InstallModalSpecificFixInfo"] ??= "Applies custom fix: {0}";
             }
             catch { }
 

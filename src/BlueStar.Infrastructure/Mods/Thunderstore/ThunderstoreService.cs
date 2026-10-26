@@ -36,6 +36,7 @@ public sealed class ThunderstoreService : IThunderstoreService
     // Fast-path lookup for well-known Steam games with official Thunderstore communities
     private static readonly Dictionary<uint, string> KnownAppIdToCommunity = new()
     {
+        [3241660] = "repo",
         [1966720] = "lethal-company",
         [892970] = "valheim",
         [632360] = "riskofrain2",
@@ -81,11 +82,27 @@ public sealed class ThunderstoreService : IThunderstoreService
             return directCommunity;
         }
 
-        // 2. Query communities list
+        var slug = Slugify(instance.Name);
+
+        // 2. Direct probe fallback: check if community packages endpoint exists for slug
+        if (!string.IsNullOrWhiteSpace(slug))
+        {
+            try
+            {
+                var probeUrl = $"https://thunderstore.io/c/{slug}/api/v1/package/";
+                using var req = new HttpRequestMessage(HttpMethod.Head, probeUrl);
+                using var probeResp = await _http.SendAsync(req, ct).ConfigureAwait(false);
+                if (probeResp.IsSuccessStatusCode)
+                {
+                    return slug;
+                }
+            }
+            catch { }
+        }
+
+        // 3. Query communities list
         var communities = await GetCommunitiesAsync(ct).ConfigureAwait(false);
         if (communities.Count == 0) return null;
-
-        var slug = Slugify(instance.Name);
 
         // Match exact identifier or exact name
         var matched = communities.FirstOrDefault(c =>
@@ -124,8 +141,23 @@ public sealed class ThunderstoreService : IThunderstoreService
             using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
 
+            JsonElement itemsElement;
+            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                itemsElement = doc.RootElement;
+            }
+            else if (doc.RootElement.TryGetProperty("results", out var resultsElem) && resultsElem.ValueKind == JsonValueKind.Array)
+            {
+                itemsElement = resultsElem;
+            }
+            else
+            {
+                _logger.LogWarning("Unexpected Thunderstore communities format");
+                return _cachedCommunities ?? [];
+            }
+
             var list = new List<ThunderstoreCommunity>();
-            foreach (var elem in doc.RootElement.EnumerateArray())
+            foreach (var elem in itemsElement.EnumerateArray())
             {
                 var identifier = elem.GetProperty("identifier").GetString();
                 var name = elem.GetProperty("name").GetString();

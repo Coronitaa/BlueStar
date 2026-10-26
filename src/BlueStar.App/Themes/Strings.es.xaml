@@ -392,6 +392,10 @@
     <sys:String x:Key="String_WorkshopWebViewMissingDesc">Para ver Workshop dentro de BlueStar hace falta Microsoft Edge WebView2. Mientras tanto, pega el enlace o el ID del ítem arriba.</sys:String>
     <sys:String x:Key="String_WorkshopInstallWebViewBtn">Instalar WebView2</sys:String>
     <sys:String x:Key="String_ModBrowseContentBtn">Explorar contenido</sys:String>
+    <sys:String x:Key="String_BrowseThunderstoreBtn">Explorar Thunderstore</sys:String>
+    <sys:String x:Key="String_BrowseWorkshopBtn">Explorar Steam Workshop</sys:String>
+    <sys:String x:Key="String_DragDropModHint">Arrastra y suelta aquí archivos .zip, .dll o .7z para instalarlos automáticamente</sys:String>
+    <sys:String x:Key="String_UnsupportedModFile">❌ Formato de archivo no compatible. Arrastra un archivo de mod .zip, .dll o .7z.</sys:String>
     <sys:String x:Key="String_ModSearchPlaceholder">Buscar mods instalados...</sys:String>
     <sys:String x:Key="String_ModFilterAll">Todos</sys:String>
     <sys:String x:Key="String_ModFilterEnabled">Activados</sys:String>
@@ -416,6 +420,7 @@
     <sys:String x:Key="String_EngineUninstalling">⏳ Desinstalando BepInEx...</sys:String>
     <sys:String x:Key="String_EngineUninstallSuccess">✅ BepInEx desinstalado (se preservó la carpeta plugins).</sys:String>
     <sys:String x:Key="String_EngineUninstallFailed">❌ No se pudo desinstalar BepInEx.</sys:String>
+    <sys:String x:Key="String_EngineOpenFolder">Abrir carpeta de BepInEx</sys:String>
     <sys:String x:Key="String_InstallEngineBtn">Instalar cargador</sys:String>
     <sys:String x:Key="String_ModInstallFailedGeneric">❌ Error al instalar el mod.</sys:String>
     <sys:String x:Key="String_ModHeaderTitle">Contenido y Mods Instalados</sys:String>

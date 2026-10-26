@@ -144,7 +144,10 @@ public sealed class WorkshopService : IWorkshopService
             var workshopUrl = $"https://steamcommunity.com/workshop/browse/?appid={appId}";
             using var req = new HttpRequestMessage(HttpMethod.Head, workshopUrl);
             using var webResp = await _http.SendAsync(req, ct).ConfigureAwait(false);
-            if (webResp.IsSuccessStatusCode && webResp.RequestMessage?.RequestUri?.ToString().Contains("workshop", StringComparison.OrdinalIgnoreCase) == true)
+            var finalUri = webResp.RequestMessage?.RequestUri?.ToString() ?? string.Empty;
+            if (webResp.IsSuccessStatusCode &&
+                (finalUri.Contains($"appid={appId}", StringComparison.OrdinalIgnoreCase) ||
+                 finalUri.Contains($"/app/{appId}", StringComparison.OrdinalIgnoreCase)))
             {
                 WorkshopSupportCache[appId] = true;
                 return true;

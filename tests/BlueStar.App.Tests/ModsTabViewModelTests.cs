@@ -423,4 +423,42 @@ public sealed class ModsTabViewModelTests : IDisposable
         await tab.InstallEngineCommand.ExecuteAsync(null);
         installed.Should().BeTrue();
     }
+    [Theory]
+    [InlineData("vv5.4.23.6+4865251c89f", "5.4.23.6")]
+    [InlineData("v5.4.23.2", "5.4.23.2")]
+    [InlineData("5.4.23.2 (x64)", "5.4.23.2")]
+    [InlineData("v5.4.21 (x86)", "5.4.21")]
+    [InlineData("5.4.22", "5.4.22")]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    public void CleanVersion_NormalizesVersionStringsCorrectly(string? input, string? expected)
+    {
+        ModsTabViewModel.CleanVersion(input).Should().Be(expected);
+    }
+
+    [Fact]
+    public void IsVersionDifferent_ReturnsFalse_WhenSameVersionDespiteHashOrArch()
+    {
+        var tab = CreateTab();
+        tab.IsEngineInstalled = true;
+        tab.EngineVersion = "vv5.4.23.6+4865251c89f";
+        tab.SelectedEngineRelease = new BepInExRelease("v5.4.23.6", "5.4.23.6 (x64)", "url", "x64", 100, DateTimeOffset.UtcNow);
+
+        tab.FormattedEngineVersion.Should().Be("5.4.23.6");
+        tab.IsVersionDifferent.Should().BeFalse();
+        tab.EngineActionButtonText.Should().Be("Reinstall");
+    }
+
+    [Fact]
+    public void ClearStatusCommand_ResetsStatus()
+    {
+        var tab = CreateTab();
+        tab.StatusMessage = "Some message";
+        tab.IsStatusError = true;
+        tab.StatusMessage.Should().Be("Some message");
+
+        tab.ClearStatusCommand.Execute(null);
+        tab.StatusMessage.Should().BeNull();
+    }
 }
+
