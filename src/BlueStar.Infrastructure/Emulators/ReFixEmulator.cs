@@ -136,6 +136,62 @@ public sealed class ReFixEmulator : IEmulator
         return "1.3";
     }
 
+    /// <summary>
+    /// ReFix suite version the bundled ReFix_StandardDeploy scripts were taken from.
+    /// </summary>
+    private static readonly Version StandardDeployBaseline = new(1, 3, 3);
+
+    /// <summary>
+    /// Picks the deploy_helper.ps1 to run against <paramref name="binDir"/>.
+    /// Suites newer than the standard scripts must run their own copy: the standard script does not know their
+    /// ReFix.ini keys (e.g. v1.4.0's [Photon] Backend=ReFixCloud) and would write settings that break those games.
+    /// </summary>
+    internal static string ResolveDeployScript(GameInstance instance, string deployPath, string binDir, string scriptName)
+    {
+        var versionScript = Path.Combine(binDir, scriptName);
+        if (UsesVersionDeployScripts(instance, deployPath) && File.Exists(versionScript)) return versionScript;
+
+        var standardScript = StandardDeployScript(scriptName);
+        return standardScript ?? versionScript;
+    }
+
+    /// <summary>
+    /// Firewall rules always come from BlueStar's standard apply_firewall.ps1, which never prompts for UAC;
+    /// the suites' own copies elevate with -Verb RunAs. Returns null (skip the step) when it is missing.
+    /// </summary>
+    internal static string? ResolveFirewallScript() => StandardDeployScript("apply_firewall.ps1");
+
+    private static string? StandardDeployScript(string scriptName)
+    {
+        var standardDeployPath = Path.Combine(AppContext.BaseDirectory, "tools", "ReFix_StandardDeploy");
+        if (!Directory.Exists(standardDeployPath))
+        {
+            standardDeployPath = Path.Combine(Directory.GetCurrentDirectory(), "src", "BlueStar.App", "tools", "ReFix_StandardDeploy");
+        }
+        var standardScript = Path.Combine(standardDeployPath, "bin", scriptName);
+        return File.Exists(standardScript) ? standardScript : null;
+    }
+
+    private static bool UsesVersionDeployScripts(GameInstance instance, string deployPath)
+    {
+        if (instance.UseVersionDeployScript) return true;
+        var suiteVersion = ParseSuiteVersion(GetCurrentVersionInternal(deployPath));
+        return suiteVersion != null && suiteVersion > StandardDeployBaseline;
+    }
+
+    /// <summary>
+    /// Early ReFix tags packed two digits into the minor part: v1.21 and v1.23 are 1.2.1 and 1.2.3, older than v1.3.1.
+    /// </summary>
+    internal static Version? ParseSuiteVersion(string version)
+    {
+        var parts = version.Trim().TrimStart('v', 'V').Split('.');
+        if (parts.Length == 2 && parts[1].Length == 2 && parts[1].All(char.IsDigit))
+        {
+            parts = new[] { parts[0], parts[1][..1], parts[1][1..] };
+        }
+        return Version.TryParse(string.Join('.', parts), out var parsed) ? parsed : null;
+    }
+
     public bool IsSupported(GameInstance instance)
     {
         return true;
@@ -392,21 +448,8 @@ public sealed class ReFixEmulator : IEmulator
                 CurrentStep = "DeployHelper"
             });
 
-            string helperPs1;
-            if (instance.UseVersionDeployScript)
-            {
-                helperPs1 = Path.Combine(binDir, "deploy_helper.ps1");
-            }
-            else
-            {
-                var standardDeployPath = Path.Combine(AppContext.BaseDirectory, "tools", "ReFix_StandardDeploy");
-                if (!Directory.Exists(standardDeployPath))
-                {
-                    standardDeployPath = Path.Combine(Directory.GetCurrentDirectory(), "src", "BlueStar.App", "tools", "ReFix_StandardDeploy");
-                }
-                helperPs1 = Path.Combine(standardDeployPath, "bin", "deploy_helper.ps1");
-                if (!File.Exists(helperPs1)) helperPs1 = Path.Combine(binDir, "deploy_helper.ps1"); // Fallback
-            }
+            var helperPs1 = ResolveDeployScript(instance, deployPath, binDir, "deploy_helper.ps1");
+            _logger.LogInformation("[ReFix] Using deploy script {Script}", helperPs1);
 
             if (!File.Exists(helperPs1))
             {
@@ -473,7 +516,7 @@ public sealed class ReFixEmulator : IEmulator
                 CurrentStep = "Shortcuts"
             });
 
-            if (!isGoldberg && Directory.Exists(exeDir) && instance.UseVersionDeployScript)
+            if (!isGoldberg && Directory.Exists(exeDir) && UsesVersionDeployScripts(instance, deployPath))
             {
                 var shortcutPs1 = Path.Combine(binDir, "add_steam_shortcut.ps1");
                 var shortcutBat = Path.Combine(binDir, "Install_ReFix_Steam_Shortcut.bat");
@@ -491,23 +534,9 @@ public sealed class ReFixEmulator : IEmulator
                 CurrentStep = "Firewall"
             });
 
-            string firewallPs1;
-            if (instance.UseVersionDeployScript)
-            {
-                firewallPs1 = Path.Combine(binDir, "apply_firewall.ps1");
-            }
-            else
-            {
-                var standardDeployPath = Path.Combine(AppContext.BaseDirectory, "tools", "ReFix_StandardDeploy");
-                if (!Directory.Exists(standardDeployPath))
-                {
-                    standardDeployPath = Path.Combine(Directory.GetCurrentDirectory(), "src", "BlueStar.App", "tools", "ReFix_StandardDeploy");
-                }
-                firewallPs1 = Path.Combine(standardDeployPath, "bin", "apply_firewall.ps1");
-                if (!File.Exists(firewallPs1)) firewallPs1 = Path.Combine(binDir, "apply_firewall.ps1"); // Fallback
-            }
+            var firewallPs1 = ResolveFirewallScript();
 
-            if (File.Exists(firewallPs1) && !string.IsNullOrWhiteSpace(gameExePath) && File.Exists(gameExePath))
+            if (firewallPs1 != null &&!string.IsNullOrWhiteSpace(gameExePath) && File.Exists(gameExePath))
             {
                 var fwArgs = $"-NoProfile -ExecutionPolicy Bypass -File \"{firewallPs1}\" -GameExe \"{EscapePsArg(gameExePath)}\" -GameName \"{EscapePsArg(gameName)}\" -LanPort \"{EscapePsArg(lanPort)}\" -Mode \"{EscapePsArg(onlineMode)}\"";
                 var fwEnv = new Dictionary<string, string>
