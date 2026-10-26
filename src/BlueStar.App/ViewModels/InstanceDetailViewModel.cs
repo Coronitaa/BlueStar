@@ -870,7 +870,12 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }
     }
 
-    partial void OnInstanceChanged(GameInstance value) => ModsTab.SetInstance(value);
+    partial void OnInstanceChanged(GameInstance value)
+    {
+        ModsTab.SetInstance(value);
+        var isUnity = value?.Engine?.Type == EngineType.Unity;
+        ModsTab.UpdateEngineStatus(isUnity ? "BepInEx" : null, null, false, isSupported: isUnity);
+    }
 
     // ── BepInEx (Unity) State ──
     [ObservableProperty]
@@ -2615,6 +2620,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         ModsTab = new ModsTabViewModel(modInstallPipeline, modManagerRegistry, localizationService, logger,
             workshopModFetcher, workshopService);
         ModsTab.ModsChanged += (_, _) => OnPropertyChanged(nameof(ModsSummaryText));
+        ModsTab.InstallEngineAction = async () => await InstallOrUpdateBepInExAsync().ConfigureAwait(true);
 
         _instanceManager = instanceManager;
         _dlcInstaller = dlcInstaller;
@@ -5846,6 +5852,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         {
             IsBepInExInstalled = _bepInExService.IsInstalled(Instance.InstallPath);
             InstalledBepInExVersion = await _bepInExService.GetInstalledVersionAsync(Instance.InstallPath, CancellationToken.None).ConfigureAwait(true);
+            ModsTab.UpdateEngineStatus(IsUnityEngine ? "BepInEx" : null, InstalledBepInExVersion, IsBepInExInstalled, isSupported: IsUnityEngine);
 
             var releases = await _bepInExService.GetAvailableReleasesAsync(false, CancellationToken.None).ConfigureAwait(true);
             AvailableBepInExVersions = new ObservableCollection<BepInExRelease>(releases);

@@ -217,4 +217,67 @@ public sealed class ModsTabViewModelTests : IDisposable
         // Assert
         tab.Items.Should().BeEmpty();
     }
+
+    [Fact]
+    public void ModrinthSearchAndFilter_UpdatesFilteredItems()
+    {
+        // Arrange
+        var tab = CreateTab();
+        tab.Items.Add(new ModListItem { Id = "1", Name = "Fabric API", Author = "modmuss50", SourceLabel = "Steam Workshop", IsEnabled = true, SizeBytes = 2048 });
+        tab.Items.Add(new ModListItem { Id = "2", Name = "Sodium", Author = "CaffeineMC", SourceLabel = "Steam Workshop", IsEnabled = false, SizeBytes = 4096 });
+        tab.Items.Add(new ModListItem { Id = "3", Name = "Local Texture Pack", Author = "Custom", SourceLabel = "Local file", IsEnabled = true, SizeBytes = 8192 });
+
+        tab.RefreshFilteredItems();
+
+        // Assert: initial state
+        tab.TotalModsCount.Should().Be(3);
+        tab.ActiveModsCount.Should().Be(2);
+        tab.DisabledModsCount.Should().Be(1);
+        tab.WorkshopModsCount.Should().Be(2);
+        tab.LocalModsCount.Should().Be(1);
+        tab.FilteredItems.Should().HaveCount(3);
+
+        // Act: search for "Sodium"
+        tab.SearchText = "Sodium";
+        tab.FilteredItems.Should().ContainSingle(i => i.Name == "Sodium");
+
+        // Act: search by author "modmuss"
+        tab.SearchText = "modmuss";
+        tab.FilteredItems.Should().ContainSingle(i => i.Name == "Fabric API");
+
+        // Act: filter by Enabled
+        tab.SearchText = string.Empty;
+        tab.SetFilter("Enabled");
+        tab.FilteredItems.Should().HaveCount(2).And.OnlyContain(i => i.IsEnabled);
+
+        // Act: filter by Disabled
+        tab.SetFilter("Disabled");
+        tab.FilteredItems.Should().ContainSingle(i => i.Name == "Sodium");
+
+        // Act: filter by Local
+        tab.SetFilter("Local");
+        tab.FilteredItems.Should().ContainSingle(i => i.Name == "Local Texture Pack");
+    }
+
+    [Fact]
+    public async Task EngineStatus_AndInstallAction_WorkSeamlessly()
+    {
+        // Arrange
+        var tab = CreateTab();
+        var installed = false;
+        tab.InstallEngineAction = () => { installed = true; return Task.CompletedTask; };
+
+        // Act
+        tab.UpdateEngineStatus("BepInEx", "5.4.21", isInstalled: true, isSupported: true);
+
+        // Assert
+        tab.EngineName.Should().Be("BepInEx");
+        tab.EngineVersion.Should().Be("5.4.21");
+        tab.IsEngineInstalled.Should().BeTrue();
+        tab.IsEngineSupported.Should().BeTrue();
+
+        // Act: invoke install command
+        await tab.InstallEngineCommand.ExecuteAsync(null);
+        installed.Should().BeTrue();
+    }
 }

@@ -92,7 +92,10 @@ public sealed partial class ModsTabViewModel : ObservableObject
                 .ConfigureAwait(true);
             if (!fetched.Succeeded)
             {
-                Workshop.ReportStatus(string.Format(T("String_WorkshopDownloadFailed", "❌ Could not download the item: {0}"), fetched.Error), isError: true);
+                var errorMsg = fetched.RequiresOwnedAccount
+                    ? T("String_WorkshopRequiresOwnedAccount", "🔒 Steam only serves this item to accounts that own the game. An anonymous download is not permitted for this game.")
+                    : string.Format(T("String_WorkshopDownloadFailed", "❌ Could not download the item: {0}"), fetched.Error);
+                Workshop.ReportStatus(errorMsg, isError: true);
                 return false;
             }
 
@@ -137,6 +140,9 @@ public sealed partial class ModsTabViewModel : ObservableObject
 
     public ObservableCollection<ModListItem> Items { get; } = [];
 
+    /// <summary>Filtered view of items shown to the user based on search query and category tab.</summary>
+    public ObservableCollection<ModListItem> FilteredItems { get; } = [];
+
     /// <summary>Destinations of the plan waiting for confirmation, relative to the game folder.</summary>
     public ObservableCollection<string> PendingDestinations { get; } = [];
 
@@ -163,9 +169,113 @@ public sealed partial class ModsTabViewModel : ObservableObject
     [ObservableProperty]
     private string? _pendingPlanReason;
 
+    [ObservableProperty]
+    private string _searchText = string.Empty;
+
+    [ObservableProperty]
+    private string _selectedFilter = "All";
+
+    // ── Mod Engine / Loader info (e.g. BepInEx, UE4SS, Native) ──
+    [ObservableProperty]
+    private string? _engineName;
+
+    [ObservableProperty]
+    private string? _engineVersion;
+
+    [ObservableProperty]
+    private bool _isEngineInstalled;
+
+    [ObservableProperty]
+    private bool _isEngineSupported;
+
+    /// <summary>Invokes engine installation from parent ViewModel if available.</summary>
+    public Func<Task>? InstallEngineAction { get; set; }
+
+    [RelayCommand]
+    public async Task InstallEngineAsync()
+    {
+        if (InstallEngineAction != null)
+        {
+            await InstallEngineAction().ConfigureAwait(true);
+        }
+    }
+
+    public void UpdateEngineStatus(string? name, string? version, bool isInstalled, bool isSupported)
+    {
+        EngineName = name;
+        EngineVersion = version;
+        IsEngineInstalled = isInstalled;
+        IsEngineSupported = isSupported;
+    }
+
     public bool IsIdle => !IsBusy;
 
     partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(IsIdle));
+
+    partial void OnSearchTextChanged(string value) => RefreshFilteredItems();
+    partial void OnSelectedFilterChanged(string value) => RefreshFilteredItems();
+
+    [RelayCommand]
+    public void SetFilter(string? filter)
+    {
+        SelectedFilter = string.IsNullOrWhiteSpace(filter) ? "All" : filter;
+    }
+
+    public int TotalModsCount => Items.Count;
+    public int ActiveModsCount => Items.Count(i => i.IsEnabled);
+    public int DisabledModsCount => Items.Count(i => !i.IsEnabled);
+    public int WorkshopModsCount => Items.Count(i => i.SourceLabel.Contains("Workshop", StringComparison.OrdinalIgnoreCase));
+    public int LocalModsCount => Items.Count(i => !i.SourceLabel.Contains("Workshop", StringComparison.OrdinalIgnoreCase));
+    public bool HasNoSearchResults => FilteredItems.Count == 0 && Items.Count > 0;
+
+    public string StatsSummary
+    {
+        get
+        {
+            var totalBytes = Items.Sum(i => i.SizeBytes);
+            var sizeStr = totalBytes > 0 ? $" · {FormatSize(totalBytes)}" : string.Empty;
+            return string.Format(T("String_ModStatsFormat", "{0} mods · {1} active{2}"), TotalModsCount, ActiveModsCount, sizeStr);
+        }
+    }
+
+    public void RefreshFilteredItems()
+    {
+        var query = SearchText?.Trim() ?? string.Empty;
+        var filter = SelectedFilter ?? "All";
+
+        var filtered = Items.Where(item =>
+        {
+            var matchesCategory = filter switch
+            {
+                "Enabled" => item.IsEnabled,
+                "Disabled" => !item.IsEnabled,
+                "Workshop" => item.SourceLabel.Contains("Workshop", StringComparison.OrdinalIgnoreCase),
+                "Local" => !item.SourceLabel.Contains("Workshop", StringComparison.OrdinalIgnoreCase),
+                _ => true
+            };
+            if (!matchesCategory) return false;
+
+            if (string.IsNullOrWhiteSpace(query)) return true;
+            return item.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                   (item.Version != null && item.Version.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
+                   (item.Author != null && item.Author.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
+                   (item.Detail != null && item.Detail.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
+                   item.SourceLabel.Contains(query, StringComparison.OrdinalIgnoreCase);
+        }).ToList();
+
+        OnUiThread(() =>
+        {
+            FilteredItems.Clear();
+            foreach (var item in filtered) FilteredItems.Add(item);
+            OnPropertyChanged(nameof(TotalModsCount));
+            OnPropertyChanged(nameof(ActiveModsCount));
+            OnPropertyChanged(nameof(DisabledModsCount));
+            OnPropertyChanged(nameof(WorkshopModsCount));
+            OnPropertyChanged(nameof(LocalModsCount));
+            OnPropertyChanged(nameof(HasNoSearchResults));
+            OnPropertyChanged(nameof(StatsSummary));
+        });
+    }
 
     /// <summary>
     /// Tracks the instance shown by the page. A new copy of the same instance (it is an immutable record)
@@ -177,7 +287,13 @@ public sealed partial class ModsTabViewModel : ObservableObject
         Instance = instance;
         if (sameInstance) return;
 
-        OnUiThread(Items.Clear);
+        OnUiThread(() =>
+        {
+            Items.Clear();
+            FilteredItems.Clear();
+            SearchText = string.Empty;
+            SelectedFilter = "All";
+        });
         StatusMessage = null;
         IsStatusError = false;
         CancelPendingPlan();
@@ -215,6 +331,7 @@ public sealed partial class ModsTabViewModel : ObservableObject
             {
                 Items.Clear();
                 foreach (var row in rows) Items.Add(row);
+                RefreshFilteredItems();
             });
 
             ModsChanged?.Invoke(this, EventArgs.Empty);
@@ -460,6 +577,11 @@ public sealed partial class ModsTabViewModel : ObservableObject
         Version = record.Version,
         SourceLabel = ProviderLabel(record.Source.Provider),
         Detail = string.Format(T("String_ModManagedDetail", "{0} files · {1}"), record.Files.Count, FormatSize(record.TotalSizeBytes)),
+        Author = record.Source.Provider.Equals("workshop", StringComparison.OrdinalIgnoreCase)
+            ? $"Steam Workshop #{record.Source.LedgerId.Replace("workshop:", "")}"
+            : ProviderLabel(record.Source.Provider),
+        SizeBytes = record.TotalSizeBytes,
+        FormattedSize = FormatSize(record.TotalSizeBytes),
         IsEnabled = record.IsEnabled,
         IsManaged = true
     };
@@ -471,6 +593,9 @@ public sealed partial class ModsTabViewModel : ObservableObject
         Version = mod.Version,
         SourceLabel = T("String_ModSourceDetected", "Found on disk"),
         Detail = mod.Category,
+        Author = !string.IsNullOrWhiteSpace(mod.Author) ? mod.Author : T("String_ModSourceDetected", "Found on disk"),
+        SizeBytes = 0,
+        FormattedSize = mod.Category,
         IsEnabled = mod.IsEnabled,
         IsManaged = false,
         LegacyPath = mod.FilePath

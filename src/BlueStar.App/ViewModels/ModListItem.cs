@@ -18,4 +18,18 @@ public sealed record ModListItem
     public string? LegacyPath { get; init; }
 
     public bool HasVersion => !string.IsNullOrWhiteSpace(Version);
+
+    /// <summary>Author or creator subtitle if known.</summary>
+    public string? Author { get; init; }
+
+    /// <summary>Size of the mod in bytes.</summary>
+    public long SizeBytes { get; init; }
+
+    /// <summary>Formatted file size or count summary (e.g. "4.2 MB · 12 files").</summary>
+    public string? FormattedSize { get; init; }
+
+    /// <summary>Geometry resource key for the icon (IconSteam, IconMod, etc.).</summary>
+    public string IconGeometryKey => SourceLabel.Contains("Workshop", System.StringComparison.OrdinalIgnoreCase)
+        ? "IconSteam"
+        : "IconMod";
 }
