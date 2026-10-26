@@ -1,0 +1,432 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using BlueStar.Core.Interfaces;
+using BlueStar.Core.Models;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
+using Microsoft.Win32;
+
+namespace BlueStar.App.ViewModels;
+
+/// <summary>
+/// State and commands of an instance's Mods tab. Installs go through <see cref="IModInstallPipeline"/>, which
+/// records every file in the mod ledger; mods already on disk that BlueStar did not install are still listed
+/// and handled by the legacy per-engine managers.
+/// </summary>
+public sealed partial class ModsTabViewModel : ObservableObject
+{
+    private readonly IModInstallPipeline? _pipeline;
+    private readonly IModManagerRegistry? _legacyRegistry;
+    private readonly ILocalizationService? _localization;
+    private readonly ILogger _logger;
+    private ModPackage? _pendingPackage;
+
+    public ModsTabViewModel(
+        IModInstallPipeline? pipeline,
+        IModManagerRegistry? legacyRegistry,
+        ILocalizationService? localization,
+        ILogger logger)
+    {
+        _pipeline = pipeline;
+        _legacyRegistry = legacyRegistry;
+        _localization = localization;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    /// <summary>Raised after the list changes, so the parent can refresh its overview summary.</summary>
+    public event EventHandler? ModsChanged;
+
+    /// <summary>Asks the user for a mod file; returns null when cancelled. Replaceable in tests.</summary>
+    public Func<string?> PickModFile { get; set; } = DefaultPickModFile;
+
+    public GameInstance? Instance { get; private set; }
+
+    public ObservableCollection<ModListItem> Items { get; } = [];
+
+    /// <summary>Destinations of the plan waiting for confirmation, relative to the game folder.</summary>
+    public ObservableCollection<string> PendingDestinations { get; } = [];
+
+    [ObservableProperty]
+    private string _modsDirectoryPath = string.Empty;
+
+    [ObservableProperty]
+    private string? _statusMessage;
+
+    [ObservableProperty]
+    private bool _isStatusError;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(InstallFromFileCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ConfirmPendingPlanCommand))]
+    private bool _isBusy;
+
+    [ObservableProperty]
+    private bool _isConfirmPlanOpen;
+
+    [ObservableProperty]
+    private string _pendingModName = string.Empty;
+
+    [ObservableProperty]
+    private string? _pendingPlanReason;
+
+    public bool IsIdle => !IsBusy;
+
+    partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(IsIdle));
+
+    /// <summary>
+    /// Tracks the instance shown by the page. A new copy of the same instance (it is an immutable record)
+    /// only swaps the reference; switching to another instance clears what was shown.
+    /// </summary>
+    public void SetInstance(GameInstance? instance)
+    {
+        var sameInstance = instance != null && Instance != null && instance.Id == Instance.Id;
+        Instance = instance;
+        if (sameInstance) return;
+
+        Items.Clear();
+        StatusMessage = null;
+        IsStatusError = false;
+        CancelPendingPlan();
+    }
+
+    [RelayCommand]
+    public async Task LoadAsync()
+    {
+        var instance = Instance;
+        if (instance == null || string.IsNullOrWhiteSpace(instance.InstallPath)) return;
+
+        try
+        {
+            var legacy = _legacyRegistry?.GetManagerForInstance(instance);
+            ModsDirectoryPath = legacy?.GetModsDirectory(instance) ?? instance.InstallPath;
+
+            var ledger = _pipeline != null
+                ? await _pipeline.GetLedgerAsync(instance, CancellationToken.None).ConfigureAwait(true)
+                : ModLedger.Empty;
+
+            var unmanaged = legacy != null
+                ? await legacy.GetInstalledModsAsync(instance, CancellationToken.None).ConfigureAwait(true)
+                : [];
+
+            if (Instance == null || Instance.Id != instance.Id) return;
+
+            Items.Clear();
+            foreach (var record in ledger.Mods.OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                Items.Add(FromRecord(record));
+            }
+
+            foreach (var mod in WithoutManagedFiles(unmanaged, ledger, instance.InstallPath))
+            {
+                Items.Add(FromLegacy(mod));
+            }
+
+            ModsChanged?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load mods for {Instance}", instance.Name);
+            ShowStatus(string.Format(T("String_ModsLoadFailed", "❌ Could not read the installed mods: {0}"), ex.Message), isError: true);
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(IsIdle))]
+    public async Task InstallFromFileAsync()
+    {
+        if (Instance == null) return;
+
+        var path = PickModFile();
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        var name = Path.GetFileNameWithoutExtension(path);
+        await InstallPackageAsync(new ModPackage
+        {
+            Path = path,
+            Name = name,
+            Source = ModSourceRef.Local(name)
+        }).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Installs a package through the pipeline. A low-confidence plan opens the confirmation dialog
+    /// instead of installing; providers (Workshop, Thunderstore...) call this too.
+    /// </summary>
+    public async Task<ModInstallResult?> InstallPackageAsync(ModPackage package, ModInstallOptions? options = null)
+    {
+        var instance = Instance;
+        if (instance == null) return null;
+
+        if (_pipeline == null)
+        {
+            ShowStatus(T("String_ModsPipelineUnavailable", "❌ The mod installer is not available."), isError: true);
+            return null;
+        }
+
+        IsBusy = true;
+        ShowStatus(string.Format(T("String_ModInstalling", "📦 Installing {0}..."), package.Name), isError: false);
+        try
+        {
+            var result = await _pipeline.InstallAsync(instance, package, options, CancellationToken.None).ConfigureAwait(true);
+            switch (result.Status)
+            {
+                case ModInstallStatus.Installed:
+                    ShowStatus(string.Format(T("String_ModInstalled", "✅ {0} installed ({1} files)."),
+                        package.Name, result.Record?.Files.Count ?? 0), isError: false);
+                    await LoadAsync().ConfigureAwait(true);
+                    break;
+
+                case ModInstallStatus.NeedsConfirmation:
+                    OpenConfirmation(package, result.Plan!);
+                    ShowStatus(null, isError: false);
+                    break;
+
+                case ModInstallStatus.Conflict:
+                    var first = result.Conflicts[0];
+                    var owner = Items.FirstOrDefault(i => i.Id == first.OwnerModId)?.Name ?? first.OwnerModId;
+                    ShowStatus(string.Format(T("String_ModConflict", "⚠ {0} would overwrite {1} files from {2} (e.g. {3}). Uninstall or disable {2} first."),
+                        package.Name, result.Conflicts.Count, owner, first.RelativePath), isError: true);
+                    break;
+
+                default:
+                    ShowStatus(string.Format(T("String_ModInstallFailed", "❌ Could not install {0}: {1}"),
+                        package.Name, result.Error), isError: true);
+                    break;
+            }
+
+            return result;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(IsIdle))]
+    public async Task ConfirmPendingPlanAsync()
+    {
+        var package = _pendingPackage;
+        CancelPendingPlan();
+        if (package == null) return;
+
+        await InstallPackageAsync(package, new ModInstallOptions { AllowLowConfidence = true }).ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    public void CancelPendingPlan()
+    {
+        _pendingPackage = null;
+        PendingDestinations.Clear();
+        PendingModName = string.Empty;
+        PendingPlanReason = null;
+        IsConfirmPlanOpen = false;
+    }
+
+    [RelayCommand]
+    public async Task ToggleAsync(ModListItem? item)
+    {
+        var instance = Instance;
+        if (instance == null || item == null) return;
+
+        var enable = !item.IsEnabled;
+        bool ok;
+        try
+        {
+            if (item.IsManaged)
+            {
+                ok = _pipeline != null &&
+                     await _pipeline.SetEnabledAsync(instance, item.Id, enable, CancellationToken.None).ConfigureAwait(true);
+            }
+            else
+            {
+                var legacy = _legacyRegistry?.GetManagerForInstance(instance);
+                ok = legacy != null &&
+                     await legacy.ToggleModAsync(instance, item.Id, enable, CancellationToken.None).ConfigureAwait(true);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to toggle mod {ModId}", item.Id);
+            ok = false;
+        }
+
+        if (!ok)
+        {
+            ShowStatus(string.Format(T("String_ModToggleFailed", "❌ Could not change {0}. Another mod may now use the same files."), item.Name), isError: true);
+        }
+
+        await LoadAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    public async Task UninstallAsync(ModListItem? item)
+    {
+        var instance = Instance;
+        if (instance == null || item == null) return;
+
+        bool ok;
+        try
+        {
+            ok = item.IsManaged
+                ? _pipeline != null && await _pipeline.UninstallAsync(instance, item.Id, CancellationToken.None).ConfigureAwait(true)
+                : await UninstallLegacyAsync(instance, item).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to uninstall mod {ModId}", item.Id);
+            ok = false;
+        }
+
+        ShowStatus(ok
+            ? string.Format(T("String_ModUninstalled", "🗑 {0} uninstalled."), item.Name)
+            : string.Format(T("String_ModUninstallFailed", "❌ Could not uninstall {0}."), item.Name), isError: !ok);
+
+        await LoadAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    public void OpenModsFolder()
+    {
+        var target = !string.IsNullOrWhiteSpace(ModsDirectoryPath) ? ModsDirectoryPath : Instance?.InstallPath;
+        if (string.IsNullOrWhiteSpace(target)) return;
+
+        try
+        {
+            Directory.CreateDirectory(target);
+            Process.Start(new ProcessStartInfo { FileName = target, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to open mods folder {Path}", target);
+        }
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    private void OpenConfirmation(ModPackage package, ModInstallPlan plan)
+    {
+        _pendingPackage = package;
+        PendingModName = package.Name;
+        PendingPlanReason = plan.Reason;
+        PendingDestinations.Clear();
+        foreach (var destination in plan.Operations.Select(o => o.RelativeDestination).Take(50))
+        {
+            PendingDestinations.Add(destination);
+        }
+
+        if (plan.Operations.Count > 50)
+        {
+            PendingDestinations.Add(string.Format(T("String_ModPlanMoreFiles", "… and {0} more"), plan.Operations.Count - 50));
+        }
+
+        IsConfirmPlanOpen = true;
+    }
+
+    private async Task<bool> UninstallLegacyAsync(GameInstance instance, ModListItem item)
+    {
+        var legacy = _legacyRegistry?.GetManagerForInstance(instance);
+        if (legacy == null) return false;
+
+        // Legacy managers only know mods by folder scan, so the file or folder itself is removed here.
+        if (!string.IsNullOrWhiteSpace(item.LegacyPath))
+        {
+            if (File.Exists(item.LegacyPath)) File.Delete(item.LegacyPath);
+            else if (Directory.Exists(item.LegacyPath)) Directory.Delete(item.LegacyPath, recursive: true);
+        }
+
+        await legacy.UninstallModAsync(instance, item.Id, CancellationToken.None).ConfigureAwait(true);
+        return true;
+    }
+
+    /// <summary>Drops scanned mods whose files are already tracked in the ledger, so nothing is listed twice.</summary>
+    public static IEnumerable<ModItem> WithoutManagedFiles(IEnumerable<ModItem> scanned, ModLedger ledger, string installPath)
+    {
+        var managedFiles = ledger.Mods
+            .SelectMany(m => m.Files)
+            .Select(f => Path.GetFullPath(Path.Combine(installPath, f.RelativePath)))
+            .ToList();
+        if (managedFiles.Count == 0) return scanned;
+
+        return scanned.Where(mod =>
+        {
+            if (string.IsNullOrWhiteSpace(mod.FilePath)) return true;
+            var path = Path.GetFullPath(mod.FilePath).TrimEnd(Path.DirectorySeparatorChar);
+            return !managedFiles.Any(f =>
+                f.Equals(path, StringComparison.OrdinalIgnoreCase) ||
+                f.StartsWith(path + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
+        });
+    }
+
+    private ModListItem FromRecord(InstalledModRecord record) => new()
+    {
+        Id = record.Id,
+        Name = record.Name,
+        Version = record.Version,
+        SourceLabel = ProviderLabel(record.Source.Provider),
+        Detail = string.Format(T("String_ModManagedDetail", "{0} files · {1}"), record.Files.Count, FormatSize(record.TotalSizeBytes)),
+        IsEnabled = record.IsEnabled,
+        IsManaged = true
+    };
+
+    private ModListItem FromLegacy(ModItem mod) => new()
+    {
+        Id = mod.Id,
+        Name = mod.Name,
+        Version = mod.Version,
+        SourceLabel = T("String_ModSourceDetected", "Found on disk"),
+        Detail = mod.Category,
+        IsEnabled = mod.IsEnabled,
+        IsManaged = false,
+        LegacyPath = mod.FilePath
+    };
+
+    private string ProviderLabel(string provider) => provider.ToLowerInvariant() switch
+    {
+        ModSourceRef.LocalProvider => T("String_ModSourceLocal", "Local file"),
+        "workshop" => "Steam Workshop",
+        "thunderstore" => "Thunderstore",
+        "curseforge" => "CurseForge",
+        "nexus" => "Nexus Mods",
+        "modio" => "mod.io",
+        _ => provider
+    };
+
+    private static string FormatSize(long bytes)
+    {
+        string[] units = ["B", "KB", "MB", "GB"];
+        double value = bytes;
+        var unit = 0;
+        while (value >= 1024 && unit < units.Length - 1)
+        {
+            value /= 1024;
+            unit++;
+        }
+
+        return $"{value:0.#} {units[unit]}";
+    }
+
+    private void ShowStatus(string? message, bool isError)
+    {
+        StatusMessage = message;
+        IsStatusError = isError;
+    }
+
+    private string T(string key, string fallback) => _localization?.GetString(key, fallback) ?? fallback;
+
+    private static string? DefaultPickModFile()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Select Mod File or Package",
+            Filter = "Mod packages (*.zip, *.rar, *.7z, *.pak, *.dll, *.esp, *.vpk)|*.zip;*.rar;*.7z;*.pak;*.ucas;*.utoc;*.dll;*.esp;*.esm;*.esl;*.vpk|All Files (*.*)|*.*"
+        };
+
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    }
+}

@@ -833,8 +833,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     private bool _isGameRunning;
 
     // ── Mods Management State ──
-    [ObservableProperty]
-    private ObservableCollection<ModItem> _installedMods = [];
+    /// <summary>Mods tab: list, install, enable/disable and uninstall through the mod install pipeline.</summary>
+    public ModsTabViewModel ModsTab { get; }
 
     [ObservableProperty]
     private bool _supportsMods;
@@ -870,9 +870,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }
     }
 
-
-    [ObservableProperty]
-    private string _modsDirectoryPath = string.Empty;
+    partial void OnInstanceChanged(GameInstance value) => ModsTab.SetInstance(value);
 
     // ── BepInEx (Unity) State ──
     [ObservableProperty]
@@ -2610,8 +2608,12 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         IManifestCacheService? manifestCacheService = null,
         ILocalizationService? localizationService = null,
         ICacheService? cacheService = null,
-        IRecommendationProvider? recommendationProvider = null)
+        IRecommendationProvider? recommendationProvider = null,
+        IModInstallPipeline? modInstallPipeline = null)
     {
+        ModsTab = new ModsTabViewModel(modInstallPipeline, modManagerRegistry, localizationService, logger);
+        ModsTab.ModsChanged += (_, _) => OnPropertyChanged(nameof(ModsSummaryText));
+
         _instanceManager = instanceManager;
         _dlcInstaller = dlcInstaller;
         _downloadQueueManager = downloadQueueManager;
@@ -4422,7 +4424,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         get
         {
             if (Instance == null) return "—";
-            var installed = InstalledMods?.Count ?? 0;
+            var installed = ModsTab.Items.Count;
             if (installed == 0 && !IsBepInExInstalled)
                 return GetString("String_OverviewNoMods", "None installed");
 
@@ -6094,128 +6096,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     }
 
     // ── Mods Management ──
-    [RelayCommand]
-    public async Task LoadModsAsync()
-    {
-        if (Instance == null) return;
-        ModsDirectoryPath = _workshopService.ResolveModDirectory(Instance);
-        var manager = _modManagerRegistry.GetManagerForInstance(Instance);
-        if (manager != null)
-        {
-            if (string.IsNullOrWhiteSpace(ModsDirectoryPath))
-            {
-                ModsDirectoryPath = manager.GetModsDirectory(Instance);
-            }
-            var mods = await manager.GetInstalledModsAsync(Instance, CancellationToken.None).ConfigureAwait(true);
-            InstalledMods = new ObservableCollection<ModItem>(mods);
-        }
-    }
-
-    [RelayCommand]
-    public async Task InstallModFileAsync()
-    {
-        if (Instance == null) return;
-        var manager = _modManagerRegistry.GetManagerForInstance(Instance);
-        if (manager == null) return;
-
-        var dialog = new OpenFileDialog
-        {
-            Title = "Select Mod File or Package",
-            Filter = "Mod Files (*.zip, *.pak, *.dll)|*.zip;*.pak;*.dll;*.ucas;*.utoc|All Files (*.*)|*.*"
-        };
-
-        if (dialog.ShowDialog() != true) return;
-
-        StatusMessage = "📦 Installing mod...";
-        var success = await manager.InstallModAsync(Instance, dialog.FileName, CancellationToken.None).ConfigureAwait(true);
-        if (success)
-        {
-            StatusMessage = "✅ Mod installed successfully.";
-            await LoadModsAsync().ConfigureAwait(true);
-        }
-        else
-        {
-            StatusMessage = "❌ Failed to install mod.";
-        }
-    }
-
-    [RelayCommand]
-    public async Task ToggleModAsync(ModItem mod)
-    {
-        if (Instance == null || mod == null) return;
-        var manager = _modManagerRegistry.GetManagerForInstance(Instance);
-        if (manager == null) return;
-
-        var newStatus = !mod.IsEnabled;
-        await manager.ToggleModAsync(Instance, mod.Id, newStatus, CancellationToken.None).ConfigureAwait(true);
-        await LoadModsAsync().ConfigureAwait(true);
-    }
-
-    [RelayCommand]
-    public async Task DeleteModAsync(ModItem mod)
-    {
-        if (Instance == null || mod == null) return;
-        var manager = _modManagerRegistry.GetManagerForInstance(Instance);
-        if (manager == null) return;
-
-        // Directly purge target path if available
-        if (!string.IsNullOrWhiteSpace(mod.FilePath))
-        {
-            try
-            {
-                if (File.Exists(mod.FilePath))
-                {
-                    File.Delete(mod.FilePath);
-                    var dir = Path.GetDirectoryName(mod.FilePath);
-                    var baseName = Path.GetFileNameWithoutExtension(mod.FilePath);
-                    if (dir != null)
-                    {
-                        var companionJson = Path.Combine(dir, $"{baseName}_info.json");
-                        if (File.Exists(companionJson)) try { File.Delete(companionJson); } catch { }
-
-                        var thumbPng = Path.Combine(dir, $"{baseName}.png");
-                        if (File.Exists(thumbPng)) try { File.Delete(thumbPng); } catch { }
-                    }
-                }
-                else if (Directory.Exists(mod.FilePath))
-                {
-                    Directory.Delete(mod.FilePath, recursive: true);
-                }
-            }
-            catch { }
-        }
-
-        await manager.UninstallModAsync(Instance, mod.Id, CancellationToken.None).ConfigureAwait(true);
-        await LoadModsAsync().ConfigureAwait(true);
-    }
-
-    [RelayCommand]
-    public void OpenModsFolder()
-    {
-        try
-        {
-            var target = ModsDirectoryPath;
-            if (string.IsNullOrWhiteSpace(target) && Instance != null)
-            {
-                var res = GameModPathResolver.ResolveModPaths(Instance);
-                target = res.PrimaryDirectory;
-            }
-
-            if (!string.IsNullOrWhiteSpace(target))
-            {
-                Directory.CreateDirectory(target);
-                Process.Start(new ProcessStartInfo { FileName = target, UseShellExecute = true });
-            }
-            else if (Instance != null && !string.IsNullOrWhiteSpace(Instance.InstallPath) && Directory.Exists(Instance.InstallPath))
-            {
-                Process.Start(new ProcessStartInfo { FileName = Instance.InstallPath, UseShellExecute = true });
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to open mods folder in Explorer");
-        }
-    }
+    /// <summary>Reloads the Mods tab list (ledger + mods found on disk).</summary>
+    public Task LoadModsAsync() => ModsTab.LoadAsync();
 
     // ── In-Memory Session Cache for Emulators & Fixes (resets when BlueStar application restarts) ──
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, (IReadOnlyList<EmulatorOptionInfo> Options, IReadOnlyList<IEmulator> Emulators, IReadOnlyList<GameFixInfo> Fixes)> _emulatorSessionCache = new();

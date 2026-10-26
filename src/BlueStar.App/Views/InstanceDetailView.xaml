@@ -2052,7 +2052,7 @@
                     </Border>
 
                     <!-- ═══ INSTALLED MODS & PACKAGES ═══ -->
-                    <Border Style="{StaticResource Card}">
+                    <Border Style="{StaticResource Card}" DataContext="{Binding ModsTab}">
                         <StackPanel>
                             <Grid Margin="0,0,0,16">
                                 <Grid.ColumnDefinitions>
@@ -2062,19 +2062,37 @@
 
                                 <StackPanel Grid.Column="0">
                                     <TextBlock Text="{DynamicResource String_InstalledModsTitle}" Style="{StaticResource H2}"/>
-                                    <TextBlock Text="{Binding ModsDirectoryPath, StringFormat='Mods folder: {0}'}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                                    <TextBlock Text="{Binding ModsDirectoryPath}" Style="{StaticResource Caption}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                                     <Button Content="{DynamicResource String_OpenFolder}" Style="{StaticResource SecondaryButton}" Margin="0,0,10,0" Command="{Binding OpenModsFolderCommand}"/>
-                                    <Button Content="{DynamicResource String_InstallModFileBtn}" Style="{StaticResource PrimaryButton}" Command="{Binding InstallModFileCommand}"/>
+                                    <Button Content="{DynamicResource String_InstallModFileBtn}" Style="{StaticResource PrimaryButton}" Command="{Binding InstallFromFileCommand}"/>
                                 </StackPanel>
                             </Grid>
+
+                            <!-- Status (installing, conflicts, errors) -->
+                            <Border CornerRadius="{StaticResource RadiusSm}" Padding="12,8" Margin="0,0,0,12" BorderThickness="1"
+                                    Visibility="{Binding StatusMessage, Converter={StaticResource NullToVisibilityConverter}}">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Background" Value="{StaticResource AccentBgBrush}"/>
+                                        <Setter Property="BorderBrush" Value="{StaticResource SubtleBorderBrush}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsStatusError}" Value="True">
+                                                <Setter Property="Background" Value="{StaticResource DangerBgBrush}"/>
+                                                <Setter Property="BorderBrush" Value="{StaticResource DangerBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource BodySmall}" TextWrapping="Wrap"/>
+                            </Border>
 
                             <!-- Empty Mods Notice -->
                             <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusMd}"
                                     Padding="24" Margin="0,0,0,0"
-                                    Visibility="{Binding InstalledMods.Count, Converter={StaticResource ZeroToVisibilityConverter}}">
+                                    Visibility="{Binding Items.Count, Converter={StaticResource ZeroToVisibilityConverter}}">
                                 <StackPanel HorizontalAlignment="Center">
                                     <TextBlock Text="{DynamicResource String_NoModsInstalled}" Style="{StaticResource BodyMedium}" HorizontalAlignment="Center" Margin="0,0,0,4"/>
                                     <TextBlock Text="{DynamicResource String_NoModsInstalledDesc}"
@@ -2083,7 +2101,7 @@
                             </Border>
 
                             <!-- Mods List -->
-                            <ItemsControl ItemsSource="{Binding InstalledMods}">
+                            <ItemsControl x:Name="ModsList" ItemsSource="{Binding Items}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Border Background="{StaticResource SurfaceInputBrush}"
@@ -2100,10 +2118,31 @@
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
 
-                                                <!-- Mod Title & Category -->
+                                                <!-- Mod title, version, source and details -->
                                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
-                                                    <TextBlock Text="{Binding Name}" Style="{StaticResource BodyMedium}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                                    <TextBlock Text="{Binding Category}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding Name}" Style="{StaticResource BodyMedium}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                                        <TextBlock Text="{Binding Version, StringFormat='  v{0}'}" Style="{StaticResource Caption}" VerticalAlignment="Center"
+                                                                   Visibility="{Binding HasVersion, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                    </StackPanel>
+                                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                        <Border CornerRadius="{StaticResource RadiusXs}" Padding="6,1" Margin="0,0,8,0" BorderThickness="1" VerticalAlignment="Center">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="Background" Value="{StaticResource SurfaceCardElevatedBrush}"/>
+                                                                    <Setter Property="BorderBrush" Value="{StaticResource SubtleBorderBrush}"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsManaged}" Value="True">
+                                                                            <Setter Property="Background" Value="{StaticResource AccentBgBrush}"/>
+                                                                            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <TextBlock Text="{Binding SourceLabel}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                        </Border>
+                                                        <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                                    </StackPanel>
                                                 </StackPanel>
 
                                                 <!-- Switch Toggle (Enable / Disable) -->
@@ -2111,18 +2150,18 @@
                                                           Style="{StaticResource ToggleSwitch}"
                                                           IsChecked="{Binding IsEnabled, Mode=OneWay}"
                                                           ToolTip="Enable / Disable mod"
-                                                          Command="{Binding DataContext.ToggleModCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                                          Command="{Binding DataContext.ToggleCommand, ElementName=ModsList}"
                                                           CommandParameter="{Binding}"/>
 
-                                                <!-- Delete Button -->
+                                                <!-- Uninstall Button -->
                                                 <Button Grid.Column="3"
                                                         Style="{StaticResource DangerButton}"
                                                         Width="34" Height="34" Padding="0"
-                                                        ToolTip="Delete mod"
+                                                        ToolTip="Uninstall mod"
                                                         VerticalAlignment="Center"
                                                         HorizontalContentAlignment="Center"
                                                         VerticalContentAlignment="Center"
-                                                        Command="{Binding DataContext.DeleteModCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                                        Command="{Binding DataContext.UninstallCommand, ElementName=ModsList}"
                                                         CommandParameter="{Binding}">
                                                     <Path Data="{StaticResource IconTrash}"
                                                           Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
@@ -3281,6 +3320,50 @@
                                 Style="{StaticResource PrimaryButton}"
                                 Command="{Binding ConfirmPendingArtworkCommand}"/>
                     </Grid>
+                </StackPanel>
+            </Border>
+        </controls:ModalOverlay>
+
+        <!-- ═══ MOD PLACEMENT CONFIRMATION MODAL (low-confidence plans) ═══ -->
+        <controls:ModalOverlay IsOpen="{Binding ModsTab.IsConfirmPlanOpen}"
+                               CloseCommand="{Binding ModsTab.CancelPendingPlanCommand}"
+                               CloseOnEscape="True"
+                               Panel.ZIndex="1000">
+            <Border Background="{StaticResource SurfaceCardElevatedBrush}"
+                    BorderBrush="{StaticResource WarningBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="28" Width="560"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    DataContext="{Binding ModsTab}">
+                <StackPanel>
+                    <TextBlock Text="{DynamicResource String_ModConfirmPlanTitle}" Style="{StaticResource H2}" Margin="0,0,0,6"/>
+                    <TextBlock Text="{Binding PendingModName}" Style="{StaticResource BodyMedium}" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                    <Border Background="{StaticResource WarningBgBrush}" BorderBrush="{StaticResource WarningBrush}" BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusSm}" Padding="12,8" Margin="0,0,0,14">
+                        <TextBlock Text="{Binding PendingPlanReason}" Style="{StaticResource BodySmall}" TextWrapping="Wrap"/>
+                    </Border>
+                    <TextBlock Text="{DynamicResource String_ModConfirmPlanFilesLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,6"/>
+                    <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusSm}" Padding="10,8" MaxHeight="220">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding PendingDestinations}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" FontFamily="Consolas, Segoe UI" FontSize="12"
+                                                   Foreground="{StaticResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis" Margin="0,1"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+                    <TextBlock Text="{DynamicResource String_ModConfirmPlanHint}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,10,0,18"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="{DynamicResource String_ModConfirmPlanCancelBtn}" Style="{StaticResource SecondaryButton}" Margin="0,0,10,0"
+                                Command="{Binding CancelPendingPlanCommand}"/>
+                        <Button Content="{DynamicResource String_ModConfirmPlanInstallBtn}" Style="{StaticResource PrimaryButton}"
+                                Command="{Binding ConfirmPendingPlanCommand}"/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
         </controls:ModalOverlay>
