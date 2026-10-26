@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json.Serialization;
 
 namespace BlueStar.Core.Models;
 
@@ -19,6 +20,7 @@ public sealed record ModSourceRef
     public string? PageUrl { get; init; }
 
     /// <summary>Stable ledger id for this source, e.g. "thunderstore:denikson-BepInExPack_Valheim".</summary>
+    [JsonIgnore]
     public string LedgerId => $"{Provider}:{RemoteId}".ToLowerInvariant();
 
     /// <summary>Source for a file the user picked from disk.</summary>
@@ -58,7 +60,10 @@ public sealed record InstalledModRecord
     /// <summary>Ledger ids of mods this one needs.</summary>
     public IReadOnlyList<string> Dependencies { get; init; } = [];
 
+    [JsonIgnore]
     public string? Version => Source.Version;
+
+    [JsonIgnore]
     public long TotalSizeBytes => Files.Sum(f => f.SizeBytes);
 }
 

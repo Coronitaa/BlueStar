@@ -361,6 +361,8 @@ public sealed class ModInstallPipeline : IModInstallPipeline
         try
         {
             if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+            // mods-disabled/ and mod-backups/ hold one folder per mod; drop the parent once the last one is gone.
+            ModFileTransaction.DeleteIfEmpty(Path.GetDirectoryName(directory));
         }
         catch (IOException)
         {

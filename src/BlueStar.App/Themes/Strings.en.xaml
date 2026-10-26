@@ -377,6 +377,8 @@
     <sys:String x:Key="String_ModSourceDetected">Found on disk</sys:String>
     <sys:String x:Key="String_ModSourceLocal">Local file</sys:String>
     <sys:String x:Key="String_ModConfirmPlanTitle">Install here?</sys:String>
+    <sys:String x:Key="String_ModPlanReason_ModsFolder">Could not tell where this mod belongs. Check the destination before installing.</sys:String>
+    <sys:String x:Key="String_ModPlanReason_UnityBepInExPlugins">This is a Unity plugin, but no mod loader is installed yet. Install BepInEx first.</sys:String>
     <sys:String x:Key="String_ModConfirmPlanFilesLabel">Where the files will go (inside the game folder):</sys:String>
     <sys:String x:Key="String_ModConfirmPlanHint">BlueStar keeps a copy of any game file it replaces and restores it when the mod is uninstalled or disabled.</sys:String>
     <sys:String x:Key="String_ModConfirmPlanCancelBtn">Cancel</sys:String>

@@ -180,6 +180,25 @@ public sealed class ModInstallPipelineTests : IDisposable
         // Uninstall after a disable/enable round trip still restores the original
         await _pipeline.UninstallAsync(_fx.Instance(), "thunderstore:cool");
         _fx.ReadGame("BepInEx/plugins/Base.dll").Should().Be("original");
+
+        // ...and leaves no scratch, backup or parking folders behind, only the ledger
+        var dataDir = _store.GetInstanceDataDirectory(_fx.Instance().Id);
+        Directory.EnumerateFileSystemEntries(dataDir).Select(Path.GetFileName).Should().Equal("mods.json");
+    }
+
+    [Fact]
+    public async Task LedgerStore_DoesNotPersistComputedProperties()
+    {
+        // Arrange
+        _fx.GameFolder("BepInEx/plugins");
+        await _pipeline.InstallAsync(_fx.Instance(), Package(_fx.Package("m", ("BepInEx/plugins/Cool.dll", "x"))));
+
+        // Act
+        var json = await File.ReadAllTextAsync(Path.Combine(_store.GetInstanceDataDirectory(_fx.Instance().Id), "mods.json"));
+
+        // Assert
+        json.Should().NotContain("ledgerId").And.NotContain("totalSizeBytes");
+        (await _store.LoadAsync(_fx.Instance().Id)).Find("thunderstore:cool")!.Version.Should().Be("1.0");
     }
 
     [Fact]

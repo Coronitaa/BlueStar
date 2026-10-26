@@ -313,7 +313,8 @@ public sealed partial class ModsTabViewModel : ObservableObject
     {
         _pendingPackage = package;
         PendingModName = package.Name;
-        PendingPlanReason = plan.Reason;
+        // The resolver explains itself in English; the UI shows the translated reason for each rule.
+        PendingPlanReason = T($"String_ModPlanReason_{plan.Strategy}", plan.Reason ?? string.Empty);
         PendingDestinations.Clear();
         foreach (var destination in plan.Operations.Select(o => o.RelativeDestination).Take(50))
         {

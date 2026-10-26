@@ -173,6 +173,15 @@ internal sealed class ModFileTransaction : IDisposable
         }
     }
 
+    /// <summary>Removes <paramref name="directory"/> when it exists and has nothing left in it.</summary>
+    public static void DeleteIfEmpty(string? directory)
+    {
+        if (directory != null && Directory.Exists(directory) && !Directory.EnumerateFileSystemEntries(directory).Any())
+        {
+            Directory.Delete(directory);
+        }
+    }
+
     private static (long Size, string Sha256) CopyWithHash(string sourcePath, string destination)
     {
         using var input = File.OpenRead(sourcePath);
@@ -197,6 +206,7 @@ internal sealed class ModFileTransaction : IDisposable
         try
         {
             if (Directory.Exists(_journalDirectory)) Directory.Delete(_journalDirectory, recursive: true);
+            DeleteIfEmpty(Path.GetDirectoryName(_journalDirectory));
         }
         catch (IOException)
         {

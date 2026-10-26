@@ -92,6 +92,24 @@ public sealed class ModsTabViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task InstallFromFileCommand_InvokedLikeAButton_AsksForAFile()
+    {
+        // Arrange: WPF buttons go through ICommand.CanExecute/Execute, not ExecuteAsync
+        var asked = new TaskCompletionSource<bool>();
+        var tab = CreateTab();
+        tab.PickModFile = () => { asked.TrySetResult(true); return null; };
+        System.Windows.Input.ICommand command = tab.InstallFromFileCommand;
+
+        // Act
+        var canExecute = command.CanExecute(null);
+        command.Execute(null);
+
+        // Assert
+        canExecute.Should().BeTrue();
+        (await Task.WhenAny(asked.Task, Task.Delay(2000))).Should().Be(asked.Task);
+    }
+
+    [Fact]
     public async Task CancelPendingPlan_LeavesGameUntouched()
     {
         // Arrange
