@@ -98,6 +98,7 @@ public partial class WorkshopBrowserPanel : UserControl
 
         WorkshopView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 27, 40, 56);
         var core = WorkshopView.CoreWebView2;
+        core.Settings.AreDefaultContextMenusEnabled = false;
         core.Settings.IsStatusBarEnabled = false;
         core.NewWindowRequested += (_, args) =>
         {

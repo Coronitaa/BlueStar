@@ -943,7 +943,7 @@
         </Grid>
 
         <!-- ═══ RESULTS AND FILTER PANEL ═══ -->
-        <Grid Grid.Row="2" Margin="24,12,24,0">
+        <Grid Grid.Row="2" Margin="24,12,24,12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" MinWidth="320"/>
                 <ColumnDefinition Width="14"/>
@@ -1007,7 +1007,7 @@
                     </ItemsControl>
                 </DockPanel>
 
-                <ScrollViewer Grid.Row="1" x:Name="ResultsScroller"
+                <ScrollViewer Grid.Row="1" x:Name="ResultsScroller" MinHeight="180"
                           VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Margin="0,0,4,16">
 

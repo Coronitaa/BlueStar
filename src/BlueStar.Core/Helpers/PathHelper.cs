@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -106,6 +107,25 @@ public static class PathHelper
                 return candidatePath;
             }
             index++;
+        }
+    }
+
+    /// <summary>
+    /// Returns true if <paramref name="childPath"/> is located inside <paramref name="parentPath"/>.
+    /// </summary>
+    public static bool IsSubPathOf(string childPath, string parentPath)
+    {
+        if (string.IsNullOrWhiteSpace(childPath) || string.IsNullOrWhiteSpace(parentPath))
+            return false;
+
+        try
+        {
+            var relative = Path.GetRelativePath(parentPath, childPath);
+            return !relative.StartsWith("..", StringComparison.Ordinal) && !Path.IsPathRooted(relative);
+        }
+        catch
+        {
+            return false;
         }
     }
 }

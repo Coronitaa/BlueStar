@@ -376,6 +376,7 @@
                                 <!-- Sliding Virtual Window: displays visible items plus 3 buffer rows above and below -->
                                 <ScrollViewer Grid.Row="0"
                                               x:Name="PackagesScroller"
+                                              MinHeight="180"
                                               ScrollChanged="OnPackagesScrollChanged"
                                               HorizontalScrollBarVisibility="Disabled"
                                               VerticalScrollBarVisibility="Auto"
@@ -546,9 +547,9 @@
             </Grid>
 
             <!-- ═══ FOOTER: STATUS / NOTIFICATION BAR ═══ -->
-            <StackPanel Grid.Row="2" Margin="0,10,0,0">
-                <Border CornerRadius="{StaticResource RadiusSm}" Padding="12,8" BorderThickness="1"
+            <StackPanel Grid.Row="2" Margin="0,10,0,0"
                         Visibility="{Binding Thunderstore.StatusMessage, Converter={StaticResource NullToVisibilityConverter}}">
+                <Border CornerRadius="{StaticResource RadiusSm}" Padding="12,8" BorderThickness="1">
                     <Border.Style>
                         <Style TargetType="Border">
                             <Setter Property="Background" Value="{StaticResource AccentBgBrush}"/>

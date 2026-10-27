@@ -80,7 +80,7 @@ public class BrowseViewModelEndToEndTests : IDisposable
         await _localRepo.UpsertAppsAsync(list);
     }
 
-    private BrowseViewModel CreateViewModel()
+    private BrowseViewModel CreateViewModel(bool autoSearch = true)
     {
         return new BrowseViewModel(
             _mockApiClient.Object,
@@ -90,7 +90,8 @@ public class BrowseViewModelEndToEndTests : IDisposable
             NullLogger<BrowseViewModel>.Instance,
             catalogSearch: _countingSteam,
             searchPipeline: _searchPipeline,
-            localRepo: _localRepo);
+            localRepo: _localRepo,
+            autoSearch: autoSearch);
     }
 
     [Fact]
@@ -98,7 +99,8 @@ public class BrowseViewModelEndToEndTests : IDisposable
     {
         await PopulateCatalogAsync(500);
 
-        var vm = CreateViewModel();
+        var vm = CreateViewModel(autoSearch: false);
+        await vm.InitTask;
         vm.SearchQuery = "";
         vm.SelectedStoreList = vm.StoreListOptions.FirstOrDefault(o => o.Value == "") ?? vm.StoreListOptions[0];
 

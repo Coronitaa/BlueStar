@@ -772,4 +772,56 @@ public sealed class ThunderstoreBrowserViewModelTests
         vm.TopSpacerHeight.Should().Be(0);
         vm.BottomSpacerHeight.Should().Be(39 * ThunderstoreBrowserViewModel.PackageRowHeight);
     }
+
+    [Fact]
+    public async Task ProgressiveScroll_UnrendersPreviousItems_AndNeverSaturatesMemory()
+    {
+        // Arrange: 100 packages
+        var packages = Enumerable.Range(0, 100).Select(i => CreateSamplePackage($"Mod_{i:D3}", "Author")).ToList();
+
+        _thunderstoreService.Setup(s => s.SearchPackagesAsync(
+                "lethal-company", "", "All", "Relevance", false,
+                It.IsAny<CancellationToken>(),
+                It.IsAny<IEnumerable<string>?>(),
+                It.IsAny<IEnumerable<string>?>()))
+            .ReturnsAsync(packages);
+
+        var vm = new ThunderstoreBrowserViewModel(
+            _thunderstoreService.Object,
+            _ => Task.FromResult<ModInstallResult?>(null),
+            null,
+            NullLogger.Instance);
+
+        var instance = new GameInstance { Id = Guid.NewGuid(), Name = "Lethal Company", InstallPath = "C:\\Games" };
+        vm.Open(instance, "lethal-company");
+        await vm.LoadPackagesCommand.ExecuteAsync(null);
+
+        // Act & Assert across continuous scrolling steps
+        // As scroll advances down to row 50, previously seen items MUST be unrendered (removed from Packages)
+        for (int row = 0; row <= 50; row += 2)
+        {
+            double offset = row * ThunderstoreBrowserViewModel.PackageRowHeight;
+            vm.UpdateScrollWindow(offset, 650.0);
+
+            // Bounded window size: Packages count should never exceed visibleCount + 2 * BufferRows (~13 items)
+            // It MUST NOT accumulate infinitely like an endless list
+            vm.Packages.Count.Should().BeLessThanOrEqualTo(14);
+
+            // If we have scrolled past row 10, items before (row - BufferRows) MUST be unrendered
+            int cutoff = row - ThunderstoreBrowserViewModel.BufferRows;
+            if (cutoff > 0)
+            {
+                for (int oldIndex = 0; oldIndex < cutoff; oldIndex++)
+                {
+                    string oldModName = $"Mod_{oldIndex:D3}";
+                    vm.Packages.Any(p => p.Name == oldModName)
+                        .Should().BeFalse($"Item {oldModName} should have been unrendered/unloaded from UI memory at row {row}");
+                }
+            }
+
+            // Total mathematical height (TopSpacer + Rendered Items + BottomSpacer) remains constant at 100 * 112px
+            double totalVirtualHeight = vm.TopSpacerHeight + (vm.Packages.Count * ThunderstoreBrowserViewModel.PackageRowHeight) + vm.BottomSpacerHeight;
+            totalVirtualHeight.Should().Be(100 * ThunderstoreBrowserViewModel.PackageRowHeight);
+        }
+    }
 }

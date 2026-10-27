@@ -1639,10 +1639,13 @@ public class DownloadQueueManager
             _runningTasks.TryRemove(instance.Id, out _);
             tcs.TrySetResult();
 
-            if (!Queue.Any(q => q.IsDownloading))
+            RunOnUi(() =>
             {
-                RunOnUi(() => UpdateTelemetry(0, 0));
-            }
+                if (!Queue.Any(q => q.IsDownloading))
+                {
+                    UpdateTelemetry(0, 0);
+                }
+            });
         }
     }
 

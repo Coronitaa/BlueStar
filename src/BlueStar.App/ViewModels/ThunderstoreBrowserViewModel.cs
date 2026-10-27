@@ -1052,13 +1052,69 @@ public sealed partial class ThunderstoreBrowserViewModel : ObservableObject
 
             {
 
-                Packages.Clear();
+                var neededSet = new HashSet<ThunderstorePackageItem>(neededItems);
 
-                foreach (var item in neededItems)
+                // 1. Unrender and unload out-of-screen items immediately to release UI visual containers and memory
+
+                for (int i = Packages.Count - 1; i >= 0; i--)
 
                 {
 
-                    Packages.Add(item);
+                    if (!neededSet.Contains(Packages[i]))
+
+                    {
+
+                        Packages.RemoveAt(i);
+
+                    }
+
+                }
+
+                // 2. Synchronize visible window items in order without thrashing existing containers
+
+                for (int i = 0; i < neededItems.Count; i++)
+
+                {
+
+                    var target = neededItems[i];
+
+                    if (i < Packages.Count)
+
+                    {
+
+                        if (!ReferenceEquals(Packages[i], target))
+
+                        {
+
+                            int existingIndex = Packages.IndexOf(target);
+
+                            if (existingIndex >= 0)
+
+                            {
+
+                                Packages.Move(existingIndex, i);
+
+                            }
+
+                            else
+
+                            {
+
+                                Packages.Insert(i, target);
+
+                            }
+
+                        }
+
+                    }
+
+                    else
+
+                    {
+
+                        Packages.Add(target);
+
+                    }
 
                 }
 

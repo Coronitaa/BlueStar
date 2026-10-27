@@ -118,6 +118,23 @@ public sealed class ModPlacementResolverTests : IDisposable
     }
 
     [Fact]
+    public void Resolve_ThunderstorePackage_OnUnrealGame_DoesNotUseBepInEx_MapsToPaksMods()
+    {
+        // Arrange
+        _fx.GameFolder("Game/Content/Paks");
+        var package = _fx.Package("pkg",
+            ("manifest.json", "{}"), ("icon.png", "x"), ("README.md", "x"),
+            ("CoolMod_P.pak", "x"));
+
+        // Act: Even with BepInExPackage layout hint from Thunderstore, an Unreal game routes to ~mods!
+        var plan = Resolve(package, engine: EngineType.UnrealEngine, layout: ModPackageLayout.BepInExPackage, name: "Author-CoolMod");
+
+        // Assert
+        plan.Strategy.Should().Be("UnrealPaks");
+        Destinations(plan).Should().Equal("Game/Content/Paks/~mods/CoolMod_P.pak");
+    }
+
+    [Fact]
     public void Resolve_ThunderstoreBepInExPack_ExtractsAtGameRoot()
     {
         // Arrange: BepInExPack wraps winhttp.dll + BepInEx/ in a folder next to the manifest

@@ -20,7 +20,19 @@ public sealed class ModManagerRegistry : IModManagerRegistry
 
     public IModManager? GetManagerForInstance(GameInstance instance)
     {
-        // First check non-generic managers
+        if (instance.Engine?.Type == EngineType.Unity)
+        {
+            var unity = _managers.FirstOrDefault(m => m.Id == "unity");
+            if (unity != null && unity.IsSupported(instance)) return unity;
+        }
+
+        if (instance.Engine?.Type == EngineType.UnrealEngine)
+        {
+            var unreal = _managers.FirstOrDefault(m => m.Id == "unreal-paks");
+            if (unreal != null && unreal.IsSupported(instance)) return unreal;
+        }
+
+        // Fallback to other specialized managers
         var specialized = _managers
             .Where(m => m.Id != "generic")
             .FirstOrDefault(m => m.IsSupported(instance));

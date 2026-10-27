@@ -91,6 +91,20 @@ public partial class App : Application
         }
 
 
+        // Suppress default context menus on scrollbars, thumbs, and scroll controls
+        EventManager.RegisterClassHandler(
+            typeof(System.Windows.Controls.Primitives.ScrollBar),
+            FrameworkElement.ContextMenuOpeningEvent,
+            new System.Windows.Controls.ContextMenuEventHandler((_, args) => args.Handled = true));
+        EventManager.RegisterClassHandler(
+            typeof(System.Windows.Controls.Primitives.Thumb),
+            FrameworkElement.ContextMenuOpeningEvent,
+            new System.Windows.Controls.ContextMenuEventHandler((_, args) => args.Handled = true));
+        EventManager.RegisterClassHandler(
+            typeof(System.Windows.Controls.Primitives.RepeatButton),
+            FrameworkElement.ContextMenuOpeningEvent,
+            new System.Windows.Controls.ContextMenuEventHandler((_, args) => args.Handled = true));
+
         // DepotDownloaderMod runs on BlueStar's own runtime through Program.Main, so no system .NET is needed
         BlueStar.Infrastructure.Workshop.DepotDownloaderHost.HostExecutablePath = Environment.ProcessPath;
 

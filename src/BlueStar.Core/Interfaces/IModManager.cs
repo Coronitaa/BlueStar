@@ -19,6 +19,7 @@ public record ModItem
     public required string FilePath { get; init; }
     public string? Category { get; init; }
     public long SizeBytes { get; init; }
+    public string? IconPath { get; init; }
 }
 
 /// <summary>

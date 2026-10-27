@@ -1,956 +1,2184 @@
 using System;
+
 using System.Collections.Generic;
+
 using System.IO;
+
 using System.Linq;
+
 using System.Threading;
+
 using System.Threading.Tasks;
+
 using BlueStar.App.ViewModels;
+
 using BlueStar.Core.Interfaces;
+
 using BlueStar.Core.Models;
+
 using BlueStar.Infrastructure.Mods.Installation;
+
 using FluentAssertions;
+
 using Microsoft.Extensions.Logging.Abstractions;
+
 using Moq;
+
 using Xunit;
+
+
 
 namespace BlueStar.App.Tests;
 
+
+
 public sealed class ModsTabViewModelTests : IDisposable
+
 {
+
     private readonly string _root = Path.Combine(Path.GetTempPath(), "bluestar_modstab_" + Guid.NewGuid().ToString("N"));
+
     private readonly Guid _instanceId = Guid.NewGuid();
+
     private readonly string _gameDir;
+
     private readonly ModInstallPipeline _pipeline;
+
     private readonly Mock<IModManager> _legacy = new();
+
     private readonly Mock<IModManagerRegistry> _registry = new();
+
     private IReadOnlyList<ModItem> _legacyMods = [];
 
+
+
     public ModsTabViewModelTests()
+
     {
+
         _gameDir = Directory.CreateDirectory(Path.Combine(_root, "game")).FullName;
+
         var store = new JsonModLedgerStore(NullLogger<JsonModLedgerStore>.Instance, Path.Combine(_root, "data"));
+
         _pipeline = new ModInstallPipeline(store, new ModPlacementResolver(), NullLogger<ModInstallPipeline>.Instance, Path.Combine(_root, "staging"));
 
+
+
         _legacy.Setup(m => m.GetModsDirectory(It.IsAny<GameInstance>())).Returns(Path.Combine(_gameDir, "mods"));
+
         _legacy.Setup(m => m.GetInstalledModsAsync(It.IsAny<GameInstance>(), It.IsAny<CancellationToken>()))
+
             .ReturnsAsync(() => _legacyMods);
+
         _registry.Setup(r => r.GetManagerForInstance(It.IsAny<GameInstance>())).Returns(_legacy.Object);
+
     }
+
+
 
     public void Dispose()
+
     {
+
         try { Directory.Delete(_root, recursive: true); } catch (IOException) { }
+
         try
+
         {
+
             var modpackDir = Path.Combine(
+
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+
                 "BlueStar", "instances", _instanceId.ToString());
+
             if (Directory.Exists(modpackDir)) Directory.Delete(modpackDir, recursive: true);
+
         }
+
         catch { }
+
     }
+
+
 
     private GameInstance Instance() => new()
+
     {
+
         Id = _instanceId,
+
         Name = "Test Game",
+
         InstallPath = _gameDir
+
     };
 
+
+
     private ModsTabViewModel CreateTab(string? pickedFile = null)
+
     {
+
         var tab = new ModsTabViewModel(_pipeline, _registry.Object, null, NullLogger.Instance)
+
         {
+
             PickModFile = () => pickedFile
+
         };
+
         tab.SetInstance(Instance());
+
         return tab;
+
     }
+
+
 
     private string ModFile(string name, string content = "data")
+
     {
+
         var path = Path.Combine(_root, "downloads", name);
+
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
         File.WriteAllText(path, content);
+
         return path;
+
     }
 
+
+
     [Fact]
+
     public async Task InstallFromFile_LowConfidencePlan_OpensConfirmation_ThenInstallsWhenConfirmed()
+
     {
+
         // Arrange
+
         var tab = CreateTab(ModFile("mystery.bin"));
 
+
+
         // Act
+
         await tab.InstallFromFileCommand.ExecuteAsync(null);
+
+
 
         // Assert: nothing written yet, the plan is shown
+
         tab.IsConfirmPlanOpen.Should().BeTrue();
+
         tab.PendingModName.Should().Be("mystery");
+
         tab.PendingDestinations.Should().ContainSingle().Which.Should().EndWith("mystery.bin");
+
         Directory.EnumerateFileSystemEntries(_gameDir).Should().BeEmpty();
 
+
+
         // Act
+
         await tab.ConfirmPendingPlanCommand.ExecuteAsync(null);
 
+
+
         // Assert
+
         tab.IsConfirmPlanOpen.Should().BeFalse();
+
         tab.IsStatusError.Should().BeFalse();
+
         tab.Items.Should().ContainSingle(i => i.IsManaged && i.Name == "mystery");
+
         File.Exists(Path.Combine(_gameDir, "mods", "mystery", "mystery.bin")).Should().BeTrue();
+
     }
 
+
+
     [Fact]
+
     public async Task InstallFromFileCommand_InvokedLikeAButton_AsksForAFile()
+
     {
+
         // Arrange: WPF buttons go through ICommand.CanExecute/Execute, not ExecuteAsync
+
         var asked = new TaskCompletionSource<bool>();
+
         var tab = CreateTab();
+
         tab.PickModFile = () => { asked.TrySetResult(true); return null; };
+
         System.Windows.Input.ICommand command = tab.InstallFromFileCommand;
 
+
+
         // Act
+
         var canExecute = command.CanExecute(null);
+
         command.Execute(null);
 
+
+
         // Assert
+
         canExecute.Should().BeTrue();
+
         (await Task.WhenAny(asked.Task, Task.Delay(2000))).Should().Be(asked.Task);
+
     }
 
+
+
     [Fact]
+
     public async Task CancelPendingPlan_LeavesGameUntouched()
+
     {
+
         // Arrange
+
         var tab = CreateTab(ModFile("mystery.bin"));
+
         await tab.InstallFromFileCommand.ExecuteAsync(null);
 
+
+
         // Act
+
         tab.CancelPendingPlanCommand.Execute(null);
 
+
+
         // Assert
+
         tab.IsConfirmPlanOpen.Should().BeFalse();
+
         tab.PendingDestinations.Should().BeEmpty();
+
         Directory.EnumerateFileSystemEntries(_gameDir).Should().BeEmpty();
+
     }
 
+
+
     [Fact]
+
     public async Task Toggle_And_Uninstall_ManagedMod_GoThroughPipeline()
+
     {
+
         // Arrange
+
         Directory.CreateDirectory(Path.Combine(_gameDir, "Data"));
+
         File.WriteAllText(Path.Combine(_gameDir, "Data", "Base.esm"), "master");
+
         var tab = CreateTab(ModFile("Cool.esp", "plugin"));
+
         await tab.InstallFromFileCommand.ExecuteAsync(null);
+
         var item = tab.Items.Single();
+
         var installed = Path.Combine(_gameDir, "Data", "Cool.esp");
+
         File.Exists(installed).Should().BeTrue();
 
+
+
         // Act: disable
+
         await tab.ToggleCommand.ExecuteAsync(item);
 
+
+
         // Assert
+
         File.Exists(installed).Should().BeFalse();
+
         tab.Items.Single().IsEnabled.Should().BeFalse();
 
+
+
         // Act: uninstall
+
         await tab.UninstallCommand.ExecuteAsync(tab.Items.Single());
 
+
+
         // Assert
+
         tab.Items.Should().BeEmpty();
+
         (await _pipeline.GetLedgerAsync(Instance())).Mods.Should().BeEmpty();
+
     }
 
+
+
     [Fact]
+
     public async Task Load_ListsUnmanagedMods_ButHidesFilesTheLedgerAlreadyTracks()
+
     {
+
         // Arrange
+
         Directory.CreateDirectory(Path.Combine(_gameDir, "Data"));
+
         File.WriteAllText(Path.Combine(_gameDir, "Data", "Base.esm"), "master");
+
         var tab = CreateTab(ModFile("Cool.esp"));
+
         await tab.InstallFromFileCommand.ExecuteAsync(null);
 
+
+
         _legacyMods =
+
         [
+
             new ModItem { Id = "Cool.esp", Name = "Cool", FilePath = Path.Combine(_gameDir, "Data", "Cool.esp") },
+
             new ModItem { Id = "Old.esp", Name = "Old", FilePath = Path.Combine(_gameDir, "Data", "Old.esp") }
+
         ];
 
+
+
         // Act
+
         await tab.LoadCommand.ExecuteAsync(null);
 
+
+
         // Assert
+
         tab.Items.Select(i => (i.Name, i.IsManaged)).Should().BeEquivalentTo(new[] { ("Cool", true), ("Old", false) });
+
     }
 
+
+
     [Fact]
+
     public async Task Install_ConflictingWithAnotherMod_ShowsErrorStatus()
+
     {
+
         // Arrange
+
         Directory.CreateDirectory(Path.Combine(_gameDir, "Data"));
+
         File.WriteAllText(Path.Combine(_gameDir, "Data", "Base.esm"), "master");
+
         var first = Path.Combine(_root, "a", "Shared.esp");
+
         var second = Path.Combine(_root, "b", "Shared.esp");
+
         Directory.CreateDirectory(Path.GetDirectoryName(first)!);
+
         Directory.CreateDirectory(Path.GetDirectoryName(second)!);
+
         File.WriteAllText(first, "a");
+
         File.WriteAllText(second, "b");
+
         var tab = CreateTab();
 
+
+
         // Act
+
         await tab.InstallPackageAsync(new ModPackage { Path = first, Name = "A", Source = ModSourceRef.Local("a") });
+
         var result = await tab.InstallPackageAsync(new ModPackage { Path = second, Name = "B", Source = ModSourceRef.Local("b") });
 
+
+
         // Assert
+
         result!.Status.Should().Be(ModInstallStatus.Conflict);
+
         tab.IsStatusError.Should().BeTrue();
+
         tab.StatusMessage.Should().Contain("A");
+
     }
 
+
+
     [Fact]
+
     public void SetInstance_SameInstanceNewCopy_KeepsList_OtherInstance_ClearsIt()
+
     {
+
         // Arrange
+
         var tab = CreateTab();
+
         tab.Items.Add(new ModListItem { Id = "x", Name = "x", SourceLabel = "Local file" });
 
+
+
         // Act
+
         tab.SetInstance(Instance() with { Name = "Renamed" });
 
+
+
         // Assert
+
         tab.Items.Should().HaveCount(1);
 
+
+
         // Act
+
         tab.SetInstance(Instance() with { Id = Guid.NewGuid() });
 
+
+
         // Assert
+
         tab.Items.Should().BeEmpty();
+
     }
 
+
+
     [Fact]
+
     public void ModrinthSearchAndFilter_UpdatesFilteredItems()
+
     {
+
         // Arrange
+
         var tab = CreateTab();
+
         tab.Items.Add(new ModListItem { Id = "1", Name = "Fabric API", Author = "modmuss50", SourceLabel = "Steam Workshop", IsEnabled = true, SizeBytes = 2048 });
+
         tab.Items.Add(new ModListItem { Id = "2", Name = "Sodium", Author = "CaffeineMC", SourceLabel = "Steam Workshop", IsEnabled = false, SizeBytes = 4096 });
+
         tab.Items.Add(new ModListItem { Id = "3", Name = "Local Texture Pack", Author = "Custom", SourceLabel = "Local file", IsEnabled = true, SizeBytes = 8192 });
+
+
 
         tab.RefreshFilteredItems();
 
+
+
         // Assert: initial state
+
         tab.TotalModsCount.Should().Be(3);
+
         tab.ActiveModsCount.Should().Be(2);
+
         tab.DisabledModsCount.Should().Be(1);
+
         tab.WorkshopModsCount.Should().Be(2);
+
         tab.LocalModsCount.Should().Be(1);
+
         tab.FilteredItems.Should().HaveCount(3);
 
+
+
         // Act: search for "Sodium"
+
         tab.SearchText = "Sodium";
+
         tab.FilteredItems.Should().ContainSingle(i => i.Name == "Sodium");
+
+
 
         // Act: search by author "modmuss"
+
         tab.SearchText = "modmuss";
+
         tab.FilteredItems.Should().ContainSingle(i => i.Name == "Fabric API");
 
+
+
         // Act: filter by Enabled
+
         tab.SearchText = string.Empty;
+
         tab.SetFilter("Enabled");
+
         tab.FilteredItems.Should().HaveCount(2).And.OnlyContain(i => i.IsEnabled);
 
+
+
         // Act: filter by Disabled
+
         tab.SetFilter("Disabled");
+
         tab.FilteredItems.Should().ContainSingle(i => i.Name == "Sodium");
 
+
+
         // Act: filter by Local
+
         tab.SetFilter("Local");
+
         tab.FilteredItems.Should().ContainSingle(i => i.Name == "Local Texture Pack");
 
+
+
         // Act: add Thunderstore mod
+
         tab.Items.Add(new ModListItem
+
         {
+
             Id = "ts_morecompany",
+
             Name = "MoreCompany",
+
             SourceLabel = "Thunderstore",
+
             IsEnabled = true,
+
             IsManaged = true
+
         });
+
         tab.ThunderstoreModsCount.Should().Be(1);
+
         tab.CanShowThunderstoreFilter.Should().BeTrue();
+
         tab.Items.Last().IconGeometryKey.Should().Be("IconBolt");
 
+
+
         // Act: filter by Thunderstore
+
         tab.SetFilter("Thunderstore");
+
         tab.FilteredItems.Should().ContainSingle(i => i.Name == "MoreCompany");
+
     }
 
+
+
     [Fact]
+
     public async Task CheckProvidersAsync_ChecksAvailability_BeforeShowingProviders()
+
     {
+
         // Arrange
+
         var mockWorkshop = new Mock<IWorkshopService>();
+
         mockWorkshop.Setup(w => w.HasWorkshopSupportAsync(12345, It.IsAny<CancellationToken>()))
+
             .ReturnsAsync(true);
+
         mockWorkshop.Setup(w => w.HasWorkshopSupportAsync(99999, It.IsAny<CancellationToken>()))
+
             .ReturnsAsync(false);
 
+
+
         var mockThunderstore = new Mock<IThunderstoreService>();
+
         var instSupported = new GameInstance { Id = Guid.NewGuid(), AppId = 12345, Name = "Lethal Company", InstallPath = _gameDir };
+
         var instUnsupported = new GameInstance { Id = Guid.NewGuid(), AppId = 99999, Name = "Unknown Game", InstallPath = _gameDir };
 
+
+
         mockThunderstore.Setup(t => t.ResolveCommunityAsync(instSupported, It.IsAny<CancellationToken>()))
+
             .ReturnsAsync("lethal-company");
+
         mockThunderstore.Setup(t => t.ResolveCommunityAsync(instUnsupported, It.IsAny<CancellationToken>()))
+
             .ReturnsAsync((string?)null);
 
+
+
         var tab = new ModsTabViewModel(
+
             _pipeline,
+
             _registry.Object,
+
             null,
+
             NullLogger.Instance,
+
             null,
+
             mockWorkshop.Object,
+
             null,
+
             mockThunderstore.Object);
 
+
+
         // Act 1: Game with both Workshop and Thunderstore
+
         await tab.CheckProvidersAsync(instSupported);
+
         tab.HasWorkshopSupport.Should().BeTrue();
+
         tab.HasThunderstoreSupport.Should().BeTrue();
+
         tab.ThunderstoreCommunity.Should().Be("lethal-company");
+
         tab.HasAnyProvider.Should().BeTrue();
+
         tab.CanShowWorkshopFilter.Should().BeTrue();
+
         tab.CanShowThunderstoreFilter.Should().BeTrue();
 
+
+
         // Act 2: Game with neither Workshop nor Thunderstore
+
         await tab.CheckProvidersAsync(instUnsupported);
+
         tab.HasWorkshopSupport.Should().BeFalse();
+
         tab.HasThunderstoreSupport.Should().BeFalse();
+
         tab.ThunderstoreCommunity.Should().BeNull();
+
         tab.HasAnyProvider.Should().BeFalse();
+
         tab.CanShowWorkshopFilter.Should().BeFalse();
+
         tab.CanShowThunderstoreFilter.Should().BeFalse();
+
     }
 
+
+
     [Fact]
+
     public async Task UnifiedBepInExManagement_InstallSwitchUninstall_UpdatesStateAndReloads()
+
     {
+
         // Arrange
+
         var mockBepInEx = new Mock<IBepInExService>();
+
         var releases = new List<BepInExRelease>
+
         {
+
             new("v5.4.23.2", "5.4.23.2", "url2", "x64", 1000, DateTimeOffset.UtcNow),
+
             new("v5.4.21", "5.4.21", "url1", "x64", 1000, DateTimeOffset.UtcNow)
+
         };
+
         mockBepInEx.Setup(b => b.GetAvailableReleasesAsync(false, It.IsAny<CancellationToken>()))
+
             .ReturnsAsync(releases);
+
         mockBepInEx.Setup(b => b.IsInstalled(It.IsAny<string>()))
+
             .Returns(false);
+
         mockBepInEx.Setup(b => b.InstallAsync(It.IsAny<string>(), It.IsAny<BepInExRelease>(), null, It.IsAny<CancellationToken>()))
+
             .ReturnsAsync(true);
+
         mockBepInEx.Setup(b => b.UninstallAsync(It.IsAny<string>(), true, It.IsAny<CancellationToken>()))
+
             .ReturnsAsync(true);
+
+
 
         var unityInstance = new GameInstance
+
         {
+
             Id = Guid.NewGuid(),
+
             Name = "Unity Game",
+
             InstallPath = _gameDir,
+
             Engine = new EngineInfo
+
             {
+
                 Id = "unity",
+
                 Name = "Unity",
+
                 Type = EngineType.Unity,
+
                 Capabilities = EngineCapabilities.BepInExSupported
+
             }
+
         };
 
+
+
         var tab = new ModsTabViewModel(
+
             _pipeline,
+
             _registry.Object,
+
             null,
+
             NullLogger.Instance,
+
             null,
+
             null,
+
             mockBepInEx.Object);
+
+
 
         tab.SetInstance(unityInstance);
 
+
+
         // Act 1: Initial state (Not installed)
+
         await tab.CheckAndLoadEngineAsync();
+
         tab.IsEngineSupported.Should().BeTrue();
+
         tab.IsEngineInstalled.Should().BeFalse();
+
         tab.AvailableEngineReleases.Should().HaveCount(2);
+
         tab.SelectedEngineRelease = releases[0];
+
         tab.EngineActionButtonText.Should().Contain("5.4.23.2");
 
+
+
         // Act 2: Install BepInEx
+
         mockBepInEx.Setup(b => b.IsInstalled(It.IsAny<string>())).Returns(true);
+
         mockBepInEx.Setup(b => b.GetInstalledVersionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+
             .ReturnsAsync("5.4.23.2");
 
+
+
         await tab.InstallOrUpdateEngineAsync();
+
         tab.IsEngineInstalled.Should().BeTrue();
+
         tab.EngineVersion.Should().Be("5.4.23.2");
+
         tab.IsVersionDifferent.Should().BeFalse();
+
         tab.CanShowEngineActionButton.Should().BeFalse();
+
         tab.EngineActionButtonText.Should().BeEmpty();
+
+
 
         // Act 3: Select older version (5.4.21) -> switch button
+
         tab.SelectedEngineRelease = releases[1];
+
         tab.IsVersionDifferent.Should().BeTrue();
+
         tab.CanShowEngineActionButton.Should().BeTrue();
+
         tab.EngineActionButtonText.Should().Contain("Switch to v5.4.21");
 
+
+
         // Act 4: Uninstall BepInEx
+
         mockBepInEx.Setup(b => b.IsInstalled(It.IsAny<string>())).Returns(false);
+
         mockBepInEx.Setup(b => b.GetInstalledVersionAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+
             .ReturnsAsync((string?)null);
 
+
+
         await tab.UninstallEngineAsync();
+
         tab.IsEngineInstalled.Should().BeFalse();
+
         tab.EngineVersion.Should().BeNull();
+
     }
 
+
+
     [Fact]
+
     public async Task EngineStatus_AndInstallAction_WorkSeamlessly()
+
     {
+
         // Arrange
+
         var tab = CreateTab();
+
         var installed = false;
+
         tab.InstallEngineAction = () => { installed = true; return Task.CompletedTask; };
 
+
+
         // Act
+
         tab.UpdateEngineStatus("BepInEx", "5.4.21", isInstalled: true, isSupported: true);
 
+
+
         // Assert
+
         tab.EngineName.Should().Be("BepInEx");
+
         tab.EngineVersion.Should().Be("5.4.21");
+
         tab.IsEngineInstalled.Should().BeTrue();
+
         tab.IsEngineSupported.Should().BeTrue();
 
+
+
         // Act: invoke install command
+
         await tab.InstallEngineCommand.ExecuteAsync(null);
+
         installed.Should().BeTrue();
-    }
-    [Theory]
-    [InlineData("vv5.4.23.6+4865251c89f", "5.4.23.6")]
-    [InlineData("v5.4.23.2", "5.4.23.2")]
-    [InlineData("5.4.23.2 (x64)", "5.4.23.2")]
-    [InlineData("v5.4.21 (x86)", "5.4.21")]
-    [InlineData("5.4.22", "5.4.22")]
-    [InlineData(null, null)]
-    [InlineData("", null)]
-    public void CleanVersion_NormalizesVersionStringsCorrectly(string? input, string? expected)
-    {
-        ModsTabViewModel.CleanVersion(input).Should().Be(expected);
+
     }
 
-    [Fact]
-    public void IsVersionDifferent_ReturnsFalse_WhenSameVersionDespiteHashOrArch()
+    [Theory]
+
+    [InlineData("vv5.4.23.6+4865251c89f", "5.4.23.6")]
+
+    [InlineData("v5.4.23.2", "5.4.23.2")]
+
+    [InlineData("5.4.23.2 (x64)", "5.4.23.2")]
+
+    [InlineData("v5.4.21 (x86)", "5.4.21")]
+
+    [InlineData("5.4.22", "5.4.22")]
+
+    [InlineData(null, null)]
+
+    [InlineData("", null)]
+
+    public void CleanVersion_NormalizesVersionStringsCorrectly(string? input, string? expected)
+
     {
+
+        ModsTabViewModel.CleanVersion(input).Should().Be(expected);
+
+    }
+
+
+
+    [Fact]
+
+    public void IsVersionDifferent_ReturnsFalse_WhenSameVersionDespiteHashOrArch()
+
+    {
+
         var tab = CreateTab();
+
         tab.IsEngineInstalled = true;
+
         tab.EngineVersion = "vv5.4.23.6+4865251c89f";
+
         tab.SelectedEngineRelease = new BepInExRelease("v5.4.23.6", "5.4.23.6 (x64)", "url", "x64", 100, DateTimeOffset.UtcNow);
 
+
+
         tab.FormattedEngineVersion.Should().Be("5.4.23.6");
+
         tab.IsVersionDifferent.Should().BeFalse();
+
         tab.CanShowEngineActionButton.Should().BeFalse();
+
         tab.EngineActionButtonText.Should().BeEmpty();
+
     }
 
+
+
     [Fact]
+
     public void ClearStatusCommand_ResetsStatus()
+
     {
+
         var tab = CreateTab();
+
         tab.StatusMessage = "Some message";
+
         tab.IsStatusError = true;
+
         tab.StatusMessage.Should().Be("Some message");
 
+
+
         tab.ClearStatusCommand.Execute(null);
+
         tab.StatusMessage.Should().BeNull();
+
     }
 
+
+
     [Fact]
+
     public void Sort_ToggleDirection_AndSelectSort_UpdatesState()
+
     {
+
         var tab = CreateTab();
+
         tab.SelectedSort.Should().Be("Name");
+
         tab.SelectedSortDisplayName.Should().Be("Nombre");
+
         tab.IsSortDescending.Should().BeFalse();
 
+
+
         // Toggle sort direction
+
         tab.ToggleSortDirectionCommand.Execute(null);
+
         tab.IsSortDescending.Should().BeTrue();
 
+
+
         // Select sort criteria
+
         tab.SelectSortCommand.Execute("Status");
+
         tab.SelectedSort.Should().Be("Status");
+
         tab.SelectedSortDisplayName.Should().Be("Estado");
+
         tab.IsSortDropdownOpen.Should().BeFalse();
+
     }
 
+
+
     [Fact]
+
     public void Modpacks_Create_Select_And_Delete()
+
     {
+
         var tab = CreateTab();
+
         tab.Items.Add(new ModListItem
+
         {
+
             Id = "mod-1",
+
             Name = "Mod 1",
+
             Version = "1.0.0",
+
             SourceLabel = "Local",
+
             IsEnabled = true
+
         });
 
+
+
         // Open create modpack dialog
+
         tab.OpenCreateModpackCommand.Execute(null);
+
         tab.IsCreateModpackOpen.Should().BeTrue();
+
         tab.CreateModpackSelectableMods.Should().ContainSingle();
 
+
+
         // Set name and confirm
+
         tab.NewModpackName = "MyTestPack";
+
         tab.ConfirmCreateModpackCommand.Execute(null);
 
+
+
         tab.IsCreateModpackOpen.Should().BeFalse();
+
         tab.Modpacks.Should().Contain(m => m.Name == "MyTestPack");
+
         tab.SelectedModpack.Should().NotBeNull();
+
         tab.SelectedModpack!.Name.Should().Be("MyTestPack");
+
+
 
         var created = tab.Modpacks.First(m => m.Name == "MyTestPack");
 
+
+
         // Open details modal first (as happens in UI when clicking active pack)
+
         tab.OpenModpackDetails(created);
+
         tab.IsModpackDetailsOpen.Should().BeTrue();
+
         tab.ActiveModpackForDetails.Should().Be(created);
 
+
+
         // Delete modpack requests confirmation first
+
         tab.DeleteModpackCommand.Execute(created);
+
+
 
         tab.IsDeleteModpackConfirmOpen.Should().BeTrue();
+
         tab.ModpackPendingDelete.Should().Be(created);
 
+
+
         // Cancel deletion leaves modpack untouched and details still open
+
         tab.CancelDeleteModpackCommand.Execute(null);
+
         tab.IsDeleteModpackConfirmOpen.Should().BeFalse();
+
         tab.Modpacks.Should().Contain(m => m.Name == "MyTestPack");
 
+
+
         // Confirm deletion removes it and closes details modal
+
         tab.DeleteModpackCommand.Execute(created);
+
         tab.ConfirmDeleteModpackCommand.Execute(null);
 
+
+
         tab.IsDeleteModpackConfirmOpen.Should().BeFalse();
+
         tab.IsModpackDetailsOpen.Should().BeFalse();
+
         tab.ActiveModpackForDetails.Should().BeNull();
+
         tab.Modpacks.Should().NotContain(m => m.Name == "MyTestPack");
+
         tab.SelectedModpack.Should().BeNull();
+
     }
 
+
+
     [Fact]
+
     public void ModPageModal_OpenModDetail_And_Close()
+
     {
+
         var tab = CreateTab();
+
         string? navigatedUrl = null;
+
         tab.OnNavigateModPage += url => navigatedUrl = url;
 
+
+
         var mod = new ModListItem
+
         {
+
             Id = "backpack-mod",
+
             Name = "BackpackMod",
+
             Author = "author",
+
             Version = "1.0.0",
+
             SourceLabel = "Thunderstore",
+
             PageUrl = "https://thunderstore.io/package/author/BackpackMod/"
+
         };
+
+
 
         // Act: Open mod detail
+
         tab.OpenModDetailCommand.Execute(mod);
 
+
+
         // Assert
+
         tab.IsModPageModalOpen.Should().BeTrue();
+
         tab.ModPageTitle.Should().Be("BackpackMod");
+
         tab.ModPageUrl.Should().Be("https://thunderstore.io/package/author/BackpackMod/");
+
         navigatedUrl.Should().Be("https://thunderstore.io/package/author/BackpackMod/");
 
+
+
         // Act: Close
+
         tab.CloseModPageCommand.Execute(null);
 
+
+
         // Assert
+
         tab.IsModPageModalOpen.Should().BeFalse();
+
     }
 
+
+
     [Fact]
+
     public void Modpack_WithCustomProfileImage_SavesAndPersistsIcon()
+
     {
+
         var iconFile = ModFile("avatar.png", "fake-image-bytes");
+
         var tab = CreateTab();
+
         tab.Items.Add(new ModListItem
+
         {
+
             Id = "icon-mod",
+
             Name = "Icon Mod",
+
             Version = "1.0",
+
             SourceLabel = "Local",
+
             IsEnabled = true
+
         });
+
         tab.PickModpackIconFile = () => iconFile;
 
+
+
         // Open create modpack dialog
+
         tab.OpenCreateModpackCommand.Execute(null);
+
         tab.IsCreateModpackOpen.Should().BeTrue();
+
         tab.NewModpackIconPath.Should().BeNull();
+
+
 
         // Browse icon
+
         tab.BrowseModpackIconCommand.Execute(null);
+
         tab.NewModpackIconPath.Should().Be(iconFile);
 
+
+
         // Clear icon test
+
         tab.ClearModpackIconCommand.Execute(null);
+
         tab.NewModpackIconPath.Should().BeNull();
 
+
+
         // Browse again and confirm
+
         tab.BrowseModpackIconCommand.Execute(null);
+
         tab.NewModpackName = "IconicPack";
+
         tab.ConfirmCreateModpackCommand.Execute(null);
+
+
 
         // Assert
+
         tab.IsCreateModpackOpen.Should().BeFalse();
+
         tab.SelectedModpack.Should().NotBeNull();
+
         tab.SelectedModpack!.Name.Should().Be("IconicPack");
+
         tab.SelectedModpack.IconPath.Should().NotBeNullOrWhiteSpace();
+
         File.Exists(tab.SelectedModpack.IconPath).Should().BeTrue();
+
     }
 
+
+
     [Fact]
+
     public void CreateModpack_WithZeroModsSelected_DoesNotCreateAndShowsError()
+
     {
+
         var tab = CreateTab();
+
         tab.Items.Add(new ModListItem
+
         {
+
             Id = "mod-1",
+
             Name = "Mod 1",
+
             Version = "1.0.0",
+
             SourceLabel = "Local",
+
             IsEnabled = true
+
         });
 
+
+
         tab.OpenCreateModpackCommand.Execute(null);
+
         tab.IsCreateModpackOpen.Should().BeTrue();
+
+
 
         // Deselect all mods
+
         tab.DeselectAllCreateModpackModsCommand.Execute(null);
+
         tab.CreateModpackSelectableMods.All(m => !m.IsSelected).Should().BeTrue();
 
+
+
         tab.NewModpackName = "EmptyPack";
+
         tab.ConfirmCreateModpackCommand.Execute(null);
+
+
 
         // Should NOT create modpack
+
         tab.IsCreateModpackOpen.Should().BeTrue();
+
         tab.Modpacks.Should().NotContain(m => m.Name == "EmptyPack");
+
         tab.IsStatusError.Should().BeTrue();
+
         tab.StatusMessage.Should().Contain("al menos un mod");
+
     }
 
+
+
     [Fact]
+
     public void ModEngineTitle_ReflectsEngineOrBepInExOrNative()
+
     {
+
         var tab = CreateTab();
+
+
 
         // Default unsupported
+
         tab.IsEngineSupported = false;
+
         tab.EngineName = null;
+
         tab.ModEngineTitle.Should().Be("Mods Nativos");
 
+
+
         // Supported Unity game without custom engine name
+
         tab.IsEngineSupported = true;
+
         tab.EngineName = null;
+
         tab.ModEngineTitle.Should().Be("BepInEx");
 
+
+
         // Explicit engine name
+
         tab.EngineName = "BepInEx 5";
+
         tab.ModEngineTitle.Should().Be("BepInEx 5");
+
     }
 
+
+
     [Fact]
+
     public void ClearSearchCommand_ClearsSearchText()
+
     {
+
         var tab = CreateTab();
+
         tab.SearchText = "somemod";
+
         tab.SearchText.Should().Be("somemod");
 
+
+
         tab.ClearSearchCommand.Execute(null);
+
         tab.SearchText.Should().BeEmpty();
+
     }
 
+
+
     [Fact]
+
     public void CreateModpack_PopulatesModsWithIconUrlAndGeometryKey()
+
     {
+
         var tab = CreateTab();
+
         tab.Items.Add(new ModListItem
+
         {
+
             Id = "test-mod",
+
             Name = "TestMod",
+
             Version = "1.2.3",
+
             SourceLabel = "Thunderstore",
+
             IconUrl = "https://example.com/icon.png",
+
             IsEnabled = true
+
         });
 
+
+
         tab.OpenCreateModpackCommand.Execute(null);
+
+
 
         tab.CreateModpackSelectableMods.Should().ContainSingle();
+
         var item = tab.CreateModpackSelectableMods[0];
+
         item.Name.Should().Be("TestMod");
+
         item.IconUrl.Should().Be("https://example.com/icon.png");
+
         item.IconGeometryKey.Should().Be("IconBolt");
+
         item.IsSelected.Should().BeTrue();
+
     }
 
+
+
     [Fact]
+
     public async Task Modpacks_SingleActiveConstraint_OnlyOneActiveAtAnyTime()
+
     {
+
         var tab = CreateTab();
+
         tab.Items.Add(new ModListItem
+
         {
+
             Id = "test-mod",
+
             Name = "Test Mod",
+
             Version = "1.0",
+
             SourceLabel = "Local",
+
             IsEnabled = true
+
         });
+
+
 
         // 1. Initial state: Default is active, no custom modpack selected
+
         tab.SelectedModpack.Should().BeNull();
+
         tab.IsDefaultModpackActive.Should().BeTrue();
+
+
 
         // 2. Create PackA
+
         tab.OpenCreateModpackCommand.Execute(null);
+
         tab.NewModpackName = "PackA";
+
         tab.ConfirmCreateModpackCommand.Execute(null);
+
+
 
         var packA = tab.Modpacks.First(m => m.Name == "PackA");
+
         tab.SelectedModpack.Should().Be(packA);
+
         packA.IsActive.Should().BeTrue();
+
         tab.IsDefaultModpackActive.Should().BeFalse();
+
+
 
         // 3. Create PackB
+
         tab.OpenCreateModpackCommand.Execute(null);
+
         tab.NewModpackName = "PackB";
+
         tab.ConfirmCreateModpackCommand.Execute(null);
+
+
 
         var packB = tab.Modpacks.First(m => m.Name == "PackB");
+
         tab.SelectedModpack.Should().Be(packB);
+
         packB.IsActive.Should().BeTrue();
+
         packA.IsActive.Should().BeFalse();
+
         tab.IsDefaultModpackActive.Should().BeFalse();
+
+
 
         // 4. Switch back to PackA
+
         await tab.ApplyModpackAsync(packA);
+
         tab.SelectedModpack.Should().Be(packA);
+
         packA.IsActive.Should().BeTrue();
+
         packB.IsActive.Should().BeFalse();
+
         tab.IsDefaultModpackActive.Should().BeFalse();
+
+
 
         // 5. Switch to Default
+
         tab.SelectDefaultModpackCommand.Execute(null);
+
         tab.SelectedModpack.Should().BeNull();
+
         tab.IsDefaultModpackActive.Should().BeTrue();
+
         packA.IsActive.Should().BeFalse();
+
         packB.IsActive.Should().BeFalse();
+
     }
 
+
+
     [Fact]
+
     public void Modpacks_CanSwitchBetweenDefaultAndCreatedModpack()
+
     {
+
         var tab = CreateTab();
+
         tab.Items.Add(new ModListItem
+
         {
+
             Id = "mod1",
+
             Name = "Mod One",
+
             Version = "1.0",
+
             SourceLabel = "Thunderstore",
+
             IsEnabled = true
+
         });
 
+
+
         tab.IsDefaultModpackActive.Should().BeTrue();
+
         tab.SelectedModpack.Should().BeNull();
+
+
 
         // Create Modpack 1
+
         tab.OpenCreateModpackCommand.Execute(null);
+
         tab.NewModpackName = "Modpack 1";
+
         tab.ConfirmCreateModpackCommand.Execute(null);
 
+
+
         var pack1 = tab.Modpacks.First(m => m.Name == "Modpack 1");
+
         tab.SelectedModpack.Should().Be(pack1);
+
         pack1.IsActive.Should().BeTrue();
+
         tab.IsDefaultModpackActive.Should().BeFalse();
+
+
 
         // Switch to Default via SelectDefaultModpackCommand
+
         tab.SelectDefaultModpackCommand.Execute(null);
+
         tab.SelectedModpack.Should().BeNull();
+
         tab.IsDefaultModpackActive.Should().BeTrue();
+
         pack1.IsActive.Should().BeFalse();
 
+
+
         // Switch back to Modpack 1 via ApplyModpackCommand
+
         tab.ApplyModpackCommand.Execute(pack1);
+
         tab.SelectedModpack.Should().Be(pack1);
+
         pack1.IsActive.Should().BeTrue();
+
         tab.IsDefaultModpackActive.Should().BeFalse();
 
+
+
         // Clicking Modpack 1 again opens details modal
+
         tab.ApplyModpackCommand.Execute(pack1);
+
         tab.IsModpackDetailsOpen.Should().BeTrue();
+
         tab.ActiveModpackForDetails.Should().Be(pack1);
+
     }
 
+
+
     [Fact]
+
     public void ModpackBlocks_ToggleCommand_TogglesVisibility()
+
     {
+
         var tab = CreateTab();
+
+
 
         tab.ShowModpackBlocks.Should().BeTrue();
 
+
+
         tab.ToggleModpackBlocksCommand.Execute(null);
+
         tab.ShowModpackBlocks.Should().BeFalse();
 
+
+
         tab.ToggleModpackBlocksCommand.Execute(null);
+
         tab.ShowModpackBlocks.Should().BeTrue();
+
     }
 
+
+
     [Fact]
+
     public void ModpackViewMode_ToggleCommand_SwitchesBetweenBlocksAndList()
+
     {
+
         var tab = CreateTab();
+
+
 
         // Default: Block view is active, shows active format (IconGridView)
+
         tab.IsModpackBlockView.Should().BeTrue();
+
         tab.ModpackViewIconGeometryKey.Should().Be("IconGridView");
+
         tab.ModpackViewModeButtonLabel.Should().Contain("bloques");
+
+
 
         // Toggle to list view: shows active format (IconListView)
+
         tab.ToggleModpackViewModeCommand.Execute(null);
+
         tab.IsModpackBlockView.Should().BeFalse();
+
         tab.ModpackViewIconGeometryKey.Should().Be("IconListView");
+
         tab.ModpackViewModeButtonLabel.Should().Contain("lista");
 
+
+
         // Toggle back to block view
+
         tab.ToggleModpackViewModeCommand.Execute(null);
+
         tab.IsModpackBlockView.Should().BeTrue();
+
         tab.ModpackViewIconGeometryKey.Should().Be("IconGridView");
+
         tab.ModpackViewModeButtonLabel.Should().Contain("bloques");
+
     }
 
+
+
     [Fact]
+
     public void SelectionMode_ToggleAndSelect_UpdatesCounts()
+
     {
+
         var tab = CreateTab();
+
         var item1 = new ModListItem { Id = "mod-1", Name = "Mod 1", FormattedSize = "1 MB", SourceLabel = "Local" };
+
         var item2 = new ModListItem { Id = "mod-2", Name = "Mod 2", FormattedSize = "2 MB", SourceLabel = "Local" };
+
         tab.Items.Add(item1);
+
         tab.Items.Add(item2);
 
+
+
         tab.IsSelectionModeActive.Should().BeFalse();
+
         tab.ToggleSelectionModeCommand.Execute(null);
+
         tab.IsSelectionModeActive.Should().BeTrue();
 
+
+
         tab.ToggleModSelectionCommand.Execute(item1);
+
         item1.IsSelected.Should().BeTrue();
+
         tab.SelectedModsCount.Should().Be(1);
+
         tab.HasSelectedMods.Should().BeTrue();
 
+
+
         tab.ClearSelectionCommand.Execute(null);
+
         item1.IsSelected.Should().BeFalse();
+
         tab.SelectedModsCount.Should().Be(0);
+
         tab.HasSelectedMods.Should().BeFalse();
 
+
+
         tab.ExitSelectionModeCommand.Execute(null);
+
         tab.IsSelectionModeActive.Should().BeFalse();
+
     }
 
+
+
     [Fact]
+
     public void SingleModDelete_ConfirmationModalFlow()
+
     {
+
         var tab = CreateTab();
+
         var item = new ModListItem { Id = "mod-test", Name = "Test Mod", FormattedSize = "1 MB", SourceLabel = "Local" };
+
         tab.Items.Add(item);
 
+
+
         tab.IsDeleteModConfirmOpen.Should().BeFalse();
+
         tab.RequestDeleteModCommand.Execute(item);
+
         tab.IsDeleteModConfirmOpen.Should().BeTrue();
+
         tab.ModPendingDelete.Should().Be(item);
 
+
+
         tab.CancelDeleteModCommand.Execute(null);
+
         tab.IsDeleteModConfirmOpen.Should().BeFalse();
+
         tab.ModPendingDelete.Should().BeNull();
+
     }
 
+
+
     [Fact]
+
     public void LoaderUninstall_ConfirmationModalFlow()
+
     {
+
         var tab = CreateTab();
+
         tab.IsUninstallEngineConfirmOpen.Should().BeFalse();
+
         tab.RequestUninstallEngineCommand.Execute(null);
+
         tab.IsUninstallEngineConfirmOpen.Should().BeTrue();
 
+
+
         tab.CancelUninstallEngineCommand.Execute(null);
+
         tab.IsUninstallEngineConfirmOpen.Should().BeFalse();
+
     }
+
+
 
     [Fact]
+
     public async Task Modpacks_SelectingModpack_DeactivatesModsNotInModpack()
+
     {
+
         var tab = CreateTab();
+
         var mod1 = new ModListItem
+
         {
+
             Id = "mod1",
+
             Name = "Mod One",
+
             Version = "1.0",
+
             SourceLabel = "Local",
+
             IsEnabled = true
+
         };
+
         var mod2 = new ModListItem
+
         {
+
             Id = "mod2",
+
             Name = "Mod Two",
+
             Version = "1.0",
+
             SourceLabel = "Local",
+
             IsEnabled = true
+
         };
+
         tab.Items.Add(mod1);
+
         tab.Items.Add(mod2);
 
+
+
         // Create modpack containing ONLY mod1
+
         tab.OpenCreateModpackCommand.Execute(null);
+
         tab.NewModpackName = "PackOnlyMod1";
+
         // Uncheck mod2
+
         var mod2Item = tab.CreateModpackSelectableMods.First(m => m.Id == "mod2");
+
         mod2Item.IsSelected = false;
+
         await tab.ConfirmCreateModpackAsync();
 
+
+
         // mod1 should remain enabled, mod2 should be disabled
+
         mod1.IsEnabled.Should().BeTrue();
+
         mod2.IsEnabled.Should().BeFalse();
+
         tab.SelectedModpack!.Name.Should().Be("PackOnlyMod1");
 
+
+
         // Selecting default modpack re-enables all mods
+
         await tab.SelectDefaultModpackAsync();
+
         mod1.IsEnabled.Should().BeTrue();
+
         mod2.IsEnabled.Should().BeTrue();
+
         tab.SelectedModpack.Should().BeNull();
+
         tab.IsDefaultModpackActive.Should().BeTrue();
+
+
 
         // Applying PackOnlyMod1 again deactivates mod2 again
+
         var pack = tab.Modpacks.First(m => m.Name == "PackOnlyMod1");
+
         await tab.ApplyModpackAsync(pack);
+
         mod1.IsEnabled.Should().BeTrue();
+
         mod2.IsEnabled.Should().BeFalse();
+
         tab.SelectedModpack.Should().Be(pack);
 
+
+
         // Toggling mod2 manually while pack is active resets to default profile
+
         await tab.ToggleAsync(mod2);
+
         tab.SelectedModpack.Should().BeNull();
+
         tab.IsDefaultModpackActive.Should().BeTrue();
+
     }
 
+
+
+
+
+    [Fact]
+
+    public async Task LoadAsync_SupportsDualModDirectories_WhenGameSupportsBepInExAndWorkshop()
+
+    {
+
+        var gameDir = Directory.CreateDirectory(Path.Combine(_root, "DualGame")).FullName;
+
+        var modsFolder = Directory.CreateDirectory(Path.Combine(gameDir, "Mods")).FullName;
+
+        var bepPlugins = Directory.CreateDirectory(Path.Combine(gameDir, "BepInEx", "plugins")).FullName;
+
+
+
+        var instance = new GameInstance
+
+        {
+
+            Id = Guid.NewGuid(),
+
+            Name = "Unity Game Dual Mods",
+
+            AppId = 123456,
+
+            InstallPath = gameDir,
+
+            Engine = new EngineInfo
+
+            {
+
+                Id = "unity",
+
+                Name = "Unity",
+
+                Type = EngineType.Unity,
+
+                Capabilities = EngineCapabilities.Mods | EngineCapabilities.BepInExSupported | EngineCapabilities.WorkshopSupported
+
+            }
+
+        };
+
+
+
+        var legacyMod1 = new ModItem
+
+        {
+
+            Id = "workshop_item",
+
+            Name = "Workshop Texture Pack",
+
+            Category = "Steam Workshop",
+
+            FilePath = Path.Combine(modsFolder, "WorkshopItem"),
+
+            IsEnabled = true
+
+        };
+
+
+
+        var legacyMod2 = new ModItem
+
+        {
+
+            Id = "bepinex_plugin",
+
+            Name = "GameplayPlugin",
+
+            Category = "BepInEx Plugin (.dll)",
+
+            FilePath = Path.Combine(bepPlugins, "GameplayPlugin.dll"),
+
+            IsEnabled = true
+
+        };
+
+
+
+        _legacyMods = [legacyMod1, legacyMod2];
+
+
+
+        var tab = CreateTab();
+
+        tab.SetInstance(instance);
+
+        await tab.LoadAsync();
+
+
+
+        tab.IsEngineSupported.Should().BeTrue();
+
+        tab.NativeModsDirectoryPath.Should().NotBeNullOrWhiteSpace();
+
+        tab.BepInExDirectoryPath.Should().NotBeNullOrWhiteSpace();
+
+        tab.BepInExDirectoryPath.Should().Contain("BepInEx");
+
+
+
+        tab.Items.Should().HaveCount(2);
+
+
+
+        var nativeMod = tab.Items.First(m => m.Id == "workshop_item");
+
+        nativeMod.IsBepInEx.Should().BeFalse();
+
+        nativeMod.IconGeometryKey.Should().Be("IconSteam");
+
+
+
+        var bepMod = tab.Items.First(m => m.Id == "bepinex_plugin");
+
+        bepMod.IsBepInEx.Should().BeTrue();
+
+        bepMod.IconGeometryKey.Should().Be("IconEngine");
+
+
+
+        tab.NativeModsCount.Should().Be(1);
+
+        tab.BepInExModsCount.Should().Be(1);
+
+        tab.NativeModsStatsSummary.Should().Be("1 mod instalado");
+
+        tab.BepInExModsStatsSummary.Should().Be("1 plugin cargado");
+
+    }
+
+
+
+    [Fact]
+
+    public async Task LoadAsync_SingleNativeDirectory_WhenGameDoesNotSupportBepInEx()
+
+    {
+
+        var gameDir = Directory.CreateDirectory(Path.Combine(_root, "UnrealGame")).FullName;
+
+        var paksDir = Directory.CreateDirectory(Path.Combine(gameDir, "Content", "Paks", "~mods")).FullName;
+
+
+
+        var instance = new GameInstance
+
+        {
+
+            Id = Guid.NewGuid(),
+
+            Name = "Unreal Engine Game",
+
+            AppId = 654321,
+
+            InstallPath = gameDir,
+
+            Engine = new EngineInfo
+
+            {
+
+                Id = "unreal",
+
+                Name = "Unreal Engine",
+
+                Type = EngineType.UnrealEngine,
+
+                Capabilities = EngineCapabilities.Mods
+
+            }
+
+        };
+
+
+
+        _legacyMods = [
+
+            new ModItem
+
+            {
+
+                Id = "pak_mod",
+
+                Name = "CustomSkin",
+
+                Category = "Pak Mod",
+
+                FilePath = Path.Combine(paksDir, "CustomSkin.pak"),
+
+                IsEnabled = true
+
+            }
+
+        ];
+
+
+
+        var tab = CreateTab();
+
+        tab.SetInstance(instance);
+
+        await tab.LoadAsync();
+
+
+
+        tab.IsEngineSupported.Should().BeFalse();
+
+        tab.BepInExDirectoryPath.Should().BeNull();
+
+        tab.NativeModsDirectoryPath.Should().NotBeNullOrWhiteSpace();
+
+        tab.NativeModsCount.Should().Be(1);
+
+        tab.BepInExModsCount.Should().Be(0);
+
+        tab.NativeModsStatsSummary.Should().Be("1 mod instalado");
+
+    }
+
+
+    [Fact]
+    public void DynamicModLoaderCards_VisibilityAndLayoutLogic()
+    {
+        var tab = CreateTab();
+
+        // 1. Neither Workshop nor BepInEx
+        tab.HasWorkshopSupport = false;
+        tab.WorkshopDirectoryPath = null;
+        tab.IsEngineSupported = false;
+        tab.BepInExDirectoryPath = null;
+
+        tab.IsWorkshopCardVisible.Should().BeFalse("games without workshop should NOT show a workshop/native card");
+        tab.IsBepInExCardVisible.Should().BeFalse();
+        tab.HasAnyModLoaderCard.Should().BeFalse();
+        tab.HasBothModLoaderCards.Should().BeFalse();
+
+        // 2. Workshop only (e.g. Tabletop Simulator without BepInEx)
+        tab.HasWorkshopSupport = true;
+        tab.WorkshopDirectoryPath = @"C:\Games\Tabletop Simulator\Mods\Workshop";
+        tab.IsEngineSupported = false;
+        tab.BepInExDirectoryPath = null;
+
+        tab.IsWorkshopCardVisible.Should().BeTrue();
+        tab.WorkshopCardTitle.Should().Be("Mods Nativos");
+        tab.IsBepInExCardVisible.Should().BeFalse();
+        tab.HasAnyModLoaderCard.Should().BeTrue();
+        tab.HasBothModLoaderCards.Should().BeFalse();
+
+        // 3. BepInEx only (e.g. Lethal Company without Steam Workshop)
+        tab.HasWorkshopSupport = false;
+        tab.WorkshopDirectoryPath = null;
+        tab.IsEngineSupported = true;
+        tab.BepInExDirectoryPath = @"C:\Games\Lethal Company\BepInEx\plugins";
+
+        tab.IsWorkshopCardVisible.Should().BeFalse("pure BepInEx games should NOT show a workshop card");
+        tab.IsBepInExCardVisible.Should().BeTrue();
+        tab.HasAnyModLoaderCard.Should().BeTrue();
+        tab.HasBothModLoaderCards.Should().BeFalse();
+
+        // 4. Both Workshop and BepInEx
+        tab.HasWorkshopSupport = true;
+        tab.WorkshopDirectoryPath = @"C:\Games\DualModGame\Workshop";
+        tab.IsEngineSupported = true;
+        tab.BepInExDirectoryPath = @"C:\Games\DualModGame\BepInEx\plugins";
+
+        tab.IsWorkshopCardVisible.Should().BeTrue();
+        tab.IsBepInExCardVisible.Should().BeTrue();
+        tab.HasAnyModLoaderCard.Should().BeTrue();
+        tab.HasBothModLoaderCards.Should().BeTrue();
+    }
 }

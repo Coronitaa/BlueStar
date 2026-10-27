@@ -1,1277 +1,2868 @@
 using System;
+
 using System.Collections.Generic;
+
 using System.IO;
+
 using System.IO.Compression;
+
 using System.Linq;
+
 using System.Text.Json;
+
 using BlueStar.Core.Helpers;
+
 using BlueStar.Core.Interfaces;
+
 using BlueStar.Core.Models;
+
+
 
 namespace BlueStar.Infrastructure.Mods;
 
+
+
 /// <summary>
+
 /// Result of resolving the mod installation path for a game instance.
+
 /// </summary>
+
 public record ModPathResolution(
+
     string PrimaryDirectory,
+
     IReadOnlyList<string> ScanDirectories,
+
     string GameCategory,
-    bool RequiresSpecialDeployment = false
+
+    bool RequiresSpecialDeployment = false,
+
+    string? WorkshopDirectory = null,
+
+    string? BepInExDirectory = null
+
 );
 
+
+
 /// <summary>
+
 /// Universal resolver that discovers where Steam Workshop and local mods must be installed for any game.
+
 /// Implements a 4-layer taxonomy:
+
 ///   1. Known game profiles (Tabletop Simulator, DST, L4D2, GMod, Portal 2, RimWorld, PZ, etc.)
+
 ///   2. Engine &amp; Directory Structure Heuristics (Source Engine, Unreal, Klei, Unity, Bethesda, Paradox)
+
 ///   3. Existing directory probing
+
 ///   4. Universal fallback + Steamworks ISteamUGC standard content mirroring
+
 /// </summary>
+
 public static class GameModPathResolver
+
 {
+
     private static readonly EnumerationOptions ShallowSearch = new()
+
     {
+
         MaxRecursionDepth = 2,
+
         RecurseSubdirectories = true,
+
         IgnoreInaccessible = true
+
     };
 
+
+
     /// <summary>
+
     /// Resolves the optimal primary mod directory and all secondary scan directories for a game instance.
+
     /// </summary>
+
     public static ModPathResolution ResolveModPaths(GameInstance instance)
+
     {
+
         if (string.IsNullOrWhiteSpace(instance.InstallPath))
+
         {
+
             return new ModPathResolution(string.Empty, Array.Empty<string>(), "Generic");
+
         }
+
+
 
         var installPath = instance.InstallPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
         var gameRoot = FindGameRoot(installPath, instance.ExecutablePath);
+
         var scanDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+
+
         // ═════════════════════════════════════════════════════════════════════
+
         // CAPA 1: Perfiles de Juegos Conocidos por AppID y Nombre
+
         // ═════════════════════════════════════════════════════════════════════
+
+
 
         // 1. Tabletop Simulator (AppId: 286160)
-        if (instance.AppId == 286160 || instance.Name?.Contains("Tabletop Simulator", StringComparison.OrdinalIgnoreCase) == true)
+
+        if (instance.AppId == 286160 ||
+
+            instance.Name?.Contains("Tabletop Simulator", StringComparison.OrdinalIgnoreCase) == true ||
+
+            instance.InstallPath?.Contains("Tabletop Simulator", StringComparison.OrdinalIgnoreCase) == true)
+
         {
+
             var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
             var ttsDocsWorkshop = Path.Combine(docs, "My Games", "Tabletop Simulator", "Mods", "Workshop");
+
             var ttsLocalMods = Path.Combine(gameRoot, "Mods");
 
+
+
             scanDirs.Add(ttsDocsWorkshop);
+
             if (Directory.Exists(ttsLocalMods)) scanDirs.Add(ttsLocalMods);
 
+
+
             var steamContent = GetSteamWorkshopContentPath(gameRoot, 286160);
+
             if (!string.IsNullOrEmpty(steamContent) && Directory.Exists(steamContent)) scanDirs.Add(steamContent);
 
+
+
+            var bepPlugins = Path.Combine(gameRoot, "BepInEx", "plugins");
+
+            string? bepDir = Directory.Exists(bepPlugins) || Directory.Exists(Path.Combine(gameRoot, "BepInEx")) ? bepPlugins : null;
+
+            if (bepDir != null && !scanDirs.Contains(bepDir)) scanDirs.Add(bepDir);
+
+
+
             return new ModPathResolution(
+
                 PrimaryDirectory: ttsDocsWorkshop,
+
                 ScanDirectories: scanDirs.ToList().AsReadOnly(),
+
                 GameCategory: "TabletopSimulator",
-                RequiresSpecialDeployment: true
+
+                RequiresSpecialDeployment: true,
+
+                WorkshopDirectory: ttsDocsWorkshop,
+
+                BepInExDirectory: bepDir
+
             );
+
         }
+
+
 
         // 2. Don't Starve Together (AppId: 322330) & Don't Starve (AppId: 214950) & Oxygen Not Included (457140)
+
         if (instance.AppId == 322330 || instance.AppId == 214950 || instance.AppId == 457140 ||
+
             instance.Name?.Contains("Don't Starve", StringComparison.OrdinalIgnoreCase) == true ||
+
             instance.Name?.Contains("Dont Starve", StringComparison.OrdinalIgnoreCase) == true ||
+
             instance.Engine?.Type == EngineType.Klei)
+
         {
+
             var dstMods = Path.Combine(gameRoot, "mods");
+
             var dataMods = Path.Combine(gameRoot, "data", "mods");
+
             var directInstallMods = Path.Combine(installPath, "mods");
 
+
+
             scanDirs.Add(dstMods);
+
             if (Directory.Exists(dataMods)) scanDirs.Add(dataMods);
+
             if (Directory.Exists(directInstallMods)) scanDirs.Add(directInstallMods);
 
+
+
             // Dynamically discover Klei Documents directories
+
             foreach (var docDir in FindKleiUserModDirectories())
+
             {
+
                 if (Directory.Exists(docDir)) scanDirs.Add(docDir);
+
             }
+
+
 
             var steamContent = GetSteamWorkshopContentPath(gameRoot, instance.AppId > 0 ? instance.AppId : 214950);
+
             if (!string.IsNullOrEmpty(steamContent) && Directory.Exists(steamContent)) scanDirs.Add(steamContent);
 
+
+
             var emulatorMods = Path.Combine(gameRoot, "steam_settings", "mods");
+
             if (Directory.Exists(emulatorMods)) scanDirs.Add(emulatorMods);
 
+
+
             return new ModPathResolution(
+
                 PrimaryDirectory: dstMods,
+
                 ScanDirectories: scanDirs.ToList().AsReadOnly(),
+
                 GameCategory: "Klei",
+
                 RequiresSpecialDeployment: true
+
             );
+
         }
+
+
 
         // 3. Left 4 Dead 2 (AppId: 550) & Left 4 Dead (AppId: 500)
+
         if (instance.AppId == 550 || instance.AppId == 500 ||
+
             instance.Name?.Contains("Left 4 Dead", StringComparison.OrdinalIgnoreCase) == true)
+
         {
+
             var l4d2Dir = Path.Combine(gameRoot, "left4dead2");
+
             var targetAddons = Directory.Exists(l4d2Dir)
+
                 ? Path.Combine(l4d2Dir, "addons", "workshop")
+
                 : Path.Combine(gameRoot, "addons", "workshop");
 
+
+
             var normalAddons = Directory.Exists(l4d2Dir)
+
                 ? Path.Combine(l4d2Dir, "addons")
+
                 : Path.Combine(gameRoot, "addons");
 
+
+
             scanDirs.Add(targetAddons);
+
             if (Directory.Exists(normalAddons)) scanDirs.Add(normalAddons);
 
+
+
             return new ModPathResolution(
+
                 PrimaryDirectory: targetAddons,
+
                 ScanDirectories: scanDirs.ToList().AsReadOnly(),
+
                 GameCategory: "SourceEngine",
+
                 RequiresSpecialDeployment: true
+
             );
+
         }
+
+
 
         // 4. Garry's Mod (AppId: 4000)
+
         if (instance.AppId == 4000 || instance.Name?.Contains("Garry's Mod", StringComparison.OrdinalIgnoreCase) == true)
+
         {
+
             var gmodAddons = Path.Combine(installPath, "garrysmod", "addons");
+
             scanDirs.Add(gmodAddons);
 
+
+
             return new ModPathResolution(
+
                 PrimaryDirectory: gmodAddons,
+
                 ScanDirectories: scanDirs.ToList().AsReadOnly(),
+
                 GameCategory: "SourceEngine",
+
                 RequiresSpecialDeployment: true
+
             );
+
         }
+
+
 
         // 5. Portal 2 (AppId: 620)
+
         if (instance.AppId == 620 || instance.Name?.Contains("Portal 2", StringComparison.OrdinalIgnoreCase) == true)
+
         {
+
             var portalAddons = Path.Combine(installPath, "portal2", "addons");
+
             scanDirs.Add(portalAddons);
 
+
+
             return new ModPathResolution(
+
                 PrimaryDirectory: portalAddons,
+
                 ScanDirectories: scanDirs.ToList().AsReadOnly(),
+
                 GameCategory: "SourceEngine",
+
                 RequiresSpecialDeployment: true
+
             );
+
         }
+
+
 
         // 6. RimWorld (AppId: 294100)
+
         if (instance.AppId == 294100 || instance.Name?.Contains("RimWorld", StringComparison.OrdinalIgnoreCase) == true)
+
         {
+
             var rimMods = Path.Combine(installPath, "Mods");
+
             scanDirs.Add(rimMods);
 
+
+
             return new ModPathResolution(
+
                 PrimaryDirectory: rimMods,
+
                 ScanDirectories: scanDirs.ToList().AsReadOnly(),
+
                 GameCategory: "RimWorld"
+
             );
+
         }
+
+
 
         // 7. Project Zomboid (AppId: 108600)
+
         if (instance.AppId == 108600 || instance.Name?.Contains("Project Zomboid", StringComparison.OrdinalIgnoreCase) == true)
+
         {
+
             var userHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
             var pzUserMods = Path.Combine(userHome, "Zomboid", "mods");
+
             var pzLocalMods = Path.Combine(installPath, "mods");
 
+
+
             scanDirs.Add(pzUserMods);
+
             if (Directory.Exists(pzLocalMods)) scanDirs.Add(pzLocalMods);
 
+
+
             return new ModPathResolution(
+
                 PrimaryDirectory: pzUserMods,
+
                 ScanDirectories: scanDirs.ToList().AsReadOnly(),
+
                 GameCategory: "ProjectZomboid"
+
             );
+
         }
+
+
 
         // 8. Cities: Skylines (AppId: 255710)
+
         if (instance.AppId == 255710 || instance.Name?.Contains("Cities: Skylines", StringComparison.OrdinalIgnoreCase) == true)
+
         {
+
             var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+
             var csMods = Path.Combine(localAppData, "Colossal Order", "Cities_Skylines", "Addons", "Mods");
+
             var csFilesMods = Path.Combine(installPath, "Files", "Mods");
 
+
+
             scanDirs.Add(csMods);
+
             if (Directory.Exists(csFilesMods)) scanDirs.Add(csFilesMods);
 
+
+
             return new ModPathResolution(
+
                 PrimaryDirectory: csMods,
+
                 ScanDirectories: scanDirs.ToList().AsReadOnly(),
+
                 GameCategory: "CitiesSkylines"
+
             );
+
         }
+
+
 
         // 9. People Playground (AppId: 1118200)
+
         if (instance.AppId == 1118200 || instance.Name?.Contains("People Playground", StringComparison.OrdinalIgnoreCase) == true)
+
         {
+
             var ppgMods = Path.Combine(installPath, "Mods");
+
             scanDirs.Add(ppgMods);
 
+
+
             return new ModPathResolution(
+
                 PrimaryDirectory: ppgMods,
+
                 ScanDirectories: scanDirs.ToList().AsReadOnly(),
+
                 GameCategory: "Generic"
+
             );
+
         }
+
+
 
         // 10. Teardown (AppId: 1167630)
+
         if (instance.AppId == 1167630 || instance.Name?.Contains("Teardown", StringComparison.OrdinalIgnoreCase) == true)
+
         {
+
             var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
             var tdDocsMods = Path.Combine(docs, "Teardown", "mods");
+
             var tdLocalMods = Path.Combine(installPath, "mods");
 
+
+
             scanDirs.Add(tdDocsMods);
+
             if (Directory.Exists(tdLocalMods)) scanDirs.Add(tdLocalMods);
 
+
+
             return new ModPathResolution(
+
                 PrimaryDirectory: tdDocsMods,
+
                 ScanDirectories: scanDirs.ToList().AsReadOnly(),
+
                 GameCategory: "Teardown"
+
             );
+
         }
+
+
 
         // 11. Blade &amp; Sorcery (AppId: 629730)
+
         if (instance.AppId == 629730 || instance.Name?.Contains("Blade and Sorcery", StringComparison.OrdinalIgnoreCase) == true || instance.Name?.Contains("Blade &amp; Sorcery", StringComparison.OrdinalIgnoreCase) == true)
+
         {
+
             var bsMods = Path.Combine(installPath, "BladeAndSorcery_Data", "StreamingAssets", "Mods");
+
             scanDirs.Add(bsMods);
 
+
+
             return new ModPathResolution(
+
                 PrimaryDirectory: bsMods,
+
                 ScanDirectories: scanDirs.ToList().AsReadOnly(),
+
                 GameCategory: "UnityStreamingAssets"
+
             );
+
         }
+
+
 
         // 12. Oxygen Not Included (AppId: 457140)
+
         if (instance.AppId == 457140 || instance.Name?.Contains("Oxygen Not Included", StringComparison.OrdinalIgnoreCase) == true)
+
         {
+
             var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
             var oniMods = Path.Combine(docs, "Klei", "OxygenNotIncluded", "mods", "Steam");
+
             var oniLocalMods = Path.Combine(installPath, "mods");
 
+
+
             scanDirs.Add(oniMods);
+
             if (Directory.Exists(oniLocalMods)) scanDirs.Add(oniLocalMods);
 
+
+
             return new ModPathResolution(
+
                 PrimaryDirectory: oniMods,
+
                 ScanDirectories: scanDirs.ToList().AsReadOnly(),
+
                 GameCategory: "Klei"
+
             );
+
         }
+
+
 
         // 13. Paradox Games (Stellaris 281990, HOI4 394360, CK3 1158310, EU4 236850)
+
         if (instance.AppId is 281990 or 394360 or 1158310 or 236850 ||
+
             File.Exists(Path.Combine(installPath, "launcher-settings.json")) ||
+
             Directory.Exists(Path.Combine(installPath, "pdx_launcher")))
+
         {
+
             var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
             var gameFolder = !string.IsNullOrWhiteSpace(instance.Name) ? instance.Name : "Stellaris";
+
             var pdxDocsMod = Path.Combine(docs, "Paradox Interactive", gameFolder, "mod");
+
             var pdxLocalMod = Path.Combine(installPath, "mod");
 
+
+
             scanDirs.Add(pdxDocsMod);
+
             if (Directory.Exists(pdxLocalMod)) scanDirs.Add(pdxLocalMod);
 
+
+
             return new ModPathResolution(
+
                 PrimaryDirectory: pdxDocsMod,
+
                 ScanDirectories: scanDirs.ToList().AsReadOnly(),
+
                 GameCategory: "Paradox"
+
             );
+
         }
 
+
+
         // ═════════════════════════════════════════════════════════════════════
+
         // CAPA 2: Detección Heurística por Motor y Estructura de Archivos
+
         // ═════════════════════════════════════════════════════════════════════
+
+
 
         // A. Source Engine (gameinfo.txt o subcarpeta con addons/)
+
         try
+
         {
+
             var gameInfoFiles = Directory.GetFiles(installPath, "gameinfo.txt", ShallowSearch);
+
             if (gameInfoFiles.Length > 0)
+
             {
+
                 var sourceSubDir = Path.GetDirectoryName(gameInfoFiles[0]) ?? installPath;
+
                 var sourceAddonsWorkshop = Path.Combine(sourceSubDir, "addons", "workshop");
+
                 var sourceAddons = Path.Combine(sourceSubDir, "addons");
+
                 var sourceCustom = Path.Combine(sourceSubDir, "custom");
 
+
+
                 scanDirs.Add(sourceAddonsWorkshop);
+
                 if (Directory.Exists(sourceAddons)) scanDirs.Add(sourceAddons);
+
                 if (Directory.Exists(sourceCustom)) scanDirs.Add(sourceCustom);
 
+
+
                 return new ModPathResolution(
+
                     PrimaryDirectory: sourceAddonsWorkshop,
+
                     ScanDirectories: scanDirs.ToList().AsReadOnly(),
+
                     GameCategory: "SourceEngine",
+
                     RequiresSpecialDeployment: true
+
                 );
+
             }
+
         }
+
         catch { }
+
+
 
         // B. Unreal Engine (Content/Paks/~mods)
+
         if (instance.Engine?.Type == EngineType.UnrealEngine ||
+
             Directory.Exists(Path.Combine(installPath, "Engine")))
+
         {
+
             try
+
             {
+
                 var paksDirs = Directory.GetDirectories(installPath, "Paks", SearchOption.AllDirectories);
+
                 if (paksDirs.Length > 0)
+
                 {
+
                     var tildeMods = Path.Combine(paksDirs[0], "~mods");
+
                     var modsFolder = Path.Combine(paksDirs[0], "Mods");
+
                     scanDirs.Add(tildeMods);
+
                     if (Directory.Exists(modsFolder)) scanDirs.Add(modsFolder);
 
+
+
                     return new ModPathResolution(
+
                         PrimaryDirectory: tildeMods,
+
                         ScanDirectories: scanDirs.ToList().AsReadOnly(),
+
                         GameCategory: "UnrealPaks"
+
                     );
+
                 }
+
             }
+
             catch { }
+
         }
+
+
 
         // C. Klei Engine (modinfo.lua)
+
         try
+
         {
+
             var hasModInfo = Directory.GetFiles(installPath, "modinfo.lua", ShallowSearch).Length > 0;
+
             if (hasModInfo)
+
             {
+
                 var kleiMods = Path.Combine(installPath, "mods");
+
                 scanDirs.Add(kleiMods);
 
+
+
                 return new ModPathResolution(
+
                     PrimaryDirectory: kleiMods,
+
                     ScanDirectories: scanDirs.ToList().AsReadOnly(),
+
                     GameCategory: "Klei",
+
                     RequiresSpecialDeployment: true
+
                 );
+
             }
+
         }
+
         catch { }
+
+
 
         // D. Unity Engine (BepInEx/plugins, StreamingAssets/Mods, *_Data/Mods)
+
         if (instance.Engine?.Type == EngineType.Unity)
+
         {
+
             var bepDir = Path.Combine(installPath, "BepInEx");
-            if (Directory.Exists(bepDir))
+
+            var bepPlugins = Path.Combine(bepDir, "plugins");
+
+            if (Directory.Exists(bepDir) || instance.Engine?.Supports(EngineCapabilities.BepInExSupported) == true)
+
             {
-                var bepPlugins = Path.Combine(bepDir, "plugins");
+
                 scanDirs.Add(bepPlugins);
 
-                return new ModPathResolution(
-                    PrimaryDirectory: bepPlugins,
-                    ScanDirectories: scanDirs.ToList().AsReadOnly(),
-                    GameCategory: "UnityBepInEx"
-                );
             }
+
+
+
+            string? nativeModsDir = null;
+
+            var modsLower = Path.Combine(installPath, "mods");
+
+            var modsUpper = Path.Combine(installPath, "Mods");
+
+
 
             try
+
             {
+
                 var streamingAssets = Directory.GetDirectories(installPath, "StreamingAssets", SearchOption.AllDirectories);
+
                 if (streamingAssets.Length > 0)
+
                 {
+
                     var saMods = Path.Combine(streamingAssets[0], "Mods");
+
                     if (Directory.Exists(saMods))
+
                     {
+
+                        nativeModsDir = saMods;
+
                         scanDirs.Add(saMods);
-                        return new ModPathResolution(
-                            PrimaryDirectory: saMods,
-                            ScanDirectories: scanDirs.ToList().AsReadOnly(),
-                            GameCategory: "UnityStreamingAssets"
-                        );
+
                     }
+
                 }
+
             }
+
             catch { }
+
+
+
+            if (nativeModsDir == null)
+
+            {
+
+                if (Directory.Exists(modsUpper))
+
+                {
+
+                    nativeModsDir = modsUpper;
+
+                    scanDirs.Add(modsUpper);
+
+                }
+
+                else if (Directory.Exists(modsLower))
+
+                {
+
+                    nativeModsDir = modsLower;
+
+                    scanDirs.Add(modsLower);
+
+                }
+
+            }
+
+
+
+            var steamContent = GetSteamWorkshopContentPath(gameRoot, instance.AppId);
+
+            if (!string.IsNullOrEmpty(steamContent) && Directory.Exists(steamContent))
+
+            {
+
+                scanDirs.Add(steamContent);
+
+            }
+
+
+
+            if (nativeModsDir != null && Directory.Exists(nativeModsDir))
+
+            {
+
+                scanDirs.Add(nativeModsDir);
+
+            }
+
+            else
+
+            {
+
+                nativeModsDir = null;
+
+            }
+
+
+
+            bool hasWorkshop = instance.AppId > 0 && (instance.Engine?.Supports(EngineCapabilities.WorkshopSupported) == true || !string.IsNullOrEmpty(steamContent));
+
+            string? workshopDir = hasWorkshop ? (nativeModsDir ?? (!string.IsNullOrEmpty(steamContent) ? steamContent : null)) : null;
+
+            string unityPrimary = (hasWorkshop && workshopDir != null) ? workshopDir : bepPlugins;
+
+
+
+            return new ModPathResolution(
+
+                PrimaryDirectory: unityPrimary,
+
+                ScanDirectories: scanDirs.ToList().AsReadOnly(),
+
+                GameCategory: Directory.Exists(bepDir) && !hasWorkshop ? "UnityBepInEx" : "Unity",
+
+                RequiresSpecialDeployment: false,
+
+                WorkshopDirectory: workshopDir,
+
+                BepInExDirectory: bepPlugins
+
+            );
+
         }
+
+
 
         // E. Bethesda / Creation Engine (Data/)
+
         try
+
         {
+
             var dataDir = Path.Combine(installPath, "Data");
+
             if (Directory.Exists(dataDir) &&
+
                 (Directory.GetFiles(dataDir, "*.esm").Length > 0 || Directory.GetFiles(dataDir, "*.esp").Length > 0))
+
             {
+
                 scanDirs.Add(dataDir);
+
                 return new ModPathResolution(
+
                     PrimaryDirectory: dataDir,
+
                     ScanDirectories: scanDirs.ToList().AsReadOnly(),
+
                     GameCategory: "BethesdaData"
+
                 );
+
             }
+
         }
+
         catch { }
 
-        // ═════════════════════════════════════════════════════════════════════
-        // CAPA 3: Inspección de Carpetas Existentes
-        // ═════════════════════════════════════════════════════════════════════
-        var candidateNames = new[] { "Mods", "mods", "Addons", "addons", "Plugins", "plugins" };
-        foreach (var cName in candidateNames)
-        {
-            var p = Path.Combine(installPath, cName);
-            if (Directory.Exists(p))
-            {
-                scanDirs.Add(p);
-                return new ModPathResolution(
-                    PrimaryDirectory: p,
-                    ScanDirectories: scanDirs.ToList().AsReadOnly(),
-                    GameCategory: "Generic"
-                );
-            }
-        }
+
 
         // ═════════════════════════════════════════════════════════════════════
-        // CAPA 4: Fallback Estándar y Soporte Steamworks ISteamUGC
+
+        // CAPA 3: Inspección de Carpetas Existentes
+
         // ═════════════════════════════════════════════════════════════════════
+
+        var candidateNames = new[] { "Mods", "mods", "Addons", "addons", "Plugins", "plugins" };
+
+        foreach (var cName in candidateNames)
+
+        {
+
+            var p = Path.Combine(installPath, cName);
+
+            if (Directory.Exists(p))
+
+            {
+
+                scanDirs.Add(p);
+
+                return new ModPathResolution(
+
+                    PrimaryDirectory: p,
+
+                    ScanDirectories: scanDirs.ToList().AsReadOnly(),
+
+                    GameCategory: "Generic"
+
+                );
+
+            }
+
+        }
+
+
+
+        // ═════════════════════════════════════════════════════════════════════
+
+        // CAPA 4: Fallback Estándar y Soporte Steamworks ISteamUGC
+
+        // ═════════════════════════════════════════════════════════════════════
+
         var defaultModsDir = Path.Combine(installPath, "mods");
-        scanDirs.Add(defaultModsDir);
+
+        if (Directory.Exists(defaultModsDir)) scanDirs.Add(defaultModsDir);
+
+
 
         var steamContentFallback = GetSteamWorkshopContentPath(installPath, instance.AppId);
+
         if (!string.IsNullOrEmpty(steamContentFallback) && Directory.Exists(steamContentFallback))
+
         {
+
             scanDirs.Add(steamContentFallback);
+
         }
 
+
+
+        string fallbackPrimary = Directory.Exists(defaultModsDir)
+
+            ? defaultModsDir
+
+            : (!string.IsNullOrEmpty(steamContentFallback) && Directory.Exists(steamContentFallback) ? steamContentFallback : string.Empty);
+
+
+
         return new ModPathResolution(
-            PrimaryDirectory: defaultModsDir,
+
+            PrimaryDirectory: fallbackPrimary,
+
             ScanDirectories: scanDirs.ToList().AsReadOnly(),
+
             GameCategory: "Generic"
+
         );
+
     }
 
+
+
     /// <summary>
+
     /// Gets the target directory where a specific Steam Workshop item should be installed.
+
     /// </summary>
+
     public static string GetItemTargetFolder(GameInstance instance, ulong publishedFileId, string? title = null)
+
     {
+
         var resolution = ResolveModPaths(instance);
-        var baseDir = resolution.PrimaryDirectory;
+
+        var baseDir = !string.IsNullOrWhiteSpace(resolution.WorkshopDirectory)
+
+            ? resolution.WorkshopDirectory
+
+            : resolution.PrimaryDirectory;
+
         var safeTitle = PathHelper.SanitizeFolderName(title ?? $"WorkshopMod_{publishedFileId}");
 
+
+
         return resolution.GameCategory switch
+
         {
+
             "SourceEngine" => baseDir, // Source engine places files directly in addons/workshop/
+
             "TabletopSimulator" => baseDir, // Tabletop Simulator places JSON files directly in Mods/Workshop/
+
             "Klei" => Path.Combine(baseDir, $"workshop-{publishedFileId}"), // DST requires prefix workshop-<id>
+
             _ => Path.Combine(baseDir, safeTitle)
+
         };
+
     }
 
+
+
     /// <summary>
+
     /// Processes and adapts downloaded Workshop files for the specific game format.
+
     /// </summary>
+
     public static void AdaptAndDeployWorkshopMod(
+
         GameInstance instance,
+
         ulong publishedFileId,
+
         string stagingFolder,
+
         string targetFolder,
+
         WorkshopItemInfo? details)
+
     {
+
         var resolution = ResolveModPaths(instance);
+
         var safeTitle = details != null ? PathHelper.SanitizeFolderName(details.Title) : null;
+
         if (string.IsNullOrWhiteSpace(safeTitle)) safeTitle = $"WorkshopMod_{publishedFileId}";
+
+
 
         Directory.CreateDirectory(targetFolder);
 
+
+
         switch (resolution.GameCategory)
+
         {
+
             case "SourceEngine":
+
                 DeploySourceEngineMod(stagingFolder, targetFolder, publishedFileId, safeTitle);
+
                 break;
+
+
 
             case "TabletopSimulator":
+
                 DeployTabletopSimulatorMod(stagingFolder, targetFolder, publishedFileId, details?.Title, details);
+
                 break;
+
+
 
             case "Klei":
+
                 DeployKleiMod(instance, stagingFolder, targetFolder, publishedFileId, details?.Title);
+
                 break;
+
+
 
             default:
+
                 DeployGenericMod(stagingFolder, targetFolder);
+
                 break;
+
         }
+
+
 
         // Always write workshop_info.json in the target directory if details are available (except TTS which scans all json as saves)
+
         if (details != null && resolution.GameCategory != "TabletopSimulator")
+
         {
+
             try
+
             {
+
                 var metaFile = resolution.GameCategory is "SourceEngine"
+
                     ? Path.Combine(targetFolder, $"{publishedFileId}_info.json")
+
                     : Path.Combine(targetFolder, "workshop_info.json");
 
+
+
                 var json = JsonSerializer.Serialize(details, new JsonSerializerOptions { WriteIndented = true });
+
                 File.WriteAllText(metaFile, json);
+
             }
+
             catch { }
+
         }
+
+
 
         // Mirror to steamapps/workshop/content/<AppId>/<PublishedFileId> and emulator steam_settings/
+
         try
+
         {
+
             MirrorToSteamUgcFolder(instance, publishedFileId, stagingFolder, details);
+
         }
+
         catch { }
+
     }
+
+
 
     private static void DeploySourceEngineMod(string stagingFolder, string targetFolder, ulong publishedFileId, string safeTitle)
+
     {
+
         // 1. Check for any .vpk files in staging folder or subdirectories
+
         var vpkFiles = Directory.GetFiles(stagingFolder, "*.vpk", SearchOption.AllDirectories);
+
         if (vpkFiles.Length > 0)
+
         {
+
             foreach (var vpk in vpkFiles)
+
             {
+
                 var destName = $"{publishedFileId}.vpk";
+
                 var destPath = Path.Combine(targetFolder, destName);
+
                 File.Copy(vpk, destPath, overwrite: true);
+
             }
+
             return;
+
         }
+
+
 
         // 2. Check for zip files that may contain a .vpk
+
         var zipFiles = Directory.GetFiles(stagingFolder, "*.zip", SearchOption.AllDirectories);
+
         foreach (var zip in zipFiles)
+
         {
+
             try
+
             {
+
                 using var archive = ZipFile.OpenRead(zip);
+
                 foreach (var entry in archive.Entries)
+
                 {
+
                     if (entry.Name.EndsWith(".vpk", StringComparison.OrdinalIgnoreCase))
+
                     {
+
                         var destPath = Path.Combine(targetFolder, $"{publishedFileId}.vpk");
+
                         entry.ExtractToFile(destPath, overwrite: true);
+
                         return;
+
                     }
+
                 }
+
             }
+
             catch { }
+
         }
+
+
 
         // 3. Fallback: Copy all files to target folder
+
         CopyDirectoryRecursive(stagingFolder, targetFolder);
+
     }
+
+
 
     public record TabletopSimulatorSaveInfo(
+
         string? SaveName,
+
         string? GameMode,
+
         string? Date,
+
         bool IsValidSave
+
     );
 
+
+
     /// <summary>
+
     /// Converts a BSON-encoded byte array or file into a UTF-8 JSON string if it is BSON,
+
     /// or returns the original string if it is already text JSON.
+
     /// </summary>
+
     public static string EnsureJsonFormat(byte[] fileBytes)
+
     {
+
         if (fileBytes == null || fileBytes.Length == 0) return string.Empty;
 
+
+
         // If it starts with '{' or '[', it's already text JSON
+
         if (fileBytes[0] == (byte)'{' || fileBytes[0] == (byte)'[' ||
+
             (fileBytes.Length > 3 && fileBytes[0] == 0xEF && fileBytes[1] == 0xBB && fileBytes[2] == 0xBF && (fileBytes[3] == (byte)'{' || fileBytes[3] == (byte)'[')))
+
         {
+
             return System.Text.Encoding.UTF8.GetString(fileBytes).TrimStart('\uFEFF', ' ', '\t', '\r', '\n');
+
         }
+
+
 
         // Try converting from BSON to JSON using Newtonsoft.Json.Bson
+
         try
+
         {
+
             using var ms = new MemoryStream(fileBytes);
+
             using var reader = new Newtonsoft.Json.Bson.BsonDataReader(ms);
+
             var serializer = new Newtonsoft.Json.JsonSerializer();
+
             var jToken = serializer.Deserialize<Newtonsoft.Json.Linq.JToken>(reader);
+
             if (jToken != null)
+
             {
+
                 return jToken.ToString(Newtonsoft.Json.Formatting.Indented);
+
             }
+
         }
+
         catch { }
+
+
 
         // Fallback to UTF-8 string
+
         return System.Text.Encoding.UTF8.GetString(fileBytes);
+
     }
 
+
+
     /// <summary>
+
     /// Parses a Tabletop Simulator save file in either text JSON or binary BSON format.
+
     /// </summary>
+
     public static TabletopSimulatorSaveInfo ParseTabletopSimulatorSave(string filePath)
+
     {
+
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+
             return new TabletopSimulatorSaveInfo(null, null, null, false);
 
+
+
         try
+
         {
+
             var fileBytes = File.ReadAllBytes(filePath);
+
             if (fileBytes.Length < 5)
+
                 return new TabletopSimulatorSaveInfo(null, null, null, false);
 
+
+
             var jsonText = EnsureJsonFormat(fileBytes);
+
             if (!string.IsNullOrWhiteSpace(jsonText) && (jsonText.StartsWith('{') || jsonText.StartsWith('[')))
+
             {
+
                 using var doc = JsonDocument.Parse(jsonText);
+
                 string? saveName = null;
+
                 string? gameMode = null;
+
                 string? date = null;
 
+
+
                 if (doc.RootElement.TryGetProperty("SaveName", out var sn) && !string.IsNullOrWhiteSpace(sn.GetString()))
+
                     saveName = sn.GetString();
+
                 if (doc.RootElement.TryGetProperty("GameMode", out var gm) && !string.IsNullOrWhiteSpace(gm.GetString()))
+
                     gameMode = gm.GetString();
+
                 if (doc.RootElement.TryGetProperty("Date", out var dt) && !string.IsNullOrWhiteSpace(dt.GetString()))
+
                     date = dt.GetString();
 
+
+
                 bool isTts = saveName != null || gameMode != null ||
+
                              doc.RootElement.TryGetProperty("ObjectStates", out _) ||
+
                              doc.RootElement.TryGetProperty("Table", out _) ||
+
                              doc.RootElement.TryGetProperty("CustomUIAssets", out _);
 
+
+
                 return new TabletopSimulatorSaveInfo(saveName, gameMode, date, isTts);
+
             }
+
         }
+
         catch { }
+
+
 
         return new TabletopSimulatorSaveInfo(null, null, null, false);
+
     }
+
+
 
     private static void DeployTabletopSimulatorMod(string stagingFolder, string targetFolder, ulong publishedFileId, string? title, WorkshopItemInfo? details)
+
     {
+
         var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
         var ttsRoot = Path.Combine(docs, "My Games", "Tabletop Simulator", "Mods");
+
         var ttsWorkshop = Path.Combine(ttsRoot, "Workshop");
+
         var ttsImages = Path.Combine(ttsRoot, "Images");
+
         var ttsModels = Path.Combine(ttsRoot, "Models");
+
         var ttsAssetbundles = Path.Combine(ttsRoot, "Assetbundles");
 
+
+
         Directory.CreateDirectory(ttsWorkshop);
+
         Directory.CreateDirectory(ttsImages);
+
         Directory.CreateDirectory(ttsModels);
+
         Directory.CreateDirectory(ttsAssetbundles);
 
+
+
         // 1. Clean up old broken metadata files
+
         CleanUpBrokenTabletopSimulatorFiles(ttsWorkshop);
+
         if (!string.Equals(ttsWorkshop, targetFolder, StringComparison.OrdinalIgnoreCase) && Directory.Exists(targetFolder))
+
         {
+
             CleanUpBrokenTabletopSimulatorFiles(targetFolder);
+
         }
+
+
 
         // 2. Extract any .zip files in stagingFolder
+
         var zipFiles = Directory.GetFiles(stagingFolder, "*.zip", SearchOption.AllDirectories);
+
         foreach (var zip in zipFiles)
+
         {
+
             try
+
             {
+
                 var extractDest = Path.Combine(stagingFolder, $"extracted_{Path.GetFileNameWithoutExtension(zip)}");
+
                 ZipFile.ExtractToDirectory(zip, extractDest, overwriteFiles: true);
+
             }
+
             catch { }
+
         }
+
+
 
         // 3. Locate the true TTS save file (JSON or BSON)
+
         string? validJsonSource = null;
+
         string? detectedSaveName = title;
 
+
+
         var allFiles = Directory.GetFiles(stagingFolder, "*", SearchOption.AllDirectories);
+
         foreach (var file in allFiles)
+
         {
+
             var fileName = Path.GetFileName(file);
+
             if (fileName.Equals("workshop_info.json", StringComparison.OrdinalIgnoreCase) ||
+
                 fileName.EndsWith("_info.json", StringComparison.OrdinalIgnoreCase) ||
+
                 fileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+
                 fileName.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+
                 fileName.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+
                 fileName.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase))
+
             {
+
                 continue;
+
             }
+
+
 
             var saveInfo = ParseTabletopSimulatorSave(file);
+
             if (saveInfo.IsValidSave)
+
             {
+
                 validJsonSource = file;
+
                 if (!string.IsNullOrWhiteSpace(saveInfo.SaveName))
+
                 {
+
                     detectedSaveName = saveInfo.SaveName;
+
                 }
+
                 break;
+
             }
+
         }
+
+
 
         // Fallback: any WorkshopUpload, .json, .bin, or extensionless file in staging
+
+        string? deployedModExtension = ".json";
+
         if (validJsonSource == null)
+
         {
+
             foreach (var file in allFiles)
+
             {
+
                 var ext = Path.GetExtension(file).ToLowerInvariant();
+
                 var fName = Path.GetFileName(file);
+
                 if (fName.Equals("WorkshopUpload", StringComparison.OrdinalIgnoreCase) ||
+
                     fName.Equals($"{publishedFileId}.json", StringComparison.OrdinalIgnoreCase) ||
+
                     ext is ".json" or ".bin" || !Path.HasExtension(file))
+
                 {
+
                     var fi = new FileInfo(file);
+
                     if (fi.Length > 100)
+
                     {
+
                         validJsonSource = file;
+
+                        deployedModExtension = ".json";
+
                         break;
+
                     }
+
                 }
+
             }
-        }
 
-        // Copy JSON save (converted to clean formatted JSON from BSON if needed) to ttsWorkshop/<publishedFileId>.json
-        if (validJsonSource != null)
-        {
-            var rawBytes = File.ReadAllBytes(validJsonSource);
-            var jsonText = EnsureJsonFormat(rawBytes);
 
-            var destJson = Path.Combine(ttsWorkshop, $"{publishedFileId}.json");
-            File.WriteAllText(destJson, jsonText, System.Text.Encoding.UTF8);
 
-            if (!string.Equals(ttsWorkshop, targetFolder, StringComparison.OrdinalIgnoreCase))
+            // Universal fallback: any non-metadata content file (supporting .png, .cjc, .obj, .unity3d, etc.)
+
+            if (validJsonSource == null)
+
             {
-                var targetJson = Path.Combine(targetFolder, $"{publishedFileId}.json");
-                File.WriteAllText(targetJson, jsonText, System.Text.Encoding.UTF8);
+
+                var candidate = allFiles
+
+                    .Where(f => !IsExcludedSystemOrMetadataFile(Path.GetFileName(f)))
+
+                    .OrderByDescending(f => new FileInfo(f).Length)
+
+                    .FirstOrDefault();
+
+
+
+                if (candidate != null)
+
+                {
+
+                    validJsonSource = candidate;
+
+                    deployedModExtension = Path.GetExtension(candidate);
+
+                    if (string.IsNullOrWhiteSpace(deployedModExtension)) deployedModExtension = ".json";
+
+                }
+
             }
+
         }
+
+
+
+        // Copy mod file to ttsWorkshop/<publishedFileId><ext>
+
+        if (validJsonSource != null)
+
+        {
+
+            if (deployedModExtension.Equals(".json", StringComparison.OrdinalIgnoreCase))
+
+            {
+
+                var rawBytes = File.ReadAllBytes(validJsonSource);
+
+                var jsonText = EnsureJsonFormat(rawBytes);
+
+
+
+                var destJson = Path.Combine(ttsWorkshop, $"{publishedFileId}.json");
+
+                File.WriteAllText(destJson, jsonText, System.Text.Encoding.UTF8);
+
+
+
+                if (!string.Equals(ttsWorkshop, targetFolder, StringComparison.OrdinalIgnoreCase))
+
+                {
+
+                    var targetJson = Path.Combine(targetFolder, $"{publishedFileId}.json");
+
+                    File.WriteAllText(targetJson, jsonText, System.Text.Encoding.UTF8);
+
+                }
+
+            }
+
+            else
+
+            {
+
+                var destFile = Path.Combine(ttsWorkshop, $"{publishedFileId}{deployedModExtension}");
+
+                File.Copy(validJsonSource, destFile, overwrite: true);
+
+
+
+                if (!string.Equals(ttsWorkshop, targetFolder, StringComparison.OrdinalIgnoreCase))
+
+                {
+
+                    var targetFile = Path.Combine(targetFolder, $"{publishedFileId}{deployedModExtension}");
+
+                    File.Copy(validJsonSource, targetFile, overwrite: true);
+
+                }
+
+            }
+
+        }
+
+
 
         // 4. Handle thumbnail / preview image (so TTS shows thumbnail instead of question mark)
+
         string? imageSource = null;
+
         foreach (var file in allFiles)
+
         {
+
             var ext = Path.GetExtension(file).ToLowerInvariant();
+
             if (ext is ".png" or ".jpg" or ".jpeg")
+
             {
+
                 var fName = Path.GetFileNameWithoutExtension(file);
+
                 if (fName.Contains("preview", StringComparison.OrdinalIgnoreCase) ||
+
                     fName.Contains("thumb", StringComparison.OrdinalIgnoreCase) ||
+
                     fName.Equals("WorkshopUpload", StringComparison.OrdinalIgnoreCase) ||
+
                     fName.Equals(publishedFileId.ToString()))
+
                 {
+
                     imageSource = file;
+
                     break;
+
                 }
+
                 imageSource ??= file;
+
             }
+
         }
+
+
 
         if (imageSource != null)
+
         {
+
             var destImg = Path.Combine(ttsWorkshop, $"{publishedFileId}.png");
+
             try { File.Copy(imageSource, destImg, overwrite: true); } catch { }
 
+
+
             if (!string.Equals(ttsWorkshop, targetFolder, StringComparison.OrdinalIgnoreCase))
+
             {
+
                 var targetImg = Path.Combine(targetFolder, $"{publishedFileId}.png");
+
                 try { File.Copy(imageSource, targetImg, overwrite: true); } catch { }
+
             }
+
         }
+
         else if (!string.IsNullOrWhiteSpace(details?.PreviewUrl))
+
         {
+
             try
+
             {
+
                 using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+
                 var imgBytes = http.GetByteArrayAsync(details.PreviewUrl).GetAwaiter().GetResult();
+
                 if (imgBytes.Length > 0)
+
                 {
+
                     var destImg = Path.Combine(ttsWorkshop, $"{publishedFileId}.png");
+
                     File.WriteAllBytes(destImg, imgBytes);
 
+
+
                     if (!string.Equals(ttsWorkshop, targetFolder, StringComparison.OrdinalIgnoreCase))
+
                     {
+
                         var targetImg = Path.Combine(targetFolder, $"{publishedFileId}.png");
+
                         File.WriteAllBytes(targetImg, imgBytes);
+
                     }
+
                 }
+
             }
+
             catch { }
+
         }
+
+
 
         // 5. Copy cached assets (Images, Models, Assetbundles)
+
         foreach (var file in allFiles)
+
         {
+
             var ext = Path.GetExtension(file).ToLowerInvariant();
+
             var fileName = Path.GetFileName(file);
 
+
+
             if (ext is ".png" or ".jpg" or ".jpeg")
+
             {
+
                 try { File.Copy(file, Path.Combine(ttsImages, fileName), overwrite: true); } catch { }
+
             }
+
             else if (ext is ".obj")
+
             {
+
                 try { File.Copy(file, Path.Combine(ttsModels, fileName), overwrite: true); } catch { }
+
             }
+
             else if (ext is ".assetbundle" or ".unity3d")
+
             {
+
                 try { File.Copy(file, Path.Combine(ttsAssetbundles, fileName), overwrite: true); } catch { }
+
             }
+
         }
+
+
 
         // 6. Update or create WorkshopFileInfos.json index so TTS registers the item
+
         var finalName = detectedSaveName ?? title ?? details?.Title ?? $"Workshop {publishedFileId}";
-        UpdateTabletopSimulatorWorkshopIndex(ttsWorkshop, publishedFileId, finalName);
+
+        UpdateTabletopSimulatorWorkshopIndex(ttsWorkshop, publishedFileId, finalName, deployedModExtension);
+
         if (!string.Equals(ttsWorkshop, targetFolder, StringComparison.OrdinalIgnoreCase))
+
         {
-            UpdateTabletopSimulatorWorkshopIndex(targetFolder, publishedFileId, finalName);
+
+            UpdateTabletopSimulatorWorkshopIndex(targetFolder, publishedFileId, finalName, deployedModExtension);
+
         }
+
     }
 
+
+
     /// <summary>
+
     /// Cleans up non-save JSON files, _info.json files, and invalid files from Tabletop Simulator's Workshop directory.
+
     /// </summary>
+
     public static void CleanUpBrokenTabletopSimulatorFiles(string ttsWorkshopDir)
+
     {
+
         try
+
         {
+
             if (!Directory.Exists(ttsWorkshopDir)) return;
 
+
+
             foreach (var file in Directory.GetFiles(ttsWorkshopDir, "*.*", SearchOption.TopDirectoryOnly))
+
             {
+
                 var fileName = Path.GetFileName(file);
+
                 var ext = Path.GetExtension(file).ToLowerInvariant();
 
+
+
                 // Delete known bad metadata files that break TTS in-game workshop browser
+
                 if (fileName.Equals("workshop_info.json", StringComparison.OrdinalIgnoreCase) ||
+
                     fileName.EndsWith("_info.json", StringComparison.OrdinalIgnoreCase) ||
+
                     ext == ".zip" || ext == ".bak" || ext == ".tmp")
+
                 {
+
                     try { File.Delete(file); } catch { }
+
                     continue;
+
                 }
+
+
 
                 // Check .json files (excluding WorkshopFileInfos.json)
+
                 if (ext == ".json" && !fileName.Equals("WorkshopFileInfos.json", StringComparison.OrdinalIgnoreCase))
+
                 {
+
                     try
+
                     {
+
                         var fi = new FileInfo(file);
+
                         if (fi.Length == 0)
+
                         {
+
                             File.Delete(file);
+
                             continue;
+
                         }
+
+
 
                         // Check if it is an HTML error page
+
                         var headBytes = new byte[Math.Min(512, (int)fi.Length)];
+
                         using (var fs = File.OpenRead(file)) { fs.Read(headBytes, 0, headBytes.Length); }
+
                         var headStr = System.Text.Encoding.UTF8.GetString(headBytes).TrimStart();
+
                         if (headStr.StartsWith("<!DOCTYPE", StringComparison.OrdinalIgnoreCase) ||
+
                             headStr.StartsWith("<html", StringComparison.OrdinalIgnoreCase))
+
                         {
+
                             File.Delete(file);
+
                             continue;
+
                         }
+
+
 
                         // Check if it's a BlueStar metadata file (has PublishedFileId but no TTS markers)
+
                         if (headStr.StartsWith('{'))
+
                         {
+
                             using var doc = JsonDocument.Parse(headStr.Length < fi.Length ? File.ReadAllText(file) : headStr);
+
                             if (doc.RootElement.TryGetProperty("PublishedFileId", out _) &&
+
                                 !doc.RootElement.TryGetProperty("SaveName", out _) &&
+
                                 !doc.RootElement.TryGetProperty("ObjectStates", out _) &&
+
                                 !doc.RootElement.TryGetProperty("Table", out _))
+
                             {
+
                                 File.Delete(file);
+
                             }
+
                         }
+
                     }
+
                     catch { }
+
                 }
+
             }
+
         }
+
         catch { }
+
     }
 
+
+
     /// <summary>
+
     /// Updates Tabletop Simulator's WorkshopFileInfos.json index file.
+
     /// </summary>
-    public static void UpdateTabletopSimulatorWorkshopIndex(string ttsWorkshopDir, ulong publishedFileId, string modName)
+
+    /// <summary>
+
+    /// Returns true if the file is an internal metadata, temporary, or OS system file that should never be listed as a mod.
+
+    /// </summary>
+
+    public static bool IsExcludedSystemOrMetadataFile(string fileName)
+
     {
-        try
+
+        if (string.IsNullOrWhiteSpace(fileName)) return true;
+
+        if (fileName.Equals("workshop_info.json", StringComparison.OrdinalIgnoreCase) ||
+
+            fileName.Equals("WorkshopFileInfos.json", StringComparison.OrdinalIgnoreCase) ||
+
+            fileName.EndsWith("_info.json", StringComparison.OrdinalIgnoreCase) ||
+
+            fileName.EndsWith(".bak", StringComparison.OrdinalIgnoreCase) ||
+
+            fileName.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) ||
+
+            fileName.EndsWith(".crdownload", StringComparison.OrdinalIgnoreCase) ||
+
+            fileName.EndsWith(".part", StringComparison.OrdinalIgnoreCase) ||
+
+            fileName.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase) ||
+
+            fileName.Equals(".DS_Store", StringComparison.OrdinalIgnoreCase) ||
+
+            fileName.Equals("thumbs.db", StringComparison.OrdinalIgnoreCase))
+
         {
+
+            return true;
+
+        }
+
+        return false;
+
+    }
+
+
+
+    /// <summary>
+
+    /// Loads a dictionary lookup from Tabletop Simulator's WorkshopFileInfos.json index file mapping Id, file name, and base name to the mod Name.
+
+    /// </summary>
+
+    public static Dictionary<string, string> LoadTabletopSimulatorIndexMap(string modsDir)
+
+    {
+
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (string.IsNullOrWhiteSpace(modsDir) || !Directory.Exists(modsDir)) return result;
+
+
+
+        var indexFile = Path.Combine(modsDir, "WorkshopFileInfos.json");
+
+        if (!File.Exists(indexFile)) return result;
+
+
+
+        try
+
+        {
+
+            var text = File.ReadAllText(indexFile);
+
+            if (string.IsNullOrWhiteSpace(text)) return result;
+
+
+
+            using var doc = JsonDocument.Parse(text);
+
+            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+
+            {
+
+                foreach (var el in doc.RootElement.EnumerateArray())
+
+                {
+
+                    string? id = el.TryGetProperty("Id", out var idProp) ? idProp.GetString() : null;
+
+                    string? dir = el.TryGetProperty("Directory", out var dirProp) ? dirProp.GetString() : null;
+
+                    string? name = el.TryGetProperty("Name", out var nameProp) ? nameProp.GetString() : null;
+
+
+
+                    if (string.IsNullOrWhiteSpace(name)) continue;
+
+
+
+                    if (!string.IsNullOrWhiteSpace(id))
+
+                    {
+
+                        result[id] = name;
+
+                    }
+
+
+
+                    if (!string.IsNullOrWhiteSpace(dir))
+
+                    {
+
+                        var dirFileName = Path.GetFileName(dir);
+
+                        var dirBaseName = Path.GetFileNameWithoutExtension(dir);
+
+                        if (!string.IsNullOrWhiteSpace(dirFileName)) result[dirFileName] = name;
+
+                        if (!string.IsNullOrWhiteSpace(dirBaseName)) result[dirBaseName] = name;
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        catch { }
+
+
+
+        return result;
+
+    }
+
+
+
+    /// <summary>
+
+    /// Updates Tabletop Simulator's WorkshopFileInfos.json index file with the specific deployed file format.
+
+    /// </summary>
+
+    public static void UpdateTabletopSimulatorWorkshopIndex(string ttsWorkshopDir, ulong publishedFileId, string modName, string? fileExtension = ".json")
+
+    {
+
+        try
+
+        {
+
             var indexFile = Path.Combine(ttsWorkshopDir, "WorkshopFileInfos.json");
+
             var entries = new List<Dictionary<string, string>>();
 
+
+
             if (File.Exists(indexFile))
+
             {
+
                 try
+
                 {
+
                     var text = File.ReadAllText(indexFile);
+
                     if (!string.IsNullOrWhiteSpace(text) && (text.TrimStart().StartsWith('[') || text.TrimStart().StartsWith('{')))
+
                     {
+
                         using var doc = JsonDocument.Parse(text);
+
                         if (doc.RootElement.ValueKind == JsonValueKind.Array)
+
                         {
+
                             foreach (var item in doc.RootElement.EnumerateArray())
+
                             {
+
                                 var dir = item.TryGetProperty("Directory", out var d) ? d.GetString() ?? "" : "";
+
                                 var name = item.TryGetProperty("Name", out var n) ? n.GetString() ?? "" : "";
+
                                 var id = item.TryGetProperty("Id", out var i) ? i.GetString() ?? "" : "";
+
+
 
                                 var checkFile = Path.Combine(ttsWorkshopDir, Path.GetFileName(dir));
 
+
+
                                 if (File.Exists(checkFile) && !dir.EndsWith("_info.json", StringComparison.OrdinalIgnoreCase))
+
                                 {
+
                                     entries.Add(new Dictionary<string, string>
+
                                     {
+
                                         ["Directory"] = $"Workshop/{Path.GetFileName(dir)}",
+
                                         ["Name"] = name,
+
                                         ["Id"] = id
+
                                     });
+
                                 }
+
                             }
+
                         }
+
                     }
+
                 }
+
                 catch { }
+
             }
 
+
+
             var pubIdStr = publishedFileId.ToString();
-            var entryDir = $"Workshop/{publishedFileId}.json";
+
+            var ext = string.IsNullOrWhiteSpace(fileExtension) ? ".json" : (fileExtension.StartsWith('.') ? fileExtension : $".{fileExtension}");
+
+            var entryDir = $"Workshop/{publishedFileId}{ext}";
+
+
 
             entries.RemoveAll(e => e.TryGetValue("Id", out var id) && id == pubIdStr);
 
+
+
             entries.Add(new Dictionary<string, string>
+
             {
+
                 ["Directory"] = entryDir,
+
                 ["Name"] = modName,
+
                 ["Id"] = pubIdStr
+
             });
 
+
+
             var json = JsonSerializer.Serialize(entries, new JsonSerializerOptions { WriteIndented = true });
+
             File.WriteAllText(indexFile, json);
+
         }
+
         catch { }
+
     }
+
+
 
     private static void DeployKleiMod(GameInstance instance, string stagingFolder, string targetFolder, ulong publishedFileId, string? title)
+
     {
+
         var gameRoot = FindGameRoot(instance.InstallPath, instance.ExecutablePath);
+
+
 
         // Find the root of the mod files in staging (containing modinfo.lua)
+
         string modSourceRoot = stagingFolder;
+
         var modInfoFiles = Directory.GetFiles(stagingFolder, "modinfo.lua", SearchOption.AllDirectories);
+
         if (modInfoFiles.Length > 0)
+
         {
+
             modSourceRoot = Path.GetDirectoryName(modInfoFiles[0]) ?? stagingFolder;
+
         }
+
+
 
         // 1. Primary destination: GameRoot/mods/workshop-<PublishedFileId>/
+
         var primaryTarget = Path.Combine(gameRoot, "mods", $"workshop-{publishedFileId}");
+
         Directory.CreateDirectory(primaryTarget);
+
         CopyDirectoryRecursive(modSourceRoot, primaryTarget);
+
         SanitizeLuaFilesAndModInfo(primaryTarget, publishedFileId, title, instance.AppId);
 
+
+
         // Remove any old redundant duplicate folders named by title in mods/ to avoid duplicate prefab crash
+
         var safeTitle = !string.IsNullOrWhiteSpace(title) ? PathHelper.SanitizeFolderName(title) : null;
+
         if (!string.IsNullOrWhiteSpace(safeTitle) && !safeTitle.Equals($"workshop-{publishedFileId}", StringComparison.OrdinalIgnoreCase))
+
         {
+
             var oldTitleTarget = Path.Combine(gameRoot, "mods", safeTitle);
+
             if (Directory.Exists(oldTitleTarget))
+
             {
+
                 try { Directory.Delete(oldTitleTarget, true); } catch { }
+
             }
+
         }
+
+
 
         // 2. Configure modsettings.lua using only valid ForceEnableMod calls
+
         var modsDir = Path.Combine(gameRoot, "mods");
+
         if (Directory.Exists(modsDir))
+
         {
+
             var modSettingsFile = Path.Combine(modsDir, "modsettings.lua");
+
             try
+
             {
+
                 var content = File.Exists(modSettingsFile) ? File.ReadAllText(modSettingsFile) : "-- Mod Settings\n";
 
+
+
                 // Strip any invalid EnableMod calls that cause runtime Lua crashes
+
                 var lines = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+
                     .Where(l => !l.TrimStart().StartsWith("EnableMod(", StringComparison.OrdinalIgnoreCase))
+
                     .ToList();
 
+
+
                 var modId = $"workshop-{publishedFileId}";
+
                 var forceLine = $"ForceEnableMod(\"{modId}\")";
 
+
+
                 if (!lines.Any(l => l.Contains(modId, StringComparison.OrdinalIgnoreCase)))
+
                 {
+
                     lines.Add(forceLine);
+
                 }
 
+
+
                 File.WriteAllText(modSettingsFile, string.Join(Environment.NewLine, lines) + Environment.NewLine);
+
             }
+
             catch { }
+
         }
+
     }
+
+
 
     private static void DeployGenericMod(string stagingFolder, string targetFolder)
+
     {
+
         CopyDirectoryRecursive(stagingFolder, targetFolder);
+
     }
 
+
+
     private static void MirrorToSteamUgcFolder(GameInstance instance, ulong publishedFileId, string stagingFolder, WorkshopItemInfo? details)
+
     {
+
         if (instance.AppId == 0 || string.IsNullOrWhiteSpace(instance.InstallPath)) return;
+
+
 
         var gameRoot = FindGameRoot(instance.InstallPath, instance.ExecutablePath);
 
+
+
         // 1. Steamapps workshop content path
+
         var contentPath = GetSteamWorkshopContentPath(gameRoot, instance.AppId);
+
         if (string.IsNullOrEmpty(contentPath))
+
         {
+
             contentPath = Path.Combine(gameRoot, "steamapps", "workshop", "content", instance.AppId.ToString());
+
         }
+
+
 
         var itemDir = Path.Combine(contentPath, publishedFileId.ToString());
+
         Directory.CreateDirectory(itemDir);
+
         CopyDirectoryRecursive(stagingFolder, itemDir);
 
+
+
         if (details != null)
+
         {
+
             var metaFile = Path.Combine(itemDir, "workshop_info.json");
+
             var json = JsonSerializer.Serialize(details, new JsonSerializerOptions { WriteIndented = true });
+
             File.WriteAllText(metaFile, json);
+
         }
+
+
 
         // 2. Emulator steam_settings/ integration (Goldberg / ReFix) - only if steam_settings already exists
+
         var steamSettingsDirs = new List<string>();
+
         var rootSettings = Path.Combine(gameRoot, "steam_settings");
+
         if (Directory.Exists(rootSettings)) steamSettingsDirs.Add(rootSettings);
 
+
+
         try
+
         {
+
             foreach (var d in Directory.GetDirectories(gameRoot, "steam_settings", SearchOption.AllDirectories))
+
             {
+
                 if (!steamSettingsDirs.Contains(d, StringComparer.OrdinalIgnoreCase))
+
                     steamSettingsDirs.Add(d);
+
             }
+
         }
+
         catch { }
+
+
 
         foreach (var sDir in steamSettingsDirs)
+
         {
+
             try
+
             {
+
                 var emulatorModsDir = Path.Combine(sDir, "mods", publishedFileId.ToString());
+
                 Directory.CreateDirectory(emulatorModsDir);
+
                 CopyDirectoryRecursive(stagingFolder, emulatorModsDir);
 
+
+
                 // Register in subscribed_items.txt and workshop_items.txt
+
                 var subFile = Path.Combine(sDir, "subscribed_items.txt");
+
                 var pubIdStr = publishedFileId.ToString();
+
                 var subContent = File.Exists(subFile) ? File.ReadAllText(subFile) : string.Empty;
+
                 if (!subContent.Contains(pubIdStr))
+
                 {
+
                     File.AppendAllText(subFile, pubIdStr + Environment.NewLine);
+
                 }
+
+
 
                 var wsFile = Path.Combine(sDir, "workshop_items.txt");
+
                 var wsContent = File.Exists(wsFile) ? File.ReadAllText(wsFile) : string.Empty;
+
                 if (!wsContent.Contains(pubIdStr))
+
                 {
+
                     File.AppendAllText(wsFile, pubIdStr + Environment.NewLine);
+
                 }
+
             }
+
             catch { }
+
         }
+
     }
+
+
 
     private static string? GetSteamWorkshopContentPath(string installPath, uint appId)
+
     {
+
         if (string.IsNullOrWhiteSpace(installPath) || appId == 0) return null;
 
+
+
         try
+
         {
+
             var norm = Path.GetFullPath(installPath);
+
             var commonIdx = norm.IndexOf(Path.Combine("steamapps", "common"), StringComparison.OrdinalIgnoreCase);
+
             if (commonIdx >= 0)
+
             {
+
                 var steamapps = norm.Substring(0, commonIdx + 9);
+
                 return Path.Combine(steamapps, "workshop", "content", appId.ToString());
+
             }
+
         }
+
         catch { }
+
+
 
         return null;
+
     }
+
+
 
     private static void CopyDirectoryRecursive(string sourceDir, string targetDir)
+
     {
+
         Directory.CreateDirectory(targetDir);
 
+
+
         foreach (var file in Directory.GetFiles(sourceDir))
+
         {
+
             var dest = Path.Combine(targetDir, Path.GetFileName(file));
+
             File.Copy(file, dest, overwrite: true);
+
         }
+
+
 
         foreach (var sub in Directory.GetDirectories(sourceDir))
+
         {
+
             var dirName = Path.GetFileName(sub);
+
             if (dirName.Equals(".DepotDownloader", StringComparison.OrdinalIgnoreCase)) continue;
+
             var destSub = Path.Combine(targetDir, dirName);
+
             CopyDirectoryRecursive(sub, destSub);
+
         }
+
     }
 
+
+
     /// <summary>
+
     /// Dynamically locates the true Game Root directory by inspecting the directory hierarchy,
+
     /// traversing up from subfolders like bin, Binaries, Win64, etc., and looking for root markers.
+
     /// </summary>
+
     public static string FindGameRoot(string installPath, string? executablePath = null)
+
     {
+
         if (string.IsNullOrWhiteSpace(installPath)) return string.Empty;
 
+
+
         string current = File.Exists(installPath) ? (Path.GetDirectoryName(installPath) ?? installPath) : installPath;
+
         current = Path.GetFullPath(current).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
+
+
         if (!string.IsNullOrWhiteSpace(executablePath) && File.Exists(executablePath))
+
         {
+
             var exeDir = Path.GetDirectoryName(Path.GetFullPath(executablePath));
+
             if (!string.IsNullOrEmpty(exeDir))
+
             {
+
                 var fromExe = InspectHierarchyForGameRoot(exeDir);
+
                 if (!string.IsNullOrEmpty(fromExe)) return fromExe;
+
             }
+
         }
+
+
 
         var foundRoot = InspectHierarchyForGameRoot(current);
+
         return !string.IsNullOrEmpty(foundRoot) ? foundRoot : current;
+
     }
+
+
 
     private static string? InspectHierarchyForGameRoot(string startDir)
+
     {
+
         try
+
         {
+
             var dirInfo = new DirectoryInfo(startDir);
+
             while (dirInfo != null)
+
             {
+
                 var name = dirInfo.Name;
 
+
+
                 // If we are currently inside a binary subfolder, climb up to parent
+
                 if (name.Equals("bin", StringComparison.OrdinalIgnoreCase) ||
+
                     name.Equals("Binaries", StringComparison.OrdinalIgnoreCase) ||
+
                     name.Equals("Win64", StringComparison.OrdinalIgnoreCase) ||
+
                     name.Equals("Win32", StringComparison.OrdinalIgnoreCase) ||
+
                     name.Equals("x64", StringComparison.OrdinalIgnoreCase) ||
+
                     name.Equals("x86", StringComparison.OrdinalIgnoreCase) ||
+
                     name.Equals("Release", StringComparison.OrdinalIgnoreCase) ||
+
                     name.Equals("Shipping", StringComparison.OrdinalIgnoreCase))
+
                 {
+
                     if (dirInfo.Parent != null)
+
                     {
+
                         dirInfo = dirInfo.Parent;
+
                         continue;
+
                     }
+
                 }
+
+
 
                 return dirInfo.FullName;
+
             }
+
         }
+
         catch { }
+
+
 
         return startDir;
+
     }
+
+
 
     /// <summary>
+
     /// Dynamically finds Klei user document and save directories across Documents and LocalAppData.
+
     /// </summary>
+
     public static IEnumerable<string> FindKleiUserModDirectories()
+
     {
+
         var dirs = new List<string>();
+
         try
+
         {
+
             var userDocs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
             var kleiDocs = Path.Combine(userDocs, "Klei");
+
             if (Directory.Exists(kleiDocs))
+
             {
+
                 foreach (var gameFolder in Directory.GetDirectories(kleiDocs))
+
                 {
+
                     dirs.Add(Path.Combine(gameFolder, "mods"));
+
                     dirs.Add(Path.Combine(gameFolder, "client_mods"));
+
                 }
+
             }
+
+
 
             var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+
             var kleiLocal = Path.Combine(localAppData, "Klei");
+
             if (Directory.Exists(kleiLocal))
+
             {
+
                 foreach (var gameFolder in Directory.GetDirectories(kleiLocal))
+
                 {
+
                     dirs.Add(Path.Combine(gameFolder, "mods"));
+
                     dirs.Add(Path.Combine(gameFolder, "client_mods"));
+
                 }
+
             }
+
         }
+
         catch { }
+
         return dirs;
+
     }
+
+
 
     private static void SanitizeLuaFilesAndModInfo(string modDirectory, ulong publishedFileId, string? title, uint appId = 0)
+
     {
+
         try
+
         {
+
             // 1. Strip UTF-8 BOM from all .lua files to avoid Lua 5.1 parser syntax errors
+
             foreach (var luaFile in Directory.GetFiles(modDirectory, "*.lua", SearchOption.AllDirectories))
+
             {
+
                 try
+
                 {
+
                     var bytes = File.ReadAllBytes(luaFile);
+
                     if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+
                     {
+
                         var cleanBytes = new byte[bytes.Length - 3];
+
                         Array.Copy(bytes, 3, cleanBytes, 0, cleanBytes.Length);
+
                         File.WriteAllBytes(luaFile, cleanBytes);
+
                     }
+
                 }
+
                 catch { }
+
             }
+
+
 
             // 2. Ensure modinfo.lua has clean compatibility flags
+
             var modInfoPath = Path.Combine(modDirectory, "modinfo.lua");
+
             if (File.Exists(modInfoPath))
+
             {
+
                 var content = File.ReadAllText(modInfoPath);
+
                 var appendLines = new List<string>();
 
+
+
                 // If Don't Starve Together (322330)
+
                 if (appId == 322330 || content.Contains("dst_compatible", StringComparison.OrdinalIgnoreCase))
+
                 {
+
                     if (!content.Contains("dst_compatible", StringComparison.OrdinalIgnoreCase))
+
                         appendLines.Add("dst_compatible = true");
+
                 }
+
                 else
+
                 {
+
                     if (!content.Contains("dont_starve_compatible", StringComparison.OrdinalIgnoreCase))
+
                         appendLines.Add("dont_starve_compatible = true");
+
                     if (!content.Contains("reign_of_giants_compatible", StringComparison.OrdinalIgnoreCase))
+
                         appendLines.Add("reign_of_giants_compatible = true");
+
                     if (!content.Contains("shipwrecked_compatible", StringComparison.OrdinalIgnoreCase))
+
                         appendLines.Add("shipwrecked_compatible = true");
+
                     if (!content.Contains("hamlet_compatible", StringComparison.OrdinalIgnoreCase))
+
                         appendLines.Add("hamlet_compatible = true");
+
                 }
+
+
 
                 if (!content.Contains("name =", StringComparison.OrdinalIgnoreCase))
+
                     appendLines.Add($"name = \"{title ?? $"WorkshopMod_{publishedFileId}"}\"");
 
+
+
                 if (appendLines.Count > 0)
+
                 {
+
                     var extra = "\n-- Compatibility flags added by BlueStar\n" + string.Join("\n", appendLines) + "\n";
+
                     File.AppendAllText(modInfoPath, extra);
+
                 }
+
             }
+
         }
+
         catch { }
+
     }
+
 }
+

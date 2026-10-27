@@ -22,6 +22,9 @@ public sealed partial class ModListItem : ObservableObject
 
     public bool IsManaged { get; init; }
 
+    /// <summary>Whether this mod resides in the BepInEx plugins folder or comes from Thunderstore.</summary>
+    public bool IsBepInEx { get; init; }
+
     /// <summary>File or folder of an unmanaged mod.</summary>
     public string? LegacyPath { get; init; }
 
@@ -42,10 +45,12 @@ public sealed partial class ModListItem : ObservableObject
     /// <summary>Remote or local image icon URL for the mod if available.</summary>
     public string? IconUrl { get; init; }
 
-    /// <summary>Geometry resource key for the icon (IconSteam, IconBolt, IconMod, etc.).</summary>
-    public string IconGeometryKey => SourceLabel.Contains("Workshop", System.StringComparison.OrdinalIgnoreCase)
+    /// <summary>Geometry resource key for the icon (IconSteam, IconBolt, IconEngine, IconMod, etc.).</summary>
+    public string IconGeometryKey => (SourceLabel.Contains("Workshop", System.StringComparison.OrdinalIgnoreCase) || Detail?.Contains("Workshop", System.StringComparison.OrdinalIgnoreCase) == true)
         ? "IconSteam"
-        : SourceLabel.Contains("Thunderstore", System.StringComparison.OrdinalIgnoreCase)
+        : (SourceLabel.Contains("Thunderstore", System.StringComparison.OrdinalIgnoreCase) || Detail?.Contains("Thunderstore", System.StringComparison.OrdinalIgnoreCase) == true)
             ? "IconBolt"
-            : "IconMod";
+            : (IsBepInEx || SourceLabel.Contains("BepInEx", System.StringComparison.OrdinalIgnoreCase) || Detail?.Contains("BepInEx", System.StringComparison.OrdinalIgnoreCase) == true)
+                ? "IconEngine"
+                : "IconMod";
 }

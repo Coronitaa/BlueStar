@@ -29,7 +29,6 @@ public sealed class UnrealModManager : IModManager
     public bool IsSupported(GameInstance instance)
     {
         if (instance.Engine?.Type == EngineType.UnrealEngine) return true;
-        if (instance.Engine?.Supports(EngineCapabilities.Mods) == true) return true;
 
         if (!string.IsNullOrWhiteSpace(instance.InstallPath) && Directory.Exists(instance.InstallPath))
         {
