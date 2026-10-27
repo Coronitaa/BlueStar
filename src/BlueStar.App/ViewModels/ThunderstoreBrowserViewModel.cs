@@ -21,7 +21,8 @@ public sealed partial class ThunderstoreBrowserViewModel : ObservableObject
     private readonly Func<ModPackage, Task<ModInstallResult?>> _installPackage;
     private readonly ILocalizationService? _localization;
     private readonly ILogger _logger;
-    private CancellationTokenSource? _searchCts;
+    private CancellationTokenSource? _debounceCts;
+    private CancellationTokenSource? _loadCts;
 
     public ThunderstoreBrowserViewModel(
         IThunderstoreService thunderstoreService,
@@ -52,6 +53,9 @@ public sealed partial class ThunderstoreBrowserViewModel : ObservableObject
 
     [ObservableProperty]
     private string _selectedSort = "Downloads";
+
+    [ObservableProperty]
+    private bool _isSortDescending = true;
 
     [ObservableProperty]
     private bool _isLoading;
@@ -109,6 +113,7 @@ public sealed partial class ThunderstoreBrowserViewModel : ObservableObject
         SearchText = string.Empty;
         SelectedCategory = "All";
         SelectedSort = "Downloads";
+        IsSortDescending = true;
         StatusMessage = null;
         IsStatusError = false;
         TotalPackagesCount = 0;
@@ -121,7 +126,8 @@ public sealed partial class ThunderstoreBrowserViewModel : ObservableObject
     [RelayCommand]
     public void Close()
     {
-        _searchCts?.Cancel();
+        _debounceCts?.Cancel();
+        _loadCts?.Cancel();
         if (!IsOpen) return;
         IsOpen = false;
         OnCloseRequested?.Invoke();
@@ -131,6 +137,13 @@ public sealed partial class ThunderstoreBrowserViewModel : ObservableObject
     public void ClearSearch()
     {
         SearchText = string.Empty;
+    }
+
+    [RelayCommand]
+    public void ToggleSortDirection()
+    {
+        IsSortDescending = !IsSortDescending;
+        _ = LoadPackagesAsync();
     }
 
     [RelayCommand]
@@ -146,9 +159,9 @@ public sealed partial class ThunderstoreBrowserViewModel : ObservableObject
 
     private void DebouncedSearch()
     {
-        _searchCts?.Cancel();
-        _searchCts = new CancellationTokenSource();
-        var token = _searchCts.Token;
+        _debounceCts?.Cancel();
+        _debounceCts = new CancellationTokenSource();
+        var token = _debounceCts.Token;
 
         _ = Task.Run(async () =>
         {
@@ -156,7 +169,7 @@ public sealed partial class ThunderstoreBrowserViewModel : ObservableObject
             {
                 await Task.Delay(250, token).ConfigureAwait(false);
                 if (token.IsCancellationRequested) return;
-                await LoadPackagesAsync(token).ConfigureAwait(true);
+                await LoadPackagesAsync().ConfigureAwait(true);
             }
             catch (OperationCanceledException)
             {
@@ -170,9 +183,9 @@ public sealed partial class ThunderstoreBrowserViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(Community)) return;
 
-        _searchCts?.Cancel();
-        _searchCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var token = _searchCts.Token;
+        _loadCts?.Cancel();
+        _loadCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var token = _loadCts.Token;
 
         IsLoading = true;
         StatusMessage = null;
@@ -185,6 +198,7 @@ public sealed partial class ThunderstoreBrowserViewModel : ObservableObject
                 SearchText,
                 SelectedCategory,
                 SelectedSort,
+                !IsSortDescending,
                 token).ConfigureAwait(true);
 
             if (token.IsCancellationRequested) return;

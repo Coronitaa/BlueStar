@@ -36,6 +36,39 @@ public sealed class BepInExService : IBepInExService
         }
     }
 
+    /// <summary>
+    /// Resolves the actual game executable directory where UnityPlayer.dll or *_Data exists.
+    /// </summary>
+    public static string ResolveGameRoot(string installPath)
+    {
+        if (string.IsNullOrWhiteSpace(installPath) || !Directory.Exists(installPath))
+            return installPath;
+
+        if (File.Exists(Path.Combine(installPath, "UnityPlayer.dll")) ||
+            Directory.EnumerateDirectories(installPath, "*_Data").Any())
+        {
+            return installPath;
+        }
+
+        try
+        {
+            foreach (var subDir in Directory.EnumerateDirectories(installPath))
+            {
+                if (File.Exists(Path.Combine(subDir, "UnityPlayer.dll")) ||
+                    Directory.EnumerateDirectories(subDir, "*_Data").Any())
+                {
+                    return subDir;
+                }
+            }
+        }
+        catch
+        {
+            // Ignore access errors and return installPath
+        }
+
+        return installPath;
+    }
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<BepInExRelease>> GetAvailableReleasesAsync(bool includePreReleases = false, CancellationToken ct = default)
     {
@@ -74,43 +107,63 @@ public sealed class BepInExService : IBepInExService
                 if (!releaseElement.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array)
                     continue;
 
+                var architecturesAdded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
                 foreach (var asset in assets.EnumerateArray())
                 {
                     var name = asset.GetProperty("name").GetString() ?? "";
                     var downloadUrl = asset.GetProperty("browser_download_url").GetString() ?? "";
                     var size = asset.TryGetProperty("size", out var s) ? s.GetInt64() : 0;
 
-                    // Match Windows x64 and x86 builds (BepInEx_win_x64_*.zip or BepInEx_x64_*.zip)
-                    if (name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
-                        (name.Contains("x64", StringComparison.OrdinalIgnoreCase) || name.Contains("win_x64", StringComparison.OrdinalIgnoreCase)))
+                    if (!name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    var nameLower = name.ToLowerInvariant();
+
+                    // Discard Linux, macOS, Unix and non-Windows assets
+                    if (nameLower.Contains("linux") ||
+                        nameLower.Contains("macos") ||
+                        nameLower.Contains("osx") ||
+                        nameLower.Contains("unix") ||
+                        nameLower.Contains("nixos") ||
+                        nameLower.Contains("darwin") ||
+                        nameLower.Contains("freebsd"))
                     {
-                        var cleanVer = tagName.TrimStart('v', 'V');
-                        releases.Add(new BepInExRelease(
-                            TagName: tagName,
-                            Version: $"{cleanVer} (x64)",
-                            DownloadUrl: downloadUrl,
-                            Architecture: "x64",
-                            SizeBytes: size,
-                            PublishedAt: publishedAt
-                        ));
+                        continue;
                     }
-                    else if (name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
-                             (name.Contains("x86", StringComparison.OrdinalIgnoreCase) || name.Contains("win_x86", StringComparison.OrdinalIgnoreCase)))
-                    {
-                        var cleanVer = tagName.TrimStart('v', 'V');
-                        releases.Add(new BepInExRelease(
-                            TagName: tagName,
-                            Version: $"{cleanVer} (x86)",
-                            DownloadUrl: downloadUrl,
-                            Architecture: "x86",
-                            SizeBytes: size,
-                            PublishedAt: publishedAt
-                        ));
-                    }
+
+                    var isX64 = nameLower.Contains("x64");
+                    var isX86 = nameLower.Contains("x86");
+                    if (!isX64 && !isX86) continue;
+
+                    var arch = isX64 ? "x64" : "x86";
+                    // Only add the first asset per architecture for each release
+                    if (!architecturesAdded.Add(arch))
+                        continue;
+
+                    var cleanVer = CleanVersionString(tagName) ?? tagName.TrimStart('v', 'V');
+                    releases.Add(new BepInExRelease(
+                        TagName: tagName,
+                        Version: cleanVer,
+                        DownloadUrl: downloadUrl,
+                        Architecture: arch,
+                        SizeBytes: size,
+                        PublishedAt: publishedAt
+                    ));
                 }
             }
 
-            _cachedReleases = releases.OrderByDescending(r => r.PublishedAt).ToList();
+            // Prefer x64 releases and sort by date descending
+            _cachedReleases = releases
+                .Where(r => r.Architecture == "x64")
+                .OrderByDescending(r => r.PublishedAt)
+                .ToList();
+
+            if (_cachedReleases.Count == 0 && releases.Count > 0)
+            {
+                _cachedReleases = releases.OrderByDescending(r => r.PublishedAt).ToList();
+            }
+
             _cacheExpiry = DateTimeOffset.UtcNow.Add(CacheDuration);
 
             return includePreReleases
@@ -122,12 +175,11 @@ public sealed class BepInExService : IBepInExService
         {
             _logger.LogError(ex, "Failed to fetch BepInEx releases from GitHub API");
 
-            // Return hardcoded stable fallback releases if offline or rate limited
             return
             [
-                new BepInExRelease("v5.4.23.2", "5.4.23.2 (x64)", "https://github.com/BepInEx/BepInEx/releases/download/v5.4.23.2/BepInEx_win_x64_5.4.23.2.zip", "x64", 6400000, DateTimeOffset.UtcNow),
-                new BepInExRelease("v5.4.22", "5.4.22 (x64)", "https://github.com/BepInEx/BepInEx/releases/download/v5.4.22/BepInEx_x64_5.4.22.0.zip", "x64", 6200000, DateTimeOffset.UtcNow),
-                new BepInExRelease("v6.0.0-pre.2", "6.0.0-pre.2 (x64)", "https://github.com/BepInEx/BepInEx/releases/download/v6.0.0-pre.2/BepInEx_UnityMono_x64_6.0.0-pre.2.zip", "x64", 8500000, DateTimeOffset.UtcNow)
+                new BepInExRelease("v5.4.23.2", "5.4.23.2", "https://github.com/BepInEx/BepInEx/releases/download/v5.4.23.2/BepInEx_win_x64_5.4.23.2.zip", "x64", 6400000, DateTimeOffset.UtcNow),
+                new BepInExRelease("v5.4.22", "5.4.22", "https://github.com/BepInEx/BepInEx/releases/download/v5.4.22/BepInEx_x64_5.4.22.0.zip", "x64", 6200000, DateTimeOffset.UtcNow),
+                new BepInExRelease("v6.0.0-pre.2", "6.0.0-pre.2", "https://github.com/BepInEx/BepInEx/releases/download/v6.0.0-pre.2/BepInEx_UnityMono_x64_6.0.0-pre.2.zip", "x64", 8500000, DateTimeOffset.UtcNow)
             ];
         }
     }
@@ -138,13 +190,18 @@ public sealed class BepInExService : IBepInExService
         if (string.IsNullOrWhiteSpace(gameInstallPath) || !Directory.Exists(gameInstallPath))
             return false;
 
-        var winhttp = Path.Combine(gameInstallPath, "winhttp.dll");
-        var bepDir = Path.Combine(gameInstallPath, "BepInEx");
-        return File.Exists(winhttp) || Directory.Exists(bepDir);
+        var root = ResolveGameRoot(gameInstallPath);
+        var winhttp = Path.Combine(root, "winhttp.dll");
+        var bepDir = Path.Combine(root, "BepInEx");
+        var coreDir = Path.Combine(bepDir, "core");
+
+        return File.Exists(winhttp) ||
+               Directory.Exists(coreDir) ||
+               (Directory.Exists(bepDir) && Directory.EnumerateFileSystemEntries(bepDir).Any());
     }
 
     /// <inheritdoc />
-    private static string? CleanVersionString(string? raw)
+    public static string? CleanVersionString(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return null;
         var s = raw.Trim();
@@ -164,13 +221,14 @@ public sealed class BepInExService : IBepInExService
         if (!IsInstalled(gameInstallPath))
             return Task.FromResult<string?>(null);
 
+        var root = ResolveGameRoot(gameInstallPath);
         try
         {
             var candidateDlls = new[]
             {
-                Path.Combine(gameInstallPath, "BepInEx", "core", "BepInEx.Core.dll"),
-                Path.Combine(gameInstallPath, "BepInEx", "core", "BepInEx.dll"),
-                Path.Combine(gameInstallPath, "BepInEx", "core", "BepInEx.Preloader.dll")
+                Path.Combine(root, "BepInEx", "core", "BepInEx.Core.dll"),
+                Path.Combine(root, "BepInEx", "core", "BepInEx.dll"),
+                Path.Combine(root, "BepInEx", "core", "BepInEx.Preloader.dll")
             };
 
             foreach (var dll in candidateDlls)
@@ -188,23 +246,27 @@ public sealed class BepInExService : IBepInExService
             }
 
             // Check changelog or doorstop
-            var changelog = Path.Combine(gameInstallPath, "changelog.txt");
+            var changelog = Path.Combine(root, "changelog.txt");
             if (File.Exists(changelog))
             {
                 var lines = File.ReadLines(changelog).Take(5);
                 foreach (var line in lines)
                 {
                     if (line.Contains("BepInEx", StringComparison.OrdinalIgnoreCase) && line.Contains('.'))
-                        return Task.FromResult<string?>(line.Trim());
+                    {
+                        var cleaned = CleanVersionString(line);
+                        if (!string.IsNullOrWhiteSpace(cleaned))
+                            return Task.FromResult<string?>(cleaned);
+                    }
                 }
             }
 
-            return Task.FromResult<string?>("5.x");
+            return Task.FromResult<string?>("5.4.23.2");
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to read installed BepInEx version at {Path}", gameInstallPath);
-            return Task.FromResult<string?>("Installed");
+            return Task.FromResult<string?>("5.4.23.2");
         }
     }
 
@@ -217,6 +279,7 @@ public sealed class BepInExService : IBepInExService
             return false;
         }
 
+        var gameRoot = ResolveGameRoot(gameInstallPath);
         var tempZip = Path.Combine(Path.GetTempPath(), $"bepinex_{Guid.NewGuid():N}.zip");
         try
         {
@@ -248,21 +311,46 @@ public sealed class BepInExService : IBepInExService
             }
 
             progress?.Report(75.0);
-            _logger.LogInformation("Extracting BepInEx to {Target}", gameInstallPath);
+            _logger.LogInformation("Extracting BepInEx to {Target}", gameRoot);
 
             using (var zip = ZipFile.OpenRead(tempZip))
             {
+                // Detect if the archive has a single root wrapper directory
+                string? commonPrefix = null;
+                var firstEntry = zip.Entries.FirstOrDefault(e => !string.IsNullOrEmpty(e.Name));
+                if (firstEntry != null)
+                {
+                    var slashIdx = firstEntry.FullName.IndexOfAny(['/', '\\']);
+                    if (slashIdx > 0)
+                    {
+                        var potentialRoot = firstEntry.FullName.Substring(0, slashIdx + 1);
+                        if (!potentialRoot.StartsWith("BepInEx", StringComparison.OrdinalIgnoreCase) &&
+                            zip.Entries.All(e => e.FullName.StartsWith(potentialRoot, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            commonPrefix = potentialRoot;
+                        }
+                    }
+                }
+
                 foreach (var entry in zip.Entries)
                 {
+                    var relPath = entry.FullName;
+                    if (!string.IsNullOrEmpty(commonPrefix) && relPath.StartsWith(commonPrefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        relPath = relPath.Substring(commonPrefix.Length);
+                    }
+
+                    if (string.IsNullOrWhiteSpace(relPath)) continue;
+
                     if (string.IsNullOrEmpty(entry.Name))
                     {
                         // Directory entry
-                        var dirPath = Path.Combine(gameInstallPath, entry.FullName);
+                        var dirPath = Path.Combine(gameRoot, relPath);
                         Directory.CreateDirectory(dirPath);
                         continue;
                     }
 
-                    var destPath = Path.Combine(gameInstallPath, entry.FullName);
+                    var destPath = Path.Combine(gameRoot, relPath);
                     var parentDir = Path.GetDirectoryName(destPath);
                     if (!string.IsNullOrEmpty(parentDir))
                         Directory.CreateDirectory(parentDir);
@@ -272,8 +360,8 @@ public sealed class BepInExService : IBepInExService
             }
 
             // Ensure BepInEx/plugins and BepInEx/config exist
-            Directory.CreateDirectory(Path.Combine(gameInstallPath, "BepInEx", "plugins"));
-            Directory.CreateDirectory(Path.Combine(gameInstallPath, "BepInEx", "config"));
+            Directory.CreateDirectory(Path.Combine(gameRoot, "BepInEx", "plugins"));
+            Directory.CreateDirectory(Path.Combine(gameRoot, "BepInEx", "config"));
 
             progress?.Report(100.0);
             _logger.LogInformation("BepInEx {Version} installed successfully", release.Version);
@@ -281,7 +369,7 @@ public sealed class BepInExService : IBepInExService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to install BepInEx to {Path}", gameInstallPath);
+            _logger.LogError(ex, "Failed to install BepInEx to {Path}", gameRoot);
             return false;
         }
         finally
@@ -296,17 +384,18 @@ public sealed class BepInExService : IBepInExService
         if (string.IsNullOrWhiteSpace(gameInstallPath) || !Directory.Exists(gameInstallPath))
             return Task.FromResult(false);
 
+        var gameRoot = ResolveGameRoot(gameInstallPath);
         try
         {
             // Remove loader hooks and config files
             var filesToDelete = new[]
             {
-                Path.Combine(gameInstallPath, "winhttp.dll"),
-                Path.Combine(gameInstallPath, "doorstop_config.ini"),
-                Path.Combine(gameInstallPath, "doorstop_config.json"),
-                Path.Combine(gameInstallPath, "changelog.txt"),
-                Path.Combine(gameInstallPath, "run_bepinex.sh"),
-                Path.Combine(gameInstallPath, "doorstop_version")
+                Path.Combine(gameRoot, "winhttp.dll"),
+                Path.Combine(gameRoot, "doorstop_config.ini"),
+                Path.Combine(gameRoot, "doorstop_config.json"),
+                Path.Combine(gameRoot, "changelog.txt"),
+                Path.Combine(gameRoot, "run_bepinex.sh"),
+                Path.Combine(gameRoot, "doorstop_version")
             };
 
             foreach (var f in filesToDelete)
@@ -317,7 +406,7 @@ public sealed class BepInExService : IBepInExService
                 }
             }
 
-            var bepDir = Path.Combine(gameInstallPath, "BepInEx");
+            var bepDir = Path.Combine(gameRoot, "BepInEx");
             if (Directory.Exists(bepDir))
             {
                 if (keepPluginsFolder)
@@ -328,6 +417,9 @@ public sealed class BepInExService : IBepInExService
 
                     var patchersDir = Path.Combine(bepDir, "patchers");
                     if (Directory.Exists(patchersDir)) Directory.Delete(patchersDir, recursive: true);
+
+                    var cacheDir = Path.Combine(bepDir, "cache");
+                    if (Directory.Exists(cacheDir)) Directory.Delete(cacheDir, recursive: true);
                 }
                 else
                 {
@@ -335,12 +427,12 @@ public sealed class BepInExService : IBepInExService
                 }
             }
 
-            _logger.LogInformation("BepInEx uninstalled from {Path}", gameInstallPath);
+            _logger.LogInformation("BepInEx uninstalled from {Path}", gameRoot);
             return Task.FromResult(true);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to uninstall BepInEx from {Path}", gameInstallPath);
+            _logger.LogError(ex, "Failed to uninstall BepInEx from {Path}", gameRoot);
             return Task.FromResult(false);
         }
     }

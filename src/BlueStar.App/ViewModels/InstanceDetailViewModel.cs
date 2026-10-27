@@ -688,6 +688,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         if (value == "Mods")
         {
             _ = LoadModsAsync();
+            _ = ModsTab.CheckAndLoadEngineAsync();
         }
         else if (value == "Emulator")
         {
@@ -874,7 +875,14 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     {
         ModsTab.SetInstance(value);
         var isUnity = value?.Engine?.Type == EngineType.Unity;
-        ModsTab.UpdateEngineStatus(isUnity ? "BepInEx" : null, null, false, isSupported: isUnity);
+        if (isUnity)
+        {
+            _ = ModsTab.CheckAndLoadEngineAsync();
+        }
+        else
+        {
+            ModsTab.UpdateEngineStatus(null, null, false, isSupported: false);
+        }
     }
 
     // ── BepInEx (Unity) State ──

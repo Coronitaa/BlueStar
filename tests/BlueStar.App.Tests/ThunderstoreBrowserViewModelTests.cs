@@ -58,7 +58,7 @@ public sealed class ThunderstoreBrowserViewModelTests
     {
         // Arrange
         var pkg = CreateSamplePackage();
-        _thunderstoreService.Setup(s => s.SearchPackagesAsync("lethal-company", "", "All", "Downloads", It.IsAny<CancellationToken>()))
+        _thunderstoreService.Setup(s => s.SearchPackagesAsync("lethal-company", "", "All", "Downloads", false, It.IsAny<CancellationToken>()))
             .ReturnsAsync([pkg]);
 
         var vm = new ThunderstoreBrowserViewModel(
@@ -86,6 +86,33 @@ public sealed class ThunderstoreBrowserViewModelTests
         vm.Packages[0].Name.Should().Be("MoreCompany");
         vm.Packages[0].FormattedDownloads.Should().Be("1.3M");
         vm.AvailableCategories.Should().Contain(["All", "BepInEx", "Client", "Server"]);
+    }
+
+    [Fact]
+    public async Task ToggleSortDirection_TogglesDescendingStateAndReloads()
+    {
+        // Arrange
+        var pkg = CreateSamplePackage();
+        _thunderstoreService.Setup(s => s.SearchPackagesAsync("lethal-company", "", "All", "Downloads", true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([pkg]);
+
+        var vm = new ThunderstoreBrowserViewModel(
+            _thunderstoreService.Object,
+            _ => Task.FromResult<ModInstallResult?>(null),
+            null,
+            NullLogger.Instance);
+
+        var instance = new GameInstance { Id = Guid.NewGuid(), Name = "Lethal Company", InstallPath = "C:\\Games" };
+        vm.Open(instance, "lethal-company");
+
+        // Act
+        vm.IsSortDescending.Should().BeTrue();
+        vm.ToggleSortDirection();
+
+        // Assert
+        vm.IsSortDescending.Should().BeFalse();
+        await vm.LoadPackagesCommand.ExecuteAsync(null);
+        vm.Packages.Should().ContainSingle();
     }
 
     [Fact]

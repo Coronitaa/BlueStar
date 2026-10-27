@@ -311,6 +311,7 @@ public sealed partial class ModsTabViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EngineActionButtonText))]
+    [NotifyPropertyChangedFor(nameof(CanShowEngineActionButton))]
     private bool _isEngineInstalled;
 
     [ObservableProperty]
@@ -326,6 +327,7 @@ public sealed partial class ModsTabViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsVersionDifferent))]
     [NotifyPropertyChangedFor(nameof(EngineActionButtonText))]
+    [NotifyPropertyChangedFor(nameof(CanShowEngineActionButton))]
     [NotifyCanExecuteChangedFor(nameof(InstallOrUpdateEngineCommand))]
     private BepInExRelease? _selectedEngineRelease;
 
@@ -334,6 +336,8 @@ public sealed partial class ModsTabViewModel : ObservableObject
         SelectedEngineRelease != null &&
         !string.IsNullOrWhiteSpace(EngineVersion) &&
         !string.Equals(CleanVersion(SelectedEngineRelease.Version), CleanVersion(EngineVersion), StringComparison.OrdinalIgnoreCase);
+
+    public bool CanShowEngineActionButton => !IsEngineInstalled || IsVersionDifferent;
 
     public string EngineActionButtonText
     {
@@ -350,7 +354,7 @@ public sealed partial class ModsTabViewModel : ObservableObject
             {
                 return string.Format(T("String_EngineSwitchBtn", "Switch to v{0}"), targetVer);
             }
-            return T("String_EngineReinstallBtn", "Reinstall");
+            return string.Empty;
         }
     }
 
@@ -403,6 +407,7 @@ public sealed partial class ModsTabViewModel : ObservableObject
         {
             IsLoadingEngine = false;
             OnPropertyChanged(nameof(IsVersionDifferent));
+            OnPropertyChanged(nameof(CanShowEngineActionButton));
             OnPropertyChanged(nameof(EngineActionButtonText));
         }
     }
@@ -514,6 +519,8 @@ public sealed partial class ModsTabViewModel : ObservableObject
         EngineVersion = version;
         IsEngineInstalled = isInstalled;
         IsEngineSupported = isSupported;
+        OnPropertyChanged(nameof(CanShowEngineActionButton));
+        OnPropertyChanged(nameof(EngineActionButtonText));
     }
 
     public bool IsIdle => !IsBusy;
@@ -707,6 +714,7 @@ public sealed partial class ModsTabViewModel : ObservableObject
             });
 
             ModsChanged?.Invoke(this, EventArgs.Empty);
+            _ = CheckAndLoadEngineAsync();
         }
         catch (Exception ex)
         {

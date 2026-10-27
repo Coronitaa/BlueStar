@@ -385,11 +385,13 @@ public sealed class ModsTabViewModelTests : IDisposable
         tab.IsEngineInstalled.Should().BeTrue();
         tab.EngineVersion.Should().Be("5.4.23.2");
         tab.IsVersionDifferent.Should().BeFalse();
-        tab.EngineActionButtonText.Should().Be("Reinstall");
+        tab.CanShowEngineActionButton.Should().BeFalse();
+        tab.EngineActionButtonText.Should().BeEmpty();
 
         // Act 3: Select older version (5.4.21) -> switch button
         tab.SelectedEngineRelease = releases[1];
         tab.IsVersionDifferent.Should().BeTrue();
+        tab.CanShowEngineActionButton.Should().BeTrue();
         tab.EngineActionButtonText.Should().Contain("Switch to v5.4.21");
 
         // Act 4: Uninstall BepInEx
@@ -446,7 +448,8 @@ public sealed class ModsTabViewModelTests : IDisposable
 
         tab.FormattedEngineVersion.Should().Be("5.4.23.6");
         tab.IsVersionDifferent.Should().BeFalse();
-        tab.EngineActionButtonText.Should().Be("Reinstall");
+        tab.CanShowEngineActionButton.Should().BeFalse();
+        tab.EngineActionButtonText.Should().BeEmpty();
     }
 
     [Fact]

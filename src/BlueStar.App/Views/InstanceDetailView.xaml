@@ -1986,10 +1986,11 @@
                                                 </ComboBox.ItemTemplate>
                                             </ComboBox>
 
-                                            <!-- Unified Action Button: Install / Switch / Reinstall -->
+                                            <!-- Action Button: Only visible when !IsEngineInstalled OR IsVersionDifferent (NO Reinstall button) -->
                                             <Button Style="{StaticResource PrimaryButton}" Height="28" Padding="12,0" Margin="0,0,6,0"
                                                     Command="{Binding InstallOrUpdateEngineCommand}"
                                                     IsEnabled="{Binding IsLoadingEngine, Converter={StaticResource InverseBoolConverter}}"
+                                                    Visibility="{Binding CanShowEngineActionButton, Converter={StaticResource BoolToVisibilityConverter}}"
                                                     VerticalAlignment="Center">
                                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                     <Path Data="{StaticResource IconSwitchVersion}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
@@ -2002,20 +2003,18 @@
                                                 </StackPanel>
                                             </Button>
 
-                                            <!-- Uninstall Button (Visible when installed) -->
-                                            <Button Style="{StaticResource DangerButton}" Height="28" Padding="10,0" Margin="0,0,6,0"
+                                            <!-- Uninstall Button: Icon-only, danger style, with Tooltip -->
+                                            <Button Style="{StaticResource DangerButton}" Width="28" Height="28" Padding="0" Margin="0,0,6,0"
                                                     Command="{Binding UninstallEngineCommand}"
+                                                    ToolTip="{DynamicResource String_EngineUninstallBtn}"
                                                     IsEnabled="{Binding IsLoadingEngine, Converter={StaticResource InverseBoolConverter}}"
                                                     Visibility="{Binding IsEngineInstalled, Converter={StaticResource BoolToVisibilityConverter}}"
                                                     VerticalAlignment="Center">
-                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <Path Data="{StaticResource IconTrash}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                                          Width="11" Height="11" Stretch="Uniform" Margin="0,0,5,0" VerticalAlignment="Center"/>
-                                                    <TextBlock Text="{DynamicResource String_EngineUninstallBtn}" FontSize="11"/>
-                                                </StackPanel>
+                                                <Path Data="{StaticResource IconTrash}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                      Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                                             </Button>
 
-                                            <!-- Open Engine Folder Button (Visible when installed) -->
+                                            <!-- Open Engine Folder Button: Icon-only, with Tooltip -->
                                             <Button Style="{StaticResource SecondaryButton}" Width="28" Height="28" Padding="0"
                                                     Command="{Binding OpenEngineFolderCommand}" ToolTip="{DynamicResource String_EngineOpenFolder}"
                                                     Visibility="{Binding IsEngineInstalled, Converter={StaticResource BoolToVisibilityConverter}}"

@@ -153,8 +153,22 @@ public sealed class ThunderstoreServiceTests : IDisposable
         var results = await service.SearchPackagesAsync("lethal-company", query: "Late");
         results.Should().ContainSingle(p => p.Name == "LateCompany");
 
+        // Act: search with multi-term
+        var multiTerm = await service.SearchPackagesAsync("lethal-company", query: "Late Comp");
+        multiTerm.Should().ContainSingle(p => p.Name == "LateCompany");
+
         // Act: filter by category
         var cosmetics = await service.SearchPackagesAsync("lethal-company", category: "Cosmetics");
         cosmetics.Should().ContainSingle(p => p.Name == "MoreCompany");
+
+        // Act: sort ascending by downloads (least downloaded first)
+        var ascDownloads = await service.SearchPackagesAsync("lethal-company", sortBy: "Downloads", isAscending: true);
+        ascDownloads[0].Name.Should().Be("LateCompany");
+        ascDownloads[1].Name.Should().Be("MoreCompany");
+
+        // Act: sort descending by downloads (most downloaded first)
+        var descDownloads = await service.SearchPackagesAsync("lethal-company", sortBy: "Downloads", isAscending: false);
+        descDownloads[0].Name.Should().Be("MoreCompany");
+        descDownloads[1].Name.Should().Be("LateCompany");
     }
 }

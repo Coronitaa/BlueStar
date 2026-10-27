@@ -343,6 +343,7 @@ public sealed class ThunderstoreService : IThunderstoreService
         string? query = null,
         string? category = null,
         string sortBy = "Downloads",
+        bool isAscending = false,
         CancellationToken ct = default)
     {
         var all = await GetPackagesAsync(community, ct).ConfigureAwait(false);
@@ -357,21 +358,34 @@ public sealed class ThunderstoreService : IThunderstoreService
 
         if (!string.IsNullOrWhiteSpace(query))
         {
-            var q = query.Trim();
-            filtered = filtered.Where(p =>
-                p.Name.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                p.Owner.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                p.Description.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                p.Categories.Any(c => c.Contains(q, StringComparison.OrdinalIgnoreCase)));
+            var terms = query.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            filtered = filtered.Where(p => terms.All(term =>
+                p.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                p.Owner.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                p.Description.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                p.Categories.Any(c => c.Contains(term, StringComparison.OrdinalIgnoreCase))));
         }
 
-        return sortBy switch
+        if (isAscending)
         {
-            "Rating" => filtered.OrderByDescending(p => p.IsPinned).ThenByDescending(p => p.RatingScore).ToList(),
-            "Updated" => filtered.OrderByDescending(p => p.IsPinned).ThenByDescending(p => p.DateUpdated).ToList(),
-            "Name" => filtered.OrderBy(p => p.Name).ToList(),
-            _ => filtered.OrderByDescending(p => p.IsPinned).ThenByDescending(p => p.TotalDownloads).ToList()
-        };
+            return sortBy switch
+            {
+                "Rating" => filtered.OrderBy(p => p.RatingScore).ToList(),
+                "Updated" => filtered.OrderBy(p => p.DateUpdated).ToList(),
+                "Name" => filtered.OrderByDescending(p => p.Name).ToList(),
+                _ => filtered.OrderBy(p => p.TotalDownloads).ToList()
+            };
+        }
+        else
+        {
+            return sortBy switch
+            {
+                "Rating" => filtered.OrderByDescending(p => p.IsPinned).ThenByDescending(p => p.RatingScore).ToList(),
+                "Updated" => filtered.OrderByDescending(p => p.IsPinned).ThenByDescending(p => p.DateUpdated).ToList(),
+                "Name" => filtered.OrderBy(p => p.Name).ToList(),
+                _ => filtered.OrderByDescending(p => p.IsPinned).ThenByDescending(p => p.TotalDownloads).ToList()
+            };
+        }
     }
 
     /// <inheritdoc />

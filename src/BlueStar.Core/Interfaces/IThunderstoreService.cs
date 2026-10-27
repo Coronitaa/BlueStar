@@ -34,6 +34,7 @@ public interface IThunderstoreService
         string? query = null,
         string? category = null,
         string sortBy = "Downloads",
+        bool isAscending = false,
         CancellationToken ct = default);
 
     /// <summary>

@@ -24,9 +24,10 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0">
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="{DynamicResource String_ModBrowserTitle}" Style="{StaticResource H1}" Margin="0,0,12,0"/>
 
@@ -41,42 +42,42 @@
                         </Border>
                     </StackPanel>
 
-                    <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,14" Foreground="{StaticResource SecondaryTextBrush}">
+                    <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" Foreground="{StaticResource SecondaryTextBrush}">
                         <Run Text="{DynamicResource String_ModBrowserSubtitle}"/>
                         <Run Text=" ("/><Run Text="{Binding InstanceName}" FontWeight="SemiBold"/><Run Text=")"/>
                     </TextBlock>
+                </StackPanel>
 
-                    <!-- ═══ PROVIDER TABS (STRICTLY BY GAME AVAILABILITY) ═══ -->
-                    <StackPanel Orientation="Horizontal">
-                        <!-- Thunderstore Provider Tab -->
-                        <RadioButton GroupName="ModBrowserProvider" Style="{StaticResource TabRadioButton}"
-                                     Visibility="{Binding HasThunderstoreSupport, Converter={StaticResource BoolToVisibilityConverter}}"
-                                     IsChecked="{Binding SelectedProvider, Converter={StaticResource StringMatchConverter}, ConverterParameter=Thunderstore}"
-                                     Command="{Binding SelectProviderCommand}" CommandParameter="Thunderstore">
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <Path Data="{StaticResource IconBolt}" Width="12" Height="12" Stretch="Uniform" Margin="0,0,7,0"
-                                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
-                                <TextBlock Text="{DynamicResource String_ModFilterThunderstore}" FontWeight="SemiBold"/>
-                            </StackPanel>
-                        </RadioButton>
+                <!-- ═══ PROVIDER TABS ON THE RIGHT (EXPLORE FORMAT) ═══ -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,14,0">
+                    <!-- Thunderstore Provider Tab -->
+                    <RadioButton GroupName="ModBrowserProvider" Style="{StaticResource TabRadioButton}"
+                                 Visibility="{Binding HasThunderstoreSupport, Converter={StaticResource BoolToVisibilityConverter}}"
+                                 IsChecked="{Binding SelectedProvider, Converter={StaticResource StringMatchConverter}, ConverterParameter=Thunderstore}"
+                                 Command="{Binding SelectProviderCommand}" CommandParameter="Thunderstore">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Path Data="{StaticResource IconBolt}" Width="12" Height="12" Stretch="Uniform" Margin="0,0,7,0"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
+                            <TextBlock Text="{DynamicResource String_ModFilterThunderstore}" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </RadioButton>
 
-                        <!-- Steam Workshop Provider Tab -->
-                        <RadioButton GroupName="ModBrowserProvider" Style="{StaticResource TabRadioButton}"
-                                     Visibility="{Binding HasWorkshopSupport, Converter={StaticResource BoolToVisibilityConverter}}"
-                                     IsChecked="{Binding SelectedProvider, Converter={StaticResource StringMatchConverter}, ConverterParameter=Workshop}"
-                                     Command="{Binding SelectProviderCommand}" CommandParameter="Workshop">
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <Path Data="{StaticResource IconSteam}" Width="12" Height="12" Stretch="Uniform" Margin="0,0,7,0"
-                                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
-                                <TextBlock Text="{DynamicResource String_ModFilterWorkshop}" FontWeight="SemiBold"/>
-                            </StackPanel>
-                        </RadioButton>
-                    </StackPanel>
+                    <!-- Steam Workshop Provider Tab -->
+                    <RadioButton GroupName="ModBrowserProvider" Style="{StaticResource TabRadioButton}"
+                                 Visibility="{Binding HasWorkshopSupport, Converter={StaticResource BoolToVisibilityConverter}}"
+                                 IsChecked="{Binding SelectedProvider, Converter={StaticResource StringMatchConverter}, ConverterParameter=Workshop}"
+                                 Command="{Binding SelectProviderCommand}" CommandParameter="Workshop">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Path Data="{StaticResource IconSteam}" Width="12" Height="12" Stretch="Uniform" Margin="0,0,7,0"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}"/>
+                            <TextBlock Text="{DynamicResource String_ModFilterWorkshop}" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </RadioButton>
                 </StackPanel>
 
                 <!-- Close Button -->
-                <Button Grid.Column="1" Content="✕" Style="{StaticResource GhostButton}" Width="34" Height="34" Padding="0"
-                        VerticalAlignment="Top" Command="{Binding CloseCommand}" ToolTip="Cerrar"/>
+                <Button Grid.Column="2" Content="✕" Style="{StaticResource GhostButton}" Width="34" Height="34" Padding="0"
+                        VerticalAlignment="Center" Command="{Binding CloseCommand}" ToolTip="Cerrar"/>
             </Grid>
 
             <!-- ═══ PROVIDER CONTENT CONTAINER ═══ -->
@@ -149,14 +150,35 @@
                                       SelectedItem="{Binding Thunderstore.SelectedCategory}"/>
                         </StackPanel>
 
-                        <!-- Sort Selector -->
+                        <!-- Sort Selector & Direction Toggle -->
                         <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="{DynamicResource String_SortBy}" Style="{StaticResource CaptionBold}"
                                        Foreground="{StaticResource SecondaryTextBrush}"
                                        VerticalAlignment="Center" Margin="0,0,7,0"/>
-                            <ComboBox Width="140" Style="{StaticResource DarkComboBox}"
+                            <ComboBox Width="130" Style="{StaticResource DarkComboBox}"
                                       ItemsSource="{Binding Thunderstore.SortOptions}"
                                       SelectedItem="{Binding Thunderstore.SelectedSort}"/>
+                            <Button Margin="6,0,0,0" Width="34" Height="34" Padding="0"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Command="{Binding Thunderstore.ToggleSortDirectionCommand}"
+                                    AutomationProperties.Name="{DynamicResource String_InvertOrder}">
+                                <Button.ToolTip>
+                                    <TextBlock Text="{DynamicResource String_InvertOrder}"/>
+                                </Button.ToolTip>
+                                <Path Stretch="Uniform" Width="14" Height="14"
+                                      Fill="{StaticResource SecondaryTextBrush}">
+                                    <Path.Style>
+                                        <Style TargetType="Path">
+                                            <Setter Property="Data" Value="{StaticResource IconSortAsc}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Thunderstore.IsSortDescending}" Value="True">
+                                                    <Setter Property="Data" Value="{StaticResource IconSortDesc}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Path.Style>
+                                </Path>
+                            </Button>
                         </StackPanel>
 
                         <!-- Refresh Button -->
@@ -177,7 +199,7 @@
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
-                            <!-- Virtualized ListBox: recycling virtualization, pixel scroll, zero freezes! -->
+                            <!-- Virtualized ListBox: recycling virtualization, pixel scroll, infinite scroll! -->
                             <ListBox Grid.Row="0"
                                      ItemsSource="{Binding Thunderstore.Packages}"
                                      VirtualizingPanel.IsVirtualizing="True"
@@ -185,6 +207,7 @@
                                      VirtualizingPanel.ScrollUnit="Pixel"
                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                      ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                     ScrollViewer.ScrollChanged="OnPackagesScrollChanged"
                                      Background="Transparent"
                                      BorderThickness="0"
                                      Padding="0"
