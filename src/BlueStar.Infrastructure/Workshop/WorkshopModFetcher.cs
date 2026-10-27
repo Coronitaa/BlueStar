@@ -117,7 +117,8 @@ public sealed class WorkshopModFetcher : IWorkshopModFetcher
             RemoteId = details.PublishedFileId.ToString(),
             Version = details.UpdatedAt?.ToString("yyyy-MM-dd"),
             FileId = details.UpdatedAt?.ToUnixTimeSeconds().ToString(),
-            PageUrl = IWorkshopModFetcher.ItemPageUrl(details.PublishedFileId)
+            PageUrl = IWorkshopModFetcher.ItemPageUrl(details.PublishedFileId),
+            IconUrl = details.PreviewUrl
         }
     };
 

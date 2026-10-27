@@ -1,17 +1,25 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+
 namespace BlueStar.App.ViewModels;
 
 /// <summary>
 /// One row in the Mods tab. Managed rows come from the mod ledger (installed by BlueStar's pipeline);
 /// unmanaged rows are mods found on disk that BlueStar did not install, handled by the legacy managers.
 /// </summary>
-public sealed record ModListItem
+public sealed partial class ModListItem : ObservableObject
 {
     public required string Id { get; init; }
     public required string Name { get; init; }
     public string? Version { get; init; }
     public required string SourceLabel { get; init; }
     public string? Detail { get; init; }
-    public bool IsEnabled { get; init; } = true;
+
+    [ObservableProperty]
+    private bool _isEnabled = true;
+
+    [ObservableProperty]
+    private bool _isSelected;
+
     public bool IsManaged { get; init; }
 
     /// <summary>File or folder of an unmanaged mod.</summary>
@@ -27,6 +35,12 @@ public sealed record ModListItem
 
     /// <summary>Formatted file size or count summary (e.g. "4.2 MB · 12 files").</summary>
     public string? FormattedSize { get; init; }
+
+    /// <summary>Web page URL for the mod (Thunderstore page, Workshop item URL, etc.).</summary>
+    public string? PageUrl { get; init; }
+
+    /// <summary>Remote or local image icon URL for the mod if available.</summary>
+    public string? IconUrl { get; init; }
 
     /// <summary>Geometry resource key for the icon (IconSteam, IconBolt, IconMod, etc.).</summary>
     public string IconGeometryKey => SourceLabel.Contains("Workshop", System.StringComparison.OrdinalIgnoreCase)

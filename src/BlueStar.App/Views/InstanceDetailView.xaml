@@ -472,8 +472,10 @@
                 </Border>
 
                 <ScrollViewer Grid.Row="1"
+                              x:Name="InstanceTabScrollViewer"
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled"
+                              CanContentScroll="False"
                               Margin="0,14,0,0"
                               Padding="0,0,10,24">
                     <StackPanel>
@@ -1890,12 +1892,12 @@
                 </StackPanel>
 
                 <!-- ── 4. MODS TAB (MODRINTH STYLE) ── -->
-                <StackPanel Visibility="{Binding SelectedTab, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Mods}"
-                            DataContext="{Binding ModsTab}"
-                            Background="Transparent"
-                            AllowDrop="True"
-                            DragOver="OnModsTabDragOver"
-                            Drop="OnModsTabDrop">
+                <StackPanel Visibility="{Binding SelectedTab, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Mods}">
+                    <StackPanel DataContext="{Binding ModsTab}"
+                                Background="Transparent"
+                                AllowDrop="True"
+                                DragOver="OnModsTabDragOver"
+                                Drop="OnModsTabDrop">
 
                     <!-- ═══ MODRINTH HEADER CARD: INSTANCE CONTENT & ENGINE ═══ -->
                     <Border Style="{StaticResource Card}" Margin="0,0,0,16">
@@ -1917,7 +1919,7 @@
                             <!-- Title, Mod Engine & Stats -->
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding Instance.Name, FallbackValue='Mod content'}" Style="{StaticResource H2}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding ModEngineTitle, FallbackValue='BepInEx'}" Style="{StaticResource H2}" VerticalAlignment="Center"/>
 
                                     <!-- ═══ MOD ENGINE CONTROL (UNIFIED: STATUS, VERSION PICKER, INSTALL/SWITCH/REINSTALL, UNINSTALL) ═══ -->
                                     <Grid Margin="14,0,0,0" VerticalAlignment="Center">
@@ -1925,59 +1927,31 @@
                                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
                                                     Visibility="{Binding IsEngineSupported, Converter={StaticResource BoolToVisibilityConverter}}">
 
-                                            <!-- Status Chip -->
-                                            <Border CornerRadius="{StaticResource RadiusSm}" Padding="8,4" BorderThickness="1" Margin="0,0,8,0" VerticalAlignment="Center">
+                                            <!-- Status Chip (only when installed) -->
+                                            <Border CornerRadius="{StaticResource RadiusSm}" Padding="8,4" BorderThickness="1" Margin="0,0,8,0" VerticalAlignment="Center"
+                                                    Visibility="{Binding IsEngineInstalled, Converter={StaticResource BoolToVisibilityConverter}}">
                                                 <Border.Style>
                                                     <Style TargetType="Border">
-                                                        <Setter Property="Background" Value="{StaticResource WarningBgBrush}"/>
-                                                        <Setter Property="BorderBrush" Value="{StaticResource WarningBrush}"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsEngineInstalled}" Value="True">
-                                                                <Setter Property="Background" Value="{StaticResource SuccessBgBrush}"/>
-                                                                <Setter Property="BorderBrush" Value="{StaticResource SuccessBrush}"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
+                                                        <Setter Property="Background" Value="{StaticResource SuccessBgBrush}"/>
+                                                        <Setter Property="BorderBrush" Value="{StaticResource SuccessBrush}"/>
                                                     </Style>
                                                 </Border.Style>
                                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <Path Data="{StaticResource IconEngine}" Width="12" Height="12" Stretch="Uniform" Margin="0,0,6,0" VerticalAlignment="Center">
-                                                        <Path.Style>
-                                                            <Style TargetType="Path">
-                                                                <Setter Property="Fill" Value="{StaticResource WarningBrush}"/>
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsEngineInstalled}" Value="True">
-                                                                        <Setter Property="Fill" Value="{StaticResource SuccessBrush}"/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </Path.Style>
-                                                    </Path>
-                                                    <TextBlock Text="{Binding EngineName}" FontWeight="Bold" FontSize="11" VerticalAlignment="Center">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Setter Property="Foreground" Value="{StaticResource WarningBrush}"/>
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsEngineInstalled}" Value="True">
-                                                                        <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
+                                                    <Path Data="{StaticResource IconEngine}" Width="12" Height="12" Stretch="Uniform" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                          Fill="{StaticResource SuccessBrush}"/>
+                                                    <TextBlock Text="{Binding EngineName}" FontWeight="Bold" FontSize="11" VerticalAlignment="Center"
+                                                               Foreground="{StaticResource SuccessBrush}"/>
                                                     <TextBlock Text="{Binding FormattedEngineVersion, StringFormat='  v{0}'}" FontSize="11" FontWeight="SemiBold"
-                                                               Foreground="{StaticResource SuccessBrush}" VerticalAlignment="Center"
-                                                               Visibility="{Binding IsEngineInstalled, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                                    <TextBlock Text=" required" FontSize="11" FontWeight="Normal"
-                                                               Foreground="{StaticResource WarningBrush}" VerticalAlignment="Center"
-                                                               Visibility="{Binding IsEngineInstalled, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                                                               Foreground="{StaticResource SuccessBrush}" VerticalAlignment="Center"/>
                                                 </StackPanel>
                                             </Border>
 
-                                            <!-- Version Selector Dropdown -->
+                                            <!-- Version Selector Dropdown (only when uninstalled) -->
                                             <ComboBox Width="110" Height="28" Margin="0,0,8,0" Style="{StaticResource DarkComboBox}"
                                                       ItemsSource="{Binding AvailableEngineReleases}"
                                                       SelectedItem="{Binding SelectedEngineRelease}"
                                                       IsEnabled="{Binding IsLoadingEngine, Converter={StaticResource InverseBoolConverter}}"
+                                                      Visibility="{Binding IsEngineInstalled, Converter={StaticResource InverseBoolToVisibilityConverter}}"
                                                       VerticalAlignment="Center">
                                                 <ComboBox.ItemTemplate>
                                                     <DataTemplate>
@@ -1986,26 +1960,22 @@
                                                 </ComboBox.ItemTemplate>
                                             </ComboBox>
 
-                                            <!-- Action Button: Only visible when !IsEngineInstalled OR IsVersionDifferent (NO Reinstall button) -->
+                                            <!-- Install Button (only when uninstalled) -->
                                             <Button Style="{StaticResource PrimaryButton}" Height="28" Padding="12,0" Margin="0,0,6,0"
                                                     Command="{Binding InstallOrUpdateEngineCommand}"
                                                     IsEnabled="{Binding IsLoadingEngine, Converter={StaticResource InverseBoolConverter}}"
-                                                    Visibility="{Binding CanShowEngineActionButton, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                    Visibility="{Binding IsEngineInstalled, Converter={StaticResource InverseBoolToVisibilityConverter}}"
                                                     VerticalAlignment="Center">
                                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <Path Data="{StaticResource IconSwitchVersion}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                                          Width="11" Height="11" Stretch="Uniform" Margin="0,0,6,0" VerticalAlignment="Center"
-                                                          Visibility="{Binding IsVersionDifferent, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                     <Path Data="{StaticResource IconDownload}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                                          Width="11" Height="11" Stretch="Uniform" Margin="0,0,6,0" VerticalAlignment="Center"
-                                                          Visibility="{Binding IsEngineInstalled, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
-                                                    <TextBlock Text="{Binding EngineActionButtonText}" FontSize="11" FontWeight="SemiBold"/>
+                                                          Width="11" Height="11" Stretch="Uniform" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="Instalar" FontSize="11" FontWeight="SemiBold"/>
                                                 </StackPanel>
                                             </Button>
 
-                                            <!-- Uninstall Button: Icon-only, danger style, with Tooltip -->
+                                            <!-- Uninstall Button: Icon-only, danger style (only when installed) -->
                                             <Button Style="{StaticResource DangerButton}" Width="28" Height="28" Padding="0" Margin="0,0,6,0"
-                                                    Command="{Binding UninstallEngineCommand}"
+                                                    Command="{Binding RequestUninstallEngineCommand}"
                                                     ToolTip="{DynamicResource String_EngineUninstallBtn}"
                                                     IsEnabled="{Binding IsLoadingEngine, Converter={StaticResource InverseBoolConverter}}"
                                                     Visibility="{Binding IsEngineInstalled, Converter={StaticResource BoolToVisibilityConverter}}"
@@ -2014,27 +1984,10 @@
                                                       Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                                             </Button>
 
-                                            <!-- Open Engine Folder Button: Icon-only, with Tooltip -->
-                                            <Button Style="{StaticResource SecondaryButton}" Width="28" Height="28" Padding="0"
-                                                    Command="{Binding OpenEngineFolderCommand}" ToolTip="{DynamicResource String_EngineOpenFolder}"
-                                                    Visibility="{Binding IsEngineInstalled, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                    VerticalAlignment="Center">
-                                                <Path Data="{StaticResource IconFolder}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                                      Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                            </Button>
-
                                             <!-- Loading spinner -->
                                             <ProgressBar IsIndeterminate="True" Width="40" Height="3" Margin="8,0,0,0" VerticalAlignment="Center"
                                                          Visibility="{Binding IsLoadingEngine, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                         </StackPanel>
-
-                                        <!-- Engine NOT required (Native mods) -->
-                                        <Border CornerRadius="{StaticResource RadiusSm}" Padding="8,4" BorderThickness="1"
-                                                Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}"
-                                                Visibility="{Binding IsEngineSupported, Converter={StaticResource InverseBoolToVisibilityConverter}}"
-                                                VerticalAlignment="Center">
-                                            <TextBlock Text="{DynamicResource String_ModEngineNotRequired}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center"/>
-                                        </Border>
                                     </Grid>
                                 </StackPanel>
 
@@ -2046,41 +1999,8 @@
                                 </StackPanel>
                             </StackPanel>
 
-                            <!-- Modrinth Header Action Buttons -->
-                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                <!-- Unified "Explorar Mods" Button (visible if any mod provider is supported) -->
-                                <Button Style="{StaticResource PrimaryButton}" Margin="0,0,8,0"
-                                        Command="{Binding OpenContentBrowserCommand}"
-                                        Visibility="{Binding HasModBrowserSupport, Converter={StaticResource BoolToVisibilityConverter}}"
-                                        ToolTip="{DynamicResource String_ModBrowseContentBtn}">
-                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <Path Data="{StaticResource IconSearch}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                              Width="12" Height="12" Stretch="Uniform" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                        <TextBlock Text="{DynamicResource String_ModBrowseContentBtn}" FontWeight="SemiBold"/>
-                                    </StackPanel>
-                                </Button>
-
-                                <Button Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Command="{Binding InstallFromFileCommand}"
-                                        ToolTip="{DynamicResource String_InstallModFileBtn}">
-                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <Path Data="{StaticResource IconPlus}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                              Width="12" Height="12" Stretch="Uniform" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                        <TextBlock Text="{DynamicResource String_InstallModFileBtn}"/>
-                                    </StackPanel>
-                                </Button>
-
-                                <Button Style="{StaticResource SecondaryButton}" Width="36" Padding="0" Margin="0,0,8,0"
-                                        Command="{Binding OpenModsFolderCommand}" ToolTip="Abrir carpeta de mods">
-                                    <Path Data="{StaticResource IconFolder}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                          Width="14" Height="14" Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                </Button>
-
-                                <Button Style="{StaticResource SecondaryButton}" Width="36" Padding="0"
-                                        Command="{Binding LoadCommand}" ToolTip="Actualizar">
-                                    <Path Data="{StaticResource IconRefresh}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                          Width="14" Height="14" Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                </Button>
-                            </StackPanel>
+                            <!-- Top-right space (actions moved down to toolbar) -->
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"/>
                         </Grid>
                     </Border>
 
@@ -2112,76 +2032,702 @@
                         </Grid>
                     </Border>
 
-                    <!-- ═══ MODRINTH TOOLBAR: SEARCH & FILTERS ═══ -->
+                    <!-- ═══ MODPACK PROFILES (BLOCKS / LIST VIEW) ═══ -->
+                    <Border Style="{StaticResource Card}"
+                            Margin="0,0,0,12"
+                            Padding="14,12">
+                        <StackPanel>
+                            <!-- Header: Title + Switch View Button + (Conditional) New Modpack Button -->
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Path Data="{StaticResource IconMod}" Fill="{StaticResource AccentBrush}" Width="13" Height="13" Stretch="Uniform" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="PERFILES DE MODPACKS" Style="{StaticResource CaptionBold}" Foreground="{StaticResource PrimaryTextBrush}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="· Solo un modpack activo a la vez" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                </StackPanel>
+
+                                <!-- + Nuevo Modpack Button: ONLY visible when NOT in block view (hidden in block view) -->
+                                <Button Grid.Column="1" Style="{StaticResource GhostButton}" Padding="8,4" Margin="0,0,10,0"
+                                        Command="{Binding OpenCreateModpackCommand}"
+                                        Visibility="{Binding IsModpackBlockView, Converter={StaticResource InverseBoolToVisibilityConverter}}"
+                                        VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Path Data="{StaticResource IconPlus}" Fill="{StaticResource AccentBrush}" Width="11" Height="11" Stretch="Uniform" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Nuevo Modpack" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <!-- Button to switch between Block View and List View (Icon-only, larger, always far-right) -->
+                                <Button Grid.Column="2" Style="{StaticResource SecondaryButton}"
+                                        Width="36" Height="32" Padding="0"
+                                        Command="{Binding ToggleModpackViewModeCommand}"
+                                        ToolTip="{Binding ModpackViewModeButtonLabel}"
+                                        VerticalAlignment="Center">
+                                    <Path Data="{Binding ModpackViewIconGeometryKey, Converter={StaticResource ResourceKeyConverter}}"
+                                          Fill="{StaticResource PrimaryTextBrush}" Width="15" Height="15" Stretch="Uniform"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Button>
+                            </Grid>
+
+                            <!-- 1. VISTA EN BLOQUES (CARDS VIEW) -->
+                            <ScrollViewer Visibility="{Binding IsModpackBlockView, Converter={StaticResource BoolToVisibilityConverter}}"
+                                          HorizontalScrollBarVisibility="Auto"
+                                          VerticalScrollBarVisibility="Disabled"
+                                          PreviewMouseWheel="OnModpackShelfPreviewMouseWheel"
+                                          Style="{StaticResource SlimDarkScrollViewer}"
+                                          Margin="0,0,0,2">
+                                <StackPanel Orientation="Horizontal">
+                                    <!-- Default Modpack Card -->
+                                    <Border Width="190" Height="110" Margin="0,0,10,0"
+                                            CornerRadius="{StaticResource RadiusMd}"
+                                            BorderThickness="1.5">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="{StaticResource SurfaceInputBrush}"/>
+                                                <Setter Property="BorderBrush" Value="{StaticResource SubtleBorderBrush}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsDefaultModpackActive}" Value="True">
+                                                        <Setter Property="Background" Value="{StaticResource SurfaceCardElevatedBrush}"/>
+                                                        <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <Button Style="{StaticResource GhostButton}" Padding="12,10"
+                                                HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+                                                Command="{Binding SelectDefaultModpackCommand}">
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="*"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+
+                                                <Grid Grid.Row="0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0" Width="28" Height="28" CornerRadius="{StaticResource RadiusSm}"
+                                                            Background="{StaticResource AccentBgBrush}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1">
+                                                        <Path Data="{StaticResource IconMod}" Fill="{StaticResource AccentBrush}" Width="13" Height="13" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <!-- Non-deforming Active Tick Badge -->
+                                                    <Border Grid.Column="2"
+                                                            HorizontalAlignment="Right"
+                                                            VerticalAlignment="Center"
+                                                            Height="20"
+                                                            Background="{StaticResource AccentTranslucentBrush}"
+                                                            BorderBrush="{StaticResource AccentBrush}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="{StaticResource RadiusXs}"
+                                                            Padding="6,0"
+                                                            SnapsToDevicePixels="True"
+                                                            Visibility="{Binding IsDefaultModpackActive, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Path Data="{StaticResource IconCheck}" Fill="{StaticResource AccentBrush}" Width="8" Height="8" Stretch="Uniform" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                                            <TextBlock Text="ACTIVO" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" TextWrapping="NoWrap"/>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </Grid>
+
+                                                <StackPanel Grid.Row="1" VerticalAlignment="Center" Margin="0,6,0,4">
+                                                    <TextBlock Text="Por defecto" FontWeight="Bold" FontSize="12.5" Foreground="{StaticResource PrimaryTextBrush}" TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock Text="Todos los mods instalados" FontSize="10.5" Foreground="{StaticResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis"/>
+                                                </StackPanel>
+
+                                                <TextBlock Grid.Row="2" Text="{Binding Items.Count, StringFormat='{}{0} mods activos'}" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
+                                            </Grid>
+                                        </Button>
+                                    </Border>
+
+                                    <!-- Custom Modpack Cards -->
+                                    <ItemsControl ItemsSource="{Binding Modpacks}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Width="190" Height="110" Margin="0,0,10,0"
+                                                        CornerRadius="{StaticResource RadiusMd}"
+                                                        BorderThickness="1.5">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="{StaticResource SurfaceInputBrush}"/>
+                                                            <Setter Property="BorderBrush" Value="{StaticResource SubtleBorderBrush}"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                                    <Setter Property="Background" Value="{StaticResource SurfaceCardElevatedBrush}"/>
+                                                                    <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <Grid>
+                                                        <Button Style="{StaticResource GhostButton}" Padding="12,10"
+                                                                HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+                                                                Command="{Binding DataContext.ApplyModpackCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                CommandParameter="{Binding}">
+                                                            <Grid>
+                                                                <Grid.RowDefinitions>
+                                                                    <RowDefinition Height="Auto"/>
+                                                                    <RowDefinition Height="*"/>
+                                                                    <RowDefinition Height="Auto"/>
+                                                                </Grid.RowDefinitions>
+
+                                                                <Grid Grid.Row="0">
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <!-- Avatar with clean corner clipping -->
+                                                                    <Grid Grid.Column="0" Width="28" Height="28">
+                                                                        <Border CornerRadius="{StaticResource RadiusSm}"
+                                                                                Background="{StaticResource SurfaceCardElevatedBrush}"
+                                                                                BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1">
+                                                                            <Path Data="{StaticResource IconMod}" Fill="{StaticResource AccentBrush}" Width="12" Height="12" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                                        </Border>
+                                                                        <Border CornerRadius="{StaticResource RadiusSm}"
+                                                                                BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                                                                                Visibility="{Binding IconPath, Converter={StaticResource NullToVisibilityConverter}}">
+                                                                            <Border.Background>
+                                                                                <ImageBrush ImageSource="{Binding IconPath, Converter={StaticResource CachedImageConverter}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                                            </Border.Background>
+                                                                        </Border>
+                                                                    </Grid>
+                                                                    <!-- Non-deforming Active Tick Badge -->
+                                                                    <Border Grid.Column="2"
+                                                                            HorizontalAlignment="Right"
+                                                                            VerticalAlignment="Center"
+                                                                            Height="20"
+                                                                            Background="{StaticResource AccentTranslucentBrush}"
+                                                                            BorderBrush="{StaticResource AccentBrush}"
+                                                                            BorderThickness="1"
+                                                                            CornerRadius="{StaticResource RadiusXs}"
+                                                                            Padding="6,0"
+                                                                            SnapsToDevicePixels="True"
+                                                                            Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                            <Path Data="{StaticResource IconCheck}" Fill="{StaticResource AccentBrush}" Width="8" Height="8" Stretch="Uniform" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                                                            <TextBlock Text="ACTIVO" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" TextWrapping="NoWrap"/>
+                                                                        </StackPanel>
+                                                                    </Border>
+                                                                </Grid>
+
+                                                                <StackPanel Grid.Row="1" VerticalAlignment="Center" Margin="0,6,0,4">
+                                                                    <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="12.5" Foreground="{StaticResource PrimaryTextBrush}" TextTrimming="CharacterEllipsis"/>
+                                                                    <TextBlock Text="{Binding ModsCount, StringFormat='{}{0} mods en perfil'}" FontSize="10.5" Foreground="{StaticResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis"/>
+                                                                </StackPanel>
+
+                                                                <TextBlock Grid.Row="2" Text="{Binding CreatedAt, StringFormat='{}{0:d MMM yyyy}'}" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
+                                                            </Grid>
+                                                        </Button>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <!-- "Crear Modpack" card (Requirement 11) -->
+                                    <Border Width="140" Height="110"
+                                            Background="{StaticResource SurfaceInputBrush}"
+                                            BorderBrush="{StaticResource SubtleBorderBrush}"
+                                            BorderThickness="1.5"
+                                            CornerRadius="{StaticResource RadiusMd}">
+                                        <Button Style="{StaticResource GhostButton}" Padding="10"
+                                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                                Command="{Binding OpenCreateModpackCommand}">
+                                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <Border Width="28" Height="28" CornerRadius="14" Background="{StaticResource AccentBgBrush}" HorizontalAlignment="Center" Margin="0,0,0,6">
+                                                    <Path Data="{StaticResource IconPlus}" Fill="{StaticResource AccentBrush}" Width="11" Height="11" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <TextBlock Text="Crear Modpack" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </Border>
+                                </StackPanel>
+                            </ScrollViewer>
+
+                            <!-- 2. VISTA EN LISTA (LIST VIEW) -->
+                            <StackPanel Visibility="{Binding IsModpackBlockView, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                                <!-- Default Modpack Row -->
+                                <Border CornerRadius="{StaticResource RadiusMd}"
+                                        BorderThickness="1.5"
+                                        Margin="0,0,0,6">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="{StaticResource SurfaceInputBrush}"/>
+                                            <Setter Property="BorderBrush" Value="{StaticResource SubtleBorderBrush}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsDefaultModpackActive}" Value="True">
+                                                    <Setter Property="Background" Value="{StaticResource SurfaceCardElevatedBrush}"/>
+                                                    <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <Button Style="{StaticResource GhostButton}" Padding="12,8"
+                                            HorizontalContentAlignment="Stretch"
+                                            Command="{Binding SelectDefaultModpackCommand}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Avatar -->
+                                            <Border Grid.Column="0" Width="30" Height="30" CornerRadius="{StaticResource RadiusSm}"
+                                                    Background="{StaticResource AccentBgBrush}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1"
+                                                    Margin="0,0,12,0" VerticalAlignment="Center">
+                                                <Path Data="{StaticResource IconMod}" Fill="{StaticResource AccentBrush}" Width="14" Height="14" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+
+                                            <!-- Info -->
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="Por defecto (Todos)" FontWeight="Bold" FontSize="12.5" Foreground="{StaticResource PrimaryTextBrush}"/>
+                                                    <TextBlock Text="{Binding Items.Count, StringFormat='  ·  {0} mods instalados'}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                                <TextBlock Text="Perfil base que incluye todos los mods instalados en el juego." Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,1,0,0"/>
+                                            </StackPanel>
+
+                                            <!-- Non-deforming Active Tick Badge -->
+                                            <Border Grid.Column="2"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Center"
+                                                    Height="20"
+                                                    Background="{StaticResource AccentTranslucentBrush}"
+                                                    BorderBrush="{StaticResource AccentBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="{StaticResource RadiusXs}"
+                                                    Padding="6,0"
+                                                    SnapsToDevicePixels="True"
+                                                    Visibility="{Binding IsDefaultModpackActive, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Path Data="{StaticResource IconCheck}" Fill="{StaticResource AccentBrush}" Width="8" Height="8" Stretch="Uniform" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="ACTIVO" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" TextWrapping="NoWrap"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+                                    </Button>
+                                </Border>
+
+                                <!-- Custom Modpacks List -->
+                                <ItemsControl ItemsSource="{Binding Modpacks}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border CornerRadius="{StaticResource RadiusMd}"
+                                                    BorderThickness="1.5"
+                                                    Margin="0,0,0,6">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="{StaticResource SurfaceInputBrush}"/>
+                                                        <Setter Property="BorderBrush" Value="{StaticResource SubtleBorderBrush}"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                                <Setter Property="Background" Value="{StaticResource SurfaceCardElevatedBrush}"/>
+                                                                <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <Grid>
+                                                    <!-- Clickable row to activate (or open details modal if already active) -->
+                                                    <Button Style="{StaticResource GhostButton}" Padding="12,8"
+                                                            HorizontalContentAlignment="Stretch"
+                                                            Command="{Binding DataContext.ApplyModpackCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            CommandParameter="{Binding}">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <!-- Avatar with clean corner clipping -->
+                                                            <Grid Grid.Column="0" Width="30" Height="30" Margin="0,0,12,0" VerticalAlignment="Center">
+                                                                <Border CornerRadius="{StaticResource RadiusSm}"
+                                                                        Background="{StaticResource SurfaceCardElevatedBrush}"
+                                                                        BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1">
+                                                                    <Path Data="{StaticResource IconMod}" Fill="{StaticResource AccentBrush}" Width="13" Height="13" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                                </Border>
+                                                                <Border CornerRadius="{StaticResource RadiusSm}"
+                                                                        BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                                                                        Visibility="{Binding IconPath, Converter={StaticResource NullToVisibilityConverter}}">
+                                                                    <Border.Background>
+                                                                        <ImageBrush ImageSource="{Binding IconPath, Converter={StaticResource CachedImageConverter}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                                    </Border.Background>
+                                                                </Border>
+                                                            </Grid>
+
+                                                            <!-- Info -->
+                                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                    <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="12.5" Foreground="{StaticResource PrimaryTextBrush}"/>
+                                                                    <TextBlock Text="{Binding ModsCount, StringFormat='  ·  {0} mods'}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                                                                    <TextBlock Text="{Binding CreatedAt, StringFormat='  ·  {0:d MMM yyyy}'}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                                                                </StackPanel>
+                                                                <TextBlock Text="Haz clic para activar este perfil de modpack." Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,1,0,0"/>
+                                                            </StackPanel>
+
+                                                            <!-- Non-deforming Active Tick Badge -->
+                                                            <Border Grid.Column="2"
+                                                                    HorizontalAlignment="Right"
+                                                                    VerticalAlignment="Center"
+                                                                    Height="20"
+                                                                    Background="{StaticResource AccentTranslucentBrush}"
+                                                                    BorderBrush="{StaticResource AccentBrush}"
+                                                                    BorderThickness="1"
+                                                                    CornerRadius="{StaticResource RadiusXs}"
+                                                                    Padding="6,0"
+                                                                    SnapsToDevicePixels="True"
+                                                                    Margin="0,0,10,0"
+                                                                    Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                    <Path Data="{StaticResource IconCheck}" Fill="{StaticResource AccentBrush}" Width="8" Height="8" Stretch="Uniform" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                                                    <TextBlock Text="ACTIVO" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" TextWrapping="NoWrap"/>
+                                                                </StackPanel>
+                                                            </Border>
+                                                        </Grid>
+                                                    </Button>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- ═══ MOD TOOLBAR: SEARCH & SORT, ACTION BUTTONS ═══ -->
                     <Border Style="{StaticResource Card}" Margin="0,0,0,12" Padding="14,12">
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <!-- Search Box -->
-                            <Grid Grid.Column="0" Width="260" Margin="0,0,16,0">
-                                <TextBox Style="{StaticResource DarkTextBox}" Padding="32,6,10,6"
-                                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"/>
-                                <Path Data="{StaticResource IconSearch}" Fill="{StaticResource MutedTextBrush}" Width="13" Height="13"
-                                      Stretch="Uniform" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" IsHitTestVisible="False"/>
-                            </Grid>
+                            <!-- Column 0: Search Box with CTA Watermark & Sort Controls All In One Row -->
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <!-- Search Box with centered text and clear button (Requirement 7) -->
+                                <Border Width="280" Height="34" Margin="0,0,8,0"
+                                        Background="{StaticResource SurfaceInputBrush}"
+                                        BorderBrush="{StaticResource SubtleBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource RadiusMd}"
+                                        Padding="10,0">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Path Grid.Column="0" Data="{StaticResource IconSearch}"
+                                              Fill="{StaticResource MutedTextBrush}"
+                                              Stretch="Uniform" Width="13" Height="13"
+                                              Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <Grid Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="Buscar mods instalados..."
+                                                       Foreground="{StaticResource MutedTextBrush}"
+                                                       FontSize="12" VerticalAlignment="Center" IsHitTestVisible="False">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding SearchText}" Value="">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding SearchText}" Value="{x:Null}">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                                     Background="Transparent" BorderThickness="0"
+                                                     Foreground="{StaticResource PrimaryTextBrush}"
+                                                     CaretBrush="{StaticResource PrimaryTextBrush}"
+                                                     FontSize="12" VerticalContentAlignment="Center"
+                                                     Padding="0"/>
+                                        </Grid>
+                                        <!-- Clear Search Button -->
+                                        <Button Grid.Column="2" Width="18" Height="18" Padding="0"
+                                                Command="{Binding ClearSearchCommand}"
+                                                VerticalAlignment="Center">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding SearchText}" Value="">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding SearchText}" Value="{x:Null}">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                            <TextBlock Text="✕" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
+                                        </Button>
+                                    </Grid>
+                                </Border>
 
-                            <!-- Category Filter Chips (Modrinth style: clean labels, no awkward (0)) -->
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                <RadioButton Content="{DynamicResource String_ModFilterAll}" Style="{StaticResource FilterChipRadioButton}" Margin="0,0,6,0"
-                                             IsChecked="{Binding SelectedFilter, Converter={StaticResource StringMatchConverter}, ConverterParameter=All}"
-                                             Command="{Binding SetFilterCommand}" CommandParameter="All"/>
-                                <RadioButton Content="{DynamicResource String_ModFilterEnabled}" Style="{StaticResource FilterChipGreen}" Margin="0,0,6,0"
-                                             IsChecked="{Binding SelectedFilter, Converter={StaticResource StringMatchConverter}, ConverterParameter=Enabled}"
-                                             Command="{Binding SetFilterCommand}" CommandParameter="Enabled"/>
-                                <RadioButton Content="{DynamicResource String_ModFilterDisabled}" Style="{StaticResource FilterChipRadioButton}" Margin="0,0,6,0"
-                                             IsChecked="{Binding SelectedFilter, Converter={StaticResource StringMatchConverter}, ConverterParameter=Disabled}"
-                                             Command="{Binding SetFilterCommand}" CommandParameter="Disabled"/>
-                                <RadioButton Content="{DynamicResource String_ModFilterWorkshop}" Style="{StaticResource FilterChipBlue}" Margin="0,0,6,0"
-                                             Visibility="{Binding CanShowWorkshopFilter, Converter={StaticResource BoolToVisibilityConverter}}"
-                                             IsChecked="{Binding SelectedFilter, Converter={StaticResource StringMatchConverter}, ConverterParameter=Workshop}"
-                                             Command="{Binding SetFilterCommand}" CommandParameter="Workshop"/>
-                                <RadioButton Content="{DynamicResource String_ModFilterThunderstore}" Style="{StaticResource FilterChipGreen}" Margin="0,0,6,0"
-                                             Visibility="{Binding CanShowThunderstoreFilter, Converter={StaticResource BoolToVisibilityConverter}}"
-                                             IsChecked="{Binding SelectedFilter, Converter={StaticResource StringMatchConverter}, ConverterParameter=Thunderstore}"
-                                             Command="{Binding SetFilterCommand}" CommandParameter="Thunderstore"/>
-                                <RadioButton Content="{DynamicResource String_ModFilterLocal}" Style="{StaticResource FilterChipRadioButton}"
-                                             Visibility="{Binding CanShowLocalFilter, Converter={StaticResource BoolToVisibilityConverter}}"
-                                             IsChecked="{Binding SelectedFilter, Converter={StaticResource StringMatchConverter}, ConverterParameter=Local}"
-                                             Command="{Binding SetFilterCommand}" CommandParameter="Local"/>
+                                <!-- Invert Sort Direction Button (⇅) -->
+                                <Button Style="{StaticResource SecondaryButton}"
+                                        Height="34"
+                                        Padding="9,0"
+                                        Margin="0,0,6,0"
+                                        ToolTip="{DynamicResource String_InvertSortOrder}"
+                                        Command="{Binding ToggleSortDirectionCommand}">
+                                    <TextBlock Text="⇅" FontWeight="Bold" FontSize="13" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                                </Button>
+
+                                <!-- Sort Dropdown Pill Button (Name ⌄) -->
+                                <Grid VerticalAlignment="Center">
+                                    <Button Style="{StaticResource SecondaryButton}"
+                                            Height="34"
+                                            Padding="12,0"
+                                            Command="{Binding ToggleSortDropdownCommand}">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding SelectedSortDisplayName}" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"/>
+                                            <TextBlock Text=" ⌄" FontWeight="Bold" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+
+                                    <Popup IsOpen="{Binding IsSortDropdownOpen, Mode=TwoWay}"
+                                           StaysOpen="False"
+                                           Placement="Bottom"
+                                           VerticalOffset="4"
+                                           AllowsTransparency="True">
+                                        <Border Background="{StaticResource SurfaceCardElevatedBrush}"
+                                                BorderBrush="{StaticResource StrongBorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="{StaticResource RadiusMd}"
+                                                Padding="6"
+                                                MinWidth="150"
+                                                SnapsToDevicePixels="True"
+                                                UseLayoutRounding="True"
+                                                TextOptions.TextFormattingMode="Display"
+                                                TextOptions.TextRenderingMode="ClearType">
+                                            <StackPanel>
+                                                <TextBlock Text="{DynamicResource String_SortByTitle}" Style="{StaticResource CaptionBold}"
+                                                           Foreground="{StaticResource MutedTextBrush}"
+                                                           Margin="8,4,8,6" FontSize="10"/>
+
+                                                <Button Style="{StaticResource GhostButton}" HorizontalContentAlignment="Left" Padding="10,6" Margin="0,1"
+                                                        Command="{Binding SelectSortCommand}" CommandParameter="Name">
+                                                    <TextBlock Text="Nombre" FontSize="12" FontWeight="SemiBold"/>
+                                                </Button>
+
+                                                <Button Style="{StaticResource GhostButton}" HorizontalContentAlignment="Left" Padding="10,6" Margin="0,1"
+                                                        Command="{Binding SelectSortCommand}" CommandParameter="Status">
+                                                    <TextBlock Text="Estado" FontSize="12" FontWeight="SemiBold"/>
+                                                </Button>
+
+                                                <Button Style="{StaticResource GhostButton}" HorizontalContentAlignment="Left" Padding="10,6" Margin="0,1"
+                                                        Command="{Binding SelectSortCommand}" CommandParameter="Source">
+                                                    <TextBlock Text="Origen" FontSize="12" FontWeight="SemiBold"/>
+                                                </Button>
+
+                                                <Button Style="{StaticResource GhostButton}" HorizontalContentAlignment="Left" Padding="10,6" Margin="0,1"
+                                                        Command="{Binding SelectSortCommand}" CommandParameter="Size">
+                                                    <TextBlock Text="Tamaño" FontSize="12" FontWeight="SemiBold"/>
+                                                </Button>
+                                            </StackPanel>
+                                        </Border>
+                                    </Popup>
+                                </Grid>
                             </StackPanel>
 
-                            <!-- Counter -->
-                            <TextBlock Grid.Column="2" Text="{Binding FilteredItems.Count, StringFormat='{}{0} shown'}" Style="{StaticResource Caption}" VerticalAlignment="Center"/>
+                            <!-- Column 1: Action Buttons / Multi-selection Action Bar -->
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <!-- Multi-selection bar (anchored right when IsSelectionModeActive is true) -->
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                            Visibility="{Binding IsSelectionModeActive, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <Border Background="{StaticResource SurfaceInputBrush}"
+                                            BorderBrush="{StaticResource SubtleBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="{StaticResource RadiusMd}"
+                                            Padding="12,6"
+                                            Margin="0,0,8,0"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding SelectedModsCountText}"
+                                                   FontWeight="SemiBold"
+                                                   FontSize="12"
+                                                   Foreground="{StaticResource PrimaryTextBrush}"
+                                                   VerticalAlignment="Center"/>
+                                    </Border>
+
+                                    <!-- Enable selected -->
+                                    <Button Style="{StaticResource SecondaryButton}"
+                                            Padding="12,7"
+                                            Margin="0,0,6,0"
+                                            VerticalAlignment="Center"
+                                            IsEnabled="{Binding HasSelectedMods}"
+                                            Command="{Binding EnableSelectedModsCommand}">
+                                        <TextBlock Text="{DynamicResource String_EnableSelected}"
+                                                   FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"/>
+                                    </Button>
+
+                                    <!-- Disable selected -->
+                                    <Button Style="{StaticResource SecondaryButton}"
+                                            Padding="12,7"
+                                            Margin="0,0,6,0"
+                                            VerticalAlignment="Center"
+                                            IsEnabled="{Binding HasSelectedMods}"
+                                            Command="{Binding DisableSelectedModsCommand}">
+                                        <TextBlock Text="{DynamicResource String_DisableSelected}"
+                                                   FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"/>
+                                    </Button>
+
+                                    <!-- Delete selected -->
+                                    <Button Style="{StaticResource DangerButton}"
+                                            Padding="12,7"
+                                            Margin="0,0,8,0"
+                                            VerticalAlignment="Center"
+                                            IsEnabled="{Binding HasSelectedMods}"
+                                            Command="{Binding OpenBulkDeleteModalCommand}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Path Data="{StaticResource IconTrash}" Fill="#FFFFFF"
+                                                  Stretch="Uniform" Width="12" Height="12"
+                                                  Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{DynamicResource String_DeleteSelected}"
+                                                       FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+
+                                    <!-- Cancel selection mode (✕) -->
+                                    <Button Style="{StaticResource GhostButton}"
+                                            Padding="8,6"
+                                            ToolTip="{DynamicResource String_CancelSelection}"
+                                            Command="{Binding ExitSelectionModeCommand}"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="✕" FontSize="13" FontWeight="Bold"
+                                                   Foreground="{StaticResource MutedTextBrush}"
+                                                   VerticalAlignment="Center"/>
+                                    </Button>
+                                </StackPanel>
+
+                                <!-- Normal Action Buttons (visible when NOT in selection mode) -->
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                            Visibility="{Binding IsSelectionModeActive, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                                    <!-- 1. Install Mod File Button (Icon-only) -->
+                                    <Button Style="{StaticResource SecondaryButton}" Width="36" Height="34" Padding="0" Margin="0,0,8,0"
+                                            Command="{Binding InstallFromFileCommand}"
+                                            ToolTip="{DynamicResource String_InstallModFileBtn}">
+                                        <Path Data="{StaticResource IconPlus}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                              Width="14" Height="14" Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                    </Button>
+
+                                    <!-- 2. Open Mods Folder Button -->
+                                    <Button Style="{StaticResource SecondaryButton}" Width="36" Height="34" Padding="0" Margin="0,0,8,0"
+                                            Command="{Binding OpenModsFolderCommand}" ToolTip="Abrir carpeta de mods">
+                                        <Path Data="{StaticResource IconFolder}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                              Width="14" Height="14" Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                    </Button>
+
+                                    <!-- 3. Explorar Mods Button (At the far right of the other two) -->
+                                    <Button Style="{StaticResource PrimaryButton}" Height="34" Padding="14,0"
+                                            Command="{Binding OpenContentBrowserCommand}"
+                                            Visibility="{Binding HasModBrowserSupport, Converter={StaticResource BoolToVisibilityConverter}}"
+                                            ToolTip="{DynamicResource String_ModBrowseContentBtn}">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Path Data="{StaticResource IconSearch}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                  Width="12" Height="12" Stretch="Uniform" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{DynamicResource String_ModBrowseContentBtn}" FontWeight="SemiBold"/>
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                            </StackPanel>
                         </Grid>
                     </Border>
 
                     <!-- ═══ MOD TABLE / LIST (MODRINTH STYLE) ═══ -->
-                    <Border Style="{StaticResource Card}" Padding="16">
+                    <Border Padding="16"
+                            AllowDrop="True"
+                            DragEnter="OnModsTabDragEnter"
+                            DragLeave="OnModsTabDragLeave"
+                            DragOver="OnModsTabDragOver"
+                            Drop="OnModsTabDrop">
+                        <Border.Style>
+                            <Style TargetType="Border" BasedOn="{StaticResource Card}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsDraggingFilesOver}" Value="True">
+                                        <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                        <Setter Property="BorderThickness" Value="2"/>
+                                        <Setter Property="Background" Value="{StaticResource SurfaceCardElevatedBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
                         <StackPanel>
+                            <!-- Visual Reaction to Drag & Drop (Requirement 15) -->
+                            <Border CornerRadius="{StaticResource RadiusMd}"
+                                    BorderBrush="{StaticResource AccentBrush}"
+                                    BorderThickness="1.5"
+                                    Background="{StaticResource AccentTranslucentBrush}"
+                                    Padding="14,10"
+                                    Margin="0,0,0,12"
+                                    Visibility="{Binding IsDraggingFilesOver, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Path Data="{StaticResource IconDownload}" Fill="{StaticResource AccentBrush}" Width="16" Height="16" Stretch="Uniform" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{DynamicResource String_DragDropActiveNotice}"
+                                               FontWeight="Bold" FontSize="12.5" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+
                             <!-- Table Column Headers -->
                             <Grid Margin="12,0,12,10" Opacity="0.85">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="44"/>
+                                    <ColumnDefinition Width="48"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="180"/>
-                                    <ColumnDefinition Width="130"/>
                                     <ColumnDefinition Width="100"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="1" Text="{DynamicResource String_ModColProject}" Style="{StaticResource CaptionBold}"/>
-                                <TextBlock Grid.Column="2" Text="{DynamicResource String_ModColVersion}" Style="{StaticResource CaptionBold}"/>
-                                <TextBlock Grid.Column="3" Text="{DynamicResource String_ModColSource}" Style="{StaticResource CaptionBold}"/>
-                                <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                    <TextBlock Text="{DynamicResource String_ModColActions}" Style="{StaticResource CaptionBold}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <Button Style="{StaticResource GhostButton}" Width="22" Height="22" Padding="0"
-                                            Command="{Binding InstallFromFileCommand}"
-                                            ToolTip="{DynamicResource String_InstallModFileBtn}">
-                                        <Path Data="{StaticResource IconPlus}" Fill="{StaticResource AccentBrush}" Width="10" Height="10" Stretch="Uniform"/>
-                                    </Button>
-                                </StackPanel>
+                                <!-- Tick button at corner of mods list (Requirement 10) -->
+                                <Button Grid.Column="0"
+                                        Width="28" Height="28" Padding="0"
+                                        HorizontalAlignment="Left" VerticalAlignment="Center"
+                                        ToolTip="{DynamicResource String_SelectMods}"
+                                        Command="{Binding ToggleSelectionModeCommand}">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsSelectionModeActive}" Value="True">
+                                                    <Setter Property="BorderBrush" Value="#10B981"/>
+                                                    <Setter Property="Background" Value="#1a10B981"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                    <Path Data="{StaticResource IconCheckSquare}"
+                                          Stretch="Uniform" Width="14" Height="14"
+                                          VerticalAlignment="Center">
+                                        <Path.Style>
+                                            <Style TargetType="Path">
+                                                <Setter Property="Fill" Value="{StaticResource SecondaryTextBrush}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsSelectionModeActive}" Value="True">
+                                                        <Setter Property="Fill" Value="#10B981"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Path.Style>
+                                    </Path>
+                                </Button>
+                                <TextBlock Grid.Column="1" Text="{DynamicResource String_ModColProject}" Style="{StaticResource CaptionBold}" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="2" Text="{DynamicResource String_ModColVersion}" Style="{StaticResource CaptionBold}" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                             </Grid>
 
                             <!-- Empty Mods Notice -->
@@ -2249,28 +2795,87 @@
                                                 Margin="0,0,0,6">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="44"/>
+                                                    <ColumnDefinition Width="48"/>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="180"/>
-                                                    <ColumnDefinition Width="130"/>
                                                     <ColumnDefinition Width="100"/>
                                                 </Grid.ColumnDefinitions>
 
-                                                <!-- Mod Icon -->
-                                                <Border Grid.Column="0" Width="32" Height="32" CornerRadius="{StaticResource RadiusSm}"
+                                                <!-- Mod Icon / Image (Visible when NOT in selection mode) -->
+                                                <Border Grid.Column="0" Width="36" Height="36" CornerRadius="{StaticResource RadiusSm}"
                                                         Background="{StaticResource SurfaceCardElevatedBrush}"
                                                         BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
-                                                        HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                    <Path Data="{Binding IconGeometryKey, Converter={StaticResource ResourceKeyConverter}}"
-                                                          Fill="{StaticResource AccentBrush}" Width="16" Height="16" Stretch="Uniform"
-                                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        HorizontalAlignment="Left" VerticalAlignment="Center" ClipToBounds="True"
+                                                        Visibility="{Binding DataContext.IsSelectionModeActive, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                                                    <Grid>
+                                                        <Path Data="{Binding IconGeometryKey, Converter={StaticResource ResourceKeyConverter}}"
+                                                              Fill="{StaticResource AccentBrush}" Width="16" Height="16" Stretch="Uniform"
+                                                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        <Image Source="{Binding IconUrl, Converter={StaticResource CachedImageConverter}}"
+                                                               Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                    </Grid>
                                                 </Border>
 
-                                                <!-- Project Name & Author -->
-                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
-                                                    <TextBlock Text="{Binding Name}" Style="{StaticResource BodyMedium}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                                    <TextBlock Text="{Binding Author}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
-                                                </StackPanel>
+                                                <!-- Selection Checkbox Badge in Column 0 (Visible when in selection mode, Requirement 10) -->
+                                                <Border Grid.Column="0" Width="24" Height="24"
+                                                        CornerRadius="12"
+                                                        HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                        IsHitTestVisible="False"
+                                                        Visibility="{Binding DataContext.IsSelectionModeActive, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <Border.Effect>
+                                                        <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="2" Opacity="0.6"/>
+                                                    </Border.Effect>
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="#D9161822"/>
+                                                            <Setter Property="BorderBrush" Value="#80FFFFFF"/>
+                                                            <Setter Property="BorderThickness" Value="2"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                                    <Setter Property="Background" Value="#10B981"/>
+                                                                    <Setter Property="BorderBrush" Value="#FFFFFF"/>
+                                                                    <Setter Property="BorderThickness" Value="2"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <Path Data="{StaticResource IconCheck}" Fill="#FFFFFF"
+                                                          Stretch="Uniform" Width="12" Height="12"
+                                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                          Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                </Border>
+
+                                                <!-- Overlay Selection Border -->
+                                                <Border Grid.Column="0" Grid.ColumnSpan="4"
+                                                        CornerRadius="{StaticResource RadiusMd}"
+                                                        BorderThickness="2"
+                                                        Margin="-14,-10"
+                                                        IsHitTestVisible="False"
+                                                        Panel.ZIndex="51">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="BorderBrush" Value="Transparent"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                                    <Setter Property="BorderBrush" Value="#10B981"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                </Border>
+
+                                                <!-- Project Name & Author (Clickable to open mod page) -->
+                                                <Button Grid.Column="1" Style="{StaticResource GhostButton}"
+                                                        HorizontalContentAlignment="Left" VerticalContentAlignment="Center"
+                                                        Padding="0" Margin="0,0,12,0"
+                                                        Command="{Binding DataContext.OpenModDetailCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        Cursor="Hand" ToolTip="Ver página del mod">
+                                                    <StackPanel VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Name}" Style="{StaticResource BodyMedium}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                                        <TextBlock Text="{Binding Author}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                                                    </StackPanel>
+                                                </Button>
 
                                                 <!-- Version & Size -->
                                                 <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,12,0">
@@ -2278,27 +2883,8 @@
                                                     <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
                                                 </StackPanel>
 
-                                                <!-- Source Badge -->
-                                                <StackPanel Grid.Column="3" VerticalAlignment="Center" Orientation="Horizontal">
-                                                    <Border CornerRadius="{StaticResource RadiusXs}" Padding="8,3" BorderThickness="1">
-                                                        <Border.Style>
-                                                            <Style TargetType="Border">
-                                                                <Setter Property="Background" Value="{StaticResource SurfaceCardElevatedBrush}"/>
-                                                                <Setter Property="BorderBrush" Value="{StaticResource SubtleBorderBrush}"/>
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsManaged}" Value="True">
-                                                                        <Setter Property="Background" Value="{StaticResource AccentBgBrush}"/>
-                                                                        <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </Border.Style>
-                                                        <TextBlock Text="{Binding SourceLabel}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}"/>
-                                                    </Border>
-                                                </StackPanel>
-
                                                 <!-- Actions: Switch Toggle + Delete -->
-                                                <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                                     <CheckBox Style="{StaticResource ToggleSwitch}"
                                                               IsChecked="{Binding IsEnabled, Mode=OneWay}"
                                                               ToolTip="Enable / Disable mod"
@@ -2306,11 +2892,12 @@
                                                               Command="{Binding DataContext.ToggleCommand, ElementName=ModsList}"
                                                               CommandParameter="{Binding}"/>
 
+                                                    <!-- Delete Mod Button (Opens confirmation modal, Requirement 9) -->
                                                     <Button Style="{StaticResource DangerButton}"
                                                             Width="32" Height="32" Padding="0"
                                                             ToolTip="Uninstall mod"
                                                             VerticalAlignment="Center"
-                                                            Command="{Binding DataContext.UninstallCommand, ElementName=ModsList}"
+                                                            Command="{Binding DataContext.RequestDeleteModCommand, ElementName=ModsList}"
                                                             CommandParameter="{Binding}">
                                                         <Path Data="{StaticResource IconTrash}"
                                                               Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
@@ -2319,6 +2906,21 @@
                                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                     </Button>
                                                 </StackPanel>
+
+                                                <!-- Invisible Full-row button for Selection Mode Click (Requirement 10) -->
+                                                <Button Grid.Column="0" Grid.ColumnSpan="4"
+                                                        Margin="-14,-10"
+                                                        Panel.ZIndex="52"
+                                                        Cursor="Hand"
+                                                        Command="{Binding DataContext.ToggleModSelectionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        Visibility="{Binding DataContext.IsSelectionModeActive, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <Button.Template>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border Background="Transparent"/>
+                                                        </ControlTemplate>
+                                                    </Button.Template>
+                                                </Button>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
@@ -2326,6 +2928,7 @@
                             </ItemsControl>
                         </StackPanel>
                     </Border>
+                    </StackPanel>
                 </StackPanel>
 
                  <!-- ── 5. EMULATOR TAB ── -->
@@ -5301,6 +5904,801 @@
                         </StackPanel>
                     </Border>
                 </Grid>
+            </Border>
+        </controls:ModalOverlay>
+
+        <!-- ═══ MOD PAGE MODAL (WEBVIEW2 EMBEDDED MOD DETAILS) ═══ -->
+        <controls:ModalOverlay IsOpen="{Binding ModsTab.IsModPageModalOpen}"
+                               CloseCommand="{Binding ModsTab.CloseModPageCommand}"
+                               Panel.ZIndex="1500">
+            <Border Width="960" MaxWidth="1100" Height="680" MaxHeight="800"
+                    Background="{StaticResource SurfaceCardElevatedBrush}"
+                    BorderBrush="{StaticResource StrongBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    SnapsToDevicePixels="True"
+                    UseLayoutRounding="True"
+                    ClipToBounds="True">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Modal Header -->
+                    <Border Grid.Row="0" Background="{StaticResource TopBarBackgroundBrush}"
+                            BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="0,0,0,1"
+                            CornerRadius="11,11,0,0" Padding="14,9">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                                <TextBlock Text="{Binding ModsTab.ModPageTitle, FallbackValue='Página del Mod'}"
+                                           FontSize="14" FontWeight="SemiBold"
+                                           Foreground="{StaticResource PrimaryTextBrush}"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding ModsTab.ModPageUrl}" FontSize="10.5"
+                                           FontFamily="{StaticResource MonospaceFontFamily}"
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Style="{StaticResource ModalCloseButton}"
+                                    Command="{Binding ModsTab.CloseModPageCommand}">
+                                <Path Data="{StaticResource IconClose}" Fill="{StaticResource SecondaryTextBrush}"
+                                      Stretch="Uniform" Width="11" Height="11"/>
+                            </Button>
+                        </Grid>
+                    </Border>
+
+                    <!-- Embedded Mod Page (WebView2 + Fallback) -->
+                    <Grid Grid.Row="1" Background="#121824">
+                        <wv2:WebView2 x:Name="ModPageView"/>
+                        <Border x:Name="ModWebViewFallbackOverlay" Visibility="Collapsed" Background="#121824" Padding="32">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="480">
+                                <TextBlock Text="🌐 Página del Mod" FontSize="18" FontWeight="SemiBold" Foreground="#FFFFFF" HorizontalAlignment="Center" Margin="0,0,0,12"/>
+                                <TextBlock Text="Puedes ver esta página directamente en tu navegador web si la vista integrada no está disponible."
+                                           TextWrapping="Wrap" TextAlignment="Center" FontSize="13" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,20"/>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <Button Style="{StaticResource PrimaryButton}" Padding="16,8"
+                                            Command="{Binding ModsTab.OpenModInExternalBrowserCommand}">
+                                        <TextBlock Text="Abrir en el Navegador" FontSize="12" FontWeight="SemiBold"/>
+                                    </Button>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- Modal Actions Footer -->
+                    <Border Grid.Row="2" Background="{StaticResource TopBarBackgroundBrush}"
+                            BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="0,1,0,0"
+                            CornerRadius="0,0,11,11" Padding="14,10">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Style="{StaticResource SecondaryButton}" Padding="14,8" Margin="0,0,8,0"
+                                    Command="{Binding ModsTab.OpenModInExternalBrowserCommand}"
+                                    ToolTip="Abrir en el navegador predeterminado">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Path Data="{StaticResource IconLink}" Fill="{StaticResource SecondaryTextBrush}"
+                                          Stretch="Uniform" Width="12" Height="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Abrir en navegador" FontSize="12"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource SecondaryButton}" Padding="14,8"
+                                    Command="{Binding ModsTab.CloseModPageCommand}"
+                                    Content="{DynamicResource String_Close}"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+        </controls:ModalOverlay>
+
+        <!-- ═══ MODPACK CREATION MODAL ═══ -->
+        <controls:ModalOverlay IsOpen="{Binding ModsTab.IsCreateModpackOpen}"
+                               CloseCommand="{Binding ModsTab.CancelCreateModpackCommand}"
+                               Panel.ZIndex="1450">
+            <Border Width="520" MaxWidth="580" MaxHeight="640"
+                    Background="{StaticResource SurfaceCardElevatedBrush}"
+                    BorderBrush="{StaticResource StrongBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="24"
+                    SnapsToDevicePixels="True"
+                    UseLayoutRounding="True">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Header -->
+                    <Grid Grid.Row="0" Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="{DynamicResource String_CreateModpackTitle}" Style="{StaticResource H2}"/>
+                            <TextBlock Text="{DynamicResource String_CreateModpackSubtitle}"
+                                       Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,4,0,0"/>
+                        </StackPanel>
+                        <!-- Import Modpack Button (Requirement 6) -->
+                        <Button Grid.Column="1" Style="{StaticResource SecondaryButton}" Padding="10,5" Margin="0,0,12,0"
+                                Command="{Binding ModsTab.ImportModpackIntoCreatorCommand}"
+                                ToolTip="{DynamicResource String_ImportModpackFile}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Path Data="{StaticResource IconDownload}" Fill="{StaticResource SecondaryTextBrush}"
+                                      Width="12" Height="12" Stretch="Uniform" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="{DynamicResource String_ImportModpackBtn}" FontSize="11" FontWeight="SemiBold"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Grid.Column="2" Style="{StaticResource ModalCloseButton}"
+                                Command="{Binding ModsTab.CancelCreateModpackCommand}">
+                            <Path Data="{StaticResource IconClose}" Fill="{StaticResource SecondaryTextBrush}"
+                                  Stretch="Uniform" Width="11" Height="11"/>
+                        </Button>
+                    </Grid>
+
+                    <!-- Profile Picture + Name input -->
+                    <Grid Grid.Row="1" Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Modpack Profile Avatar / Image Selector with clean corner clipping (Requirement 4) -->
+                        <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                            <TextBlock Text="{DynamicResource String_ModpackProfileImage}" Style="{StaticResource CaptionBold}"
+                                       Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,6"/>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <!-- Avatar Frame (Clickable) -->
+                                <Button Style="{StaticResource GhostButton}" Padding="0"
+                                        Command="{Binding ModsTab.BrowseModpackIconCommand}"
+                                        ToolTip="{DynamicResource String_ChooseProfileImage}">
+                                    <Border Width="56" Height="56" CornerRadius="{StaticResource RadiusMd}"
+                                            Background="{StaticResource SurfaceCardElevatedBrush}"
+                                            BorderBrush="{StaticResource AccentBrush}" BorderThickness="1.5">
+                                        <Grid>
+                                            <!-- Fallback Placeholder when no icon -->
+                                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
+                                                        Visibility="{Binding ModsTab.NewModpackIconPath, Converter={StaticResource InverseNullToVisibilityConverter}}">
+                                                <Path Data="{StaticResource IconCamera}" Fill="{StaticResource AccentBrush}"
+                                                      Width="20" Height="20" Stretch="Uniform" HorizontalAlignment="Center"/>
+                                                <TextBlock Text="{DynamicResource String_Add}" FontSize="9" FontWeight="SemiBold"
+                                                           Foreground="{StaticResource SecondaryTextBrush}" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                            </StackPanel>
+
+                                            <!-- Loaded Image Preview with clean rounded corners -->
+                                            <Border CornerRadius="{StaticResource RadiusMd}"
+                                                    Visibility="{Binding ModsTab.NewModpackIconPath, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <Border.Background>
+                                                    <ImageBrush ImageSource="{Binding ModsTab.NewModpackIconPath, Converter={StaticResource CachedImageConverter}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                </Border.Background>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                </Button>
+
+                                <!-- Actions next to avatar: Elegir / Quitar -->
+                                <StackPanel VerticalAlignment="Center" Margin="10,0,0,0">
+                                    <Button Content="{DynamicResource String_ChooseBtn}" Style="{StaticResource SecondaryButton}"
+                                            Padding="10,4" FontSize="11" Margin="0,0,0,4"
+                                            Command="{Binding ModsTab.BrowseModpackIconCommand}"/>
+                                    <Button Content="{DynamicResource String_RemoveBtn}" Style="{StaticResource GhostButton}"
+                                            Padding="6,2" FontSize="10.5" Foreground="{StaticResource DangerBrush}"
+                                            Command="{Binding ModsTab.ClearModpackIconCommand}"
+                                            Visibility="{Binding ModsTab.NewModpackIconPath, Converter={StaticResource NullToVisibilityConverter}}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Name Input Field -->
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="{DynamicResource String_ModpackNameLabel}" Style="{StaticResource CaptionBold}"
+                                       Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,6"/>
+                            <Border Background="{StaticResource SurfaceInputBrush}"
+                                    BorderBrush="{StaticResource SubtleBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="{StaticResource RadiusMd}"
+                                    Padding="12,0"
+                                    MinHeight="38">
+                                <TextBox Text="{Binding ModsTab.NewModpackName, UpdateSourceTrigger=PropertyChanged}"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Foreground="{StaticResource PrimaryTextBrush}"
+                                         CaretBrush="{StaticResource PrimaryTextBrush}"
+                                         FontSize="13"
+                                         Padding="0,8"
+                                         VerticalContentAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="{DynamicResource String_ModpackNameHelp}"
+                                       Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- List Header + Select All / None -->
+                    <Grid Grid.Row="2" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{DynamicResource String_AvailableModsTitle}" Style="{StaticResource CaptionBold}"
+                                   Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Style="{StaticResource GhostButton}" Padding="4,2" Margin="0,0,6,0"
+                                    Command="{Binding ModsTab.SelectAllCreateModpackModsCommand}">
+                                <TextBlock Text="{DynamicResource String_SelectAllMods}" FontSize="11" Foreground="{StaticResource AccentBrush}"/>
+                            </Button>
+                            <TextBlock Text="·" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <Button Style="{StaticResource GhostButton}" Padding="4,2"
+                                    Command="{Binding ModsTab.DeselectAllCreateModpackModsCommand}">
+                                <TextBlock Text="{DynamicResource String_DeselectAllMods}" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Mods scroll list with circular badges (Requirement 10) -->
+                    <Border Grid.Row="3" Background="{StaticResource SurfaceInputBrush}"
+                            BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusMd}" Padding="6" MaxHeight="280" Margin="0,0,0,20">
+                        <Grid>
+                            <!-- Empty State Notice when no mods available -->
+                            <Border Background="Transparent" Padding="20,32"
+                                    Visibility="{Binding ModsTab.CreateModpackSelectableMods.Count, Converter={StaticResource ZeroToVisibilityConverter}}">
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Border Width="44" Height="44" CornerRadius="22" Background="{StaticResource AccentBgBrush}" HorizontalAlignment="Center" Margin="0,0,0,12">
+                                        <Path Data="{StaticResource IconMod}" Fill="{StaticResource AccentBrush}" Width="20" Height="20" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <TextBlock Text="{DynamicResource String_NoAvailableMods}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                                    <TextBlock Text="{DynamicResource String_NoAvailableModsDesc}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="360" HorizontalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Scrollable list of selectable mods -->
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <ItemsControl ItemsSource="{Binding ModsTab.CreateModpackSelectableMods}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="Transparent" CornerRadius="{StaticResource RadiusSm}"
+                                                    Padding="8,6" Margin="0,1">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <!-- Circular selection badge (Requirement 10) -->
+                                                    <Border Grid.Column="0" Width="20" Height="20"
+                                                            CornerRadius="10"
+                                                            Margin="0,0,10,0"
+                                                            VerticalAlignment="Center">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Background" Value="#D9161822"/>
+                                                                <Setter Property="BorderBrush" Value="#80FFFFFF"/>
+                                                                <Setter Property="BorderThickness" Value="1.5"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                                        <Setter Property="Background" Value="#10B981"/>
+                                                                        <Setter Property="BorderBrush" Value="#FFFFFF"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <Path Data="{StaticResource IconCheck}" Fill="#FFFFFF"
+                                                              Stretch="Uniform" Width="10" Height="10"
+                                                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                              Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                    </Border>
+
+                                                    <!-- Mod Thumbnail / Icon with clean corner clipping -->
+                                                    <Grid Grid.Column="1" Width="30" Height="30" Margin="0,0,10,0" VerticalAlignment="Center">
+                                                        <Border CornerRadius="{StaticResource RadiusSm}"
+                                                                Background="{StaticResource SurfaceCardElevatedBrush}"
+                                                                BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1">
+                                                            <Path Data="{Binding IconGeometryKey, Converter={StaticResource ResourceKeyConverter}}"
+                                                                  Fill="{StaticResource AccentBrush}" Width="14" Height="14" Stretch="Uniform"
+                                                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                        <Border CornerRadius="{StaticResource RadiusSm}"
+                                                                BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                                                                Visibility="{Binding IconUrl, Converter={StaticResource NullToVisibilityConverter}}">
+                                                            <Border.Background>
+                                                                <ImageBrush ImageSource="{Binding IconUrl, Converter={StaticResource CachedImageConverter}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                            </Border.Background>
+                                                        </Border>
+                                                    </Grid>
+
+                                                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12.5" Foreground="{StaticResource PrimaryTextBrush}" TextTrimming="CharacterEllipsis"/>
+                                                        <TextBlock Text="{Binding Source}" FontSize="10.5" Foreground="{StaticResource MutedTextBrush}" TextTrimming="CharacterEllipsis"/>
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="3" Text="{Binding Version, StringFormat='v{0}'}"
+                                                               FontSize="11" Foreground="{StaticResource SecondaryTextBrush}"
+                                                               VerticalAlignment="Center"/>
+
+                                                    <!-- Clickable overlay to toggle selection -->
+                                                    <CheckBox Grid.Column="0" Grid.ColumnSpan="4"
+                                                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                              Opacity="0" Cursor="Hand"
+                                                              HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+
+                    <!-- Action buttons -->
+                    <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="{DynamicResource String_Cancel}" Style="{StaticResource SecondaryButton}"
+                                Margin="0,0,10,0" Padding="16,8"
+                                Command="{Binding ModsTab.CancelCreateModpackCommand}"/>
+                        <Button Content="{DynamicResource String_SaveModpackBtn}" Style="{StaticResource PrimaryButton}"
+                                Padding="18,8"
+                                Command="{Binding ModsTab.ConfirmCreateModpackCommand}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </controls:ModalOverlay>
+
+        <!-- ═══ ACTIVE MODPACK DETAILS & MANAGEMENT MODAL (EDIT, DELETE, EXPORT - REQUIREMENT 3) ═══ -->
+        <controls:ModalOverlay IsOpen="{Binding ModsTab.IsModpackDetailsOpen}"
+                               CloseCommand="{Binding ModsTab.CloseModpackDetailsCommand}"
+                               Panel.ZIndex="1455">
+            <Border Width="520" MaxWidth="580" MaxHeight="640"
+                    Background="{StaticResource SurfaceCardElevatedBrush}"
+                    BorderBrush="{StaticResource StrongBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="24"
+                    SnapsToDevicePixels="True"
+                    UseLayoutRounding="True">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Header -->
+                    <Grid Grid.Row="0" Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="{DynamicResource String_EditModpackTitle}" Style="{StaticResource H2}"/>
+                            <TextBlock Text="{DynamicResource String_EditModpackSubtitle}"
+                                       Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,4,0,0"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" Style="{StaticResource ModalCloseButton}"
+                                Command="{Binding ModsTab.CloseModpackDetailsCommand}">
+                            <Path Data="{StaticResource IconClose}" Fill="{StaticResource SecondaryTextBrush}"
+                                  Stretch="Uniform" Width="11" Height="11"/>
+                        </Button>
+                    </Grid>
+
+                    <!-- Profile Picture + Name input -->
+                    <Grid Grid.Row="1" Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Modpack Profile Avatar / Image Selector with clean corner clipping (Requirement 4) -->
+                        <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                            <TextBlock Text="{DynamicResource String_ModpackProfileImage}" Style="{StaticResource CaptionBold}"
+                                       Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,6"/>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Style="{StaticResource GhostButton}" Padding="0"
+                                        Command="{Binding ModsTab.BrowseEditModpackIconCommand}"
+                                        ToolTip="{DynamicResource String_ChooseProfileImage}">
+                                    <Border Width="56" Height="56" CornerRadius="{StaticResource RadiusMd}"
+                                            Background="{StaticResource SurfaceCardElevatedBrush}"
+                                            BorderBrush="{StaticResource AccentBrush}" BorderThickness="1.5">
+                                        <Grid>
+                                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
+                                                        Visibility="{Binding ModsTab.EditModpackIconPath, Converter={StaticResource InverseNullToVisibilityConverter}}">
+                                                <Path Data="{StaticResource IconCamera}" Fill="{StaticResource AccentBrush}"
+                                                      Width="20" Height="20" Stretch="Uniform" HorizontalAlignment="Center"/>
+                                                <TextBlock Text="{DynamicResource String_Add}" FontSize="9" FontWeight="SemiBold"
+                                                           Foreground="{StaticResource SecondaryTextBrush}" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                            <Border CornerRadius="{StaticResource RadiusMd}"
+                                                    Visibility="{Binding ModsTab.EditModpackIconPath, Converter={StaticResource NullToVisibilityConverter}}">
+                                                <Border.Background>
+                                                    <ImageBrush ImageSource="{Binding ModsTab.EditModpackIconPath, Converter={StaticResource CachedImageConverter}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                </Border.Background>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                </Button>
+
+                                <StackPanel VerticalAlignment="Center" Margin="10,0,0,0">
+                                    <Button Content="{DynamicResource String_ChooseBtn}" Style="{StaticResource SecondaryButton}"
+                                            Padding="10,4" FontSize="11" Margin="0,0,0,4"
+                                            Command="{Binding ModsTab.BrowseEditModpackIconCommand}"/>
+                                    <Button Content="{DynamicResource String_RemoveBtn}" Style="{StaticResource GhostButton}"
+                                            Padding="6,2" FontSize="10.5" Foreground="{StaticResource DangerBrush}"
+                                            Command="{Binding ModsTab.ClearEditModpackIconCommand}"
+                                            Visibility="{Binding ModsTab.EditModpackIconPath, Converter={StaticResource NullToVisibilityConverter}}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Name Input Field -->
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="{DynamicResource String_ModpackNameLabel}" Style="{StaticResource CaptionBold}"
+                                       Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,6"/>
+                            <Border Background="{StaticResource SurfaceInputBrush}"
+                                    BorderBrush="{StaticResource SubtleBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="{StaticResource RadiusMd}"
+                                    Padding="12,0"
+                                    MinHeight="38">
+                                <TextBox Text="{Binding ModsTab.EditModpackName, UpdateSourceTrigger=PropertyChanged}"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Foreground="{StaticResource PrimaryTextBrush}"
+                                         CaretBrush="{StaticResource PrimaryTextBrush}"
+                                         FontSize="13"
+                                         Padding="0,8"
+                                         VerticalContentAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="{DynamicResource String_ModpackNameHelp}"
+                                       Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- List Header + Select All / None -->
+                    <Grid Grid.Row="2" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{DynamicResource String_AvailableModsTitle}" Style="{StaticResource CaptionBold}"
+                                   Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Style="{StaticResource GhostButton}" Padding="4,2" Margin="0,0,6,0"
+                                    Command="{Binding ModsTab.SelectAllEditModpackModsCommand}">
+                                <TextBlock Text="{DynamicResource String_SelectAllMods}" FontSize="11" Foreground="{StaticResource AccentBrush}"/>
+                            </Button>
+                            <TextBlock Text="·" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <Button Style="{StaticResource GhostButton}" Padding="4,2"
+                                    Command="{Binding ModsTab.DeselectAllEditModpackModsCommand}">
+                                <TextBlock Text="{DynamicResource String_DeselectAllMods}" FontSize="11" Foreground="{StaticResource MutedTextBrush}"/>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Mods scroll list with circular selection badges (Requirement 10) -->
+                    <Border Grid.Row="3" Background="{StaticResource SurfaceInputBrush}"
+                            BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusMd}" Padding="6" MaxHeight="280" Margin="0,0,0,20">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding ModsTab.EditModpackSelectableMods}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="Transparent" CornerRadius="{StaticResource RadiusSm}"
+                                                Padding="8,6" Margin="0,1">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <!-- Circular selection badge (Requirement 10) -->
+                                                <Border Grid.Column="0" Width="20" Height="20"
+                                                        CornerRadius="10"
+                                                        Margin="0,0,10,0"
+                                                        VerticalAlignment="Center">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="#D9161822"/>
+                                                            <Setter Property="BorderBrush" Value="#80FFFFFF"/>
+                                                            <Setter Property="BorderThickness" Value="1.5"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                                    <Setter Property="Background" Value="#10B981"/>
+                                                                    <Setter Property="BorderBrush" Value="#FFFFFF"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <Path Data="{StaticResource IconCheck}" Fill="#FFFFFF"
+                                                          Stretch="Uniform" Width="10" Height="10"
+                                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                          Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                </Border>
+
+                                                <!-- Mod Thumbnail / Icon with clean corner clipping -->
+                                                <Grid Grid.Column="1" Width="30" Height="30" Margin="0,0,10,0" VerticalAlignment="Center">
+                                                    <Border CornerRadius="{StaticResource RadiusSm}"
+                                                            Background="{StaticResource SurfaceCardElevatedBrush}"
+                                                            BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1">
+                                                        <Path Data="{Binding IconGeometryKey, Converter={StaticResource ResourceKeyConverter}}"
+                                                              Fill="{StaticResource AccentBrush}" Width="14" Height="14" Stretch="Uniform"
+                                                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <Border CornerRadius="{StaticResource RadiusSm}"
+                                                            BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
+                                                            Visibility="{Binding IconUrl, Converter={StaticResource NullToVisibilityConverter}}">
+                                                        <Border.Background>
+                                                            <ImageBrush ImageSource="{Binding IconUrl, Converter={StaticResource CachedImageConverter}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                        </Border.Background>
+                                                    </Border>
+                                                </Grid>
+
+                                                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12.5" Foreground="{StaticResource PrimaryTextBrush}" TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock Text="{Binding Source}" FontSize="10.5" Foreground="{StaticResource MutedTextBrush}" TextTrimming="CharacterEllipsis"/>
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="3" Text="{Binding Version, StringFormat='v{0}'}"
+                                                           FontSize="11" Foreground="{StaticResource SecondaryTextBrush}"
+                                                           VerticalAlignment="Center"/>
+
+                                                <!-- Clickable overlay to toggle selection -->
+                                                <CheckBox Grid.Column="0" Grid.ColumnSpan="4"
+                                                          IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                          Opacity="0" Cursor="Hand"
+                                                          HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+
+                    <!-- Action buttons (Save, Export, Delete, Cancel - Requirement 3) -->
+                    <Grid Grid.Row="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Left buttons: Delete & Export -->
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Style="{StaticResource DangerButton}" Padding="12,7" Margin="0,0,8,0"
+                                    Command="{Binding ModsTab.DeleteModpackCommand}"
+                                    CommandParameter="{Binding ModsTab.ActiveModpackForDetails}"
+                                    ToolTip="{DynamicResource String_DeleteModpack}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Data="{StaticResource IconTrash}" Fill="#FFFFFF"
+                                          Stretch="Uniform" Width="12" Height="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{DynamicResource String_Delete}" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource SecondaryButton}" Padding="12,7"
+                                    Command="{Binding ModsTab.ExportModpackCommand}"
+                                    CommandParameter="{Binding ModsTab.ActiveModpackForDetails}"
+                                    ToolTip="{DynamicResource String_ExportModpack}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Data="{StaticResource IconUpload}" Fill="{StaticResource SecondaryTextBrush}"
+                                          Stretch="Uniform" Width="12" Height="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{DynamicResource String_Export}" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+
+                        <!-- Right buttons: Cancel & Save -->
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Content="{DynamicResource String_Cancel}" Style="{StaticResource SecondaryButton}"
+                                    Margin="0,0,10,0" Padding="16,8"
+                                    Command="{Binding ModsTab.CloseModpackDetailsCommand}"/>
+                            <Button Content="{DynamicResource String_SaveChanges}" Style="{StaticResource PrimaryButton}"
+                                    Padding="18,8"
+                                    Command="{Binding ModsTab.SaveEditModpackCommand}"/>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </Border>
+        </controls:ModalOverlay>
+
+        <!-- ═══ MODPACK DELETE CONFIRMATION MODAL ═══ -->
+        <controls:ModalOverlay IsOpen="{Binding ModsTab.IsDeleteModpackConfirmOpen}"
+                               CloseCommand="{Binding ModsTab.CancelDeleteModpackCommand}"
+                               Panel.ZIndex="1460">
+            <Border Width="420"
+                    Background="{StaticResource SurfaceCardElevatedBrush}"
+                    BorderBrush="{StaticResource StrongBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="24"
+                    SnapsToDevicePixels="True"
+                    UseLayoutRounding="True">
+                <StackPanel>
+                    <!-- Warning Icon & Title -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,14" VerticalAlignment="Center">
+                        <Border Width="38" Height="38" CornerRadius="{StaticResource RadiusSm}"
+                                Background="{StaticResource DangerBgBrush}" BorderBrush="{StaticResource DangerBrush}" BorderThickness="1"
+                                Margin="0,0,12,0" VerticalAlignment="Center">
+                            <Path Data="{StaticResource IconTrash}" Fill="{StaticResource DangerBrush}"
+                                  Width="16" Height="16" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{DynamicResource String_DeleteModpackConfirmTitle}" Style="{StaticResource H2}"/>
+                            <TextBlock Text="{DynamicResource String_ActionCannotBeUndone}" Style="{StaticResource Caption}" Foreground="{StaticResource DangerBrush}" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <TextBlock Text="{DynamicResource String_DeleteModpackConfirmPrompt}"
+                               Style="{StaticResource Body}" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,10"/>
+
+                    <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}"
+                            BorderThickness="1" CornerRadius="{StaticResource RadiusMd}" Padding="12,10" Margin="0,0,0,16">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Path Data="{StaticResource IconMod}" Fill="{StaticResource AccentBrush}" Width="14" Height="14" Stretch="Uniform" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding ModsTab.ModpackPendingDelete.Name}" FontWeight="Bold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding ModsTab.ModpackPendingDelete.ModsCount, StringFormat='  ({0} mods)'}" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="{DynamicResource String_DeleteModpackHelp}"
+                               Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,0,0,22"/>
+
+                    <!-- Action buttons -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="{DynamicResource String_Cancel}" Style="{StaticResource SecondaryButton}"
+                                Margin="0,0,10,0" Padding="16,8"
+                                Command="{Binding ModsTab.CancelDeleteModpackCommand}"/>
+                        <Button Content="{DynamicResource String_Delete}" Style="{StaticResource DangerButton}"
+                                Padding="18,8"
+                                Command="{Binding ModsTab.ConfirmDeleteModpackCommand}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </controls:ModalOverlay>
+
+        <!-- ═══ SINGLE MOD DELETE CONFIRMATION MODAL (REQUIREMENT 9) ═══ -->
+        <controls:ModalOverlay IsOpen="{Binding ModsTab.IsDeleteModConfirmOpen}"
+                               CloseCommand="{Binding ModsTab.CancelDeleteModCommand}"
+                               Panel.ZIndex="1470">
+            <Border Width="420"
+                    Background="{StaticResource SurfaceCardElevatedBrush}"
+                    BorderBrush="{StaticResource StrongBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="24"
+                    SnapsToDevicePixels="True"
+                    UseLayoutRounding="True">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,14" VerticalAlignment="Center">
+                        <Border Width="38" Height="38" CornerRadius="{StaticResource RadiusSm}"
+                                Background="{StaticResource DangerBgBrush}" BorderBrush="{StaticResource DangerBrush}" BorderThickness="1"
+                                Margin="0,0,12,0" VerticalAlignment="Center">
+                            <Path Data="{StaticResource IconTrash}" Fill="{StaticResource DangerBrush}"
+                                  Width="16" Height="16" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{DynamicResource String_DeleteModConfirmTitle}" Style="{StaticResource H2}"/>
+                            <TextBlock Text="{DynamicResource String_ActionCannotBeUndone}" Style="{StaticResource Caption}" Foreground="{StaticResource DangerBrush}" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <TextBlock Text="{DynamicResource String_DeleteModConfirmSubtitle}"
+                               Style="{StaticResource Body}" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,10"/>
+
+                    <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}"
+                            BorderThickness="1" CornerRadius="{StaticResource RadiusMd}" Padding="12,10" Margin="0,0,0,16">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Path Data="{StaticResource IconMod}" Fill="{StaticResource AccentBrush}" Width="14" Height="14" Stretch="Uniform" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding ModsTab.ModPendingDelete.Name}" FontWeight="Bold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding ModsTab.ModPendingDelete.Version, StringFormat='  ({0})'}" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="{DynamicResource String_Cancel}" Style="{StaticResource SecondaryButton}"
+                                Margin="0,0,10,0" Padding="16,8"
+                                Command="{Binding ModsTab.CancelDeleteModCommand}"/>
+                        <Button Content="{DynamicResource String_Delete}" Style="{StaticResource DangerButton}"
+                                Padding="18,8"
+                                Command="{Binding ModsTab.ConfirmDeleteModCommand}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </controls:ModalOverlay>
+
+        <!-- ═══ BULK MODS DELETE CONFIRMATION MODAL (REQUIREMENT 10) ═══ -->
+        <controls:ModalOverlay IsOpen="{Binding ModsTab.IsBulkDeleteModsModalOpen}"
+                               CloseCommand="{Binding ModsTab.CloseBulkDeleteModalCommand}"
+                               Panel.ZIndex="1475">
+            <Border Width="440"
+                    Background="{StaticResource SurfaceCardElevatedBrush}"
+                    BorderBrush="{StaticResource StrongBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="24"
+                    SnapsToDevicePixels="True"
+                    UseLayoutRounding="True">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,14" VerticalAlignment="Center">
+                        <Border Width="38" Height="38" CornerRadius="{StaticResource RadiusSm}"
+                                Background="{StaticResource DangerBgBrush}" BorderBrush="{StaticResource DangerBrush}" BorderThickness="1"
+                                Margin="0,0,12,0" VerticalAlignment="Center">
+                            <Path Data="{StaticResource IconTrash}" Fill="{StaticResource DangerBrush}"
+                                  Width="16" Height="16" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{DynamicResource String_BulkDeleteModsTitle}" Style="{StaticResource H2}"/>
+                            <TextBlock Text="{DynamicResource String_ActionCannotBeUndone}" Style="{StaticResource Caption}" Foreground="{StaticResource DangerBrush}" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <TextBlock Text="{Binding ModsTab.BulkDeleteModsModalSubtitle}"
+                               Style="{StaticResource Body}" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,20"/>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="{DynamicResource String_Cancel}" Style="{StaticResource SecondaryButton}"
+                                Margin="0,0,10,0" Padding="16,8"
+                                Command="{Binding ModsTab.CloseBulkDeleteModalCommand}"/>
+                        <Button Content="{DynamicResource String_DeleteSelected}" Style="{StaticResource DangerButton}"
+                                Padding="18,8"
+                                Command="{Binding ModsTab.ConfirmBulkDeleteModsCommand}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </controls:ModalOverlay>
+
+        <!-- ═══ MOD LOADER UNINSTALL CONFIRMATION MODAL (REQUIREMENT 13) ═══ -->
+        <controls:ModalOverlay IsOpen="{Binding ModsTab.IsUninstallEngineConfirmOpen}"
+                               CloseCommand="{Binding ModsTab.CancelUninstallEngineCommand}"
+                               Panel.ZIndex="1480">
+            <Border Width="450"
+                    Background="{StaticResource SurfaceCardElevatedBrush}"
+                    BorderBrush="{StaticResource StrongBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="24"
+                    SnapsToDevicePixels="True"
+                    UseLayoutRounding="True">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,14" VerticalAlignment="Center">
+                        <Border Width="38" Height="38" CornerRadius="{StaticResource RadiusSm}"
+                                Background="{StaticResource DangerBgBrush}" BorderBrush="{StaticResource DangerBrush}" BorderThickness="1"
+                                Margin="0,0,12,0" VerticalAlignment="Center">
+                            <Path Data="{StaticResource IconTrash}" Fill="{StaticResource DangerBrush}"
+                                  Width="16" Height="16" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{DynamicResource String_UninstallEngineConfirmTitle}" Style="{StaticResource H2}"/>
+                            <TextBlock Text="{DynamicResource String_UninstallEngineConfirmSubtitle}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}"
+                            BorderThickness="1" CornerRadius="{StaticResource RadiusMd}" Padding="14,12" Margin="0,0,0,20">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Path Data="{StaticResource IconFolder}" Fill="{StaticResource AccentBrush}" Width="16" Height="16" Stretch="Uniform" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="{DynamicResource String_UninstallEngineKeepFolderHint}"
+                                       FontSize="11.5" Foreground="{StaticResource PrimaryTextBrush}" TextWrapping="Wrap" MaxWidth="340" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="{DynamicResource String_Cancel}" Style="{StaticResource SecondaryButton}"
+                                Margin="0,0,10,0" Padding="16,8"
+                                Command="{Binding ModsTab.CancelUninstallEngineCommand}"/>
+                        <Button Content="{DynamicResource String_Uninstall}" Style="{StaticResource DangerButton}"
+                                Padding="18,8"
+                                Command="{Binding ModsTab.ConfirmUninstallEngineCommand}"/>
+                    </StackPanel>
+                </StackPanel>
             </Border>
         </controls:ModalOverlay>
     </Grid>

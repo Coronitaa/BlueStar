@@ -808,9 +808,14 @@
         </Setter>
     </Style>
 
+    <!-- Minimum ScrollBar thumb size for application-wide scrollbars -->
+    <sys:Double x:Key="{x:Static SystemParameters.VerticalScrollBarButtonHeightKey}">48</sys:Double>
+    <sys:Double x:Key="{x:Static SystemParameters.HorizontalScrollBarButtonWidthKey}">48</sys:Double>
+
     <Style x:Key="ModernScrollBarThumb" TargetType="Thumb">
         <Setter Property="OverridesDefaultStyle" Value="True"/>
         <Setter Property="IsTabStop" Value="False"/>
+        <Setter Property="MinHeight" Value="48"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Thumb">
@@ -818,6 +823,7 @@
                             Background="#2C3246"
                             CornerRadius="4"
                             Margin="1,2"
+                            MinHeight="48"
                             SnapsToDevicePixels="True"/>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
@@ -835,6 +841,7 @@
     <Style x:Key="ModernScrollBarHorizontalThumb" TargetType="Thumb">
         <Setter Property="OverridesDefaultStyle" Value="True"/>
         <Setter Property="IsTabStop" Value="False"/>
+        <Setter Property="MinWidth" Value="48"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Thumb">
@@ -842,6 +849,7 @@
                             Background="#2C3246"
                             CornerRadius="4"
                             Margin="2,1"
+                            MinWidth="48"
                             SnapsToDevicePixels="True"/>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
@@ -873,7 +881,7 @@
                     <RepeatButton Style="{StaticResource ModernScrollBarPageButton}" Command="ScrollBar.PageUpCommand"/>
                 </Track.DecreaseRepeatButton>
                 <Track.Thumb>
-                    <Thumb Style="{StaticResource ModernScrollBarThumb}"/>
+                    <Thumb Style="{StaticResource ModernScrollBarThumb}" MinHeight="48"/>
                 </Track.Thumb>
                 <Track.IncreaseRepeatButton>
                     <RepeatButton Style="{StaticResource ModernScrollBarPageButton}" Command="ScrollBar.PageDownCommand"/>
@@ -904,7 +912,7 @@
                     <RepeatButton Style="{StaticResource ModernScrollBarPageButton}" Command="ScrollBar.PageLeftCommand"/>
                 </Track.DecreaseRepeatButton>
                 <Track.Thumb>
-                    <Thumb Style="{StaticResource ModernScrollBarHorizontalThumb}"/>
+                    <Thumb Style="{StaticResource ModernScrollBarHorizontalThumb}" MinWidth="48"/>
                 </Track.Thumb>
                 <Track.IncreaseRepeatButton>
                     <RepeatButton Style="{StaticResource ModernScrollBarPageButton}" Command="ScrollBar.PageRightCommand"/>

@@ -21,6 +21,7 @@ public sealed partial class ThunderstorePackageItem : ObservableObject
     public string Name => Package.Name;
     public string Owner => Package.Owner;
     public string FullName => Package.FullName;
+    public string PackageUrl => Package.PackageUrl;
     public string Description => Package.LatestVersion?.Description ?? string.Empty;
     public string? IconUrl => Package.LatestVersion?.IconUrl;
     public IReadOnlyList<string> Categories => Package.Categories;

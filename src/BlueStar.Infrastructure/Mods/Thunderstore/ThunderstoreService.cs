@@ -337,6 +337,12 @@ public sealed class ThunderstoreService : IThunderstoreService
         }
     }
 
+    private static string NormalizeTerm(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+        return text.Replace("-", "").Replace("_", "").Replace(" ", "").Trim();
+    }
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<ThunderstorePackage>> SearchPackagesAsync(
         string community,
@@ -344,35 +350,158 @@ public sealed class ThunderstoreService : IThunderstoreService
         string? category = null,
         string sortBy = "Downloads",
         bool isAscending = false,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        IEnumerable<string>? includedCategories = null,
+        IEnumerable<string>? excludedCategories = null)
     {
         var all = await GetPackagesAsync(community, ct).ConfigureAwait(false);
         if (all.Count == 0) return [];
 
-        var filtered = all.Where(p => !p.IsDeprecated);
+        // Exclude deprecated packages and mod managers / loaders (r2modman, BepInExPack) that are not mods
+        var filtered = all.Where(p =>
+            !p.IsDeprecated &&
+            !p.Name.Equals("r2modman", StringComparison.OrdinalIgnoreCase) &&
+            !p.FullName.Contains("r2modman", StringComparison.OrdinalIgnoreCase) &&
+            !p.Name.StartsWith("BepInExPack", StringComparison.OrdinalIgnoreCase) &&
+            !p.FullName.Contains("BepInExPack", StringComparison.OrdinalIgnoreCase) &&
+            !p.Name.Equals("BepInEx", StringComparison.OrdinalIgnoreCase));
 
-        if (!string.IsNullOrWhiteSpace(category) && !category.Equals("All", StringComparison.OrdinalIgnoreCase))
+        if (includedCategories != null && includedCategories.Any())
+        {
+            var incList = includedCategories.Where(c => !string.IsNullOrWhiteSpace(c) && !c.Equals("All", StringComparison.OrdinalIgnoreCase)).ToList();
+            if (incList.Count > 0)
+            {
+                filtered = filtered.Where(p => incList.All(inc => p.Categories.Any(c => c.Equals(inc, StringComparison.OrdinalIgnoreCase))));
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(category) && !category.Equals("All", StringComparison.OrdinalIgnoreCase))
         {
             filtered = filtered.Where(p => p.Categories.Any(c => c.Equals(category, StringComparison.OrdinalIgnoreCase)));
         }
 
-        if (!string.IsNullOrWhiteSpace(query))
+        if (excludedCategories != null && excludedCategories.Any())
         {
-            var terms = query.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            filtered = filtered.Where(p => terms.All(term =>
-                p.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ||
-                p.Owner.Contains(term, StringComparison.OrdinalIgnoreCase) ||
-                p.Description.Contains(term, StringComparison.OrdinalIgnoreCase) ||
-                p.Categories.Any(c => c.Contains(term, StringComparison.OrdinalIgnoreCase))));
+            var excList = excludedCategories.Where(c => !string.IsNullOrWhiteSpace(c) && !c.Equals("All", StringComparison.OrdinalIgnoreCase)).ToList();
+            if (excList.Count > 0)
+            {
+                filtered = filtered.Where(p => !excList.Any(exc => p.Categories.Any(c => c.Equals(exc, StringComparison.OrdinalIgnoreCase))));
+            }
         }
 
+        var trimmedQuery = query?.Trim();
+        var hasQuery = !string.IsNullOrWhiteSpace(trimmedQuery);
+
+        if (hasQuery)
+        {
+            var q = trimmedQuery!;
+            var normQuery = NormalizeTerm(q);
+            var terms = q.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+            filtered = filtered.Where(p =>
+            {
+                var normName = NormalizeTerm(p.Name);
+                var normFull = NormalizeTerm(p.FullName);
+
+                // Direct exact or substring match in Name, FullName, Owner, Description, Categories
+                if (normName.Contains(normQuery, StringComparison.OrdinalIgnoreCase) ||
+                    normFull.Contains(normQuery, StringComparison.OrdinalIgnoreCase) ||
+                    p.Owner.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    p.Description.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    p.Categories.Any(c => c.Contains(q, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return true;
+                }
+
+                // If multiple terms, check if all terms appear in the mod or if any term appears in the mod name
+                if (terms.Length > 1)
+                {
+                    if (terms.All(t =>
+                        p.Name.Contains(t, StringComparison.OrdinalIgnoreCase) ||
+                        p.FullName.Contains(t, StringComparison.OrdinalIgnoreCase) ||
+                        p.Owner.Contains(t, StringComparison.OrdinalIgnoreCase) ||
+                        p.Description.Contains(t, StringComparison.OrdinalIgnoreCase) ||
+                        p.Categories.Any(c => c.Contains(t, StringComparison.OrdinalIgnoreCase))))
+                    {
+                        return true;
+                    }
+
+                    if (terms.Any(t => t.Length >= 3 && normName.Contains(NormalizeTerm(t), StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            });
+        }
+
+        // Determine if sort is Relevance/Default ("Ordenar" or empty)
+        var isRelevanceSort = string.IsNullOrWhiteSpace(sortBy) ||
+                              sortBy.Equals("Relevance", StringComparison.OrdinalIgnoreCase) ||
+                              sortBy.Equals("Ordenar", StringComparison.OrdinalIgnoreCase);
+
+        if (isRelevanceSort)
+        {
+            if (hasQuery)
+            {
+                var q = trimmedQuery!;
+                var normQuery = NormalizeTerm(q);
+                var terms = q.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+                // Rank by relevance score: best matches at the TOP!
+                return filtered
+                    .OrderByDescending(p =>
+                    {
+                        double score = 0;
+                        var normName = NormalizeTerm(p.Name);
+
+                        if (p.Name.Equals(q, StringComparison.OrdinalIgnoreCase)) score += 10000;
+                        else if (normName.Equals(normQuery, StringComparison.OrdinalIgnoreCase)) score += 8000;
+                        else if (p.Name.StartsWith(q, StringComparison.OrdinalIgnoreCase)) score += 5000;
+                        else if (normName.StartsWith(normQuery, StringComparison.OrdinalIgnoreCase)) score += 4000;
+                        else if (p.Name.Contains(q, StringComparison.OrdinalIgnoreCase)) score += 3000;
+                        else if (normName.Contains(normQuery, StringComparison.OrdinalIgnoreCase)) score += 2500;
+                        else if (p.FullName.Contains(q, StringComparison.OrdinalIgnoreCase)) score += 1500;
+
+                        if (terms.Length > 1)
+                        {
+                            var matchingTermsInName = terms.Count(t => p.Name.Contains(t, StringComparison.OrdinalIgnoreCase));
+                            score += matchingTermsInName * 600;
+                        }
+
+                        if (p.Owner.Contains(q, StringComparison.OrdinalIgnoreCase)) score += 300;
+                        if (p.Categories.Any(c => c.Contains(q, StringComparison.OrdinalIgnoreCase))) score += 200;
+                        if (p.Description.Contains(q, StringComparison.OrdinalIgnoreCase)) score += 100;
+
+                        // Tie-breakers: logarithmic downloads + rating + pinned
+                        score += Math.Min(60, Math.Log10(Math.Max(1, p.TotalDownloads)) * 6);
+                        score += Math.Min(30, p.RatingScore / 50.0);
+                        if (p.IsPinned) score += 100;
+
+                        return score;
+                    })
+                    .ThenByDescending(p => p.TotalDownloads)
+                    .ToList();
+            }
+            else
+            {
+                // Default without search: Most popular downloads first
+                return filtered
+                    .OrderByDescending(p => p.IsPinned)
+                    .ThenByDescending(p => p.TotalDownloads)
+                    .ToList();
+            }
+        }
+
+        // Explicit user sorting
         if (isAscending)
         {
             return sortBy switch
             {
-                "Rating" => filtered.OrderBy(p => p.RatingScore).ToList(),
-                "Updated" => filtered.OrderBy(p => p.DateUpdated).ToList(),
-                "Name" => filtered.OrderByDescending(p => p.Name).ToList(),
+                "Rating" or "Calificación" => filtered.OrderBy(p => p.RatingScore).ToList(),
+                "Updated" or "Actualizado" => filtered.OrderBy(p => p.DateUpdated).ToList(),
+                "Name" or "Nombre" => filtered.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList(),
+                "Downloads" or "Descargas" => filtered.OrderBy(p => p.TotalDownloads).ToList(),
                 _ => filtered.OrderBy(p => p.TotalDownloads).ToList()
             };
         }
@@ -380,9 +509,10 @@ public sealed class ThunderstoreService : IThunderstoreService
         {
             return sortBy switch
             {
-                "Rating" => filtered.OrderByDescending(p => p.IsPinned).ThenByDescending(p => p.RatingScore).ToList(),
-                "Updated" => filtered.OrderByDescending(p => p.IsPinned).ThenByDescending(p => p.DateUpdated).ToList(),
-                "Name" => filtered.OrderBy(p => p.Name).ToList(),
+                "Rating" or "Calificación" => filtered.OrderByDescending(p => p.IsPinned).ThenByDescending(p => p.RatingScore).ToList(),
+                "Updated" or "Actualizado" => filtered.OrderByDescending(p => p.IsPinned).ThenByDescending(p => p.DateUpdated).ToList(),
+                "Name" or "Nombre" => filtered.OrderByDescending(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList(),
+                "Downloads" or "Descargas" => filtered.OrderByDescending(p => p.IsPinned).ThenByDescending(p => p.TotalDownloads).ToList(),
                 _ => filtered.OrderByDescending(p => p.IsPinned).ThenByDescending(p => p.TotalDownloads).ToList()
             };
         }
@@ -470,7 +600,8 @@ public sealed class ThunderstoreService : IThunderstoreService
                 Provider = "thunderstore",
                 RemoteId = $"{community}:{package.Owner}:{package.Name}",
                 Version = version.VersionNumber,
-                PageUrl = package.PackageUrl
+                PageUrl = package.PackageUrl,
+                IconUrl = !string.IsNullOrWhiteSpace(version.IconUrl) ? version.IconUrl : package.IconUrl
             },
             Layout = ModPackageLayout.BepInExPackage
         };

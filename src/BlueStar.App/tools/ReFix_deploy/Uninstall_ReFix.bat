@@ -79,7 +79,22 @@ for /f "delims=" %%W in ('dir /s /b "%TARGET_DIR%\winmm_o.dll" 2^>nul') do (
     echo [OK] Restored original winmm.dll in "%%~dpW"
 )
 
-:: 2. Restore original steam_api64.dll and steam_api.dll from backup
+:: 2. Restore original steam_api64.dll and steam_api.dll from backup.
+::    *_original.dll is the game's pristine DLL and wins: in Re:Goldberg deploys *_valve.dll is the emulator.
+for /f "delims=" %%V in ('dir /s /b "%TARGET_DIR%\steam_api64_original.dll" 2^>nul') do (
+    if exist "%%~dpVsteam_api64.dll" del /f /q "%%~dpVsteam_api64.dll"
+    if exist "%%~dpVsteam_api64_valve.dll" del /f /q "%%~dpVsteam_api64_valve.dll"
+    if exist "%%~dpVsteam_api64_o.dll" del /f /q "%%~dpVsteam_api64_o.dll"
+    ren "%%V" "steam_api64.dll"
+    echo [OK] Restored original steam_api64.dll in "%%~dpV"
+)
+for /f "delims=" %%V in ('dir /s /b "%TARGET_DIR%\steam_api_original.dll" 2^>nul') do (
+    if exist "%%~dpVsteam_api.dll" del /f /q "%%~dpVsteam_api.dll"
+    if exist "%%~dpVsteam_api_valve.dll" del /f /q "%%~dpVsteam_api_valve.dll"
+    if exist "%%~dpVsteam_api_o.dll" del /f /q "%%~dpVsteam_api_o.dll"
+    ren "%%V" "steam_api.dll"
+    echo [OK] Restored original steam_api.dll in "%%~dpV"
+)
 for /f "delims=" %%V in ('dir /s /b "%TARGET_DIR%\steam_api64_valve.dll" "%TARGET_DIR%\steam_api64_o.dll" 2^>nul') do (
     if exist "%%~dpVsteam_api64.dll" del /f /q "%%~dpVsteam_api64.dll"
     ren "%%V" "steam_api64.dll"

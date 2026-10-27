@@ -18,6 +18,7 @@ public sealed record ModSourceRef
     public string? Version { get; init; }
     public string? FileId { get; init; }
     public string? PageUrl { get; init; }
+    public string? IconUrl { get; init; }
 
     /// <summary>Stable ledger id for this source, e.g. "thunderstore:denikson-BepInExPack_Valheim".</summary>
     [JsonIgnore]

@@ -111,14 +111,23 @@ public class DependencyInjectionTests
         var staticResourceRegex = new System.Text.RegularExpressions.Regex(@"StaticResource\s+([a-zA-Z0-9_]+)");
         var dynamicResourceRegex = new System.Text.RegularExpressions.Regex(@"DynamicResource\s+([a-zA-Z0-9_]+)");
 
+        var duplicateKeys = new List<string>();
         foreach (var file in xamlFiles)
         {
             var content = File.ReadAllText(file);
+            var fileKeys = new HashSet<string>(StringComparer.Ordinal);
             foreach (System.Text.RegularExpressions.Match match in keyRegex.Matches(content))
             {
-                definedKeys.Add(match.Groups[1].Value);
+                var key = match.Groups[1].Value;
+                if (!fileKeys.Add(key))
+                {
+                    duplicateKeys.Add($"{Path.GetFileName(file)} -> {key}");
+                }
+                definedKeys.Add(key);
             }
         }
+
+        duplicateKeys.Should().BeEmpty("resource dictionaries must not contain duplicate x:Key entries as this crashes WPF on launch");
 
         var missing = new List<string>();
         foreach (var file in xamlFiles)

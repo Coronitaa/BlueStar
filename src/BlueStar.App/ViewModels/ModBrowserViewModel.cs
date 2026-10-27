@@ -35,9 +35,13 @@ public sealed partial class ModBrowserViewModel : ObservableObject
         if (Thunderstore != null)
         {
             Thunderstore.OnCloseRequested = Close;
+            Thunderstore.OpenModPageAction = (title, url) => OpenModPageAction?.Invoke(title, url);
             Thunderstore.PropertyChanged += OnThunderstorePropertyChanged;
         }
     }
+
+    /// <summary>Notification callback when clicking on a package or mod to view its web page.</summary>
+    public Action<string, string>? OpenModPageAction { get; set; }
 
     public WorkshopBrowserViewModel Workshop { get; }
     public ThunderstoreBrowserViewModel? Thunderstore { get; }

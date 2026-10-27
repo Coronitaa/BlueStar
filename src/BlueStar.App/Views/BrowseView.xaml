@@ -1119,7 +1119,7 @@
                                             <Setter Property="ItemTemplate" Value="{StaticResource SkeletonRowTemplate}"/>
                                             <Setter Property="ItemsPanel">
                                                 <Setter.Value>
-                                                    <ItemsPanelTemplate><VirtualizingStackPanel Orientation="Vertical"/></ItemsPanelTemplate>
+                                                    <ItemsPanelTemplate><ctrl:VirtualizingWrapPanel ItemWidth="0" ItemHeight="110"/></ItemsPanelTemplate>
                                                 </Setter.Value>
                                             </Setter>
                                         </DataTrigger>
@@ -1153,7 +1153,7 @@
                                             <Setter Property="ItemsPanel">
                                                 <Setter.Value>
                                                     <ItemsPanelTemplate>
-                                                        <VirtualizingStackPanel Orientation="Vertical"/>
+                                                        <ctrl:VirtualizingWrapPanel ItemWidth="0" ItemHeight="110"/>
                                                     </ItemsPanelTemplate>
                                                 </Setter.Value>
                                             </Setter>

@@ -18,6 +18,7 @@ namespace BlueStar.App.Tests;
 public sealed class ModsTabViewModelTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "bluestar_modstab_" + Guid.NewGuid().ToString("N"));
+    private readonly Guid _instanceId = Guid.NewGuid();
     private readonly string _gameDir;
     private readonly ModInstallPipeline _pipeline;
     private readonly Mock<IModManager> _legacy = new();
@@ -39,11 +40,19 @@ public sealed class ModsTabViewModelTests : IDisposable
     public void Dispose()
     {
         try { Directory.Delete(_root, recursive: true); } catch (IOException) { }
+        try
+        {
+            var modpackDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "BlueStar", "instances", _instanceId.ToString());
+            if (Directory.Exists(modpackDir)) Directory.Delete(modpackDir, recursive: true);
+        }
+        catch { }
     }
 
     private GameInstance Instance() => new()
     {
-        Id = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
+        Id = _instanceId,
         Name = "Test Game",
         InstallPath = _gameDir
     };
@@ -463,5 +472,485 @@ public sealed class ModsTabViewModelTests : IDisposable
         tab.ClearStatusCommand.Execute(null);
         tab.StatusMessage.Should().BeNull();
     }
-}
 
+    [Fact]
+    public void Sort_ToggleDirection_AndSelectSort_UpdatesState()
+    {
+        var tab = CreateTab();
+        tab.SelectedSort.Should().Be("Name");
+        tab.SelectedSortDisplayName.Should().Be("Nombre");
+        tab.IsSortDescending.Should().BeFalse();
+
+        // Toggle sort direction
+        tab.ToggleSortDirectionCommand.Execute(null);
+        tab.IsSortDescending.Should().BeTrue();
+
+        // Select sort criteria
+        tab.SelectSortCommand.Execute("Status");
+        tab.SelectedSort.Should().Be("Status");
+        tab.SelectedSortDisplayName.Should().Be("Estado");
+        tab.IsSortDropdownOpen.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Modpacks_Create_Select_And_Delete()
+    {
+        var tab = CreateTab();
+        tab.Items.Add(new ModListItem
+        {
+            Id = "mod-1",
+            Name = "Mod 1",
+            Version = "1.0.0",
+            SourceLabel = "Local",
+            IsEnabled = true
+        });
+
+        // Open create modpack dialog
+        tab.OpenCreateModpackCommand.Execute(null);
+        tab.IsCreateModpackOpen.Should().BeTrue();
+        tab.CreateModpackSelectableMods.Should().ContainSingle();
+
+        // Set name and confirm
+        tab.NewModpackName = "MyTestPack";
+        tab.ConfirmCreateModpackCommand.Execute(null);
+
+        tab.IsCreateModpackOpen.Should().BeFalse();
+        tab.Modpacks.Should().Contain(m => m.Name == "MyTestPack");
+        tab.SelectedModpack.Should().NotBeNull();
+        tab.SelectedModpack!.Name.Should().Be("MyTestPack");
+
+        var created = tab.Modpacks.First(m => m.Name == "MyTestPack");
+
+        // Open details modal first (as happens in UI when clicking active pack)
+        tab.OpenModpackDetails(created);
+        tab.IsModpackDetailsOpen.Should().BeTrue();
+        tab.ActiveModpackForDetails.Should().Be(created);
+
+        // Delete modpack requests confirmation first
+        tab.DeleteModpackCommand.Execute(created);
+
+        tab.IsDeleteModpackConfirmOpen.Should().BeTrue();
+        tab.ModpackPendingDelete.Should().Be(created);
+
+        // Cancel deletion leaves modpack untouched and details still open
+        tab.CancelDeleteModpackCommand.Execute(null);
+        tab.IsDeleteModpackConfirmOpen.Should().BeFalse();
+        tab.Modpacks.Should().Contain(m => m.Name == "MyTestPack");
+
+        // Confirm deletion removes it and closes details modal
+        tab.DeleteModpackCommand.Execute(created);
+        tab.ConfirmDeleteModpackCommand.Execute(null);
+
+        tab.IsDeleteModpackConfirmOpen.Should().BeFalse();
+        tab.IsModpackDetailsOpen.Should().BeFalse();
+        tab.ActiveModpackForDetails.Should().BeNull();
+        tab.Modpacks.Should().NotContain(m => m.Name == "MyTestPack");
+        tab.SelectedModpack.Should().BeNull();
+    }
+
+    [Fact]
+    public void ModPageModal_OpenModDetail_And_Close()
+    {
+        var tab = CreateTab();
+        string? navigatedUrl = null;
+        tab.OnNavigateModPage += url => navigatedUrl = url;
+
+        var mod = new ModListItem
+        {
+            Id = "backpack-mod",
+            Name = "BackpackMod",
+            Author = "author",
+            Version = "1.0.0",
+            SourceLabel = "Thunderstore",
+            PageUrl = "https://thunderstore.io/package/author/BackpackMod/"
+        };
+
+        // Act: Open mod detail
+        tab.OpenModDetailCommand.Execute(mod);
+
+        // Assert
+        tab.IsModPageModalOpen.Should().BeTrue();
+        tab.ModPageTitle.Should().Be("BackpackMod");
+        tab.ModPageUrl.Should().Be("https://thunderstore.io/package/author/BackpackMod/");
+        navigatedUrl.Should().Be("https://thunderstore.io/package/author/BackpackMod/");
+
+        // Act: Close
+        tab.CloseModPageCommand.Execute(null);
+
+        // Assert
+        tab.IsModPageModalOpen.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Modpack_WithCustomProfileImage_SavesAndPersistsIcon()
+    {
+        var iconFile = ModFile("avatar.png", "fake-image-bytes");
+        var tab = CreateTab();
+        tab.Items.Add(new ModListItem
+        {
+            Id = "icon-mod",
+            Name = "Icon Mod",
+            Version = "1.0",
+            SourceLabel = "Local",
+            IsEnabled = true
+        });
+        tab.PickModpackIconFile = () => iconFile;
+
+        // Open create modpack dialog
+        tab.OpenCreateModpackCommand.Execute(null);
+        tab.IsCreateModpackOpen.Should().BeTrue();
+        tab.NewModpackIconPath.Should().BeNull();
+
+        // Browse icon
+        tab.BrowseModpackIconCommand.Execute(null);
+        tab.NewModpackIconPath.Should().Be(iconFile);
+
+        // Clear icon test
+        tab.ClearModpackIconCommand.Execute(null);
+        tab.NewModpackIconPath.Should().BeNull();
+
+        // Browse again and confirm
+        tab.BrowseModpackIconCommand.Execute(null);
+        tab.NewModpackName = "IconicPack";
+        tab.ConfirmCreateModpackCommand.Execute(null);
+
+        // Assert
+        tab.IsCreateModpackOpen.Should().BeFalse();
+        tab.SelectedModpack.Should().NotBeNull();
+        tab.SelectedModpack!.Name.Should().Be("IconicPack");
+        tab.SelectedModpack.IconPath.Should().NotBeNullOrWhiteSpace();
+        File.Exists(tab.SelectedModpack.IconPath).Should().BeTrue();
+    }
+
+    [Fact]
+    public void CreateModpack_WithZeroModsSelected_DoesNotCreateAndShowsError()
+    {
+        var tab = CreateTab();
+        tab.Items.Add(new ModListItem
+        {
+            Id = "mod-1",
+            Name = "Mod 1",
+            Version = "1.0.0",
+            SourceLabel = "Local",
+            IsEnabled = true
+        });
+
+        tab.OpenCreateModpackCommand.Execute(null);
+        tab.IsCreateModpackOpen.Should().BeTrue();
+
+        // Deselect all mods
+        tab.DeselectAllCreateModpackModsCommand.Execute(null);
+        tab.CreateModpackSelectableMods.All(m => !m.IsSelected).Should().BeTrue();
+
+        tab.NewModpackName = "EmptyPack";
+        tab.ConfirmCreateModpackCommand.Execute(null);
+
+        // Should NOT create modpack
+        tab.IsCreateModpackOpen.Should().BeTrue();
+        tab.Modpacks.Should().NotContain(m => m.Name == "EmptyPack");
+        tab.IsStatusError.Should().BeTrue();
+        tab.StatusMessage.Should().Contain("al menos un mod");
+    }
+
+    [Fact]
+    public void ModEngineTitle_ReflectsEngineOrBepInExOrNative()
+    {
+        var tab = CreateTab();
+
+        // Default unsupported
+        tab.IsEngineSupported = false;
+        tab.EngineName = null;
+        tab.ModEngineTitle.Should().Be("Mods Nativos");
+
+        // Supported Unity game without custom engine name
+        tab.IsEngineSupported = true;
+        tab.EngineName = null;
+        tab.ModEngineTitle.Should().Be("BepInEx");
+
+        // Explicit engine name
+        tab.EngineName = "BepInEx 5";
+        tab.ModEngineTitle.Should().Be("BepInEx 5");
+    }
+
+    [Fact]
+    public void ClearSearchCommand_ClearsSearchText()
+    {
+        var tab = CreateTab();
+        tab.SearchText = "somemod";
+        tab.SearchText.Should().Be("somemod");
+
+        tab.ClearSearchCommand.Execute(null);
+        tab.SearchText.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CreateModpack_PopulatesModsWithIconUrlAndGeometryKey()
+    {
+        var tab = CreateTab();
+        tab.Items.Add(new ModListItem
+        {
+            Id = "test-mod",
+            Name = "TestMod",
+            Version = "1.2.3",
+            SourceLabel = "Thunderstore",
+            IconUrl = "https://example.com/icon.png",
+            IsEnabled = true
+        });
+
+        tab.OpenCreateModpackCommand.Execute(null);
+
+        tab.CreateModpackSelectableMods.Should().ContainSingle();
+        var item = tab.CreateModpackSelectableMods[0];
+        item.Name.Should().Be("TestMod");
+        item.IconUrl.Should().Be("https://example.com/icon.png");
+        item.IconGeometryKey.Should().Be("IconBolt");
+        item.IsSelected.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Modpacks_SingleActiveConstraint_OnlyOneActiveAtAnyTime()
+    {
+        var tab = CreateTab();
+        tab.Items.Add(new ModListItem
+        {
+            Id = "test-mod",
+            Name = "Test Mod",
+            Version = "1.0",
+            SourceLabel = "Local",
+            IsEnabled = true
+        });
+
+        // 1. Initial state: Default is active, no custom modpack selected
+        tab.SelectedModpack.Should().BeNull();
+        tab.IsDefaultModpackActive.Should().BeTrue();
+
+        // 2. Create PackA
+        tab.OpenCreateModpackCommand.Execute(null);
+        tab.NewModpackName = "PackA";
+        tab.ConfirmCreateModpackCommand.Execute(null);
+
+        var packA = tab.Modpacks.First(m => m.Name == "PackA");
+        tab.SelectedModpack.Should().Be(packA);
+        packA.IsActive.Should().BeTrue();
+        tab.IsDefaultModpackActive.Should().BeFalse();
+
+        // 3. Create PackB
+        tab.OpenCreateModpackCommand.Execute(null);
+        tab.NewModpackName = "PackB";
+        tab.ConfirmCreateModpackCommand.Execute(null);
+
+        var packB = tab.Modpacks.First(m => m.Name == "PackB");
+        tab.SelectedModpack.Should().Be(packB);
+        packB.IsActive.Should().BeTrue();
+        packA.IsActive.Should().BeFalse();
+        tab.IsDefaultModpackActive.Should().BeFalse();
+
+        // 4. Switch back to PackA
+        await tab.ApplyModpackAsync(packA);
+        tab.SelectedModpack.Should().Be(packA);
+        packA.IsActive.Should().BeTrue();
+        packB.IsActive.Should().BeFalse();
+        tab.IsDefaultModpackActive.Should().BeFalse();
+
+        // 5. Switch to Default
+        tab.SelectDefaultModpackCommand.Execute(null);
+        tab.SelectedModpack.Should().BeNull();
+        tab.IsDefaultModpackActive.Should().BeTrue();
+        packA.IsActive.Should().BeFalse();
+        packB.IsActive.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Modpacks_CanSwitchBetweenDefaultAndCreatedModpack()
+    {
+        var tab = CreateTab();
+        tab.Items.Add(new ModListItem
+        {
+            Id = "mod1",
+            Name = "Mod One",
+            Version = "1.0",
+            SourceLabel = "Thunderstore",
+            IsEnabled = true
+        });
+
+        tab.IsDefaultModpackActive.Should().BeTrue();
+        tab.SelectedModpack.Should().BeNull();
+
+        // Create Modpack 1
+        tab.OpenCreateModpackCommand.Execute(null);
+        tab.NewModpackName = "Modpack 1";
+        tab.ConfirmCreateModpackCommand.Execute(null);
+
+        var pack1 = tab.Modpacks.First(m => m.Name == "Modpack 1");
+        tab.SelectedModpack.Should().Be(pack1);
+        pack1.IsActive.Should().BeTrue();
+        tab.IsDefaultModpackActive.Should().BeFalse();
+
+        // Switch to Default via SelectDefaultModpackCommand
+        tab.SelectDefaultModpackCommand.Execute(null);
+        tab.SelectedModpack.Should().BeNull();
+        tab.IsDefaultModpackActive.Should().BeTrue();
+        pack1.IsActive.Should().BeFalse();
+
+        // Switch back to Modpack 1 via ApplyModpackCommand
+        tab.ApplyModpackCommand.Execute(pack1);
+        tab.SelectedModpack.Should().Be(pack1);
+        pack1.IsActive.Should().BeTrue();
+        tab.IsDefaultModpackActive.Should().BeFalse();
+
+        // Clicking Modpack 1 again opens details modal
+        tab.ApplyModpackCommand.Execute(pack1);
+        tab.IsModpackDetailsOpen.Should().BeTrue();
+        tab.ActiveModpackForDetails.Should().Be(pack1);
+    }
+
+    [Fact]
+    public void ModpackBlocks_ToggleCommand_TogglesVisibility()
+    {
+        var tab = CreateTab();
+
+        tab.ShowModpackBlocks.Should().BeTrue();
+
+        tab.ToggleModpackBlocksCommand.Execute(null);
+        tab.ShowModpackBlocks.Should().BeFalse();
+
+        tab.ToggleModpackBlocksCommand.Execute(null);
+        tab.ShowModpackBlocks.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ModpackViewMode_ToggleCommand_SwitchesBetweenBlocksAndList()
+    {
+        var tab = CreateTab();
+
+        // Default: Block view is active, shows active format (IconGridView)
+        tab.IsModpackBlockView.Should().BeTrue();
+        tab.ModpackViewIconGeometryKey.Should().Be("IconGridView");
+        tab.ModpackViewModeButtonLabel.Should().Contain("bloques");
+
+        // Toggle to list view: shows active format (IconListView)
+        tab.ToggleModpackViewModeCommand.Execute(null);
+        tab.IsModpackBlockView.Should().BeFalse();
+        tab.ModpackViewIconGeometryKey.Should().Be("IconListView");
+        tab.ModpackViewModeButtonLabel.Should().Contain("lista");
+
+        // Toggle back to block view
+        tab.ToggleModpackViewModeCommand.Execute(null);
+        tab.IsModpackBlockView.Should().BeTrue();
+        tab.ModpackViewIconGeometryKey.Should().Be("IconGridView");
+        tab.ModpackViewModeButtonLabel.Should().Contain("bloques");
+    }
+
+    [Fact]
+    public void SelectionMode_ToggleAndSelect_UpdatesCounts()
+    {
+        var tab = CreateTab();
+        var item1 = new ModListItem { Id = "mod-1", Name = "Mod 1", FormattedSize = "1 MB", SourceLabel = "Local" };
+        var item2 = new ModListItem { Id = "mod-2", Name = "Mod 2", FormattedSize = "2 MB", SourceLabel = "Local" };
+        tab.Items.Add(item1);
+        tab.Items.Add(item2);
+
+        tab.IsSelectionModeActive.Should().BeFalse();
+        tab.ToggleSelectionModeCommand.Execute(null);
+        tab.IsSelectionModeActive.Should().BeTrue();
+
+        tab.ToggleModSelectionCommand.Execute(item1);
+        item1.IsSelected.Should().BeTrue();
+        tab.SelectedModsCount.Should().Be(1);
+        tab.HasSelectedMods.Should().BeTrue();
+
+        tab.ClearSelectionCommand.Execute(null);
+        item1.IsSelected.Should().BeFalse();
+        tab.SelectedModsCount.Should().Be(0);
+        tab.HasSelectedMods.Should().BeFalse();
+
+        tab.ExitSelectionModeCommand.Execute(null);
+        tab.IsSelectionModeActive.Should().BeFalse();
+    }
+
+    [Fact]
+    public void SingleModDelete_ConfirmationModalFlow()
+    {
+        var tab = CreateTab();
+        var item = new ModListItem { Id = "mod-test", Name = "Test Mod", FormattedSize = "1 MB", SourceLabel = "Local" };
+        tab.Items.Add(item);
+
+        tab.IsDeleteModConfirmOpen.Should().BeFalse();
+        tab.RequestDeleteModCommand.Execute(item);
+        tab.IsDeleteModConfirmOpen.Should().BeTrue();
+        tab.ModPendingDelete.Should().Be(item);
+
+        tab.CancelDeleteModCommand.Execute(null);
+        tab.IsDeleteModConfirmOpen.Should().BeFalse();
+        tab.ModPendingDelete.Should().BeNull();
+    }
+
+    [Fact]
+    public void LoaderUninstall_ConfirmationModalFlow()
+    {
+        var tab = CreateTab();
+        tab.IsUninstallEngineConfirmOpen.Should().BeFalse();
+        tab.RequestUninstallEngineCommand.Execute(null);
+        tab.IsUninstallEngineConfirmOpen.Should().BeTrue();
+
+        tab.CancelUninstallEngineCommand.Execute(null);
+        tab.IsUninstallEngineConfirmOpen.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Modpacks_SelectingModpack_DeactivatesModsNotInModpack()
+    {
+        var tab = CreateTab();
+        var mod1 = new ModListItem
+        {
+            Id = "mod1",
+            Name = "Mod One",
+            Version = "1.0",
+            SourceLabel = "Local",
+            IsEnabled = true
+        };
+        var mod2 = new ModListItem
+        {
+            Id = "mod2",
+            Name = "Mod Two",
+            Version = "1.0",
+            SourceLabel = "Local",
+            IsEnabled = true
+        };
+        tab.Items.Add(mod1);
+        tab.Items.Add(mod2);
+
+        // Create modpack containing ONLY mod1
+        tab.OpenCreateModpackCommand.Execute(null);
+        tab.NewModpackName = "PackOnlyMod1";
+        // Uncheck mod2
+        var mod2Item = tab.CreateModpackSelectableMods.First(m => m.Id == "mod2");
+        mod2Item.IsSelected = false;
+        await tab.ConfirmCreateModpackAsync();
+
+        // mod1 should remain enabled, mod2 should be disabled
+        mod1.IsEnabled.Should().BeTrue();
+        mod2.IsEnabled.Should().BeFalse();
+        tab.SelectedModpack!.Name.Should().Be("PackOnlyMod1");
+
+        // Selecting default modpack re-enables all mods
+        await tab.SelectDefaultModpackAsync();
+        mod1.IsEnabled.Should().BeTrue();
+        mod2.IsEnabled.Should().BeTrue();
+        tab.SelectedModpack.Should().BeNull();
+        tab.IsDefaultModpackActive.Should().BeTrue();
+
+        // Applying PackOnlyMod1 again deactivates mod2 again
+        var pack = tab.Modpacks.First(m => m.Name == "PackOnlyMod1");
+        await tab.ApplyModpackAsync(pack);
+        mod1.IsEnabled.Should().BeTrue();
+        mod2.IsEnabled.Should().BeFalse();
+        tab.SelectedModpack.Should().Be(pack);
+
+        // Toggling mod2 manually while pack is active resets to default profile
+        await tab.ToggleAsync(mod2);
+        tab.SelectedModpack.Should().BeNull();
+        tab.IsDefaultModpackActive.Should().BeTrue();
+    }
+
+}

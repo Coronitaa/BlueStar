@@ -29,8 +29,22 @@ public sealed class ImageCacheService
 
     private readonly ConcurrentDictionary<string, BitmapSource> _memoryCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Task<BitmapSource?>> _inFlightTasks = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentQueue<string> _memoryCacheOrder = new();
+    private const int MaxMemoryCacheEntries = 150;
     private readonly string _diskCacheFolder;
     private readonly HttpClient _httpClient;
+
+    private void SetMemoryCache(string key, BitmapSource bmp)
+    {
+        _memoryCache[key] = bmp;
+        _memoryCacheOrder.Enqueue(key);
+
+        while (_memoryCache.Count > MaxMemoryCacheEntries && _memoryCacheOrder.TryDequeue(out var oldKey))
+        {
+            if (_memoryCache.Count <= MaxMemoryCacheEntries) break;
+            _memoryCache.TryRemove(oldKey, out _);
+        }
+    }
 
     private static readonly Regex SteamAppIdRegex = new(@"apps[\\/](?<appid>\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
@@ -88,7 +102,7 @@ public sealed class ImageCacheService
                     var diskBitmap = CreateFrozenBitmap(fileBytes);
                     if (diskBitmap != null)
                     {
-                        _memoryCache[key] = diskBitmap;
+                        SetMemoryCache(key, diskBitmap);
                         return diskBitmap;
                     }
                 }
@@ -118,7 +132,7 @@ public sealed class ImageCacheService
                         var localBitmap = CreateFrozenBitmap(fileBytes);
                         if (localBitmap != null)
                         {
-                            _memoryCache[key] = localBitmap;
+                            SetMemoryCache(key, localBitmap);
                             return localBitmap;
                         }
                     }
@@ -139,7 +153,7 @@ public sealed class ImageCacheService
                     try
                     {
                         if (bmp.CanFreeze) bmp.Freeze();
-                        _memoryCache[key] = bmp;
+                        SetMemoryCache(key, bmp);
 
                         // Save to disk cache asynchronously
                         _ = Task.Run(async () =>
@@ -194,7 +208,7 @@ public sealed class ImageCacheService
                     var diskBitmap = CreateFrozenBitmap(fileBytes);
                     if (diskBitmap != null)
                     {
-                        _memoryCache[key] = diskBitmap;
+                        SetMemoryCache(key, diskBitmap);
                         return diskBitmap;
                     }
                 }
@@ -237,7 +251,7 @@ public sealed class ImageCacheService
                         var bmp = CreateFrozenBitmap(bytes);
                         if (bmp != null)
                         {
-                            _memoryCache[key] = bmp;
+                            SetMemoryCache(key, bmp);
                             return bmp;
                         }
                     }
@@ -303,7 +317,7 @@ public sealed class ImageCacheService
                         }
                         catch { }
 
-                        _memoryCache[key] = bitmap;
+                        SetMemoryCache(key, bitmap);
                         return bitmap;
                     }
                 }

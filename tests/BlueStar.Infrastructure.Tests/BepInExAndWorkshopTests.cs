@@ -53,6 +53,17 @@ public class BepInExAndWorkshopTests : IDisposable
     }
 
     [Fact]
+    public void BepInExService_IsInstalled_ReturnsFalse_WhenOnlyPluginsFolderExists()
+    {
+        var gameDir = Path.Combine(_tempTestDir, "PluginsOnlyGame");
+        Directory.CreateDirectory(Path.Combine(gameDir, "BepInEx", "plugins"));
+        File.WriteAllText(Path.Combine(gameDir, "BepInEx", "plugins", "some_mod.dll"), "mod");
+
+        var service = new BepInExService(new HttpClient(), NullLogger<BepInExService>.Instance);
+        service.IsInstalled(gameDir).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task BepInExService_UninstallAsync_RemovesWinhttpAndCoreFiles()
     {
         var gameDir = Path.Combine(_tempTestDir, "UninstallTest");

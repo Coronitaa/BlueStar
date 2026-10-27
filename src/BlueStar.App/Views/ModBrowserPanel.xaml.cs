@@ -1,3 +1,5 @@
+using System;
+using System.Windows;
 using System.Windows.Controls;
 using BlueStar.App.ViewModels;
 
@@ -8,11 +10,61 @@ namespace BlueStar.App.Views;
 /// </summary>
 public partial class ModBrowserPanel : UserControl
 {
-    private const double LoadMoreThreshold = 250.0;
+    private ThunderstoreBrowserViewModel? _boundThunderstore;
 
     public ModBrowserPanel()
     {
         InitializeComponent();
+        DataContextChanged += OnDataContextChanged;
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+    }
+
+    private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        UnhookThunderstore();
+        HookThunderstore();
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        HookThunderstore();
+        if (_boundThunderstore != null && PackagesScroller != null && PackagesScroller.ViewportHeight > 0)
+        {
+            _boundThunderstore.UpdateScrollWindow(PackagesScroller.VerticalOffset, PackagesScroller.ViewportHeight);
+        }
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        UnhookThunderstore();
+    }
+
+    private void HookThunderstore()
+    {
+        if (DataContext is ModBrowserViewModel vm && vm.Thunderstore != null)
+        {
+            if (!ReferenceEquals(_boundThunderstore, vm.Thunderstore))
+            {
+                UnhookThunderstore();
+                _boundThunderstore = vm.Thunderstore;
+                _boundThunderstore.RequestScrollToTop += OnRequestScrollToTop;
+            }
+        }
+    }
+
+    private void UnhookThunderstore()
+    {
+        if (_boundThunderstore != null)
+        {
+            _boundThunderstore.RequestScrollToTop -= OnRequestScrollToTop;
+            _boundThunderstore = null;
+        }
+    }
+
+    private void OnRequestScrollToTop()
+    {
+        PackagesScroller?.ScrollToTop();
     }
 
     private void OnPackagesScrollChanged(object sender, ScrollChangedEventArgs e)
@@ -20,18 +72,6 @@ public partial class ModBrowserPanel : UserControl
         if (DataContext is not ModBrowserViewModel vm || vm.Thunderstore == null) return;
         var tstore = vm.Thunderstore;
 
-        // Only trigger when user is scrolling downward and there is actual scrollable content
-        if (e.VerticalChange <= 0 || e.ExtentHeight <= 0) return;
-
-        var remaining = e.ExtentHeight - (e.VerticalOffset + e.ViewportHeight);
-        if (remaining > LoadMoreThreshold) return;
-
-        if (!tstore.HasMorePackages || tstore.IsLoadingMore || tstore.IsLoading) return;
-
-        var command = tstore.LoadMoreCommand;
-        if (command.CanExecute(null))
-        {
-            command.Execute(null);
-        }
+        tstore.UpdateScrollWindow(e.VerticalOffset, e.ViewportHeight);
     }
 }

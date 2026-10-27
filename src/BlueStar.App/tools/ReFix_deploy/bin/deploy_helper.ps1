@@ -169,6 +169,8 @@ function Detect-UNAE-Topology {
         } catch {}
     }
 
+    $usesPhoton = $hasPhotonRealtime -or $hasPhoton3Unity -or $hasPhotonVoice -or $hasPhotonFusion -or $il2cppPUN -or $il2cppFusion
+
     # Topologia B: Multiplexado Hibrido (Fusion + nanosockets, Mirror + EOS WebRTC)
     # Se prioriza sobre Topologia C para evitar que juegos hibridos con voz auxiliar
     # (como Dumb Ways to Build) sean erróneamente clasificados como Cloud Relay estricto.
@@ -181,6 +183,7 @@ function Detect-UNAE-Topology {
             Color = "Cyan"
             DirectP2PAllowed = $true
             P2PPort = $port
+            UsesPhoton = $usesPhoton
         }
     } elseif ($hasPhotonRealtime -or $hasPhoton3Unity -or $il2cppPUN -or $hasPhotonVoice) {
         return @{
@@ -190,6 +193,7 @@ function Detect-UNAE-Topology {
             Color = "Yellow"
             DirectP2PAllowed = $false
             P2PPort = "7777"
+            UsesPhoton = $usesPhoton
         }
     } else {
         return @{
@@ -199,6 +203,7 @@ function Detect-UNAE-Topology {
             Color = "Green"
             DirectP2PAllowed = $true
             P2PPort = "7777"
+            UsesPhoton = $usesPhoton
         }
     }
 }
@@ -243,7 +248,19 @@ function Generate-UNAE-ReFixIni {
     $defRegion     = & $Pick "Photon" "DefaultRegion" $regionCandidate
     $bypassVal     = if ($P.DLCMode -eq "none") { "false" } else { "true" }
     $eosMode       = if ($P.OnlineMode -in @("goldberg", "offline", "lan")) { "emulated" } else { "passthrough" }
+    # ReFix decides the Photon backend: a detected Photon stack (PUN2/Realtime/Voice/Fusion) in a
+    # no-third-party mode uses the local emulator (ReFixCloud over Steam P2P); otherwise real Photon.
+    $photonDefault = if ($P.UsesPhoton -and ($P.OnlineMode -in @("valve","goldberg","offline","lan"))) { "ReFixCloud" } else { "OfficialPhoton" }
+    $photonBackend = & $Pick "Photon" "Backend" $photonDefault
+    # OfficialPhoton is what older ReFix versions wrote for every game, so an existing value is not a user
+    # choice: re-decide it. Without this a redeploy keeps the emulator off on one PC while the other uses it,
+    # and the joining player hits real Photon Cloud with a Spacewar ticket ("Custom Authentication Failed").
+    if ($photonBackend -eq "OfficialPhoton") { $photonBackend = $photonDefault }
     $eosAuth       = if ($P.OnlineMode -in @("goldberg", "offline", "lan")) { "false" } else { "true" }
+    # Fast-failing cloud TCP (443/80) only helps when there is no internet backend to reach; online it would
+    # block EOS sign-in, PlayFab and other official services.
+    $fastCloudFailDefault = if ($P.OnlineMode -in @("goldberg", "offline", "lan")) { "true" } else { "false" }
+    $fastCloudFail = & $Pick "P2P" "FastCloudFail" $fastCloudFailDefault
 
     $existingDiscoveryPort = if ($existing.ContainsKey("Network/DiscoveryPort") -and $existing["Network/DiscoveryPort"] -ne "") {
         $existing["Network/DiscoveryPort"]
@@ -311,6 +328,10 @@ AllowRelay = true
 ; Puerto UDP principal de la sesion de juego (Default: 7777 para Unreal/Mirror, 27015 para Fusion)
 P2PPort = $existingP2PPort
 
+; Falla al instante las conexiones TCP 443/80 a la nube (evita congelamientos de 16s sin internet).
+; Solo en modos offline/LAN: en modo online bloquearia EOS, PlayFab y otros backends oficiales.
+FastCloudFail = $fastCloudFail
+
 ; Tiempo de espera de negociacion de sesion P2P antes de activar fallback (milisegundos)
 PeerHandshakeTimeoutMs = 5000
 
@@ -326,7 +347,7 @@ MaxPacketLossTolerance = 40
 ;   ReFixCloud      - Infraestructura gestionada/local ReFix (Cero costo, alto rendimiento).
 ;   OfficialPhoton  - Conexion a la nube publica de Photon Engine (Requiere AppIDs validos).
 ;   CustomPhoton    - Servidores privados self-hosted (Photon Server / Luxon).
-Backend = OfficialPhoton
+Backend = $photonBackend
 
 ; Clave de Aplicacion desacoplada para Photon Realtime y PUN 2 (Sincronizacion de juego y salas)
 AppIdRealtime = $appIdRealtime
@@ -497,16 +518,21 @@ Write-Host ""
 # Discover all steam_api64.dll or backup steam_api64_valve.dll locations
 $pluginDirs = @()
 
-# For Unity games, discover dedicated Plugins folders (e.g. *_Data\Plugins\x86_64 or *_Data\Plugins)
-$unityPluginDirs = @()
+# A folder is a Steam plugin folder only if it holds a Steam API DLL (or ReFix's backup of one). Unity also
+# ships Linux plugins in *_Data\Plugins\x86 / x86_64 (.so files): a proxy there has no genuine DLL behind it
+# and fails post-deploy verification (e.g. Overcooked! 2, a 32-bit game using *_Data\Plugins\steam_api.dll).
+function Test-HasSteamApi([string]$Dir, [string]$Pattern) {
+    return [bool](Get-ChildItem -LiteralPath $Dir -Filter $Pattern -File -ErrorAction SilentlyContinue | Select-Object -First 1)
+}
+
 # For Unity games, discover dedicated Plugins folders (e.g. *_Data\Plugins\x86_64 or *_Data\Plugins)
 $unityPluginDirs = @()
 $unityDataDirs = Get-ChildItem -LiteralPath $TargetDir -Directory -Filter "*_Data" -Recurse -ErrorAction SilentlyContinue
 foreach ($uData in $unityDataDirs) {
     $p64 = Join-Path $uData.FullName "Plugins\x86_64"
     $pRoot = Join-Path $uData.FullName "Plugins"
-    if (Test-Path -LiteralPath $p64) { $unityPluginDirs += $p64 }
-    elseif (Test-Path -LiteralPath $pRoot) { $unityPluginDirs += $pRoot }
+    if (Test-HasSteamApi $p64 "steam_api64*.dll") { $unityPluginDirs += $p64 }
+    elseif (Test-HasSteamApi $pRoot "steam_api64*.dll") { $unityPluginDirs += $pRoot }
 }
 
 $steamDlls = Get-ChildItem -LiteralPath $TargetDir -Filter "steam_api64.dll" -Recurse -ErrorAction SilentlyContinue
@@ -548,7 +574,7 @@ $pluginDirs32 = @()
 # Unity x86 plugin subfolder: *_Data\Plugins\x86
 foreach ($uData in $unityDataDirs) {
     $p32 = Join-Path $uData.FullName "Plugins\x86"
-    if (Test-Path -LiteralPath $p32) {
+    if ((Test-HasSteamApi $p32 "steam_api.dll") -or (Test-HasSteamApi $p32 "steam_api_*.dll")) {
         if ($pluginDirs32 -notcontains $p32) { $pluginDirs32 += $p32 }
     }
 }
@@ -570,7 +596,11 @@ if ($pluginDirs32.Count -gt 0) {
     Write-Host "  [x86] Detected 32-bit steam_api.dll location(s): $($pluginDirs32 -join ', ')" -ForegroundColor Yellow
 }
 
-if ($pluginDirs.Count -eq 0) { $pluginDirs += $ExeDir }
+# No steam_api64.dll anywhere: fall back to the exe folder, unless the game is 32-bit only (it never loads it).
+if ($pluginDirs.Count -eq 0 -and $pluginDirs32.Count -eq 0) { $pluginDirs += $ExeDir }
+
+# Set by the Valve branch; other modes must still pass a boolean to Verify-ReFixDeployment.
+$isX86Game = ($pluginDirs32.Count -gt 0)
 
 switch ($OnlineMode) {
     "valve" {
@@ -600,12 +630,17 @@ switch ($OnlineMode) {
                 }
             }
 
-            # If $origPath exists, make sure $valvePath is restored from $origPath
+            # Online mode keeps ONE backup: steam_api64_original.dll (the game's genuine DLL). The proxy loads it when
+            # no steam_api64_valve.dll backend is present; _valve is only needed for Re:Goldberg (emulator backend).
             if (Test-Path -LiteralPath $origPath) {
-                if ((-not (Test-Path -LiteralPath $valvePath)) -or $isGoldbergAtValve) {
-                    Copy-Item -LiteralPath $origPath -Destination $valvePath -Force
-                    Write-Host "  [OK] Restored original Valve DLL from $origPath -> steam_api64_valve.dll in $dir" -ForegroundColor Green
+                if ($isGoldbergAtValve) {
+                    Remove-Item -LiteralPath $valvePath -Force
+                    Write-Host "  [OK] Removed Re:Goldberg backend steam_api64_valve.dll; proxy uses steam_api64_original.dll in $dir" -ForegroundColor Green
                     $isGoldbergAtValve = $false
+                } elseif ((Test-Path -LiteralPath $valvePath) -and
+                          (Get-FileHash -LiteralPath $valvePath).Hash -eq (Get-FileHash -LiteralPath $origPath).Hash) {
+                    Remove-Item -LiteralPath $valvePath -Force
+                    Write-Host "  [OK] Removed duplicate steam_api64_valve.dll (same as steam_api64_original.dll) in $dir" -ForegroundColor Green
                 }
             } elseif (Test-Path -LiteralPath $steamPath) {
                 $isAlreadyProxy = ((Get-Item -LiteralPath $steamPath).Length -eq (Get-Item -LiteralPath $proxyPath).Length)
@@ -613,14 +648,13 @@ switch ($OnlineMode) {
                 if ((-not $isAlreadyProxy) -and (-not $isGoldbergAtSteam)) {
                     # This is genuine original DLL
                     Copy-Item -LiteralPath $steamPath -Destination $origPath -Force
-                    Copy-Item -LiteralPath $steamPath -Destination $valvePath -Force
-                    Write-Host "  [OK] Preserved original steam_api64.dll -> steam_api64_original.dll & steam_api64_valve.dll in $dir" -ForegroundColor Green
+                    Write-Host "  [OK] Preserved original steam_api64.dll -> steam_api64_original.dll in $dir" -ForegroundColor Green
                     $isGoldbergAtValve = $false
                 }
             }
 
-            # If valvePath is still missing or still Goldberg, use stock genuine Valve DLL as fallback
-            if ((-not (Test-Path -LiteralPath $valvePath)) -or $isGoldbergAtValve) {
+            # No genuine DLL of the game's own to forward to: use ReFix's stock Valve DLL as the backend.
+            if ((-not (Test-Path -LiteralPath $origPath)) -and ((-not (Test-Path -LiteralPath $valvePath)) -or $isGoldbergAtValve)) {
                 if (Test-Path -LiteralPath $valveStockDll) {
                     Copy-Item -LiteralPath $valveStockDll -Destination $valvePath -Force
                     Write-Host "  [OK] Deployed stock genuine Valve steam_api64.dll -> steam_api64_valve.dll in $dir" -ForegroundColor Green
@@ -763,6 +797,7 @@ switch ($OnlineMode) {
             DefaultRegion       = $DefaultRegion
             PhotonRegion        = $PhotonRegion
             P2PPort             = $p2pPortVal
+            UsesPhoton          = $(if ($unaeTopology) { $unaeTopology.UsesPhoton } else { $false })
         }
         Write-Host "  [OK] Configured unified ReFix.ini in $ExeDir" -ForegroundColor Green
     }
@@ -830,6 +865,7 @@ switch ($OnlineMode) {
             DefaultRegion       = $DefaultRegion
             PhotonRegion        = $PhotonRegion
             P2PPort             = $p2pPortVal
+            UsesPhoton          = $(if ($unaeTopology) { $unaeTopology.UsesPhoton } else { $false })
         }
         Write-Host "  [OK] Configured unified ReFix.ini in $ExeDir" -ForegroundColor Green
     }
@@ -1193,6 +1229,7 @@ unlock_all_dlc=$unlockAllDlcStr
         DefaultRegion       = $DefaultRegion
         PhotonRegion        = $PhotonRegion
         P2PPort             = $p2pPortVal
+        UsesPhoton          = $(if ($unaeTopology) { $unaeTopology.UsesPhoton } else { $false })
     }
     Write-Host "  [OK] Written unified ReFix.ini in $ExeDir" -ForegroundColor Green
 
@@ -2281,7 +2318,7 @@ $verifySuccess = Verify-ReFixDeployment `
     -GameName $GameName `
     -PluginDirs $pluginDirs `
     -PluginDirs32 $pluginDirs32 `
-    -IsX86 $isX86Game
+    -IsX86 ([bool]$isX86Game)
 
 if (-not $verifySuccess) {
     Write-Host "[FATAL ERROR] Post-deploy verification failed! Mandatory files are missing or corrupted." -ForegroundColor Red

@@ -192,12 +192,13 @@ public sealed class BepInExService : IBepInExService
 
         var root = ResolveGameRoot(gameInstallPath);
         var winhttp = Path.Combine(root, "winhttp.dll");
-        var bepDir = Path.Combine(root, "BepInEx");
-        var coreDir = Path.Combine(bepDir, "core");
+        var bepDll = Path.Combine(root, "BepInEx", "core", "BepInEx.dll");
+        var bepCoreDll = Path.Combine(root, "BepInEx", "core", "BepInEx.Core.dll");
+        var bepPreloaderDll = Path.Combine(root, "BepInEx", "core", "BepInEx.Preloader.dll");
 
-        return File.Exists(winhttp) ||
-               Directory.Exists(coreDir) ||
-               (Directory.Exists(bepDir) && Directory.EnumerateFileSystemEntries(bepDir).Any());
+        // The true presence of BepInEx is determined by the loader DLL (winhttp.dll) or the core engine DLLs.
+        // A leftover BepInEx/ folder (e.g. plugins preserved on uninstall) does NOT mark BepInEx as installed.
+        return File.Exists(winhttp) || File.Exists(bepDll) || File.Exists(bepCoreDll) || File.Exists(bepPreloaderDll);
     }
 
     /// <inheritdoc />

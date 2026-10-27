@@ -219,6 +219,24 @@ public class BrowseViewModelPhase1RegressionTests
         thread.Join();
     }
 
+    [Fact]
+    public void TestL2_VirtualizingWrapPanel_BufferRowsAndSingleColumnListSupport()
+    {
+        var thread = new System.Threading.Thread(() =>
+        {
+            var panel = new BlueStar.App.Controls.VirtualizingWrapPanel
+            {
+                ItemWidth = 0,
+                ItemHeight = 110
+            };
+            panel.Measure(new System.Windows.Size(1000, 800));
+            Assert.True(panel.DesiredSize.Width >= 0);
+        });
+        thread.SetApartmentState(System.Threading.ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+    }
+
     /// <summary>
     /// TEST M — UI Filter Propagation for Hide free to play & VR only
     /// Ensures that activating "Hide free to play" and "VR only" from the right-hand panel

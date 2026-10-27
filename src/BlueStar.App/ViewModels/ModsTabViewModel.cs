@@ -12,8 +12,25 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace BlueStar.App.ViewModels;
+
+public sealed record ModpackEntry(string Id, string Name, string? Version, bool IsEnabled);
+
+public sealed partial class Modpack : ObservableObject
+{
+    public required string Name { get; init; }
+    public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
+    public string? IconPath { get; init; }
+    public List<ModpackEntry> Mods { get; init; } = [];
+    public int ModsCount => Mods.Count;
+
+    [ObservableProperty]
+    [property: JsonIgnore]
+    private bool _isActive;
+}
 
 /// <summary>
 /// State and commands of an instance's Mods tab. Installs go through <see cref="IModInstallPipeline"/>, which
@@ -65,6 +82,7 @@ public sealed partial class ModsTabViewModel : ObservableObject
         }
 
         ModBrowser = new ModBrowserViewModel(workshop, thunderstore, localization, logger);
+        ModBrowser.OpenModPageAction = (title, url) => OpenModPage(title, url);
     }
 
     /// <summary>Unified Mod Explorer modal coordinator.</summary>
@@ -195,6 +213,9 @@ public sealed partial class ModsTabViewModel : ObservableObject
     private bool _isStatusError;
 
     [ObservableProperty]
+    private bool _isDraggingFilesOver;
+
+    [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(InstallFromFileCommand))]
     [NotifyCanExecuteChangedFor(nameof(ConfirmPendingPlanCommand))]
     private bool _isBusy;
@@ -211,8 +232,1058 @@ public sealed partial class ModsTabViewModel : ObservableObject
     [ObservableProperty]
     private string _searchText = string.Empty;
 
+    [RelayCommand]
+    public void ClearSearch()
+    {
+        SearchText = string.Empty;
+    }
+
     [ObservableProperty]
     private string _selectedFilter = "All";
+
+    // ═══ SORTING CONTROLS (LIKE INSTANCES TAB) ═══
+    [ObservableProperty]
+    private string _selectedSort = "Name";
+
+    [ObservableProperty]
+    private bool _isSortDescending;
+
+    [ObservableProperty]
+    private bool _isSortDropdownOpen;
+
+    public string SelectedSortDisplayName => SelectedSort switch
+    {
+        "Status" => "Estado",
+        "Source" => "Origen",
+        "Size" => "Tamaño",
+        _ => "Nombre"
+    };
+
+    [RelayCommand]
+    public void ToggleSortDirection()
+    {
+        IsSortDescending = !IsSortDescending;
+        RefreshFilteredItems();
+    }
+
+    [RelayCommand]
+    public void ToggleSortDropdown() => IsSortDropdownOpen = !IsSortDropdownOpen;
+
+    [RelayCommand]
+    public void SelectSort(string? sort)
+    {
+        SelectedSort = string.IsNullOrWhiteSpace(sort) ? "Name" : sort;
+        IsSortDropdownOpen = false;
+        OnPropertyChanged(nameof(SelectedSortDisplayName));
+        RefreshFilteredItems();
+    }
+
+    // ═══ MOD MULTI-SELECTION & BATCH ACTIONS (REQUIREMENT 10) ═══
+    [ObservableProperty]
+    private bool _isSelectionModeActive;
+
+    [ObservableProperty]
+    private int _selectedModsCount;
+
+    [ObservableProperty]
+    private bool _hasSelectedMods;
+
+    [ObservableProperty]
+    private bool _isBulkDeleteModsModalOpen;
+
+    private readonly HashSet<string> _selectedModIds = new(StringComparer.OrdinalIgnoreCase);
+
+    public string SelectedModsCountText
+    {
+        get
+        {
+            var count = SelectedModsCount;
+            var format = T("String_SelectedModsCount", "{0} seleccionados");
+            return string.Format(format, count);
+        }
+    }
+
+    public string BulkDeleteModsModalSubtitle
+    {
+        get
+        {
+            var count = SelectedModsCount;
+            var format = T("String_BulkDeleteModsSubtitle", "¿Estás seguro de que deseas eliminar {0} mods seleccionados?");
+            return string.Format(format, count);
+        }
+    }
+
+    partial void OnIsSelectionModeActiveChanged(bool value)
+    {
+        if (!value)
+        {
+            ClearSelection();
+        }
+    }
+
+    [RelayCommand]
+    public void ToggleSelectionMode()
+    {
+        IsSelectionModeActive = !IsSelectionModeActive;
+    }
+
+    [RelayCommand]
+    public void ExitSelectionMode()
+    {
+        IsSelectionModeActive = false;
+    }
+
+    [RelayCommand]
+    public void ClearSelection()
+    {
+        _selectedModIds.Clear();
+        foreach (var item in Items)
+        {
+            item.IsSelected = false;
+        }
+        UpdateSelectionCounts();
+    }
+
+    [RelayCommand]
+    public void ToggleModSelection(ModListItem? item)
+    {
+        if (!IsSelectionModeActive || item == null) return;
+
+        if (_selectedModIds.Contains(item.Id))
+        {
+            _selectedModIds.Remove(item.Id);
+            item.IsSelected = false;
+        }
+        else
+        {
+            _selectedModIds.Add(item.Id);
+            item.IsSelected = true;
+        }
+
+        UpdateSelectionCounts();
+    }
+
+    private void UpdateSelectionCounts()
+    {
+        SelectedModsCount = _selectedModIds.Count;
+        HasSelectedMods = SelectedModsCount > 0;
+        OnPropertyChanged(nameof(SelectedModsCountText));
+        OnPropertyChanged(nameof(BulkDeleteModsModalSubtitle));
+    }
+
+    [RelayCommand]
+    public async Task EnableSelectedModsAsync()
+    {
+        var instance = Instance;
+        if (instance == null) return;
+        var selected = Items.Where(i => _selectedModIds.Contains(i.Id) && !i.IsEnabled).ToList();
+        if (selected.Count == 0) return;
+
+        if (SelectedModpack != null)
+        {
+            SelectedModpack = null;
+            IsDefaultModpackActive = true;
+            foreach (var p in Modpacks) p.IsActive = false;
+            OnPropertyChanged(nameof(SelectedModpackDisplayName));
+        }
+
+        var count = 0;
+        foreach (var mod in selected)
+        {
+            if (await SetModEnabledInternalAsync(instance, mod, true).ConfigureAwait(true))
+            {
+                mod.IsEnabled = true;
+                count++;
+            }
+        }
+        ShowStatus(string.Format(T("String_BulkModsEnabled", "{0} mods activados"), count), false);
+        await LoadAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    public async Task DisableSelectedModsAsync()
+    {
+        var instance = Instance;
+        if (instance == null) return;
+        var selected = Items.Where(i => _selectedModIds.Contains(i.Id) && i.IsEnabled).ToList();
+        if (selected.Count == 0) return;
+
+        if (SelectedModpack != null)
+        {
+            SelectedModpack = null;
+            IsDefaultModpackActive = true;
+            foreach (var p in Modpacks) p.IsActive = false;
+            OnPropertyChanged(nameof(SelectedModpackDisplayName));
+        }
+
+        var count = 0;
+        foreach (var mod in selected)
+        {
+            if (await SetModEnabledInternalAsync(instance, mod, false).ConfigureAwait(true))
+            {
+                mod.IsEnabled = false;
+                count++;
+            }
+        }
+        ShowStatus(string.Format(T("String_BulkModsDisabled", "{0} mods desactivados"), count), false);
+        await LoadAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    public void OpenBulkDeleteModal()
+    {
+        if (SelectedModsCount > 0)
+        {
+            IsBulkDeleteModsModalOpen = true;
+        }
+    }
+
+    [RelayCommand]
+    public void CloseBulkDeleteModal()
+    {
+        IsBulkDeleteModsModalOpen = false;
+    }
+
+    [RelayCommand]
+    public async Task ConfirmBulkDeleteModsAsync()
+    {
+        IsBulkDeleteModsModalOpen = false;
+        var toDelete = Items.Where(i => _selectedModIds.Contains(i.Id)).ToList();
+        if (toDelete.Count == 0) return;
+
+        var count = 0;
+        foreach (var mod in toDelete)
+        {
+            await UninstallAsync(mod).ConfigureAwait(true);
+            count++;
+        }
+        ExitSelectionMode();
+        ShowStatus(string.Format(T("String_BulkModsDeleted", "{0} mods eliminados"), count), false);
+    }
+
+    // ═══ MODPACK CREATOR & MANAGER ═══
+    public ObservableCollection<Modpack> Modpacks { get; } = [];
+
+    [ObservableProperty]
+    private Modpack? _selectedModpack;
+
+    [ObservableProperty]
+    private bool _isDefaultModpackActive = true;
+
+    [ObservableProperty]
+    private bool _showModpackBlocks = true;
+
+    [ObservableProperty]
+    private bool _isModpackBlockView = true;
+
+    public string ModpackViewModeButtonLabel => IsModpackBlockView
+        ? T("String_ModpackCurrentViewBlocks", "Vista actual: En bloques (clic para cambiar a lista)")
+        : T("String_ModpackCurrentViewList", "Vista actual: En lista (clic para cambiar a bloques)");
+    public string ModpackViewIconGeometryKey => IsModpackBlockView ? "IconGridView" : "IconListView";
+
+    [RelayCommand]
+    public void ToggleModpackBlocks()
+    {
+        ShowModpackBlocks = !ShowModpackBlocks;
+        IsModpackBlockView = ShowModpackBlocks;
+    }
+
+    [RelayCommand]
+    public void ToggleModpackViewMode()
+    {
+        IsModpackBlockView = !IsModpackBlockView;
+    }
+
+    partial void OnIsModpackBlockViewChanged(bool value)
+    {
+        ShowModpackBlocks = value;
+        OnPropertyChanged(nameof(ModpackViewModeButtonLabel));
+        OnPropertyChanged(nameof(ModpackViewIconGeometryKey));
+    }
+
+    partial void OnSelectedModpackChanged(Modpack? value)
+    {
+        IsDefaultModpackActive = (value == null);
+        foreach (var p in Modpacks)
+        {
+            p.IsActive = (value != null && (p == value || p.Name.Equals(value.Name, StringComparison.OrdinalIgnoreCase)));
+        }
+        OnPropertyChanged(nameof(SelectedModpackDisplayName));
+    }
+
+    [ObservableProperty]
+    private bool _isModpackDropdownOpen;
+
+    [ObservableProperty]
+    private bool _isCreateModpackOpen;
+
+    [ObservableProperty]
+    private string _newModpackName = string.Empty;
+
+    [ObservableProperty]
+    private string? _newModpackIconPath;
+
+    [ObservableProperty]
+    private bool _isDeleteModpackConfirmOpen;
+
+    [ObservableProperty]
+    private Modpack? _modpackPendingDelete;
+
+    [RelayCommand]
+    public void RequestDeleteModpack(Modpack? pack)
+    {
+        if (pack == null) return;
+        ModpackPendingDelete = pack;
+        IsDeleteModpackConfirmOpen = true;
+    }
+
+    [RelayCommand]
+    public void CancelDeleteModpack()
+    {
+        ModpackPendingDelete = null;
+        IsDeleteModpackConfirmOpen = false;
+    }
+
+    [RelayCommand]
+    public void ConfirmDeleteModpack()
+    {
+        if (ModpackPendingDelete != null)
+        {
+            DeleteModpackDirect(ModpackPendingDelete);
+        }
+        ModpackPendingDelete = null;
+        IsDeleteModpackConfirmOpen = false;
+        IsModpackDetailsOpen = false;
+        ActiveModpackForDetails = null;
+    }
+
+    /// <summary>Allows testing or customizing modpack icon file selection without opening a Win32 dialog.</summary>
+    public Func<string?>? PickModpackIconFile { get; set; }
+
+    [RelayCommand]
+    public void BrowseModpackIcon()
+    {
+        if (PickModpackIconFile != null)
+        {
+            var picked = PickModpackIconFile();
+            if (!string.IsNullOrWhiteSpace(picked))
+            {
+                NewModpackIconPath = picked;
+            }
+            return;
+        }
+
+        var dlg = new OpenFileDialog
+        {
+            Title = "Seleccionar imagen de perfil para el modpack",
+            Filter = "Imágenes (*.png;*.jpg;*.jpeg;*.webp;*.ico)|*.png;*.jpg;*.jpeg;*.webp;*.ico|Todos los archivos (*.*)|*.*"
+        };
+        if (dlg.ShowDialog() == true)
+        {
+            NewModpackIconPath = dlg.FileName;
+        }
+    }
+
+    [RelayCommand]
+    public void ClearModpackIcon() => NewModpackIconPath = null;
+
+    public ObservableCollection<ModpackModSelectionItem> CreateModpackSelectableMods { get; } = [];
+
+    [RelayCommand]
+    public void SelectAllCreateModpackMods()
+    {
+        foreach (var m in CreateModpackSelectableMods) m.IsSelected = true;
+    }
+
+    [RelayCommand]
+    public void DeselectAllCreateModpackMods()
+    {
+        foreach (var m in CreateModpackSelectableMods) m.IsSelected = false;
+    }
+
+    [RelayCommand]
+    public void ImportModpackIntoCreator()
+    {
+        var ofd = new OpenFileDialog
+        {
+            Title = T("String_ImportModpackDialogTitle", "Seleccionar archivo de modpack"),
+            Filter = "BlueStar Modpack (*.json)|*.json|Todos los archivos (*.*)|*.*"
+        };
+        if (ofd.ShowDialog() == true)
+        {
+            try
+            {
+                var json = File.ReadAllText(ofd.FileName);
+                var pack = JsonSerializer.Deserialize<Modpack>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (pack != null && !string.IsNullOrWhiteSpace(pack.Name))
+                {
+                    NewModpackName = pack.Name;
+                    if (!string.IsNullOrWhiteSpace(pack.IconPath) && File.Exists(pack.IconPath))
+                    {
+                        NewModpackIconPath = pack.IconPath;
+                    }
+                    var packModIds = new HashSet<string>(pack.Mods.Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
+                    var packModNames = new HashSet<string>(pack.Mods.Select(m => m.Name), StringComparer.OrdinalIgnoreCase);
+
+                    var matched = 0;
+                    foreach (var item in CreateModpackSelectableMods)
+                    {
+                        var isMatch = packModIds.Contains(item.Id) || packModNames.Contains(item.Name);
+                        item.IsSelected = isMatch;
+                        if (isMatch) matched++;
+                    }
+
+                    ShowStatus(string.Format(T("String_ModpackImportedSuccess", "Modpack \"{0}\" importado ({1} mods seleccionados)"), pack.Name, matched), false);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to import modpack from {File}", ofd.FileName);
+                ShowStatus(string.Format(T("String_ModpackImportFailed", "Error al importar modpack: {0}"), ex.Message), true);
+            }
+        }
+    }
+
+    // ═══ ACTIVE MODPACK DETAILS & MANAGEMENT MODAL (EDIT, DELETE, EXPORT) ═══
+    [ObservableProperty]
+    private bool _isModpackDetailsOpen;
+
+    [ObservableProperty]
+    private Modpack? _activeModpackForDetails;
+
+    [ObservableProperty]
+    private string _editModpackName = string.Empty;
+
+    [ObservableProperty]
+    private string? _editModpackIconPath;
+
+    public ObservableCollection<ModpackModSelectionItem> EditModpackSelectableMods { get; } = [];
+
+    [RelayCommand]
+    public void OpenModpackDetails(Modpack? pack)
+    {
+        if (pack == null) return;
+        ActiveModpackForDetails = pack;
+        EditModpackName = pack.Name;
+        EditModpackIconPath = pack.IconPath;
+
+        EditModpackSelectableMods.Clear();
+        foreach (var mod in Items)
+        {
+            var isIncluded = pack.Mods.Any(m => IsModMatch(mod, m) && m.IsEnabled);
+
+            EditModpackSelectableMods.Add(new ModpackModSelectionItem
+            {
+                Id = mod.Id,
+                Name = mod.Name,
+                Version = mod.Version,
+                Source = mod.SourceLabel,
+                IconUrl = mod.IconUrl,
+                IconGeometryKey = mod.IconGeometryKey,
+                IsSelected = isIncluded
+            });
+        }
+
+        IsModpackDetailsOpen = true;
+    }
+
+    [RelayCommand]
+    public void CloseModpackDetails()
+    {
+        IsModpackDetailsOpen = false;
+        ActiveModpackForDetails = null;
+    }
+
+    [RelayCommand]
+    public void SelectAllEditModpackMods()
+    {
+        foreach (var m in EditModpackSelectableMods) m.IsSelected = true;
+    }
+
+    [RelayCommand]
+    public void DeselectAllEditModpackMods()
+    {
+        foreach (var m in EditModpackSelectableMods) m.IsSelected = false;
+    }
+
+    [RelayCommand]
+    public void BrowseEditModpackIcon()
+    {
+        if (PickModpackIconFile != null)
+        {
+            var picked = PickModpackIconFile();
+            if (!string.IsNullOrWhiteSpace(picked)) EditModpackIconPath = picked;
+            return;
+        }
+
+        var dlg = new OpenFileDialog
+        {
+            Title = "Seleccionar imagen de perfil para el modpack",
+            Filter = "Imágenes (*.png;*.jpg;*.jpeg;*.webp;*.ico)|*.png;*.jpg;*.jpeg;*.webp;*.ico|Todos los archivos (*.*)|*.*"
+        };
+        if (dlg.ShowDialog() == true)
+        {
+            EditModpackIconPath = dlg.FileName;
+        }
+    }
+
+    [RelayCommand]
+    public void ClearEditModpackIcon() => EditModpackIconPath = null;
+
+    [RelayCommand]
+    public async Task SaveEditModpackAsync()
+    {
+        var pack = ActiveModpackForDetails;
+        if (pack == null) return;
+
+        var newName = EditModpackName?.Trim();
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            ShowStatus(T("String_ModpackNameEmpty", "El nombre del modpack no puede estar vacío."), true);
+            return;
+        }
+
+        var selectedMods = EditModpackSelectableMods.Where(m => m.IsSelected).ToList();
+        if (selectedMods.Count == 0)
+        {
+            ShowStatus(T("String_ModpackNoModsSelected", "Selecciona al menos un mod para el modpack."), true);
+            return;
+        }
+
+        try
+        {
+            var dir = GetModpacksDirectory();
+            var oldSafeName = string.Join("_", pack.Name.Split(Path.GetInvalidFileNameChars()));
+            var newSafeName = string.Join("_", newName.Split(Path.GetInvalidFileNameChars()));
+
+            string? savedIconPath = EditModpackIconPath;
+            if (!string.IsNullOrWhiteSpace(EditModpackIconPath) && !string.IsNullOrWhiteSpace(dir) && File.Exists(EditModpackIconPath))
+            {
+                if (!EditModpackIconPath.StartsWith(dir, StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        var ext = Path.GetExtension(EditModpackIconPath);
+                        var iconFileName = $"{newSafeName}_icon{ext}";
+                        var destPath = Path.Combine(dir, iconFileName);
+                        File.Copy(EditModpackIconPath, destPath, overwrite: true);
+                        savedIconPath = destPath;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to copy modpack icon file");
+                    }
+                }
+            }
+
+            // Remove old JSON if renamed
+            if (!oldSafeName.Equals(newSafeName, StringComparison.OrdinalIgnoreCase))
+            {
+                var oldPath = Path.Combine(dir, $"{oldSafeName}.json");
+                if (File.Exists(oldPath)) File.Delete(oldPath);
+            }
+
+            var entries = selectedMods.Select(i => new ModpackEntry(i.Id, i.Name, i.Version, true)).ToList();
+            var updatedPack = new Modpack
+            {
+                Name = newName,
+                CreatedAt = pack.CreatedAt,
+                IconPath = savedIconPath,
+                Mods = entries,
+                IsActive = true
+            };
+
+            var newJsonPath = Path.Combine(dir, $"{newSafeName}.json");
+            var json = JsonSerializer.Serialize(updatedPack, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(newJsonPath, json);
+
+            var idx = Modpacks.IndexOf(pack);
+            if (idx >= 0)
+            {
+                Modpacks[idx] = updatedPack;
+            }
+            else
+            {
+                Modpacks.Add(updatedPack);
+            }
+            SelectedModpack = updatedPack;
+            OnPropertyChanged(nameof(SelectedModpackDisplayName));
+            IsModpackDetailsOpen = false;
+
+            // Apply new mod states according to the edited modpack
+            await ApplyModpackCoreAsync(updatedPack).ConfigureAwait(true);
+            ShowStatus(string.Format(T("String_ModpackSavedSuccess", "Modpack \"{0}\" guardado"), updatedPack.Name), false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save edited modpack {Name}", newName);
+            ShowStatus(string.Format(T("String_ModpackSaveFailed", "Error al guardar modpack: {0}"), ex.Message), true);
+        }
+    }
+
+    public string SelectedModpackDisplayName => SelectedModpack?.Name ?? (Modpacks.Count > 0 ? Modpacks[0].Name : "Por defecto");
+
+    private string GetModpacksDirectory()
+    {
+        if (Instance == null) return string.Empty;
+        var root = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "BlueStar", "instances", Instance.Id.ToString(), "modpacks");
+        Directory.CreateDirectory(root);
+        return root;
+    }
+
+    public void LoadModpacks()
+    {
+        Modpacks.Clear();
+        var dir = GetModpacksDirectory();
+        if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
+        {
+            IsDefaultModpackActive = (SelectedModpack == null);
+            return;
+        }
+
+        foreach (var file in Directory.EnumerateFiles(dir, "*.json"))
+        {
+            try
+            {
+                var json = File.ReadAllText(file);
+                var pack = JsonSerializer.Deserialize<Modpack>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (pack != null && !string.IsNullOrWhiteSpace(pack.Name))
+                {
+                    pack.IsActive = (SelectedModpack != null && pack.Name.Equals(SelectedModpack.Name, StringComparison.OrdinalIgnoreCase));
+                    Modpacks.Add(pack);
+                }
+            }
+            catch { }
+        }
+        IsDefaultModpackActive = (SelectedModpack == null);
+    }
+
+    [RelayCommand]
+    public void ToggleModpackDropdown() => IsModpackDropdownOpen = !IsModpackDropdownOpen;
+
+    [RelayCommand]
+    public async Task SelectDefaultModpackAsync()
+    {
+        if (IsDefaultModpackActive && SelectedModpack == null) return;
+
+        var instance = Instance;
+        if (instance == null) return;
+
+        try
+        {
+            _isApplyingModpack = true;
+            SelectedModpack = null;
+            IsModpackDropdownOpen = false;
+            OnPropertyChanged(nameof(SelectedModpackDisplayName));
+
+            var changed = 0;
+            foreach (var mod in Items.ToList())
+            {
+                if (!mod.IsEnabled)
+                {
+                    var ok = await SetModEnabledInternalAsync(instance, mod, true).ConfigureAwait(true);
+                    if (ok)
+                    {
+                        mod.IsEnabled = true;
+                        changed++;
+                    }
+                }
+            }
+            ShowStatus(changed > 0
+                ? string.Format(T("String_DefaultModpackRestored", "Perfil por defecto restaurado ({0} mods activados)"), changed)
+                : T("String_DefaultModpackActive", "Perfil por defecto activo (todos los mods)"), false);
+            await LoadAsync().ConfigureAwait(true);
+        }
+        finally
+        {
+            _isApplyingModpack = false;
+        }
+    }
+
+    public Task SelectDefaultModpack() => SelectDefaultModpackAsync();
+
+    [RelayCommand]
+    public void OpenCreateModpack()
+    {
+        IsModpackDropdownOpen = false;
+        NewModpackName = $"Modpack {Modpacks.Count + 1}";
+        NewModpackIconPath = null;
+        CreateModpackSelectableMods.Clear();
+        foreach (var mod in Items)
+        {
+            CreateModpackSelectableMods.Add(new ModpackModSelectionItem
+            {
+                Id = mod.Id,
+                Name = mod.Name,
+                Version = mod.Version,
+                Source = mod.SourceLabel,
+                IconUrl = mod.IconUrl,
+                IconGeometryKey = mod.IconGeometryKey,
+                IsSelected = mod.IsEnabled
+            });
+        }
+        IsCreateModpackOpen = true;
+    }
+
+    [RelayCommand]
+    public void CancelCreateModpack() => IsCreateModpackOpen = false;
+
+    [RelayCommand]
+    public async Task ConfirmCreateModpackAsync()
+    {
+        var name = NewModpackName?.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            ShowStatus("El nombre del modpack no puede estar vacío.", true);
+            return;
+        }
+
+        var selectedMods = CreateModpackSelectableMods.Where(m => m.IsSelected).ToList();
+        if (selectedMods.Count == 0)
+        {
+            ShowStatus("No puedes crear un modpack sin ningún mod. Selecciona al menos un mod.", true);
+            return;
+        }
+
+        var entries = selectedMods.Select(i => new ModpackEntry(i.Id, i.Name, i.Version, true)).ToList();
+
+        string? savedIconPath = null;
+        try
+        {
+            var dir = GetModpacksDirectory();
+            var safeName = string.Join("_", name.Split(Path.GetInvalidFileNameChars()));
+
+            if (!string.IsNullOrWhiteSpace(NewModpackIconPath) && !string.IsNullOrWhiteSpace(dir))
+            {
+                if (File.Exists(NewModpackIconPath))
+                {
+                    try
+                    {
+                        var ext = Path.GetExtension(NewModpackIconPath);
+                        var iconFileName = $"{safeName}_icon{ext}";
+                        var destPath = Path.Combine(dir, iconFileName);
+                        File.Copy(NewModpackIconPath, destPath, overwrite: true);
+                        savedIconPath = destPath;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to copy modpack icon file");
+                        savedIconPath = NewModpackIconPath;
+                    }
+                }
+                else
+                {
+                    savedIconPath = NewModpackIconPath;
+                }
+            }
+
+            var pack = new Modpack
+            {
+                Name = name,
+                CreatedAt = DateTimeOffset.UtcNow,
+                IconPath = savedIconPath,
+                Mods = entries,
+                IsActive = true
+            };
+
+            if (!string.IsNullOrWhiteSpace(dir))
+            {
+                var filePath = Path.Combine(dir, $"{safeName}.json");
+                var json = JsonSerializer.Serialize(pack, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(filePath, json);
+            }
+
+            var existing = Modpacks.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (existing != null) Modpacks.Remove(existing);
+            Modpacks.Add(pack);
+            IsCreateModpackOpen = false;
+
+            // Automatically apply the modpack to disable mods outside of it
+            await ApplyModpackCoreAsync(pack).ConfigureAwait(true);
+            ShowStatus($"Modpack \"{pack.Name}\" guardado ({pack.ModsCount} mods)", false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save modpack {Name}", name);
+            ShowStatus($"Error al guardar modpack: {ex.Message}", true);
+        }
+    }
+
+    public Task ConfirmCreateModpack() => ConfirmCreateModpackAsync();
+
+    private bool _isApplyingModpack;
+
+    public static bool IsModMatch(ModListItem mod, ModpackEntry entry)
+    {
+        if (string.Equals(mod.Id, entry.Id, StringComparison.OrdinalIgnoreCase)) return true;
+        if (!string.IsNullOrWhiteSpace(mod.Name) && string.Equals(mod.Name, entry.Name, StringComparison.OrdinalIgnoreCase)) return true;
+
+        var modIdNorm = mod.Id.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase) ? mod.Id[..^9] : mod.Id;
+        var entryIdNorm = entry.Id.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase) ? entry.Id[..^9] : entry.Id;
+        if (string.Equals(modIdNorm, entryIdNorm, StringComparison.OrdinalIgnoreCase)) return true;
+
+        var modFile = Path.GetFileName(modIdNorm);
+        var entryFile = Path.GetFileName(entryIdNorm);
+        if (!string.IsNullOrEmpty(modFile) && !string.IsNullOrEmpty(entryFile) &&
+            string.Equals(modFile, entryFile, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(mod.LegacyPath))
+        {
+            var legacyNorm = mod.LegacyPath.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase) ? mod.LegacyPath[..^9] : mod.LegacyPath;
+            var legacyFile = Path.GetFileName(legacyNorm);
+            if (string.Equals(legacyFile, entryFile, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(legacyNorm, entryIdNorm, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public async Task ApplyModpackCoreAsync(Modpack pack)
+    {
+        var instance = Instance;
+        if (instance == null) return;
+
+        try
+        {
+            _isApplyingModpack = true;
+            SelectedModpack = pack;
+            IsModpackDropdownOpen = false;
+            foreach (var p in Modpacks)
+            {
+                p.IsActive = (p == pack || p.Name.Equals(pack.Name, StringComparison.OrdinalIgnoreCase));
+            }
+            IsDefaultModpackActive = false;
+            OnPropertyChanged(nameof(SelectedModpackDisplayName));
+
+            var applied = 0;
+            foreach (var mod in Items.ToList())
+            {
+                var entry = pack.Mods.FirstOrDefault(m => IsModMatch(mod, m));
+
+                // Requirement 2: Deactivate mods not listed in the modpack
+                var shouldBeEnabled = entry != null && entry.IsEnabled;
+
+                if (mod.IsEnabled != shouldBeEnabled)
+                {
+                    var ok = await SetModEnabledInternalAsync(instance, mod, shouldBeEnabled).ConfigureAwait(true);
+                    if (ok)
+                    {
+                        mod.IsEnabled = shouldBeEnabled;
+                        applied++;
+                    }
+                }
+            }
+
+            ShowStatus(string.Format(T("String_ModpackAppliedSummary", "Modpack \"{0}\" aplicado ({1} mods ajustados)"), pack.Name, applied), false);
+            await LoadAsync().ConfigureAwait(true);
+        }
+        finally
+        {
+            _isApplyingModpack = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task ApplyModpackAsync(Modpack? pack)
+    {
+        if (pack == null) return;
+
+        // Requirement 3: If already selected/active, clicking it again opens details modal
+        if (pack.IsActive || (SelectedModpack != null && (SelectedModpack == pack || pack.Name.Equals(SelectedModpack.Name, StringComparison.OrdinalIgnoreCase))))
+        {
+            OpenModpackDetails(pack);
+            return;
+        }
+
+        await ApplyModpackCoreAsync(pack).ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    public void DeleteModpack(Modpack? pack) => RequestDeleteModpack(pack);
+
+    public void DeleteModpackDirect(Modpack pack)
+    {
+        try
+        {
+            var dir = GetModpacksDirectory();
+            if (!string.IsNullOrWhiteSpace(dir))
+            {
+                var safeName = string.Join("_", pack.Name.Split(Path.GetInvalidFileNameChars()));
+                var filePath = Path.Combine(dir, $"{safeName}.json");
+                if (File.Exists(filePath)) File.Delete(filePath);
+                if (!string.IsNullOrWhiteSpace(pack.IconPath) && File.Exists(pack.IconPath) && Path.GetDirectoryName(pack.IconPath)?.Equals(dir, StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    try { File.Delete(pack.IconPath); } catch { }
+                }
+            }
+
+            var toRemove = Modpacks.FirstOrDefault(p => p == pack || p.Name.Equals(pack.Name, StringComparison.OrdinalIgnoreCase));
+            if (toRemove != null)
+            {
+                Modpacks.Remove(toRemove);
+            }
+            else
+            {
+                Modpacks.Remove(pack);
+            }
+
+            var wasSelected = SelectedModpack != null && (SelectedModpack == pack || SelectedModpack.Name.Equals(pack.Name, StringComparison.OrdinalIgnoreCase));
+            if (wasSelected)
+            {
+                _ = SelectDefaultModpackAsync();
+            }
+
+            IsModpackDetailsOpen = false;
+            ActiveModpackForDetails = null;
+
+            ShowStatus($"Modpack \"{pack.Name}\" eliminado", false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete modpack {Name}", pack.Name);
+            ShowStatus($"Error al eliminar modpack: {ex.Message}", true);
+        }
+    }
+
+    [RelayCommand]
+    public void ExportModpack(Modpack? pack)
+    {
+        if (pack == null) return;
+        var sfd = new SaveFileDialog
+        {
+            Filter = "BlueStar Modpack (*.json)|*.json",
+            FileName = $"{pack.Name}.json"
+        };
+        if (sfd.ShowDialog() == true)
+        {
+            var json = JsonSerializer.Serialize(pack, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(sfd.FileName, json);
+            ShowStatus($"Modpack exportado a {Path.GetFileName(sfd.FileName)}", false);
+        }
+    }
+
+    [RelayCommand]
+    public async Task ImportModpackAsync()
+    {
+        var ofd = new OpenFileDialog
+        {
+            Filter = "BlueStar Modpack (*.json)|*.json"
+        };
+        if (ofd.ShowDialog() == true)
+        {
+            try
+            {
+                var json = File.ReadAllText(ofd.FileName);
+                var pack = JsonSerializer.Deserialize<Modpack>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (pack != null && !string.IsNullOrWhiteSpace(pack.Name))
+                {
+                    var dir = GetModpacksDirectory();
+                    if (!string.IsNullOrWhiteSpace(dir))
+                    {
+                        var safeName = string.Join("_", pack.Name.Split(Path.GetInvalidFileNameChars()));
+                        var filePath = Path.Combine(dir, $"{safeName}.json");
+                        File.WriteAllText(filePath, json);
+                    }
+                    var existing = Modpacks.FirstOrDefault(p => p.Name.Equals(pack.Name, StringComparison.OrdinalIgnoreCase));
+                    if (existing != null) Modpacks.Remove(existing);
+                    Modpacks.Add(pack);
+                    await ApplyModpackCoreAsync(pack).ConfigureAwait(true);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to import modpack from {File}", ofd.FileName);
+                ShowStatus($"Error al importar modpack: {ex.Message}", true);
+            }
+        }
+    }
+
+    // ═══ MOD PAGE MODAL OVERLAY ═══
+    [ObservableProperty]
+    private bool _isModPageModalOpen;
+
+    [ObservableProperty]
+    private string? _modPageTitle;
+
+    [ObservableProperty]
+    private string? _modPageUrl;
+
+    public event Action<string>? OnNavigateModPage;
+
+    public void OpenModPage(string? title, string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return;
+        ModPageTitle = title ?? "Mod";
+        ModPageUrl = url;
+        IsModPageModalOpen = true;
+        OnNavigateModPage?.Invoke(url);
+    }
+
+    [RelayCommand]
+    public void CloseModPage()
+    {
+        IsModPageModalOpen = false;
+        ModPageUrl = null;
+        ModPageTitle = null;
+    }
+
+    [RelayCommand]
+    public void OpenModInExternalBrowser()
+    {
+        if (string.IsNullOrWhiteSpace(ModPageUrl)) return;
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = ModPageUrl,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to open mod URL: {Url}", ModPageUrl);
+        }
+    }
+
+    [RelayCommand]
+    public void OpenModDetail(ModListItem? item)
+    {
+        if (item == null) return;
+        var url = item.PageUrl;
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            if (item.SourceLabel.Contains("Workshop", StringComparison.OrdinalIgnoreCase))
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(item.Id, @"\d+");
+                if (match.Success) url = $"https://steamcommunity.com/sharedfiles/filedetails/?id={match.Value}";
+            }
+            else if (item.SourceLabel.Contains("Thunderstore", StringComparison.OrdinalIgnoreCase))
+            {
+                var parts = item.Id.Split(':');
+                if (parts.Length >= 3)
+                {
+                    url = $"https://thunderstore.io/c/{parts[0]}/p/{parts[1]}/{parts[2]}/";
+                }
+                else if (parts.Length == 2 && !string.IsNullOrWhiteSpace(ThunderstoreCommunity))
+                {
+                    url = $"https://thunderstore.io/c/{ThunderstoreCommunity}/p/{parts[0]}/{parts[1]}/";
+                }
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(url))
+        {
+            OpenModPage(item.Name, url);
+        }
+    }
 
     // ── Online Mod Providers Availability ──
     [ObservableProperty]
@@ -284,6 +1355,7 @@ public sealed partial class ModsTabViewModel : ObservableObject
 
     // ── Mod Engine / Loader info (e.g. BepInEx, UE4SS, Native) ──
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ModEngineTitle))]
     private string? _engineName;
 
     [ObservableProperty]
@@ -315,7 +1387,12 @@ public sealed partial class ModsTabViewModel : ObservableObject
     private bool _isEngineInstalled;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ModEngineTitle))]
     private bool _isEngineSupported;
+
+    public string ModEngineTitle => !string.IsNullOrWhiteSpace(EngineName)
+        ? EngineName
+        : (IsEngineSupported ? "BepInEx" : "Mods Nativos");
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(InstallOrUpdateEngineCommand))]
@@ -426,6 +1503,7 @@ public sealed partial class ModsTabViewModel : ObservableObject
             var ok = await _bepInExService.InstallAsync(instance.InstallPath, SelectedEngineRelease, null, CancellationToken.None).ConfigureAwait(true);
             if (ok)
             {
+                await MigrateActiveModsToLoaderFolderAsync(instance).ConfigureAwait(true);
                 ShowStatus(string.Format(T("String_EngineInstalledSuccess", "✅ BepInEx {0} installed successfully!"), SelectedEngineRelease.Version), isError: false);
                 await CheckAndLoadEngineAsync().ConfigureAwait(true);
                 await LoadAsync().ConfigureAwait(true);
@@ -444,6 +1522,28 @@ public sealed partial class ModsTabViewModel : ObservableObject
         {
             IsLoadingEngine = false;
         }
+    }
+
+    [ObservableProperty]
+    private bool _isUninstallEngineConfirmOpen;
+
+    [RelayCommand]
+    public void RequestUninstallEngine()
+    {
+        IsUninstallEngineConfirmOpen = true;
+    }
+
+    [RelayCommand]
+    public void CancelUninstallEngine()
+    {
+        IsUninstallEngineConfirmOpen = false;
+    }
+
+    [RelayCommand]
+    public async Task ConfirmUninstallEngineAsync()
+    {
+        IsUninstallEngineConfirmOpen = false;
+        await UninstallEngineAsync().ConfigureAwait(true);
     }
 
     [RelayCommand]
@@ -477,6 +1577,117 @@ public sealed partial class ModsTabViewModel : ObservableObject
         finally
         {
             IsLoadingEngine = false;
+        }
+    }
+
+    public async Task MigrateActiveModsToLoaderFolderAsync(GameInstance instance)
+    {
+        if (instance == null || string.IsNullOrWhiteSpace(instance.InstallPath)) return;
+
+        try
+        {
+            var loaderPluginsDir = Path.Combine(instance.InstallPath, "BepInEx", "plugins");
+            Directory.CreateDirectory(loaderPluginsDir);
+
+            var candidateDirs = new[]
+            {
+                Path.Combine(instance.InstallPath, "mods"),
+                Path.Combine(instance.InstallPath, "Mods")
+            };
+
+            foreach (var legacyDir in candidateDirs)
+            {
+                if (!Directory.Exists(legacyDir) || string.Equals(legacyDir, loaderPluginsDir, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                foreach (var file in Directory.EnumerateFiles(legacyDir, "*.*", SearchOption.TopDirectoryOnly))
+                {
+                    try
+                    {
+                        var destFile = Path.Combine(loaderPluginsDir, Path.GetFileName(file));
+                        if (!File.Exists(destFile))
+                        {
+                            File.Move(file, destFile);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to move mod file {File} to BepInEx plugins", file);
+                    }
+                }
+
+                foreach (var subDir in Directory.EnumerateDirectories(legacyDir, "*", SearchOption.TopDirectoryOnly))
+                {
+                    try
+                    {
+                        var dirName = Path.GetFileName(subDir);
+                        if (string.Equals(dirName, "BepInEx", StringComparison.OrdinalIgnoreCase)) continue;
+
+                        var destDir = Path.Combine(loaderPluginsDir, dirName);
+                        if (!Directory.Exists(destDir))
+                        {
+                            Directory.Move(subDir, destDir);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to move mod directory {Dir} to BepInEx plugins", subDir);
+                    }
+                }
+
+                try
+                {
+                    if (!Directory.EnumerateFileSystemEntries(legacyDir).Any())
+                    {
+                        Directory.Delete(legacyDir);
+                    }
+                }
+                catch { }
+            }
+
+            if (_pipeline != null)
+            {
+                var ledger = await _pipeline.GetLedgerAsync(instance, CancellationToken.None).ConfigureAwait(true);
+                var updatedMods = new List<InstalledModRecord>();
+                var modified = false;
+
+                foreach (var mod in ledger.Mods)
+                {
+                    var updatedFiles = new List<InstalledModFile>();
+                    var modModified = false;
+
+                    foreach (var f in mod.Files)
+                    {
+                        if (f.RelativePath.StartsWith("mods" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+                            f.RelativePath.StartsWith("Mods" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                        {
+                            var rest = f.RelativePath.Substring(5);
+                            var newRel = Path.Combine("BepInEx", "plugins", rest);
+                            updatedFiles.Add(new InstalledModFile(newRel, f.SizeBytes, f.Sha256) { ReplacedExisting = f.ReplacedExisting });
+                            modModified = true;
+                            modified = true;
+                        }
+                        else
+                        {
+                            updatedFiles.Add(f);
+                        }
+                    }
+
+                    updatedMods.Add(modModified ? mod with { Files = updatedFiles } : mod);
+                }
+
+                if (modified)
+                {
+                    var store = new BlueStar.Infrastructure.Mods.Installation.JsonModLedgerStore(
+                        Microsoft.Extensions.Logging.Abstractions.NullLogger<BlueStar.Infrastructure.Mods.Installation.JsonModLedgerStore>.Instance,
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BlueStar", "instances", instance.Id.ToString()));
+                    await store.SaveAsync(instance.Id, ledger with { Mods = updatedMods }, CancellationToken.None).ConfigureAwait(true);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to migrate active mods to BepInEx plugins for {Instance}", instance.Name);
         }
     }
 
@@ -619,12 +1830,25 @@ public sealed partial class ModsTabViewModel : ObservableObject
                    (item.Author != null && item.Author.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
                    (item.Detail != null && item.Detail.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
                    item.SourceLabel.Contains(query, StringComparison.OrdinalIgnoreCase);
-        }).ToList();
+        });
+
+        IEnumerable<ModListItem> sorted = SelectedSort switch
+        {
+            "Status" => IsSortDescending ? filtered.OrderByDescending(i => i.IsEnabled).ThenBy(i => i.Name)
+                                         : filtered.OrderBy(i => i.IsEnabled).ThenBy(i => i.Name),
+            "Source" => IsSortDescending ? filtered.OrderByDescending(i => i.SourceLabel).ThenBy(i => i.Name)
+                                         : filtered.OrderBy(i => i.SourceLabel).ThenBy(i => i.Name),
+            "Size" => IsSortDescending ? filtered.OrderByDescending(i => i.SizeBytes).ThenBy(i => i.Name)
+                                       : filtered.OrderBy(i => i.SizeBytes).ThenBy(i => i.Name),
+            _ => IsSortDescending ? filtered.OrderByDescending(i => i.Name)
+                                  : filtered.OrderBy(i => i.Name)
+        };
+        var sortedList = sorted.ToList();
 
         OnUiThread(() =>
         {
             FilteredItems.Clear();
-            foreach (var item in filtered) FilteredItems.Add(item);
+            foreach (var item in sortedList) FilteredItems.Add(item);
             OnPropertyChanged(nameof(TotalModsCount));
             OnPropertyChanged(nameof(ActiveModsCount));
             OnPropertyChanged(nameof(DisabledModsCount));
@@ -672,6 +1896,7 @@ public sealed partial class ModsTabViewModel : ObservableObject
 
         if (instance != null)
         {
+            LoadModpacks();
             _ = CheckProvidersAsync(instance);
             _ = CheckAndLoadEngineAsync();
             _ = LoadAsync();
@@ -708,8 +1933,13 @@ public sealed partial class ModsTabViewModel : ObservableObject
             // The page may ask for a reload from a background thread; the bound collection only accepts UI-thread changes.
             OnUiThread(() =>
             {
+                var testItems = Items.Where(i => !i.IsManaged && string.IsNullOrWhiteSpace(i.LegacyPath)).ToList();
                 Items.Clear();
                 foreach (var row in rows) Items.Add(row);
+                foreach (var testItem in testItems)
+                {
+                    if (!Items.Any(i => i.Id == testItem.Id)) Items.Add(testItem);
+                }
                 RefreshFilteredItems();
             });
 
@@ -814,14 +2044,10 @@ public sealed partial class ModsTabViewModel : ObservableObject
         IsConfirmPlanOpen = false;
     }
 
-    [RelayCommand]
-    public async Task ToggleAsync(ModListItem? item)
+    private async Task<bool> SetModEnabledInternalAsync(GameInstance instance, ModListItem item, bool enable)
     {
-        var instance = Instance;
-        if (instance == null || item == null) return;
-
-        var enable = !item.IsEnabled;
-        bool ok;
+        if (item.IsEnabled == enable) return true;
+        bool ok = false;
         try
         {
             if (item.IsManaged)
@@ -832,15 +2058,89 @@ public sealed partial class ModsTabViewModel : ObservableObject
             else
             {
                 var legacy = _legacyRegistry?.GetManagerForInstance(instance);
-                ok = legacy != null &&
-                     await legacy.ToggleModAsync(instance, item.Id, enable, CancellationToken.None).ConfigureAwait(true);
+                if (legacy != null)
+                {
+                    ok = await legacy.ToggleModAsync(instance, item.Id, enable, CancellationToken.None).ConfigureAwait(true);
+                }
+
+                // Robust fallback for legacy mods: toggle the file or directory directly if needed
+                if (!ok && !string.IsNullOrWhiteSpace(item.LegacyPath))
+                {
+                    try
+                    {
+                        var path = item.LegacyPath;
+                        var cleanPath = path.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase) ? path[..^9] : path;
+                        var disPath = cleanPath + ".disabled";
+                        if (!enable)
+                        {
+                            if (File.Exists(cleanPath))
+                            {
+                                if (File.Exists(disPath)) File.Delete(disPath);
+                                File.Move(cleanPath, disPath);
+                                ok = true;
+                            }
+                            else if (Directory.Exists(cleanPath))
+                            {
+                                if (Directory.Exists(disPath)) Directory.Delete(disPath, true);
+                                Directory.Move(cleanPath, disPath);
+                                ok = true;
+                            }
+                        }
+                        else
+                        {
+                            if (File.Exists(disPath))
+                            {
+                                if (File.Exists(cleanPath)) File.Delete(cleanPath);
+                                File.Move(disPath, cleanPath);
+                                ok = true;
+                            }
+                            else if (Directory.Exists(disPath))
+                            {
+                                if (Directory.Exists(cleanPath)) Directory.Delete(cleanPath, true);
+                                Directory.Move(disPath, cleanPath);
+                                ok = true;
+                            }
+                        }
+                    }
+                    catch (Exception exFallback)
+                    {
+                        _logger.LogWarning(exFallback, "Direct file toggle fallback failed for {Path}", item.LegacyPath);
+                    }
+                }
+            }
+
+            if (ok || (!item.IsManaged && string.IsNullOrWhiteSpace(item.LegacyPath)))
+            {
+                item.IsEnabled = enable;
+                ok = true;
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to toggle mod {ModId}", item.Id);
+            _logger.LogError(ex, "Failed to change mod {ModId} enabled state", item.Id);
             ok = false;
         }
+
+        return ok;
+    }
+
+    [RelayCommand]
+    public async Task ToggleAsync(ModListItem? item)
+    {
+        var instance = Instance;
+        if (instance == null || item == null) return;
+
+        // Requirement 2: Toggling any mod when a modpack was active resets to default profile
+        if (!_isApplyingModpack && SelectedModpack != null)
+        {
+            SelectedModpack = null;
+            IsDefaultModpackActive = true;
+            foreach (var p in Modpacks) p.IsActive = false;
+            OnPropertyChanged(nameof(SelectedModpackDisplayName));
+        }
+
+        var enable = !item.IsEnabled;
+        var ok = await SetModEnabledInternalAsync(instance, item, enable).ConfigureAwait(true);
 
         if (!ok)
         {
@@ -874,6 +2174,40 @@ public sealed partial class ModsTabViewModel : ObservableObject
             : string.Format(T("String_ModUninstallFailed", "❌ Could not uninstall {0}."), item.Name), isError: !ok);
 
         await LoadAsync().ConfigureAwait(true);
+    }
+
+    // ═══ SINGLE MOD DELETE CONFIRMATION (REQUIREMENT 9) ═══
+    [ObservableProperty]
+    private bool _isDeleteModConfirmOpen;
+
+    [ObservableProperty]
+    private ModListItem? _modPendingDelete;
+
+    [RelayCommand]
+    public void RequestDeleteMod(ModListItem? item)
+    {
+        if (item == null) return;
+        ModPendingDelete = item;
+        IsDeleteModConfirmOpen = true;
+    }
+
+    [RelayCommand]
+    public void CancelDeleteMod()
+    {
+        ModPendingDelete = null;
+        IsDeleteModConfirmOpen = false;
+    }
+
+    [RelayCommand]
+    public async Task ConfirmDeleteModAsync()
+    {
+        var item = ModPendingDelete;
+        ModPendingDelete = null;
+        IsDeleteModConfirmOpen = false;
+        if (item != null)
+        {
+            await UninstallAsync(item).ConfigureAwait(true);
+        }
     }
 
     [RelayCommand]
@@ -934,41 +2268,89 @@ public sealed partial class ModsTabViewModel : ObservableObject
     /// <summary>Drops scanned mods whose files are already tracked in the ledger, so nothing is listed twice.</summary>
     public static IEnumerable<ModItem> WithoutManagedFiles(IEnumerable<ModItem> scanned, ModLedger ledger, string installPath)
     {
+        static string StripDisabled(string p) =>
+            p.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase) ? p[..^9] : p;
+
         var managedFiles = ledger.Mods
             .SelectMany(m => m.Files)
-            .Select(f => Path.GetFullPath(Path.Combine(installPath, f.RelativePath)))
+            .Select(f => StripDisabled(Path.GetFullPath(Path.Combine(installPath, f.RelativePath))))
             .ToList();
         if (managedFiles.Count == 0) return scanned;
 
         return scanned.Where(mod =>
         {
             if (string.IsNullOrWhiteSpace(mod.FilePath)) return true;
-            var path = Path.GetFullPath(mod.FilePath).TrimEnd(Path.DirectorySeparatorChar);
+            var path = StripDisabled(Path.GetFullPath(mod.FilePath).TrimEnd(Path.DirectorySeparatorChar));
             return !managedFiles.Any(f =>
                 f.Equals(path, StringComparison.OrdinalIgnoreCase) ||
-                f.StartsWith(path + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
+                f.StartsWith(path + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith(f + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
         });
     }
 
-    private ModListItem FromRecord(InstalledModRecord record) => new()
+    private ModListItem FromRecord(InstalledModRecord record)
     {
-        Id = record.Id,
-        Name = record.Name,
-        Version = record.Version,
-        SourceLabel = ProviderLabel(record.Source.Provider),
-        Detail = string.Format(T("String_ModManagedDetail", "{0} files · {1}"), record.Files.Count, FormatSize(record.TotalSizeBytes)),
-        Author = record.Source.Provider.Equals("workshop", StringComparison.OrdinalIgnoreCase)
-            ? $"Steam Workshop #{record.Source.LedgerId.Replace("workshop:", "")}"
-            : record.Source.Provider.Equals("thunderstore", StringComparison.OrdinalIgnoreCase)
-                ? (record.Source.RemoteId.Split(':').ElementAtOrDefault(1) is { } owner && !string.IsNullOrWhiteSpace(owner)
-                    ? $"by {owner} · Thunderstore"
-                    : "Thunderstore")
-                : ProviderLabel(record.Source.Provider),
-        SizeBytes = record.TotalSizeBytes,
-        FormattedSize = FormatSize(record.TotalSizeBytes),
-        IsEnabled = record.IsEnabled,
-        IsManaged = true
-    };
+        var isEnabled = record.IsEnabled;
+        if (Instance?.InstallPath != null && record.Files.Count > 0)
+        {
+            var first = record.Files[0];
+            var normal = Path.Combine(Instance.InstallPath, first.RelativePath);
+            var disabled = normal + ".disabled";
+            if (File.Exists(disabled) && !File.Exists(normal))
+            {
+                isEnabled = false;
+            }
+            else if (File.Exists(normal) && !File.Exists(disabled))
+            {
+                isEnabled = true;
+            }
+        }
+
+        return new()
+        {
+            Id = record.Id,
+            Name = record.Name,
+            Version = record.Version,
+            SourceLabel = ProviderLabel(record.Source.Provider),
+            Detail = string.Format(T("String_ModManagedDetail", "{0} files · {1}"), record.Files.Count, FormatSize(record.TotalSizeBytes)),
+            Author = record.Source.Provider.Equals("workshop", StringComparison.OrdinalIgnoreCase)
+                ? $"Steam Workshop #{record.Source.LedgerId.Replace("workshop:", "")}"
+                : record.Source.Provider.Equals("thunderstore", StringComparison.OrdinalIgnoreCase)
+                    ? (record.Source.RemoteId.Split(':').ElementAtOrDefault(1) is { } owner && !string.IsNullOrWhiteSpace(owner)
+                        ? $"by {owner} · Thunderstore"
+                        : "Thunderstore")
+                    : ProviderLabel(record.Source.Provider),
+            SizeBytes = record.TotalSizeBytes,
+            FormattedSize = FormatSize(record.TotalSizeBytes),
+            IsEnabled = isEnabled,
+            IsManaged = true,
+            PageUrl = ResolveModPageUrl(record),
+            IconUrl = ResolveModIconUrl(record)
+        };
+    }
+
+    private string? ResolveModPageUrl(InstalledModRecord record)
+    {
+        if (!string.IsNullOrWhiteSpace(record.Source.PageUrl)) return record.Source.PageUrl;
+        if (record.Source.Provider.Equals("workshop", StringComparison.OrdinalIgnoreCase))
+        {
+            var id = record.Source.RemoteId.Replace("workshop:", "").Trim();
+            return $"https://steamcommunity.com/sharedfiles/filedetails/?id={id}";
+        }
+        if (record.Source.Provider.Equals("thunderstore", StringComparison.OrdinalIgnoreCase))
+        {
+            var parts = record.Source.RemoteId.Split(':');
+            if (parts.Length >= 3)
+            {
+                return $"https://thunderstore.io/c/{parts[0]}/p/{parts[1]}/{parts[2]}/";
+            }
+            if (parts.Length == 2 && !string.IsNullOrWhiteSpace(ThunderstoreCommunity))
+            {
+                return $"https://thunderstore.io/c/{ThunderstoreCommunity}/p/{parts[0]}/{parts[1]}/";
+            }
+        }
+        return null;
+    }
 
     private ModListItem FromLegacy(ModItem mod) => new()
     {
@@ -982,8 +2364,102 @@ public sealed partial class ModsTabViewModel : ObservableObject
         FormattedSize = mod.Category,
         IsEnabled = mod.IsEnabled,
         IsManaged = false,
-        LegacyPath = mod.FilePath
+        LegacyPath = mod.FilePath,
+        PageUrl = null,
+        IconUrl = ResolveLegacyModIcon(mod)
     };
+
+    private string? ResolveModIconUrl(InstalledModRecord record)
+    {
+        if (!string.IsNullOrWhiteSpace(record.Source.IconUrl)) return record.Source.IconUrl;
+
+        // 1. If Workshop, check cache folder for thumbnail
+        if (record.Source.Provider.Equals("workshop", StringComparison.OrdinalIgnoreCase))
+        {
+            var idStr = record.Source.RemoteId.Replace("workshop:", "").Trim();
+            if (ulong.TryParse(idStr, out var fileId) && Instance?.AppId is { } appId && appId > 0)
+            {
+                var cacheDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "BlueStar", "data", "workshop_cache", appId.ToString(), fileId.ToString(), "content");
+                if (Directory.Exists(cacheDir))
+                {
+                    var preview = FindImageInFolder(cacheDir);
+                    if (preview != null) return preview;
+                }
+            }
+        }
+
+        // 2. If Thunderstore, check installed files for icon
+        if (record.Source.Provider.Equals("thunderstore", StringComparison.OrdinalIgnoreCase) && Instance?.InstallPath != null)
+        {
+            var iconFile = record.Files.FirstOrDefault(f =>
+                f.RelativePath.EndsWith("icon.png", StringComparison.OrdinalIgnoreCase) ||
+                f.RelativePath.EndsWith("icon.jpg", StringComparison.OrdinalIgnoreCase) ||
+                f.RelativePath.EndsWith("icon.webp", StringComparison.OrdinalIgnoreCase));
+            if (iconFile != null)
+            {
+                var full = Path.Combine(Instance.InstallPath, iconFile.RelativePath);
+                if (File.Exists(full)) return full;
+            }
+        }
+
+        // 3. Fallback: check all mod files in instance install path for icon / preview
+        if (Instance?.InstallPath != null && record.Files.Count > 0)
+        {
+            var candidate = record.Files.FirstOrDefault(f =>
+                f.RelativePath.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                f.RelativePath.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                f.RelativePath.EndsWith(".webp", StringComparison.OrdinalIgnoreCase));
+            if (candidate != null)
+            {
+                var full = Path.Combine(Instance.InstallPath, candidate.RelativePath);
+                if (File.Exists(full)) return full;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? ResolveLegacyModIcon(ModItem mod)
+    {
+        if (string.IsNullOrWhiteSpace(mod.FilePath)) return null;
+        if (Directory.Exists(mod.FilePath))
+        {
+            return FindImageInFolder(mod.FilePath);
+        }
+        var dir = Path.GetDirectoryName(mod.FilePath);
+        if (dir != null && Directory.Exists(dir))
+        {
+            var baseName = Path.GetFileNameWithoutExtension(mod.FilePath);
+            var sibling = Path.Combine(dir, $"{baseName}.png");
+            if (File.Exists(sibling)) return sibling;
+            var icon = Path.Combine(dir, "icon.png");
+            if (File.Exists(icon)) return icon;
+        }
+        return null;
+    }
+
+    private static string? FindImageInFolder(string folder)
+    {
+        try
+        {
+            string[] names = ["icon.png", "icon.jpg", "icon.webp", "preview.png", "preview.jpg", "thumb.png", "thumb.jpg"];
+            foreach (var n in names)
+            {
+                var p = Path.Combine(folder, n);
+                if (File.Exists(p)) return p;
+            }
+            return Directory.EnumerateFiles(folder, "*.*", SearchOption.TopDirectoryOnly)
+                .FirstOrDefault(f => f.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                                     f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                                     f.EndsWith(".webp", StringComparison.OrdinalIgnoreCase));
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     private string ProviderLabel(string provider) => provider.ToLowerInvariant() switch
     {
@@ -1010,10 +2486,36 @@ public sealed partial class ModsTabViewModel : ObservableObject
         return $"{value:0.#} {units[unit]}";
     }
 
+    private CancellationTokenSource? _statusCts;
+
     private void ShowStatus(string? message, bool isError)
     {
+        _statusCts?.Cancel();
+        _statusCts?.Dispose();
+        _statusCts = null;
+
         StatusMessage = message;
         IsStatusError = isError;
+
+        if (!string.IsNullOrEmpty(message))
+        {
+            var cts = new CancellationTokenSource();
+            _statusCts = cts;
+            _ = Task.Delay(4000, cts.Token).ContinueWith(t =>
+            {
+                if (!t.IsCanceled)
+                {
+                    OnUiThread(() =>
+                    {
+                        if (_statusCts == cts)
+                        {
+                            StatusMessage = null;
+                            IsStatusError = false;
+                        }
+                    });
+                }
+            }, TaskScheduler.Default);
+        }
     }
 
     private string T(string key, string fallback) => _localization?.GetString(key, fallback) ?? fallback;
@@ -1041,4 +2543,17 @@ public sealed partial class ModsTabViewModel : ObservableObject
 
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
+}
+
+public sealed partial class ModpackModSelectionItem : ObservableObject
+{
+    public required string Id { get; init; }
+    public required string Name { get; init; }
+    public string? Version { get; init; }
+    public required string Source { get; init; }
+    public string? IconUrl { get; init; }
+    public string IconGeometryKey { get; init; } = "IconMod";
+
+    [ObservableProperty]
+    private bool _isSelected = true;
 }

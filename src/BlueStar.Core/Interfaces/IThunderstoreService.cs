@@ -28,6 +28,7 @@ public interface IThunderstoreService
 
     /// <summary>
     /// Searches and filters packages for the specified community by text query, category, and sorting.
+    /// Supports multiple included and excluded category tags.
     /// </summary>
     Task<IReadOnlyList<ThunderstorePackage>> SearchPackagesAsync(
         string community,
@@ -35,7 +36,9 @@ public interface IThunderstoreService
         string? category = null,
         string sortBy = "Downloads",
         bool isAscending = false,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        IEnumerable<string>? includedCategories = null,
+        IEnumerable<string>? excludedCategories = null);
 
     /// <summary>
     /// Downloads a Thunderstore package into the local cache and returns a <see cref="ModPackage"/> ready for installation.

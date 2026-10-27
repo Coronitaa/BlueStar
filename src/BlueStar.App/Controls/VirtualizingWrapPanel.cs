@@ -14,6 +14,8 @@ namespace BlueStar.App.Controls;
 /// </summary>
 public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
 {
+    private const int BufferRows = 3;
+
     public static readonly DependencyProperty ItemWidthProperty =
         DependencyProperty.Register(
             nameof(ItemWidth),
@@ -101,6 +103,7 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         if (e.VerticalChange != 0 || e.HorizontalChange != 0 || e.ViewportHeightChange != 0 || e.ViewportWidthChange != 0)
         {
             InvalidateMeasure();
+            InvalidateArrange();
         }
     }
 
@@ -147,8 +150,10 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
                 return new Size(0, 0);
             }
 
-            double itemWidth = ItemWidth > 0 ? ItemWidth : 300;
-            double itemHeight = ItemHeight > 0 ? ItemHeight : 350;
+            if (_ancestorScroller == null)
+            {
+                HookAncestorScroller();
+            }
 
             double availableWidth = double.IsInfinity(availableSize.Width)
                 ? (_viewport.Width > 0 ? _viewport.Width : 1200)
@@ -156,7 +161,10 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
 
             if (availableWidth <= 0) availableWidth = 1200;
 
-            int columns = Math.Max(1, (int)(availableWidth / itemWidth));
+            int columns = ItemWidth > 0 ? Math.Max(1, (int)(availableWidth / ItemWidth)) : 1;
+            double itemWidth = columns == 1 && ItemWidth <= 0 ? availableWidth : (ItemWidth > 0 ? ItemWidth : 300);
+            double itemHeight = ItemHeight > 0 ? ItemHeight : 350;
+
             int rows = (int)Math.Ceiling((double)itemCount / columns);
 
             double extentHeight = rows * itemHeight;
@@ -164,20 +172,47 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
 
             UpdateScrollDimensions(extentWidth, extentHeight, availableWidth, double.IsInfinity(availableSize.Height) ? extentHeight : availableSize.Height);
 
-            var generator = ItemContainerGenerator;
-            if (generator != null)
+            double relativeScrollY = _offset.Y;
+            double viewHeight = _viewport.Height;
+
+            if (_ancestorScroller != null)
             {
-                var startPos = generator.GeneratorPositionFromIndex(0);
+                viewHeight = _ancestorScroller.ViewportHeight;
+                try
+                {
+                    var transform = TransformToAncestor(_ancestorScroller);
+                    var pt = transform.Transform(new Point(0, 0));
+                    relativeScrollY = Math.Max(0, -pt.Y);
+                }
+                catch
+                {
+                    relativeScrollY = _ancestorScroller.VerticalOffset;
+                }
+            }
+
+            if (viewHeight <= 0) viewHeight = 800;
+
+            int firstRow = Math.Max(0, (int)(relativeScrollY / itemHeight) - BufferRows);
+            int lastRow = Math.Min(rows - 1, (int)((relativeScrollY + viewHeight) / itemHeight) + BufferRows);
+
+            int firstItemIndex = firstRow * columns;
+            int lastItemIndex = Math.Min(itemCount - 1, (lastRow + 1) * columns - 1);
+
+            var generator = ItemContainerGenerator;
+            if (generator != null && firstItemIndex <= lastItemIndex)
+            {
+                var startPos = generator.GeneratorPositionFromIndex(firstItemIndex);
                 int childIndex = (startPos.Offset == 0) ? startPos.Index : startPos.Index + 1;
+                if (childIndex < 0) childIndex = 0;
 
                 using (generator.StartAt(startPos, GeneratorDirection.Forward, true))
                 {
-                    for (int i = 0; i < itemCount; i++)
+                    for (int i = firstItemIndex; i <= lastItemIndex; i++)
                     {
                         var child = generator.GenerateNext(out bool isNewlyRealized) as UIElement;
-                        if (child == null) break;
+                        if (child == null) continue;
 
-                        if (isNewlyRealized || childIndex >= InternalChildren.Count || !ReferenceEquals(InternalChildren[childIndex], child))
+                        if (isNewlyRealized)
                         {
                             if (childIndex >= InternalChildren.Count)
                             {
@@ -189,14 +224,49 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
                             }
                             generator.PrepareItemContainer(child);
                         }
+                        else
+                        {
+                            if (childIndex >= InternalChildren.Count || !ReferenceEquals(InternalChildren[childIndex], child))
+                            {
+                                int existingIndex = InternalChildren.IndexOf(child);
+                                if (existingIndex >= 0)
+                                {
+                                    RemoveInternalChildRange(existingIndex, 1);
+                                }
+                                if (childIndex >= InternalChildren.Count)
+                                {
+                                    AddInternalChild(child);
+                                }
+                                else
+                                {
+                                    InsertInternalChild(childIndex, child);
+                                }
+                            }
+                        }
+
                         child.Measure(new Size(itemWidth, itemHeight));
                         childIndex++;
                     }
                 }
 
-                if (InternalChildren.Count > itemCount)
+                // Clean up containers that have scrolled out of view (above or below)
+                var recyclingGen = generator as IRecyclingItemContainerGenerator;
+                for (int i = InternalChildren.Count - 1; i >= 0; i--)
                 {
-                    RemoveInternalChildRange(itemCount, InternalChildren.Count - itemCount);
+                    var genPos = new GeneratorPosition(i, 0);
+                    int itemIndex = generator.IndexFromGeneratorPosition(genPos);
+                    if (itemIndex < firstItemIndex || itemIndex > lastItemIndex || itemIndex < 0)
+                    {
+                        if (recyclingGen != null)
+                        {
+                            recyclingGen.Recycle(genPos, 1);
+                        }
+                        else
+                        {
+                            generator.Remove(genPos, 1);
+                        }
+                        RemoveInternalChildRange(i, 1);
+                    }
                 }
             }
             else
@@ -230,18 +300,22 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
     {
         try
         {
-            double itemWidth = ItemWidth > 0 ? ItemWidth : 300;
+            int columns = ItemWidth > 0 ? Math.Max(1, (int)(finalSize.Width / ItemWidth)) : 1;
+            double itemWidth = columns == 1 && ItemWidth <= 0 ? finalSize.Width : (ItemWidth > 0 ? ItemWidth : 300);
             double itemHeight = ItemHeight > 0 ? ItemHeight : 350;
 
-            int columns = Math.Max(1, (int)(finalSize.Width / itemWidth));
-
+            var generator = ItemContainerGenerator;
             for (int i = 0; i < InternalChildren.Count; i++)
             {
                 var child = InternalChildren[i];
                 if (child == null) continue;
 
-                int row = i / columns;
-                int col = i % columns;
+                var genPos = new GeneratorPosition(i, 0);
+                int itemIndex = generator != null ? generator.IndexFromGeneratorPosition(genPos) : i;
+                if (itemIndex < 0) itemIndex = i;
+
+                int row = itemIndex / columns;
+                int col = itemIndex % columns;
 
                 double x = col * itemWidth;
                 double y = row * itemHeight;
@@ -356,4 +430,3 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         return rectangle;
     }
 }
-

@@ -123,9 +123,15 @@ public sealed class ModInstallPipeline : IModInstallPipeline
 
             using (var tx = BeginTransaction(instance, record.Id))
             {
-                if (record.IsEnabled)
+                foreach (var file in record.Files)
                 {
-                    foreach (var file in record.Files)
+                    var normalPath = Path.Combine(instance.InstallPath, file.RelativePath);
+                    var disabledPath = normalPath + ".disabled";
+                    if (File.Exists(disabledPath))
+                    {
+                        try { File.Delete(disabledPath); } catch { }
+                    }
+                    if (record.IsEnabled)
                     {
                         tx.Remove(file.RelativePath, restoreBackup: file.ReplacedExisting);
                     }
@@ -229,33 +235,36 @@ public sealed class ModInstallPipeline : IModInstallPipeline
 
     private async Task<bool> DisableAsync(GameInstance instance, ModLedger ledger, InstalledModRecord record, CancellationToken ct)
     {
-        var parked = DisabledDirectory(instance, record.Id);
-        using var tx = BeginTransaction(instance, record.Id);
         try
         {
             foreach (var file in record.Files)
             {
-                var source = tx.FullPath(file.RelativePath);
-                if (!File.Exists(source)) continue;
+                var source = Path.Combine(instance.InstallPath, file.RelativePath);
+                if (File.Exists(source))
+                {
+                    var target = source + ".disabled";
+                    File.Move(source, target, overwrite: true);
+                }
 
-                var target = Path.Combine(parked, file.RelativePath);
-                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                File.Copy(source, target, overwrite: true);
-                tx.Remove(file.RelativePath, restoreBackup: file.ReplacedExisting);
+                if (file.ReplacedExisting)
+                {
+                    var backup = Path.Combine(BackupDirectory(instance, record.Id), file.RelativePath);
+                    if (File.Exists(backup))
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(source)!);
+                        File.Copy(backup, source, overwrite: true);
+                    }
+                }
             }
 
             await _ledgerStore.SaveAsync(instance.Id, ledger.WithMod(record with { IsEnabled = false }), ct).ConfigureAwait(false);
-            tx.Commit();
+            return true;
         }
-        catch
+        catch (Exception ex)
         {
-            tx.Rollback();
-            DeleteQuietly(parked);
-            throw;
+            _logger.LogError(ex, "Failed to disable mod {ModId}", record.Id);
+            return false;
         }
-
-        ModFileTransaction.RemoveEmptyDirectories(instance.InstallPath, record.CreatedDirectories);
-        return true;
     }
 
     private async Task<bool> EnableAsync(GameInstance instance, ModLedger ledger, InstalledModRecord record, CancellationToken ct)
@@ -269,19 +278,34 @@ public sealed class ModInstallPipeline : IModInstallPipeline
         }
 
         var parked = DisabledDirectory(instance, record.Id);
-        using (var tx = BeginTransaction(instance, record.Id))
+        try
         {
-            var restored = record.Files
-                .Select(f => tx.Copy(Path.Combine(parked, f.RelativePath), f.RelativePath, ownedByThisMod: true, f.ReplacedExisting))
-                .ToList();
+            foreach (var file in record.Files)
+            {
+                var activePath = Path.Combine(instance.InstallPath, file.RelativePath);
+                var disabledPath = activePath + ".disabled";
 
-            var enabled = record with { IsEnabled = true, Files = restored };
-            await _ledgerStore.SaveAsync(instance.Id, ledger.WithMod(enabled), ct).ConfigureAwait(false);
-            tx.Commit();
+                if (File.Exists(disabledPath))
+                {
+                    File.Move(disabledPath, activePath, overwrite: true);
+                }
+                else if (File.Exists(Path.Combine(parked, file.RelativePath)))
+                {
+                    var pSource = Path.Combine(parked, file.RelativePath);
+                    Directory.CreateDirectory(Path.GetDirectoryName(activePath)!);
+                    File.Copy(pSource, activePath, overwrite: true);
+                }
+            }
+
+            await _ledgerStore.SaveAsync(instance.Id, ledger.WithMod(record with { IsEnabled = true }), ct).ConfigureAwait(false);
+            DeleteQuietly(parked);
+            return true;
         }
-
-        DeleteQuietly(parked);
-        return true;
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to enable mod {ModId}", record.Id);
+            return false;
+        }
     }
 
     // ── Staging ────────────────────────────────────────────────────────────

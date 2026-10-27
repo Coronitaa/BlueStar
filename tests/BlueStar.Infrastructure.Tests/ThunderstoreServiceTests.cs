@@ -170,5 +170,13 @@ public sealed class ThunderstoreServiceTests : IDisposable
         var descDownloads = await service.SearchPackagesAsync("lethal-company", sortBy: "Downloads", isAscending: false);
         descDownloads[0].Name.Should().Be("MoreCompany");
         descDownloads[1].Name.Should().Be("LateCompany");
+
+        // Act: filter with includedCategories
+        var included = await service.SearchPackagesAsync("lethal-company", includedCategories: ["Gameplay"]);
+        included.Should().ContainSingle(p => p.Name == "LateCompany");
+
+        // Act: filter with excludedCategories
+        var excluded = await service.SearchPackagesAsync("lethal-company", excludedCategories: ["Gameplay"]);
+        excluded.Should().ContainSingle(p => p.Name == "MoreCompany");
     }
 }
