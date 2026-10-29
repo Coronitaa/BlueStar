@@ -153,6 +153,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly IMetadataProvider? _metadataProvider;
     private readonly IPrerequisiteService? _prerequisiteService;
     private readonly BlueStar.Infrastructure.Storage.AppSettingsService? _appSettings;
+    private readonly INexusModsService? _nexusModsService;
 
     // ── System Requirements State ──
     [ObservableProperty]
@@ -199,7 +200,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         IMetadataProvider? metadataProvider = null,
         IPrerequisiteService? prerequisiteService = null,
         BlueStar.Infrastructure.Storage.AppSettingsService? appSettings = null,
-        ICommunityStatsService? statsService = null)
+        ICommunityStatsService? statsService = null,
+        INexusModsService? nexusModsService = null)
     {
         _downloadQueueManager = downloadQueueManager;
         _steamStatusService = steamStatusService;
@@ -213,6 +215,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _prerequisiteService = prerequisiteService;
         _appSettings = appSettings;
         _statsService = statsService;
+        _nexusModsService = nexusModsService;
         _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
         if (_appSettings != null)
@@ -863,6 +866,66 @@ public partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Opens the instance dashboard for a specific game instance.
     /// </summary>
+    /// <summary>
+    /// Handles an incoming nxm:// URL, finding the matching installed game instance,
+    /// opening its detail view, and triggering the mod download and installation.
+    /// </summary>
+    public async Task HandleNxmUrlAsync(string nxmUrl)
+    {
+        if (string.IsNullOrWhiteSpace(nxmUrl)) return;
+        if (_nexusModsService == null || !_nexusModsService.CanHandleNxmUrl(nxmUrl))
+        {
+            _notificationService.ShowWarning("Nexus Mods", "El enlace recibido no es un enlace nxm:// válido de Nexus Mods.");
+            return;
+        }
+
+        var link = _nexusModsService.ParseNxmUrl(nxmUrl);
+        if (link == null)
+        {
+            _notificationService.ShowWarning("Nexus Mods", "No se pudo interpretar el enlace nxm:// de Nexus Mods.");
+            return;
+        }
+
+        var instances = await _instanceManager.GetAllAsync().ConfigureAwait(true);
+        GameInstance? targetInstance = null;
+
+        // If the current view is already the detail view of the matching game, use it
+        if (CurrentView is InstanceDetailView && CurrentView.DataContext is InstanceDetailViewModel currentIdvm && currentIdvm.Instance != null)
+        {
+            var currentDomain = await _nexusModsService.ResolveGameDomainAsync(currentIdvm.Instance).ConfigureAwait(true);
+            if (string.Equals(currentDomain, link.GameDomain, StringComparison.OrdinalIgnoreCase))
+            {
+                targetInstance = currentIdvm.Instance;
+                currentIdvm.SelectedTab = "Mods";
+                _ = currentIdvm.InstallNxmUrlAsync(nxmUrl);
+                return;
+            }
+        }
+
+        foreach (var inst in instances)
+        {
+            var domain = await _nexusModsService.ResolveGameDomainAsync(inst).ConfigureAwait(true);
+            if (string.Equals(domain, link.GameDomain, StringComparison.OrdinalIgnoreCase))
+            {
+                targetInstance = inst;
+                break;
+            }
+        }
+
+        if (targetInstance == null)
+        {
+            _notificationService.ShowWarning("Nexus Mods", $"Se recibió una descarga de Nexus Mods para '{link.GameDomain}', pero no se encontró ninguna instancia instalada para este juego.");
+            return;
+        }
+
+        OpenInstanceDetail(targetInstance);
+        if (CurrentView is InstanceDetailView detailView && detailView.DataContext is InstanceDetailViewModel idvm)
+        {
+            idvm.SelectedTab = "Mods";
+            _ = idvm.InstallNxmUrlAsync(nxmUrl);
+        }
+    }
+
     public void OpenInstanceDetail(GameInstance instance) => OpenInstanceDetail(instance, autoCheckUpdates: false);
 
     /// <summary>

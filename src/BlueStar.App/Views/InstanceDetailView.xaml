@@ -1963,7 +1963,7 @@
 
                             <!-- Action: Open Native Mods Folder Button -->
                             <Button Grid.Column="2" Style="{StaticResource GhostButton}" Width="32" Height="32" Padding="0"
-                                    Command="{Binding OpenWorkshopFolderCommand}" ToolTip="Abrir carpeta de mods nativos"
+                                    Command="{Binding OpenWorkshopFolderCommand}" ToolTip="{DynamicResource String_OpenNativeModsFolder}"
                                     VerticalAlignment="Center">
                                 <Path Data="{StaticResource IconFolder}" Fill="{StaticResource SecondaryTextBrush}" Width="14" Height="14" Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                             </Button>
@@ -2049,7 +2049,7 @@
                                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                     <Path Data="{StaticResource IconDownload}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                                           Width="10" Height="10" Stretch="Uniform" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                                    <TextBlock Text="Instalar" FontSize="10.5" FontWeight="SemiBold"/>
+                                                    <TextBlock Text="{DynamicResource String_Install}" FontSize="10.5" FontWeight="SemiBold"/>
                                                 </StackPanel>
                                             </Button>
 
@@ -2080,7 +2080,7 @@
 
                             <!-- Action: Open BepInEx Folder Button -->
                             <Button Grid.Column="2" Style="{StaticResource GhostButton}" Width="32" Height="32" Padding="0"
-                                    Command="{Binding OpenBepInExFolderCommand}" ToolTip="Abrir carpeta BepInEx"
+                                    Command="{Binding OpenBepInExFolderCommand}" ToolTip="{DynamicResource String_OpenBepInExFolder}"
                                     VerticalAlignment="Center">
                                 <Path Data="{StaticResource IconFolder}" Fill="{StaticResource SecondaryTextBrush}" Width="14" Height="14" Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                             </Button>
@@ -2110,7 +2110,7 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" Style="{StaticResource BodySmall}" TextWrapping="Wrap" VerticalAlignment="Center"/>
                             <Button Grid.Column="1" Style="{StaticResource GhostButton}" Width="24" Height="24" Padding="0" Margin="8,0,0,0"
-                                    Command="{Binding ClearStatusCommand}" ToolTip="Cerrar" VerticalAlignment="Center">
+                                    Command="{Binding ClearStatusCommand}" ToolTip="{DynamicResource String_Close}" VerticalAlignment="Center">
                                 <TextBlock Text="✕" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}"/>
                             </Button>
                         </Grid>
@@ -2130,8 +2130,8 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                                     <Path Data="{StaticResource IconMod}" Fill="{StaticResource AccentBrush}" Width="13" Height="13" Stretch="Uniform" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                    <TextBlock Text="PERFILES DE MODPACKS" Style="{StaticResource CaptionBold}" Foreground="{StaticResource PrimaryTextBrush}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="· Solo un modpack activo a la vez" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                    <TextBlock Text="{DynamicResource String_ModpackProfilesHeader}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource PrimaryTextBrush}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{DynamicResource String_ModpackProfilesSubtitle}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
                                 </StackPanel>
 
                                 <!-- + Nuevo Modpack Button: ONLY visible when NOT in block view (hidden in block view) -->
@@ -2141,7 +2141,7 @@
                                         VerticalAlignment="Center">
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                         <Path Data="{StaticResource IconPlus}" Fill="{StaticResource AccentBrush}" Width="11" Height="11" Stretch="Uniform" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                        <TextBlock Text="Nuevo Modpack" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
+                                        <TextBlock Text="{DynamicResource String_NewModpackBtn}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
                                     </StackPanel>
                                 </Button>
 
@@ -2215,17 +2215,17 @@
                                                             Visibility="{Binding IsDefaultModpackActive, Converter={StaticResource BoolToVisibilityConverter}}">
                                                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                             <Path Data="{StaticResource IconCheck}" Fill="{StaticResource AccentBrush}" Width="8" Height="8" Stretch="Uniform" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                                            <TextBlock Text="ACTIVO" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" TextWrapping="NoWrap"/>
+                                                            <TextBlock Text="{DynamicResource String_ModpackActiveBadge}" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" TextWrapping="NoWrap"/>
                                                         </StackPanel>
                                                     </Border>
                                                 </Grid>
 
                                                 <StackPanel Grid.Row="1" VerticalAlignment="Center" Margin="0,6,0,4">
-                                                    <TextBlock Text="Por defecto" FontWeight="Bold" FontSize="12.5" Foreground="{StaticResource PrimaryTextBrush}" TextTrimming="CharacterEllipsis"/>
-                                                    <TextBlock Text="Todos los mods instalados" FontSize="10.5" Foreground="{StaticResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock Text="{DynamicResource String_ModpackDefaultName}" FontWeight="Bold" FontSize="12.5" Foreground="{StaticResource PrimaryTextBrush}" TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock Text="{DynamicResource String_ModpackDefaultDesc}" FontSize="10.5" Foreground="{StaticResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis"/>
                                                 </StackPanel>
 
-                                                <TextBlock Grid.Row="2" Text="{Binding Items.Count, StringFormat='{}{0} mods activos'}" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
+                                                <TextBlock Grid.Row="2" Text="{Binding DefaultModpackActiveCountText}" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
                                             </Grid>
                                         </Button>
                                     </Border>
@@ -2301,14 +2301,14 @@
                                                                             Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibilityConverter}}">
                                                                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                                             <Path Data="{StaticResource IconCheck}" Fill="{StaticResource AccentBrush}" Width="8" Height="8" Stretch="Uniform" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                                                            <TextBlock Text="ACTIVO" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" TextWrapping="NoWrap"/>
+                                                                            <TextBlock Text="{DynamicResource String_ModpackActiveBadge}" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" TextWrapping="NoWrap"/>
                                                                         </StackPanel>
                                                                     </Border>
                                                                 </Grid>
 
                                                                 <StackPanel Grid.Row="1" VerticalAlignment="Center" Margin="0,6,0,4">
                                                                     <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="12.5" Foreground="{StaticResource PrimaryTextBrush}" TextTrimming="CharacterEllipsis"/>
-                                                                    <TextBlock Text="{Binding ModsCount, StringFormat='{}{0} mods en perfil'}" FontSize="10.5" Foreground="{StaticResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis"/>
+                                                                    <TextBlock Text="{Binding ModsCountText}" FontSize="10.5" Foreground="{StaticResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis"/>
                                                                 </StackPanel>
 
                                                                 <TextBlock Grid.Row="2" Text="{Binding CreatedAt, StringFormat='{}{0:d MMM yyyy}'}" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
@@ -2333,7 +2333,7 @@
                                                 <Border Width="28" Height="28" CornerRadius="14" Background="{StaticResource AccentBgBrush}" HorizontalAlignment="Center" Margin="0,0,0,6">
                                                     <Path Data="{StaticResource IconPlus}" Fill="{StaticResource AccentBrush}" Width="11" Height="11" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                 </Border>
-                                                <TextBlock Text="Crear Modpack" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center"/>
+                                                <TextBlock Text="{DynamicResource String_CreateModpackCardBtn}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center"/>
                                             </StackPanel>
                                         </Button>
                                     </Border>
@@ -2378,10 +2378,10 @@
                                             <!-- Info -->
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <TextBlock Text="Por defecto (Todos)" FontWeight="Bold" FontSize="12.5" Foreground="{StaticResource PrimaryTextBrush}"/>
-                                                    <TextBlock Text="{Binding Items.Count, StringFormat='  ·  {0} mods instalados'}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{DynamicResource String_ModpackDefaultFullName}" FontWeight="Bold" FontSize="12.5" Foreground="{StaticResource PrimaryTextBrush}"/>
+                                                    <TextBlock Text="{Binding DefaultModpackInstalledCountText}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
                                                 </StackPanel>
-                                                <TextBlock Text="Perfil base que incluye todos los mods instalados en el juego." Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,1,0,0"/>
+                                                <TextBlock Text="{DynamicResource String_ModpackDefaultProfileHelp}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,1,0,0"/>
                                             </StackPanel>
 
                                             <!-- Non-deforming Active Tick Badge -->
@@ -2398,7 +2398,7 @@
                                                     Visibility="{Binding IsDefaultModpackActive, Converter={StaticResource BoolToVisibilityConverter}}">
                                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                     <Path Data="{StaticResource IconCheck}" Fill="{StaticResource AccentBrush}" Width="8" Height="8" Stretch="Uniform" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                                    <TextBlock Text="ACTIVO" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" TextWrapping="NoWrap"/>
+                                                    <TextBlock Text="{DynamicResource String_ModpackActiveBadge}" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" TextWrapping="NoWrap"/>
                                                 </StackPanel>
                                             </Border>
                                         </Grid>
@@ -2457,10 +2457,10 @@
                                                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                                     <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="12.5" Foreground="{StaticResource PrimaryTextBrush}"/>
-                                                                    <TextBlock Text="{Binding ModsCount, StringFormat='  ·  {0} mods'}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
+                                                                    <TextBlock Text="{Binding ModsCountListText}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
                                                                     <TextBlock Text="{Binding CreatedAt, StringFormat='  ·  {0:d MMM yyyy}'}" FontSize="10" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
                                                                 </StackPanel>
-                                                                <TextBlock Text="Haz clic para activar este perfil de modpack." Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,1,0,0"/>
+                                                                <TextBlock Text="{DynamicResource String_ModpackActivateHint}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,1,0,0"/>
                                                             </StackPanel>
 
                                                             <!-- Non-deforming Active Tick Badge -->
@@ -2478,7 +2478,7 @@
                                                                     Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibilityConverter}}">
                                                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                                     <Path Data="{StaticResource IconCheck}" Fill="{StaticResource AccentBrush}" Width="8" Height="8" Stretch="Uniform" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                                                    <TextBlock Text="ACTIVO" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" TextWrapping="NoWrap"/>
+                                                                    <TextBlock Text="{DynamicResource String_ModpackActiveBadge}" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" TextWrapping="NoWrap"/>
                                                                 </StackPanel>
                                                             </Border>
                                                         </Grid>
@@ -2520,7 +2520,7 @@
                                               Stretch="Uniform" Width="13" Height="13"
                                               Margin="0,0,8,0" VerticalAlignment="Center"/>
                                         <Grid Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBlock Text="Buscar mods instalados..."
+                                            <TextBlock Text="{DynamicResource String_SearchInstalledMods}"
                                                        Foreground="{StaticResource MutedTextBrush}"
                                                        FontSize="12" VerticalAlignment="Center" IsHitTestVisible="False">
                                                 <TextBlock.Style>
@@ -2610,22 +2610,22 @@
 
                                                 <Button Style="{StaticResource GhostButton}" HorizontalContentAlignment="Left" Padding="10,6" Margin="0,1"
                                                         Command="{Binding SelectSortCommand}" CommandParameter="Name">
-                                                    <TextBlock Text="Nombre" FontSize="12" FontWeight="SemiBold"/>
+                                                    <TextBlock Text="{DynamicResource String_SortByName}" FontSize="12" FontWeight="SemiBold"/>
                                                 </Button>
 
                                                 <Button Style="{StaticResource GhostButton}" HorizontalContentAlignment="Left" Padding="10,6" Margin="0,1"
                                                         Command="{Binding SelectSortCommand}" CommandParameter="Status">
-                                                    <TextBlock Text="Estado" FontSize="12" FontWeight="SemiBold"/>
+                                                    <TextBlock Text="{DynamicResource String_SortByStatus}" FontSize="12" FontWeight="SemiBold"/>
                                                 </Button>
 
                                                 <Button Style="{StaticResource GhostButton}" HorizontalContentAlignment="Left" Padding="10,6" Margin="0,1"
                                                         Command="{Binding SelectSortCommand}" CommandParameter="Source">
-                                                    <TextBlock Text="Origen" FontSize="12" FontWeight="SemiBold"/>
+                                                    <TextBlock Text="{DynamicResource String_SortBySource}" FontSize="12" FontWeight="SemiBold"/>
                                                 </Button>
 
                                                 <Button Style="{StaticResource GhostButton}" HorizontalContentAlignment="Left" Padding="10,6" Margin="0,1"
                                                         Command="{Binding SelectSortCommand}" CommandParameter="Size">
-                                                    <TextBlock Text="Tamaño" FontSize="12" FontWeight="SemiBold"/>
+                                                    <TextBlock Text="{DynamicResource String_SortBySize}" FontSize="12" FontWeight="SemiBold"/>
                                                 </Button>
                                             </StackPanel>
                                         </Border>
@@ -2715,7 +2715,7 @@
 
                                     <!-- 2. Open Mods Folder Button -->
                                     <Button Style="{StaticResource SecondaryButton}" Width="36" Height="34" Padding="0" Margin="0,0,8,0"
-                                            Command="{Binding OpenModsFolderCommand}" ToolTip="Abrir carpeta de mods">
+                                            Command="{Binding OpenModsFolderCommand}" ToolTip="{DynamicResource String_OpenModsFolder}">
                                         <Path Data="{StaticResource IconFolder}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                               Width="14" Height="14" Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                                     </Button>
@@ -2954,7 +2954,7 @@
                                                         Padding="0" Margin="0,0,12,0"
                                                         Command="{Binding DataContext.OpenModDetailCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}"
-                                                        Cursor="Hand" ToolTip="Ver página del mod">
+                                                        Cursor="Hand" ToolTip="{DynamicResource String_ViewModPageToolTip}">
                                                     <StackPanel VerticalAlignment="Center">
                                                         <TextBlock Text="{Binding Name}" Style="{StaticResource BodyMedium}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                                         <TextBlock Text="{Binding Author}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
@@ -2971,7 +2971,7 @@
                                                 <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                                     <CheckBox Style="{StaticResource ToggleSwitch}"
                                                               IsChecked="{Binding IsEnabled, Mode=OneWay}"
-                                                              ToolTip="Enable / Disable mod"
+                                                              ToolTip="{DynamicResource String_ToggleModToolTip}"
                                                               Margin="0,0,10,0"
                                                               Command="{Binding DataContext.ToggleCommand, ElementName=ModsList}"
                                                               CommandParameter="{Binding}"/>
@@ -2979,7 +2979,7 @@
                                                     <!-- Delete Mod Button (Opens confirmation modal, Requirement 9) -->
                                                     <Button Style="{StaticResource DangerButton}"
                                                             Width="32" Height="32" Padding="0"
-                                                            ToolTip="Uninstall mod"
+                                                            ToolTip="{DynamicResource String_UninstallModToolTip}"
                                                             VerticalAlignment="Center"
                                                             Command="{Binding DataContext.RequestDeleteModCommand, ElementName=ModsList}"
                                                             CommandParameter="{Binding}">
@@ -6020,7 +6020,7 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" Margin="0,0,12,0">
-                                <TextBlock Text="{Binding ModsTab.ModPageTitle, FallbackValue='Página del Mod'}"
+                                <TextBlock Text="{Binding ModsTab.ModPageTitle, FallbackValue='Mod Page'}"
                                            FontSize="14" FontWeight="SemiBold"
                                            Foreground="{StaticResource PrimaryTextBrush}"
                                            TextTrimming="CharacterEllipsis"/>
@@ -6040,15 +6040,30 @@
                     <!-- Embedded Mod Page (WebView2 + Fallback) -->
                     <Grid Grid.Row="1" Background="#121824">
                         <wv2:WebView2 x:Name="ModPageView"/>
+
+                        <!-- Loading Indicator Overlay -->
+                        <Border Background="#E60D121D"
+                                Visibility="{Binding ModsTab.IsModPageLoading, Converter={StaticResource BoolToVisibilityConverter}}"
+                                IsHitTestVisible="False">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <ProgressBar Style="{StaticResource LoadingSpinner}" Width="40" Height="40" Margin="0,0,0,14"/>
+                                <TextBlock Text="{DynamicResource String_LoadingModPage}" Style="{StaticResource BodyMedium}"
+                                           FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" HorizontalAlignment="Center"/>
+                                <TextBlock Text="{Binding ModsTab.ModPageUrl}" Style="{StaticResource Caption}"
+                                           Foreground="{StaticResource MutedTextBrush}" HorizontalAlignment="Center" Margin="0,4,0,0"
+                                           MaxWidth="450" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                        </Border>
+
                         <Border x:Name="ModWebViewFallbackOverlay" Visibility="Collapsed" Background="#121824" Padding="32">
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="480">
-                                <TextBlock Text="🌐 Página del Mod" FontSize="18" FontWeight="SemiBold" Foreground="#FFFFFF" HorizontalAlignment="Center" Margin="0,0,0,12"/>
-                                <TextBlock Text="Puedes ver esta página directamente en tu navegador web si la vista integrada no está disponible."
+                                <TextBlock Text="{DynamicResource String_ModPageFallbackTitle}" FontSize="18" FontWeight="SemiBold" Foreground="#FFFFFF" HorizontalAlignment="Center" Margin="0,0,0,12"/>
+                                <TextBlock Text="{DynamicResource String_ModPageFallbackDesc}"
                                            TextWrapping="Wrap" TextAlignment="Center" FontSize="13" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,20"/>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                     <Button Style="{StaticResource PrimaryButton}" Padding="16,8"
                                             Command="{Binding ModsTab.OpenModInExternalBrowserCommand}">
-                                        <TextBlock Text="Abrir en el Navegador" FontSize="12" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{DynamicResource String_OpenInBrowser}" FontSize="12" FontWeight="SemiBold"/>
                                     </Button>
                                 </StackPanel>
                             </StackPanel>
@@ -6062,11 +6077,11 @@
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                             <Button Style="{StaticResource SecondaryButton}" Padding="14,8" Margin="0,0,8,0"
                                     Command="{Binding ModsTab.OpenModInExternalBrowserCommand}"
-                                    ToolTip="Abrir en el navegador predeterminado">
+                                    ToolTip="{DynamicResource String_OpenInBrowserToolTip}">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <Path Data="{StaticResource IconLink}" Fill="{StaticResource SecondaryTextBrush}"
                                           Stretch="Uniform" Width="12" Height="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Abrir en navegador" FontSize="12"/>
+                                    <TextBlock Text="{DynamicResource String_OpenInBrowser}" FontSize="12"/>
                                 </StackPanel>
                             </Button>
                             <Button Style="{StaticResource SecondaryButton}" Padding="14,8"
@@ -6682,7 +6697,8 @@
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Path Data="{StaticResource IconMod}" Fill="{StaticResource AccentBrush}" Width="14" Height="14" Stretch="Uniform" Margin="0,0,8,0" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding ModsTab.ModPendingDelete.Name}" FontWeight="Bold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Text="{Binding ModsTab.ModPendingDelete.Version, StringFormat='  ({0})'}" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding ModsTab.ModPendingDeleteVersionText}" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center"
+                                       Visibility="{Binding ModsTab.ModPendingDeleteVersionText, Converter={StaticResource NullToVisibilityConverter}}"/>
                         </StackPanel>
                     </Border>
 

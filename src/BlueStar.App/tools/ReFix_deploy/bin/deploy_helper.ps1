@@ -766,6 +766,18 @@ switch ($OnlineMode) {
             }
         }
 
+        # Deploy ReFix companion tools (such as FusionShared) if present
+        $refixBin = Join-Path $BinDir "ReFix"
+        if (Test-Path -LiteralPath $refixBin) {
+            try {
+                $targetRefix = Join-Path $ExeDir "ReFix"
+                Copy-Item -LiteralPath $refixBin -Destination $ExeDir -Recurse -Force -ErrorAction Stop
+                Write-Host "  [OK] Deployed ReFix support tools to $targetRefix" -ForegroundColor Green
+            } catch {
+                Write-Host "  [WARNING] Failed to deploy ReFix support tools: $_" -ForegroundColor Yellow
+            }
+        }
+
         # Synchronize ReFix.ini in ExeDir
         $reFixIniPath = Join-Path $ExeDir "ReFix.ini"
         $identity = Get-Or-Generate-Identity -ConfigPath $reFixIniPath -InputName $UserName -BasePath $TargetDir

@@ -2181,4 +2181,143 @@ public sealed class ModsTabViewModelTests : IDisposable
         tab.HasAnyModLoaderCard.Should().BeTrue();
         tab.HasBothModLoaderCards.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task Modpack_ExportAsync_CreatesZipWithModFilesAndBepInExConfig()
+    {
+        var tab = CreateTab();
+        var pluginsDir = Path.Combine(_gameDir, "BepInEx", "plugins");
+        var configDir = Path.Combine(_gameDir, "BepInEx", "config");
+        Directory.CreateDirectory(pluginsDir);
+        Directory.CreateDirectory(configDir);
+
+        var modDllPath = Path.Combine(pluginsDir, "CoolMod.dll");
+        await File.WriteAllTextAsync(modDllPath, "cool mod binary content");
+
+        var configFilePath = Path.Combine(configDir, "com.coolmod.cfg");
+        await File.WriteAllTextAsync(configFilePath, "setting = true");
+
+        var modItem = new ModListItem
+        {
+            Id = "coolmod-id",
+            Name = "CoolMod",
+            SourceLabel = "BepInEx",
+            LegacyPath = modDllPath,
+            IsEnabled = true
+        };
+        tab.Items.Add(modItem);
+
+        var pack = new Modpack
+        {
+            Name = "ExportTestPack",
+            Mods = [new ModpackEntry("coolmod-id", "CoolMod", "1.0.0", true)]
+        };
+
+        var exportZipPath = Path.Combine(_root, "ExportedPack.zip");
+        tab.PickExportModpackFile = _ => exportZipPath;
+
+        await tab.ExportModpackAsync(pack);
+
+        File.Exists(exportZipPath).Should().BeTrue();
+
+        using var zip = System.IO.Compression.ZipFile.OpenRead(exportZipPath);
+        zip.GetEntry("modpack.json").Should().NotBeNull();
+        zip.GetEntry("files/BepInEx/plugins/CoolMod.dll").Should().NotBeNull();
+        zip.GetEntry("files/BepInEx/config/com.coolmod.cfg").Should().NotBeNull();
+
+        using var cfgStream = zip.GetEntry("files/BepInEx/config/com.coolmod.cfg")!.Open();
+        using var reader = new StreamReader(cfgStream);
+        var readConfig = await reader.ReadToEndAsync();
+        readConfig.Should().Be("setting = true");
+    }
+
+    [Fact]
+    public async Task Modpack_ImportAsync_ExtractsModFilesAndBepInExConfig_AndRegistersModpack()
+    {
+        var tab = CreateTab();
+        var zipPath = Path.Combine(_root, "ImportTestPack.zip");
+
+        var pack = new Modpack
+        {
+            Name = "ImportedPack",
+            Mods = [new ModpackEntry("imported-mod", "ImportedPlugin", "1.0", true)]
+        };
+
+        using (var zipStream = File.Create(zipPath))
+        using (var archive = new System.IO.Compression.ZipArchive(zipStream, System.IO.Compression.ZipArchiveMode.Create))
+        {
+            var packEntry = archive.CreateEntry("modpack.json");
+            using (var writer = new StreamWriter(packEntry.Open()))
+            {
+                await writer.WriteAsync(System.Text.Json.JsonSerializer.Serialize(pack));
+            }
+
+            var pluginEntry = archive.CreateEntry("files/BepInEx/plugins/ImportedPlugin.dll");
+            using (var writer = new StreamWriter(pluginEntry.Open()))
+            {
+                await writer.WriteAsync("imported dll bytes");
+            }
+
+            var cfgEntry = archive.CreateEntry("files/BepInEx/config/imported.cfg");
+            using (var writer = new StreamWriter(cfgEntry.Open()))
+            {
+                await writer.WriteAsync("imported_val = 123");
+            }
+        }
+
+        tab.PickImportModpackFile = () => zipPath;
+
+        await tab.ImportModpackAsync();
+
+        tab.Modpacks.Should().Contain(p => p.Name == "ImportedPack");
+
+        var extractedPluginPath = Path.Combine(_gameDir, "BepInEx", "plugins", "ImportedPlugin.dll");
+        File.Exists(extractedPluginPath).Should().BeTrue();
+        (await File.ReadAllTextAsync(extractedPluginPath)).Should().Be("imported dll bytes");
+
+        var extractedConfigPath = Path.Combine(_gameDir, "BepInEx", "config", "imported.cfg");
+        File.Exists(extractedConfigPath).Should().BeTrue();
+        (await File.ReadAllTextAsync(extractedConfigPath)).Should().Be("imported_val = 123");
+    }
+
+    [Fact]
+    public async Task Modpack_ImportIntoCreator_FillsModpackNameAndSelection_FromZip()
+    {
+        var tab = CreateTab();
+        var zipPath = Path.Combine(_root, "CreatorTestPack.zip");
+
+        var pack = new Modpack
+        {
+            Name = "CreatorPack",
+            Mods = [new ModpackEntry("creator-mod", "CreatorMod", "1.0", true)]
+        };
+
+        using (var zipStream = File.Create(zipPath))
+        using (var archive = new System.IO.Compression.ZipArchive(zipStream, System.IO.Compression.ZipArchiveMode.Create))
+        {
+            var packEntry = archive.CreateEntry("modpack.json");
+            using var writer = new StreamWriter(packEntry.Open());
+            await writer.WriteAsync(System.Text.Json.JsonSerializer.Serialize(pack));
+        }
+
+        var modItem = new ModListItem
+        {
+            Id = "creator-mod",
+            Name = "CreatorMod",
+            SourceLabel = "Local",
+            IsEnabled = true
+        };
+        tab.Items.Add(modItem);
+
+        tab.OpenCreateModpackCommand.Execute(null);
+        tab.IsCreateModpackOpen.Should().BeTrue();
+
+        tab.PickImportModpackFile = () => zipPath;
+        tab.ImportModpackIntoCreatorCommand.Execute(null);
+
+        tab.NewModpackName.Should().Be("CreatorPack");
+        var selectedItem = tab.CreateModpackSelectableMods.FirstOrDefault(m => m.Id == "creator-mod");
+        selectedItem.Should().NotBeNull();
+        selectedItem!.IsSelected.Should().BeTrue();
+    }
 }

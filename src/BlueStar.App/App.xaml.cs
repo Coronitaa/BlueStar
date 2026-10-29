@@ -25,6 +25,7 @@ public partial class App : Application
 {
     private static Mutex? _singleInstanceMutex;
     private const string MutexId = "Global\\BlueStar_SingleInstance_Mutex_9F4F";
+    private static CancellationTokenSource? _ipcTokenSource;
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -54,6 +55,25 @@ public partial class App : Application
         _singleInstanceMutex = new Mutex(true, MutexId, out bool isFirstInstance);
         if (!isFirstInstance)
         {
+            var nxmArg = e.Args.FirstOrDefault(a =>
+                a.StartsWith("nxm://", StringComparison.OrdinalIgnoreCase) ||
+                a.StartsWith("vortex://", StringComparison.OrdinalIgnoreCase) ||
+                a.StartsWith("nxm-protocol://", StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrEmpty(nxmArg))
+            {
+                try
+                {
+                    using var client = new System.IO.Pipes.NamedPipeClientStream(".", "BlueStar_Nxm_Ipc", System.IO.Pipes.PipeDirection.Out);
+                    client.Connect(1500);
+                    using var writer = new System.IO.StreamWriter(client) { AutoFlush = true };
+                    writer.WriteLine(nxmArg);
+                }
+                catch
+                {
+                    // Ignore pipe connect failure
+                }
+            }
+
             var broughtForward = false;
 
             try
@@ -259,6 +279,8 @@ public partial class App : Application
         services.AddSingleton<IModInstallPipeline, BlueStar.Infrastructure.Mods.Installation.ModInstallPipeline>();
         services.AddSingleton<IWorkshopModFetcher, BlueStar.Infrastructure.Workshop.WorkshopModFetcher>();
         services.AddHttpClient<IThunderstoreService, BlueStar.Infrastructure.Mods.Thunderstore.ThunderstoreService>();
+        services.AddHttpClient<ICurseForgeService, BlueStar.Infrastructure.Mods.CurseForge.CurseForgeService>();
+        services.AddHttpClient<INexusModsService, BlueStar.Infrastructure.Mods.NexusMods.NexusModsService>();
         services.AddHttpClient<IModApiKeyService, BlueStar.Infrastructure.Mods.ModApiKeyService>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(20);
@@ -443,6 +465,44 @@ public partial class App : Application
             }
         });
 
+        // Start IPC listener for nxm:// protocol messages
+        StartNxmIpcListener();
+
+        // Register nxm:// protocol handler in Windows Registry
+        try
+        {
+            var nexusService = Services.GetService<INexusModsService>();
+            nexusService?.RegisterProtocolHandler();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to register nxm:// protocol handler");
+        }
+
+        // Handle cold start NXM argument if present
+        var coldNxmArg = e.Args.FirstOrDefault(a =>
+            a.StartsWith("nxm://", StringComparison.OrdinalIgnoreCase) ||
+            a.StartsWith("vortex://", StringComparison.OrdinalIgnoreCase) ||
+            a.StartsWith("nxm-protocol://", StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrEmpty(coldNxmArg))
+        {
+            _ = Dispatcher.InvokeAsync(async () =>
+            {
+                try
+                {
+                    await Task.Delay(1500);
+                    if (MainWindow?.DataContext is ViewModels.MainViewModel mainVm)
+                    {
+                        await mainVm.HandleNxmUrlAsync(coldNxmArg);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Failed to process cold start NXM argument");
+                }
+            });
+        }
+
         // Trigger background ReFix update check
         _ = Task.Run(async () =>
         {
@@ -518,10 +578,76 @@ public partial class App : Application
         watchdog.Start();
     }
 
+    private void StartNxmIpcListener()
+    {
+        _ipcTokenSource = new CancellationTokenSource();
+        var token = _ipcTokenSource.Token;
+
+        Task.Run(async () =>
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    using var server = new System.IO.Pipes.NamedPipeServerStream(
+                        "BlueStar_Nxm_Ipc",
+                        System.IO.Pipes.PipeDirection.In,
+                        1,
+                        System.IO.Pipes.PipeTransmissionMode.Byte,
+                        System.IO.Pipes.PipeOptions.Asynchronous);
+
+                    await server.WaitForConnectionAsync(token).ConfigureAwait(false);
+                    using var reader = new System.IO.StreamReader(server);
+                    var nxmUrl = await reader.ReadLineAsync(token).ConfigureAwait(false);
+
+                    if (!string.IsNullOrWhiteSpace(nxmUrl))
+                    {
+                        Dispatcher.BeginInvoke(() =>
+                        {
+                            try
+                            {
+                                if (MainWindow != null)
+                                {
+                                    if (MainWindow.WindowState == WindowState.Minimized)
+                                    {
+                                        MainWindow.WindowState = WindowState.Normal;
+                                    }
+                                    MainWindow.Activate();
+                                    MainWindow.Focus();
+
+                                    if (MainWindow.DataContext is ViewModels.MainViewModel mainVm)
+                                    {
+                                        _ = mainVm.HandleNxmUrlAsync(nxmUrl);
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Log.Warning(ex, "Failed to handle incoming IPC NXM url");
+                            }
+                        });
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Error in NXM IPC server loop");
+                    await Task.Delay(1000, token).ConfigureAwait(false);
+                }
+            }
+        }, token);
+    }
+
     /// <inheritdoc />
     protected override void OnExit(ExitEventArgs e)
     {
         Log.Information("BlueStar is shutting down (exit code {ExitCode})", e.ApplicationExitCode);
+
+        _ipcTokenSource?.Cancel();
+        _ipcTokenSource?.Dispose();
 
         if (_singleInstanceMutex != null)
         {

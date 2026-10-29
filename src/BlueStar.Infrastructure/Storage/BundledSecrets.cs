@@ -35,19 +35,69 @@ public sealed record BundledSecrets
     public static BundledSecrets? Load(string? baseDirectory = null)
     {
         var key = BuildKey();
-        if (key == null) return null;
+        if (key != null)
+        {
+            var path = Path.Combine(baseDirectory ?? AppContext.BaseDirectory, FileName);
+            if (File.Exists(path))
+            {
+                try
+                {
+                    var secrets = Decrypt(File.ReadAllText(path).Trim(), key);
+                    if (secrets != null)
+                    {
+                        return secrets;
+                    }
+                }
+                catch (Exception ex) when (ex is FormatException or CryptographicException or JsonException)
+                {
+                    // Fall back to modkeys.json below
+                }
+            }
+        }
 
-        var path = Path.Combine(baseDirectory ?? AppContext.BaseDirectory, FileName);
-        if (!File.Exists(path)) return null;
+        // Development fallback: check for modkeys.json in app directory or parent directories
+        return LoadFromModKeysJson(baseDirectory);
+    }
 
+    private static BundledSecrets? LoadFromModKeysJson(string? baseDirectory)
+    {
+        if (!string.IsNullOrWhiteSpace(baseDirectory))
+        {
+            return SearchUpwardsForModKeys(baseDirectory);
+        }
+
+        var found = SearchUpwardsForModKeys(AppContext.BaseDirectory);
+        if (found != null) return found;
+
+        found = SearchUpwardsForModKeys(Directory.GetCurrentDirectory());
+        if (found != null) return found;
+
+        return SearchUpwardsForModKeys(AppDomain.CurrentDomain.BaseDirectory);
+    }
+
+    private static BundledSecrets? SearchUpwardsForModKeys(string startDirectory)
+    {
         try
         {
-            return Decrypt(File.ReadAllText(path).Trim(), key);
+            var dir = Path.GetFullPath(startDirectory);
+            for (int i = 0; i < 12 && !string.IsNullOrEmpty(dir); i++)
+            {
+                var candidate = Path.Combine(dir, "modkeys.json");
+                if (File.Exists(candidate))
+                {
+                    var json = File.ReadAllText(candidate);
+                    return JsonSerializer.Deserialize<BundledSecrets>(json);
+                }
+                var parent = Directory.GetParent(dir);
+                if (parent == null) break;
+                dir = parent.FullName;
+            }
         }
-        catch (Exception ex) when (ex is FormatException or CryptographicException or JsonException)
+        catch
         {
-            return null;
+            // Ignore dev read errors
         }
+        return null;
     }
 
     /// <summary>

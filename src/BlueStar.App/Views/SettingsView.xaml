@@ -117,7 +117,17 @@
 
                                                 <!-- Personal Override API Key -->
                                                 <StackPanel Margin="0,4,0,0">
-                                                    <TextBlock Text="{DynamicResource String_ApiKeyLabel}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4"/>
+                                                    <Grid Margin="0,0,0,4">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="{DynamicResource String_ApiKeyLabel}" Style="{StaticResource CaptionBold}" VerticalAlignment="Center"/>
+                                                        <Button Grid.Column="1" Content="{DynamicResource String_GetApiKey}"
+                                                                Style="{StaticResource GhostButton}"
+                                                                Command="{Binding OpenUrlCommand}"
+                                                                CommandParameter="https://depotbox.org/pricing"/>
+                                                    </Grid>
                                                     <TextBlock Text="{DynamicResource String_ApiKeyHelp}"
                                                                Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,8"/>
                                                     <TextBox Style="{StaticResource DarkTextBox}"
@@ -332,69 +342,6 @@
                                                            Style="{StaticResource Muted}" TextWrapping="Wrap"/>
                                             </StackPanel>
                                         </Expander>
-
-                        <!-- ═══ APPLICATION CACHE & STORAGE SECTION ═══ -->
-                                    <Expander Style="{StaticResource SettingsExpanderCard}">
-                                        <Expander.Header>
-                                                <Grid Margin="0,0,12,0">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                        <ColumnDefinition Width="*"/>
-                                                    </Grid.ColumnDefinitions>
-                                                    <Border Grid.Column="0" Background="#16A855F7"
-                                                            BorderBrush="#35A855F7" BorderThickness="1"
-                                                            Width="40" Height="40" CornerRadius="{StaticResource RadiusSm}"
-                                                            VerticalAlignment="Center" Margin="0,0,14,0">
-                                                        <Viewbox Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                            <Canvas Width="24" Height="24">
-                                                                <Path Fill="#A855F7" Data="M19.4 4.6a1 1 0 0 0-1.4 0l-8.5 8.5 1.4 1.4 8.5-8.5a1 1 0 0 0 0-1.4zM19 14l.6 1.4L21 16l-1.4.6L19 18l-.6-1.4L17 16l1.4-.6L19 14z"/>
-                                                                <Path Fill="#FFFFFF" Data="M10.2 13.8l-1.4-1.4-4.5 4.5A2 2 0 0 0 4 18.5V20h1.5a2 2 0 0 0 1.6-.7l4.5-4.5z"/>
-                                                            </Canvas>
-                                                        </Viewbox>
-                                                    </Border>
-                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                        <TextBlock Text="{DynamicResource String_CacheCleanupTitle}" Style="{StaticResource H2}" Margin="0,0,0,3"/>
-                                                        <TextBlock Text="{DynamicResource String_CacheCleanupDesc}"
-                                                                   Style="{StaticResource Caption}" TextWrapping="Wrap"/>
-                                                    </StackPanel>
-                                                </Grid>
-                                            </Expander.Header>
-                                        <StackPanel Margin="0,4,0,0">
-                                            <Border Background="{StaticResource SurfaceInputBrush}"
-                                                    BorderBrush="{StaticResource SubtleBorderBrush}"
-                                                    BorderThickness="1"
-                                                    CornerRadius="{StaticResource RadiusSm}"
-                                                    Padding="14,12">
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                    </Grid.ColumnDefinitions>
-                                                    <StackPanel Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
-                                                        <TextBlock Text="{DynamicResource String_ClearCacheModalTitle}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
-                                                        <TextBlock Text="{DynamicResource String_ClearCacheModalDesc}"
-                                                                   Style="{StaticResource Muted}" TextWrapping="Wrap"/>
-                                                    </StackPanel>
-                                                    <Button Grid.Column="1"
-                                                            Content="{DynamicResource String_ClearAppCacheBtn}"
-                                                            Style="{StaticResource SecondaryButton}"
-                                                            Padding="14,8"
-                                                            VerticalAlignment="Center"
-                                                            Command="{Binding OpenClearCacheModalCommand}"/>
-                                                </Grid>
-                                            </Border>
-
-                                            <!-- Status Result Banner -->
-                                            <Border Background="{StaticResource SurfaceCardBrush}"
-                                                    BorderBrush="{StaticResource SubtleBorderBrush}"
-                                                    BorderThickness="1"
-                                                    CornerRadius="{StaticResource RadiusSm}"
-                                                    Padding="10,8" Margin="0,8,0,0"
-                                                    Visibility="{Binding ClearCacheResult, Converter={StaticResource NullToVisibilityConverter}}">
-                                                <TextBlock Text="{Binding ClearCacheResult}" Style="{StaticResource Caption}" Foreground="{StaticResource PrimaryTextBrush}"/>
-                                            </Border>
-                                        </StackPanel>
-                                    </Expander>
                     </StackPanel>
 
                     <!-- ── RIGHT COLUMN BLOQUECITOS ── -->
@@ -848,6 +795,69 @@
                                             </Border>
                                         </StackPanel>
                                     </Expander>
+
+                        <!-- ═══ APPLICATION CACHE & STORAGE SECTION ═══ -->
+                        <Expander Style="{StaticResource SettingsExpanderCard}">
+                            <Expander.Header>
+                                <Grid Margin="0,0,12,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Background="#16A855F7"
+                                            BorderBrush="#35A855F7" BorderThickness="1"
+                                            Width="40" Height="40" CornerRadius="{StaticResource RadiusSm}"
+                                            VerticalAlignment="Center" Margin="0,0,14,0">
+                                        <Viewbox Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <Canvas Width="24" Height="24">
+                                                <Path Fill="#A855F7" Data="M19.4 4.6a1 1 0 0 0-1.4 0l-8.5 8.5 1.4 1.4 8.5-8.5a1 1 0 0 0 0-1.4zM19 14l.6 1.4L21 16l-1.4.6L19 18l-.6-1.4L17 16l1.4-.6L19 14z"/>
+                                                <Path Fill="#FFFFFF" Data="M10.2 13.8l-1.4-1.4-4.5 4.5A2 2 0 0 0 4 18.5V20h1.5a2 2 0 0 0 1.6-.7l4.5-4.5z"/>
+                                            </Canvas>
+                                        </Viewbox>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{DynamicResource String_CacheCleanupTitle}" Style="{StaticResource H2}" Margin="0,0,0,3"/>
+                                        <TextBlock Text="{DynamicResource String_CacheCleanupDesc}"
+                                                   Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Expander.Header>
+                            <StackPanel Margin="0,4,0,0">
+                                <Border Background="{StaticResource SurfaceInputBrush}"
+                                        BorderBrush="{StaticResource SubtleBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource RadiusSm}"
+                                        Padding="14,12">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{DynamicResource String_ClearCacheModalTitle}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,0,2"/>
+                                            <TextBlock Text="{DynamicResource String_ClearCacheModalDesc}"
+                                                       Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="1"
+                                                Content="{DynamicResource String_ClearAppCacheBtn}"
+                                                Style="{StaticResource SecondaryButton}"
+                                                Padding="14,8"
+                                                VerticalAlignment="Center"
+                                                Command="{Binding OpenClearCacheModalCommand}"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Status Result Banner -->
+                                <Border Background="{StaticResource SurfaceCardBrush}"
+                                        BorderBrush="{StaticResource SubtleBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource RadiusSm}"
+                                        Padding="10,8" Margin="0,8,0,0"
+                                        Visibility="{Binding ClearCacheResult, Converter={StaticResource NullToVisibilityConverter}}">
+                                    <TextBlock Text="{Binding ClearCacheResult}" Style="{StaticResource Caption}" Foreground="{StaticResource PrimaryTextBrush}"/>
+                                </Border>
+                            </StackPanel>
+                        </Expander>
                     </StackPanel>
                 </Grid>
             <!-- ═══ ABOUT & ECOSYSTEM CREDITS SECTION (Permanently Expanded) ═══ -->

@@ -2624,7 +2624,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         IRecommendationProvider? recommendationProvider = null,
         IModInstallPipeline? modInstallPipeline = null,
         IWorkshopModFetcher? workshopModFetcher = null,
-        IThunderstoreService? thunderstoreService = null)
+        IThunderstoreService? thunderstoreService = null,
+        ICurseForgeService? curseForgeService = null,
+        INexusModsService? nexusModsService = null)
     {
         ModsTab = new ModsTabViewModel(
             modInstallPipeline,
@@ -2634,7 +2636,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             workshopModFetcher,
             workshopService,
             bepInExService,
-            thunderstoreService);
+            thunderstoreService,
+            curseForgeService,
+            nexusModsService);
         ModsTab.ModsChanged += (_, _) => OnPropertyChanged(nameof(ModsSummaryText));
         ModsTab.InstallEngineAction = async () => await InstallOrUpdateBepInExAsync().ConfigureAwait(true);
 
@@ -6100,6 +6104,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     // ── Mods Management ──
     /// <summary>Reloads the Mods tab list (ledger + mods found on disk).</summary>
     public Task LoadModsAsync() => ModsTab.LoadAsync();
+
+    /// <summary>Installs an nxm:// URL for the current instance.</summary>
+    public Task<bool> InstallNxmUrlAsync(string nxmUrl) => ModsTab.InstallNxmUrlAsync(nxmUrl);
 
     // ── In-Memory Session Cache for Emulators & Fixes (resets when BlueStar application restarts) ──
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, (IReadOnlyList<EmulatorOptionInfo> Options, IReadOnlyList<IEmulator> Emulators, IReadOnlyList<GameFixInfo> Fixes)> _emulatorSessionCache = new();

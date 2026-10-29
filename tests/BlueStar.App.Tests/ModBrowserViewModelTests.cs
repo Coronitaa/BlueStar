@@ -152,4 +152,79 @@ public sealed class ModBrowserViewModelTests
         workshop.IsOpen.Should().BeFalse();
         thunderstore.IsOpen.Should().BeFalse();
     }
+
+    [Fact]
+    public void Open_WithCurseForgeAndNexus_EnablesAllProviderTabs()
+    {
+        // Arrange
+        var workshop = new WorkshopBrowserViewModel((_, _) => Task.FromResult(true));
+        var cfMock = new Mock<ICurseForgeService>();
+        var nexusMock = new Mock<INexusModsService>();
+
+        var cfVm = new CurseForgeBrowserViewModel(cfMock.Object, _ => Task.FromResult<ModInstallResult?>(null), null, NullLogger.Instance);
+        var nexusVm = new NexusBrowserViewModel(nexusMock.Object, _ => Task.FromResult<ModInstallResult?>(null), null, NullLogger.Instance);
+
+        var vm = new ModBrowserViewModel(workshop, null, null, NullLogger.Instance, cfVm, nexusVm);
+        var instance = new GameInstance
+        {
+            Id = Guid.NewGuid(),
+            Name = "Baldur's Gate 3",
+            AppId = 1086940,
+            InstallPath = @"C:\Games\BG3"
+        };
+
+        // Act: Open with CurseForge and Nexus support
+        vm.Open(
+            instance,
+            hasWorkshop: false,
+            hasThunderstore: false,
+            hasCurseForge: true,
+            curseForgeGameId: 82579,
+            hasNexus: true,
+            nexusGameDomain: "baldursgate3");
+
+        // Assert: Tabs must all be enabled and available
+        vm.HasWorkshopSupport.Should().BeFalse();
+        vm.HasThunderstoreSupport.Should().BeFalse();
+        vm.HasCurseForgeSupport.Should().BeTrue();
+        vm.HasNexusSupport.Should().BeTrue();
+        vm.SelectedProvider.Should().Be("CurseForge");
+
+        // Act: Select Nexus
+        vm.SelectProvider("Nexus");
+        vm.SelectedProvider.Should().Be("Nexus");
+    }
+
+    [Fact]
+    public void UpdateProviderInfo_DynamicallyEnablesTabsWhenResolved()
+    {
+        // Arrange
+        var workshop = new WorkshopBrowserViewModel((_, _) => Task.FromResult(true));
+        var cfMock = new Mock<ICurseForgeService>();
+        var cfVm = new CurseForgeBrowserViewModel(cfMock.Object, _ => Task.FromResult<ModInstallResult?>(null), null, NullLogger.Instance);
+
+        var vm = new ModBrowserViewModel(workshop, null, null, NullLogger.Instance, cfVm);
+        var instance = new GameInstance
+        {
+            Id = Guid.NewGuid(),
+            Name = "Palworld",
+            AppId = 1623730,
+            InstallPath = @"C:\Games\Palworld"
+        };
+
+        // Act: Open before provider resolution finishes (all false)
+        vm.Open(instance, hasWorkshop: false, hasThunderstore: false);
+        vm.HasCurseForgeSupport.Should().BeFalse();
+
+        // Act: Provider finishes resolving asynchronously
+        vm.UpdateProviderInfo(
+            hasWorkshop: false,
+            hasThunderstore: false,
+            hasCurseForge: true,
+            curseForgeGameId: 85196);
+
+        // Assert: Tab is now visible and selectable
+        vm.HasCurseForgeSupport.Should().BeTrue();
+        vm.SelectedProvider.Should().Be("CurseForge");
+    }
 }

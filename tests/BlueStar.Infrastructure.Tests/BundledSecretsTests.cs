@@ -60,6 +60,16 @@ public class BundledSecretsTests : IDisposable
     }
 
     [Fact]
+    public void LoadFromModKeysJson_FindsModKeysJson_InWorkspace()
+    {
+        var secrets = BundledSecrets.Load();
+        secrets.Should().NotBeNull();
+        secrets!.CurseForge.Should().NotBeNullOrEmpty();
+        secrets.NexusMods.Should().NotBeNullOrEmpty();
+        secrets.ModIo.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
     public void Builds_without_a_key_have_no_bundled_secrets()
     {
         File.WriteAllText(Path.Combine(_dir, BundledSecrets.FileName), "anything");

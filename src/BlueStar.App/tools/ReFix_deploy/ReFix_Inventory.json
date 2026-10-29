@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "appId": 1260320,
+  "items": [
+    {
+      "itemId": 100000001,
+      "definitionId": 100,
+      "quantity": 1,
+      "flags": 0,
+      "acquired": 1729737600
+    },
+    {
+      "itemId": 100000002,
+      "definitionId": 101,
+      "quantity": 1,
+      "flags": 0,
+      "acquired": 1729737600
+    },
+    {
+      "itemId": 100000003,
+      "definitionId": 102,
+      "quantity": 1,
+      "flags": 0,
+      "acquired": 1729737600
+    }
+  ]
+}

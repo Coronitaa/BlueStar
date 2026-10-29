@@ -179,4 +179,92 @@ public sealed class ThunderstoreServiceTests : IDisposable
         var excluded = await service.SearchPackagesAsync("lethal-company", excludedCategories: ["Gameplay"]);
         excluded.Should().ContainSingle(p => p.Name == "MoreCompany");
     }
+
+    [Fact]
+    public async Task GetPackagesAsync_FiltersOut_GaleModManager_And_R2ModMan()
+    {
+        const string json = """
+        [
+          {
+            "name": "GaleModManager",
+            "full_name": "Gale-GaleModManager-1.0.0",
+            "owner": "Gale",
+            "package_url": "https://thunderstore.io/c/lethal-company/p/Gale/GaleModManager/",
+            "date_created": "2024-01-01T00:00:00Z",
+            "date_updated": "2024-01-01T00:00:00Z",
+            "rating_score": 10,
+            "is_pinned": false,
+            "is_deprecated": false,
+            "total_downloads": 1000,
+            "has_nsfw_content": false,
+            "categories": ["Modding"],
+            "versions": []
+          },
+          {
+            "name": "r2modman",
+            "full_name": "ebkr-r2modman-3.1.48",
+            "owner": "ebkr",
+            "package_url": "https://thunderstore.io/c/lethal-company/p/ebkr/r2modman/",
+            "date_created": "2023-11-01T00:00:00Z",
+            "date_updated": "2024-01-01T00:00:00Z",
+            "rating_score": 500,
+            "is_pinned": false,
+            "is_deprecated": false,
+            "total_downloads": 5000000,
+            "has_nsfw_content": false,
+            "categories": ["Tools"],
+            "versions": []
+          },
+          {
+            "name": "RealMod",
+            "full_name": "Author-RealMod-1.0.0",
+            "owner": "Author",
+            "package_url": "https://thunderstore.io/c/lethal-company/p/Author/RealMod/",
+            "date_created": "2024-01-01T00:00:00Z",
+            "date_updated": "2024-01-01T00:00:00Z",
+            "rating_score": 50,
+            "is_pinned": false,
+            "is_deprecated": false,
+            "total_downloads": 2000,
+            "has_nsfw_content": false,
+            "categories": ["Gameplay"],
+            "versions": [
+              {
+                "name": "RealMod",
+                "full_name": "Author-RealMod-1.0.0",
+                "version_number": "1.0.0",
+                "description": "A real gameplay mod",
+                "icon": "https://thunderstore.io/icon.png",
+                "download_url": "https://thunderstore.io/dl.zip",
+                "downloads": 2000,
+                "date_created": "2024-01-01T00:00:00Z",
+                "file_size": 1000,
+                "dependencies": []
+              }
+            ]
+          }
+        ]
+        """;
+
+        var handler = new Mock<HttpMessageHandler>();
+        handler.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json)
+            });
+
+        var client = new HttpClient(handler.Object);
+        var service = new ThunderstoreService(client, NullLogger<ThunderstoreService>.Instance, _cacheRoot);
+
+        var packages = await service.GetPackagesAsync("lethal-company");
+        packages.Should().ContainSingle(p => p.Name == "RealMod");
+        packages.Should().NotContain(p => p.Name == "GaleModManager");
+        packages.Should().NotContain(p => p.Name == "r2modman");
+
+        var search = await service.SearchPackagesAsync("lethal-company");
+        search.Should().ContainSingle(p => p.Name == "RealMod");
+        search.Should().NotContain(p => p.Name == "GaleModManager");
+        search.Should().NotContain(p => p.Name == "r2modman");
+    }
 }

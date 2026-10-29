@@ -1,8 +1,19 @@
 ====================================================================
-               ReFix Deployment Suite v1.4.1 (Standalone)
+               ReFix Deployment Suite v1.4.2 (Standalone)
 ====================================================================
 
-WHAT'S NEW IN v1.4.1 (test build):
+WHAT'S NEW IN v1.4.2:
+- Photon Fusion 2.0.x Shared Mode emulation: Full standalone support for Fusion Shared topology games
+  (e.g. Dumb Ways to Build, modern Unity co-op titles).
+- Native ReFixFusionShared companion server: runs Fusion's official server simulation in Shared mode,
+  acting as room authority (actor 0) without requiring Photon Cloud.
+- Harmony IL transpiler in Fusion runtime: resolves headless server state replication and skips client-only
+  AOI interest tracking to prevent NullReferenceException disconnects.
+- Automatic MasterClient authority synchronization for SceneInfo and PhysicsInfo network structures,
+  allowing seamless room transitions and lobby scene loading.
+- Protocol v3+ serialization parity: fixed bit-level string polarity and custom data footer handling.
+
+WHAT'S NEW IN v1.4.1:
 - Photon P2P: lower voice/game latency. The emulator no longer waits up to ~15 ms per Steam hop, enables
   direct Steam P2P routes (LAN / nearby players skip the Valve relay) and raises Steam's send-rate cap.
 - Photon P2P: joins survive an unstable host better (longer Steam session timeouts, session opened early).

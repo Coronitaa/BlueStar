@@ -366,8 +366,6 @@ public partial class SettingsViewModel : ObservableObject
                 "https://console.curseforge.com/", modApiKeyService, _localizationService, _notificationService, _logger));
             ModApiKeys.Add(new ModApiKeyItemViewModel(ModApiProvider.NexusMods, "Nexus Mods", "String_ModApiKeyNexusDesc",
                 "https://next.nexusmods.com/settings/api-keys", modApiKeyService, _localizationService, _notificationService, _logger));
-            ModApiKeys.Add(new ModApiKeyItemViewModel(ModApiProvider.ModIo, "mod.io", "String_ModApiKeyModIoDesc",
-                "https://mod.io/me/access", modApiKeyService, _localizationService, _notificationService, _logger));
             ModApiKeys.Add(new ModApiKeyItemViewModel(ModApiProvider.Thunderstore, "Thunderstore", "String_ModApiKeyThunderstoreDesc",
                 "https://thunderstore.io/settings/teams/", modApiKeyService, _localizationService, _notificationService, _logger));
         }

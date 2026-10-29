@@ -178,11 +178,19 @@ public partial class InstanceDetailView : UserControl
     }
 
     private bool _modWebViewReady;
+    private string? _currentModPageInitialUrl;
+    private bool _isInitialModPageNavigation;
+
+    private static string NormalizeHost(string host) =>
+        host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? host[4..] : host;
 
     private async Task LoadModPageAsync(string url)
     {
         try
         {
+            _currentModPageInitialUrl = url;
+            _isInitialModPageNavigation = true;
+
             if (!Services.WebView2AvailabilityService.IsAvailable())
             {
                 ShowModWebViewFallback();
@@ -206,6 +214,10 @@ public partial class InstanceDetailView : UserControl
 
     private void ShowModWebViewFallback()
     {
+        if (DataContext is InstanceDetailViewModel vm)
+        {
+            vm.ModsTab.IsModPageLoading = false;
+        }
         ModPageView.Visibility = Visibility.Collapsed;
         ModWebViewFallbackOverlay.Visibility = Visibility.Visible;
     }
@@ -231,13 +243,97 @@ public partial class InstanceDetailView : UserControl
         {
             ModPageView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
             ModPageView.CoreWebView2.Settings.IsStatusBarEnabled = false;
+
+            // Block all downloads in the preview modal
+            ModPageView.CoreWebView2.DownloadStarting += (s, args) =>
+            {
+                args.Cancel = true;
+                args.Handled = true;
+            };
+
+            // Block external scheme launches
+            ModPageView.CoreWebView2.LaunchingExternalUriScheme += (s, args) =>
+            {
+                args.Cancel = true;
+            };
+
+            // Block opening new windows or popups from preview modal
             ModPageView.CoreWebView2.NewWindowRequested += (s, args) =>
             {
                 args.Handled = true;
-                if (!string.IsNullOrWhiteSpace(args.Uri))
+            };
+
+            ModPageView.CoreWebView2.NavigationStarting += (s, args) =>
+            {
+                if (string.IsNullOrWhiteSpace(args.Uri)) return;
+
+                // Always allow internal browser schemes
+                if (args.Uri.StartsWith("about:", StringComparison.OrdinalIgnoreCase) ||
+                    args.Uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
                 {
-                    ModPageView.CoreWebView2.Navigate(args.Uri);
+                    return;
                 }
+
+                // Allow initial navigation and its direct redirects
+                if (_isInitialModPageNavigation)
+                {
+                    Dispatcher.InvokeAsync(() =>
+                    {
+                        if (DataContext is InstanceDetailViewModel vm)
+                        {
+                            vm.ModsTab.IsModPageLoading = true;
+                        }
+                    });
+                    return;
+                }
+
+                // After initial load, strictly keep the URL fixed to where it was opened:
+                // block any navigation to other sites or other pages
+                bool isSamePage = false;
+                if (!string.IsNullOrWhiteSpace(_currentModPageInitialUrl) &&
+                    Uri.TryCreate(args.Uri, UriKind.Absolute, out var targetUri) &&
+                    Uri.TryCreate(_currentModPageInitialUrl, UriKind.Absolute, out var initialUri))
+                {
+                    bool sameHost = string.Equals(NormalizeHost(targetUri.Host), NormalizeHost(initialUri.Host), StringComparison.OrdinalIgnoreCase);
+                    bool samePath = string.Equals(targetUri.AbsolutePath.TrimEnd('/'), initialUri.AbsolutePath.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
+                    isSamePage = sameHost && samePath;
+                }
+
+                if (!isSamePage)
+                {
+                    // Block navigation away from the mod page
+                    args.Cancel = true;
+                    return;
+                }
+
+                Dispatcher.InvokeAsync(() =>
+                {
+                    if (DataContext is InstanceDetailViewModel vm)
+                    {
+                        vm.ModsTab.IsModPageLoading = true;
+                    }
+                });
+            };
+
+            ModPageView.CoreWebView2.NavigationCompleted += (s, args) =>
+            {
+                if (_isInitialModPageNavigation && args.IsSuccess)
+                {
+                    var finalUrl = ModPageView.Source?.ToString();
+                    if (!string.IsNullOrWhiteSpace(finalUrl))
+                    {
+                        _currentModPageInitialUrl = finalUrl;
+                    }
+                }
+                _isInitialModPageNavigation = false;
+
+                Dispatcher.InvokeAsync(() =>
+                {
+                    if (DataContext is InstanceDetailViewModel vm)
+                    {
+                        vm.ModsTab.IsModPageLoading = false;
+                    }
+                });
             };
         }
 

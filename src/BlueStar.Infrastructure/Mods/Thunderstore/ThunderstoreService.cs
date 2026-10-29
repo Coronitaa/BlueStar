@@ -219,6 +219,10 @@ public sealed class ThunderstoreService : IThunderstoreService
             {
                 var name = elem.GetProperty("name").GetString() ?? string.Empty;
                 var fullName = elem.GetProperty("full_name").GetString() ?? string.Empty;
+                if (IsExcludedModManager(name, fullName))
+                {
+                    continue;
+                }
                 var owner = elem.GetProperty("owner").GetString() ?? string.Empty;
                 var packageUrl = elem.GetProperty("package_url").GetString() ?? string.Empty;
                 var donation = elem.TryGetProperty("donation_link", out var don) ? don.GetString() : null;
@@ -343,6 +347,30 @@ public sealed class ThunderstoreService : IThunderstoreService
         return text.Replace("-", "").Replace("_", "").Replace(" ", "").Trim();
     }
 
+    private static bool IsExcludedModManager(string name, string fullName)
+    {
+        var normName = NormalizeTerm(name);
+        var normFull = NormalizeTerm(fullName);
+
+        if (normName.Equals("r2modman", StringComparison.OrdinalIgnoreCase) ||
+            normFull.Contains("r2modman", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (normName.Equals("GaleModManager", StringComparison.OrdinalIgnoreCase) ||
+            normName.Equals("Gale_Mod_Manager", StringComparison.OrdinalIgnoreCase) ||
+            normName.Equals("Gale", StringComparison.OrdinalIgnoreCase) ||
+            normFull.Contains("GaleModManager", StringComparison.OrdinalIgnoreCase) ||
+            normFull.Contains("Gale_Mod_Manager", StringComparison.OrdinalIgnoreCase) ||
+            normFull.Contains("GaleMod", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<ThunderstorePackage>> SearchPackagesAsync(
         string community,
@@ -357,11 +385,10 @@ public sealed class ThunderstoreService : IThunderstoreService
         var all = await GetPackagesAsync(community, ct).ConfigureAwait(false);
         if (all.Count == 0) return [];
 
-        // Exclude deprecated packages and mod managers / loaders (r2modman, BepInExPack) that are not mods
+        // Exclude deprecated packages and mod managers / loaders (r2modman, GaleModManager, BepInExPack) that are not mods
         var filtered = all.Where(p =>
             !p.IsDeprecated &&
-            !p.Name.Equals("r2modman", StringComparison.OrdinalIgnoreCase) &&
-            !p.FullName.Contains("r2modman", StringComparison.OrdinalIgnoreCase) &&
+            !IsExcludedModManager(p.Name, p.FullName) &&
             !p.Name.StartsWith("BepInExPack", StringComparison.OrdinalIgnoreCase) &&
             !p.FullName.Contains("BepInExPack", StringComparison.OrdinalIgnoreCase) &&
             !p.Name.Equals("BepInEx", StringComparison.OrdinalIgnoreCase));
