@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 setlocal disabledelayedexpansion
-title ReFix - Universal AutoDeploy Tool v1.4.1
+title ReFix - Universal AutoDeploy Tool v1.4.2
 
 set "SCRIPT_DIR=%~dp0"
 if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
@@ -395,19 +395,8 @@ if errorlevel 1 (
     goto ERROR_EXIT
 )
 
-:: Copy Steam Shortcut Installer & PowerShell helper (Valve mode only)
-if "%ONLINE_MODE_NAME%"=="valve" (
-    echo [2/3] Copying Steam Shortcut scripts...
-    if exist "%BIN_DIR%\add_steam_shortcut.ps1" (
-        copy /y "%BIN_DIR%\add_steam_shortcut.ps1" "%EXE_DIR%\add_steam_shortcut.ps1" >nul
-    )
-    if exist "%BIN_DIR%\Install_ReFix_Steam_Shortcut.bat" (
-        copy /y "%BIN_DIR%\Install_ReFix_Steam_Shortcut.bat" "%EXE_DIR%\Install_ReFix_Steam_Shortcut.bat" >nul
-    )
-    echo [OK] Deployed Steam Shortcut scripts to "%EXE_DIR%"
-) else (
-    echo [2/3] Finalizing portable configuration...
-)
+:: Finalizing portable configuration
+echo [2/3] Finalizing portable configuration...
 
 :: Apply Windows Firewall Rules dynamically
 if "%FIREWALL_AUTO_APPLY%"=="true" (
@@ -491,21 +480,7 @@ echo [OK] Game started.
 goto SUCCESS_EXIT
 
 :SKIP_LAUNCH_OFFER
-
-if "%ONLINE_MODE_NAME%"=="valve" (
-    if "%REFIX_NON_INTERACTIVE%"=="1" goto SUCCESS_EXIT
-    set "RUN_INSTALLER=Y"
-    set /p "RUN_INSTALLER=Add to Steam as Non-Steam Game? [Y/N] (Default: Y): "
-    if /i "%RUN_INSTALLER%"=="N" goto SUCCESS_EXIT
-
-    echo:
-    echo [INFO] Running Steam Shortcut Auto-Installer...
-    pushd "%EXE_DIR%"
-    if exist "Install_ReFix_Steam_Shortcut.bat" (
-        call Install_ReFix_Steam_Shortcut.bat "%GAME_NAME%" "%GAME_EXE_PATH%"
-    )
-    popd
-)
+goto SUCCESS_EXIT
 
 :SUCCESS_EXIT
 echo:

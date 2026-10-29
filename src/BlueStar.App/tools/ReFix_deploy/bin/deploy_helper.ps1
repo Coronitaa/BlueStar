@@ -733,8 +733,13 @@ switch ($OnlineMode) {
         }
 
         # Also deploy winmm.dll to ExeDir for early Steam Overlay injection (64-bit only)
+        # Note: Games that inspect loaded modules (e.g. Phasmophobia) detect root winmm.dll and self-terminate.
+        $skipWinmm = $false
+        if ($env:REFIX_SKIP_WINMM -eq "1" -or $GameName -match "Phasmophobia" -or $TargetDir -match "Phasmophobia" -or $ExeDir -match "Phasmophobia") {
+            $skipWinmm = $true
+        }
         $winmmPath = Join-Path $BinDir "winmm.dll"
-        if ((Test-Path -LiteralPath $winmmPath) -and (-not $isX86Game)) {
+        if ((Test-Path -LiteralPath $winmmPath) -and (-not $isX86Game) -and (-not $skipWinmm)) {
             $targetWinmm = Join-Path $ExeDir "winmm.dll"
             $targetWinmmOrig = Join-Path $ExeDir "winmm_o.dll"
             try {
@@ -747,6 +752,13 @@ switch ($OnlineMode) {
             } catch {
                 Write-Host "  [ERROR] Failed to deploy winmm.dll to $ExeDir : $_" -ForegroundColor Red
                 exit 1
+            }
+        } elseif ($skipWinmm) {
+            # Critical: Ensure no winmm.dll remains to avoid anti-cheat/integrity module blacklists
+            $strayWinmm = Join-Path $ExeDir "winmm.dll"
+            if (Test-Path -LiteralPath $strayWinmm) {
+                Remove-Item -LiteralPath $strayWinmm -Force -ErrorAction SilentlyContinue
+                Write-Host "  [NOTICE] Removed root winmm.dll to avoid anti-cheat/integrity scan blacklist in $GameName" -ForegroundColor Yellow
             }
         } elseif ($isX86Game) {
             # Critical: Ensure no 64-bit winmm.dll remains in 32-bit game directory
@@ -1522,6 +1534,27 @@ if ($EngineType -eq "Unity") {
                     $modified = $true
                 }
 
+                # 4. Phasmophobia Unity Services Steam Linking Bypass:
+                # Suppress AttemptLinkWithSteamAsync exception so failed Spacewar (AppID 480) Steam link
+                # falls through to the existing anonymous Unity session without crashing during splash.
+                if ($GameName -match "Phasmophobia" -or $TargetDir -match "Phasmophobia" -or $ExeDir -match "Phasmophobia") {
+                    $phasmPat = [byte[]]@(0x45, 0x84, 0xE4, 0x0F, 0x84, 0x8A, 0x00, 0x00, 0x00, 0x33, 0xC0)
+                    for ($idx = 0x4000000; $idx -lt [math]::Min($gaBytes.Length - 12, 0x5500000); $idx++) {
+                        $pMatch = $true
+                        for ($k = 0; $k -lt $phasmPat.Length; $k++) {
+                            if ($gaBytes[$idx + $k] -ne $phasmPat[$k]) { $pMatch = $false; break }
+                        }
+                        if ($pMatch) {
+                            for ($k = 3; $k -le 8; $k++) {
+                                $gaBytes[$idx + $k] = [byte]0x90
+                            }
+                            $modified = $true
+                            Write-Host "  [SUCCESS] Patched Phasmophobia GameAssembly.dll: Suppressed AttemptLinkWithSteamAsync exception at 0x$([System.Convert]::ToString($idx + 3, 16))" -ForegroundColor Green
+                            break
+                        }
+                    }
+                }
+
                 if ($modified) {
                     [System.IO.File]::WriteAllBytes($gameAssemblyPath, $gaBytes)
                     Write-Host "  [SUCCESS] Patched GameAssembly.dll: AuthType -> None (0xFF) & Ticket -> ret (Anonymous Photon Handshake)" -ForegroundColor Green
@@ -2076,17 +2109,7 @@ FixedRegion=$effectiveRegion
     }
 }
 
-# Deploy shortcut helper scripts for Valve mode
-if ($OnlineMode -eq "valve") {
-    $srcPs1 = Join-Path $BinDir "add_steam_shortcut.ps1"
-    $srcBat = Join-Path $BinDir "Install_ReFix_Steam_Shortcut.bat"
-    if (Test-Path -LiteralPath $srcPs1) {
-        Copy-Item -LiteralPath $srcPs1 -Destination (Join-Path $ExeDir "add_steam_shortcut.ps1") -Force -ErrorAction SilentlyContinue
-    }
-    if (Test-Path -LiteralPath $srcBat) {
-        Copy-Item -LiteralPath $srcBat -Destination (Join-Path $ExeDir "Install_ReFix_Steam_Shortcut.bat") -Force -ErrorAction SilentlyContinue
-    }
-}
+# Shortcut helper scripts deployment deactivated
 
 # ============================================================
 # Step 5: Universal Epic Online Services (EOS) & Redpoint Deployment
@@ -2272,7 +2295,11 @@ function Verify-ReFixDeployment {
 
     # 5. Loader proxy verification (winmm.dll)
     # Required for Valve mode on 64-bit games
-    if ($OnlineMode -eq "valve" -and (-not $IsX86)) {
+    $skipWinmmVerify = $false
+    if ($env:REFIX_SKIP_WINMM -eq "1" -or $GameName -match "Phasmophobia" -or $TargetDir -match "Phasmophobia" -or $ExeDir -match "Phasmophobia") {
+        $skipWinmmVerify = $true
+    }
+    if ($OnlineMode -eq "valve" -and (-not $IsX86) -and (-not $skipWinmmVerify)) {
         $winmmPath = Join-Path $BinDir "winmm.dll"
         if (Test-Path -LiteralPath $winmmPath) {
             $destWinmm = Join-Path $ExeDir "winmm.dll"
