@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Windows;
@@ -175,10 +176,25 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private bool _checkRequirementsOnStartup = true;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MissingRequirementsSummaryText))]
     private int _missingPrerequisitesCount;
 
     [ObservableProperty]
     private bool _hasMissingRequirements;
+
+    public string MissingRequirementsSummaryText
+    {
+        get
+        {
+            var isSpanish = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("es", StringComparison.OrdinalIgnoreCase);
+            var format = System.Windows.Application.Current?.TryFindResource("String_MissingPrereqsCountFormat") as string;
+            if (string.IsNullOrWhiteSpace(format))
+            {
+                format = isSpanish ? "Componentes requeridos faltantes ({0})" : "Missing prerequisite components ({0})";
+            }
+            return string.Format(format, MissingPrerequisitesCount);
+        }
+    }
 
     partial void OnCheckRequirementsOnStartupChanged(bool value)
     {
@@ -187,6 +203,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _ = _appSettings.SetCheckSystemRequirementsOnStartupAsync(value);
         }
     }
+
+    private readonly ILocalizationService? _localizationService;
 
     public MainViewModel(
         DownloadQueueManager downloadQueueManager,
@@ -201,7 +219,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         IPrerequisiteService? prerequisiteService = null,
         BlueStar.Infrastructure.Storage.AppSettingsService? appSettings = null,
         ICommunityStatsService? statsService = null,
-        INexusModsService? nexusModsService = null)
+        INexusModsService? nexusModsService = null,
+        ILocalizationService? localizationService = null)
     {
         _downloadQueueManager = downloadQueueManager;
         _steamStatusService = steamStatusService;
@@ -216,11 +235,24 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _appSettings = appSettings;
         _statsService = statsService;
         _nexusModsService = nexusModsService;
+        _localizationService = localizationService;
         _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
         if (_appSettings != null)
         {
             CheckRequirementsOnStartup = _appSettings.CheckSystemRequirementsOnStartup;
+        }
+
+        if (_localizationService != null)
+        {
+            _localizationService.LanguageChanged += (_, _) =>
+            {
+                _uiContext.Post(_ =>
+                {
+                    OnPropertyChanged(nameof(MissingRequirementsSummaryText));
+                    _ = ScanSystemRequirementsAsync(autoPromptModal: false);
+                }, null);
+            };
         }
 
         _queueCollectionChangedHandler = (_, _) => _uiContext.Post(_ => UpdateDownloadStats(), null);
@@ -1254,25 +1286,30 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         if (item == null || _prerequisiteService == null || IsInstallingSystemPrerequisites) return;
 
+        var isSpanish = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("es", StringComparison.OrdinalIgnoreCase);
         IsInstallingSystemPrerequisites = true;
-        SystemPrerequisitesInstallStatusText = $"Installing {item.Name}...";
+        SystemPrerequisitesInstallStatusText = isSpanish ? $"Instalando {item.Name}..." : $"Installing {item.Name}...";
         try
         {
             var progress = new Progress<string>(msg => SystemPrerequisitesInstallStatusText = msg);
             var success = await _prerequisiteService.InstallPrerequisiteAsync(item, progress, CancellationToken.None).ConfigureAwait(true);
             if (success)
             {
-                _notificationService.ShowSuccess("Prerequisite Installed", $"{item.Name} was installed successfully.");
+                _notificationService.ShowSuccess(
+                    isSpanish ? "Requisito Instalado" : "Prerequisite Installed",
+                    isSpanish ? $"{item.Name} se instaló correctamente." : $"{item.Name} was installed successfully.");
             }
             else
             {
-                _notificationService.ShowError("Installation Incomplete", $"Could not complete installation of {item.Name}.");
+                _notificationService.ShowError(
+                    isSpanish ? "Instalación Incompleta" : "Installation Incomplete",
+                    isSpanish ? $"No se pudo completar la instalación de {item.Name}." : $"Could not complete installation of {item.Name}.");
             }
             await ScanSystemRequirementsAsync(autoPromptModal: false).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
-            _notificationService.ShowError("Installation Error", ex.Message);
+            _notificationService.ShowError(isSpanish ? "Error de Instalación" : "Installation Error", ex.Message);
         }
         finally
         {
@@ -1289,10 +1326,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         if (_prerequisiteService == null || IsInstallingSystemPrerequisites || SystemPrerequisites.Count == 0) return;
 
+        var isSpanish = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("es", StringComparison.OrdinalIgnoreCase);
         var missing = SystemPrerequisites.Where(i => i.Status != PrerequisiteStatus.InstalledInSystem && i.Status != PrerequisiteStatus.InstalledSuccess).ToList();
         if (missing.Count == 0)
         {
-            _notificationService.ShowInfo("System Up to Date", "All essential system requirements are already installed.");
+            _notificationService.ShowInfo(
+                isSpanish ? "Sistema Actualizado" : "System Up to Date",
+                isSpanish ? "Todos los requisitos esenciales del sistema ya están instalados." : "All essential system requirements are already installed.");
             return;
         }
 
@@ -1301,17 +1341,21 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             var progress = new Progress<string>(msg => SystemPrerequisitesInstallStatusText = msg);
             int installed = await _prerequisiteService.InstallAllPrerequisitesAsync(missing, progress, CancellationToken.None).ConfigureAwait(true);
-            _notificationService.ShowSuccess("System Requirements Updated", $"{installed} requirement(s) configured successfully.");
+            _notificationService.ShowSuccess(
+                isSpanish ? "Requisitos Actualizados" : "System Requirements Updated",
+                isSpanish ? $"{installed} requisito(s) configurado(s) correctamente." : $"{installed} requirement(s) configured successfully.");
             await ScanSystemRequirementsAsync(autoPromptModal: false).ConfigureAwait(true);
 
             if (!HasMissingRequirements)
             {
-                SystemPrerequisitesInstallStatusText = "All requirements verified successfully!";
+                SystemPrerequisitesInstallStatusText = isSpanish
+                    ? "¡Todos los requisitos fueron verificados correctamente!"
+                    : "All requirements verified successfully!";
             }
         }
         catch (Exception ex)
         {
-            _notificationService.ShowError("Installation Error", ex.Message);
+            _notificationService.ShowError(isSpanish ? "Error de Instalación" : "Installation Error", ex.Message);
         }
         finally
         {

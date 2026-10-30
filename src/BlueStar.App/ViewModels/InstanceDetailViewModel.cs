@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -2273,20 +2274,39 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }
 
         var selectedDlcIds = InstallModalDlcs.Where(d => d.IsSelected).Select(d => d.AppId).ToHashSet();
+        var dlcDepotIds = GetDlcDepotIds();
 
         // Base game depots + selected DLC depots
         var selectedDepots = new List<DepotInfo>();
-        if (Instance.Depots != null)
+        var selectedBase = Depots.Where(d => d.IsSelected && !dlcDepotIds.Contains(d.Depot.DepotId)).Select(d => d.Depot).ToList();
+        if (selectedBase.Count > 0)
         {
-            selectedDepots.AddRange(Instance.Depots);
+            selectedDepots.AddRange(selectedBase);
         }
+        else if (Instance.Depots != null)
+        {
+            var compatibleBase = Instance.Depots
+                .Where(d => !dlcDepotIds.Contains(d.DepotId) && IsDepotCompatibleWithCurrentOS(d))
+                .ToList();
+
+            var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var d in compatibleBase)
+            {
+                var key = $"{d.Platform}_{d.Name?.Trim()}";
+                if (string.IsNullOrWhiteSpace(d.Name) || seenNames.Add(key))
+                {
+                    selectedDepots.Add(d);
+                }
+            }
+        }
+
         if (Instance.Dlcs != null)
         {
             foreach (var dlc in Instance.Dlcs)
             {
                 if (selectedDlcIds.Contains(dlc.AppId) && dlc.Depots != null)
                 {
-                    selectedDepots.AddRange(dlc.Depots);
+                    selectedDepots.AddRange(dlc.Depots.Where(IsDepotCompatibleWithCurrentOS));
                 }
             }
         }
@@ -2368,16 +2388,21 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }
 
         // Update depots and dlcs in the viewmodel
+        var selectedDepotIdSet = distinctDepots.Select(d => d.DepotId).ToHashSet();
+        foreach (var item in Depots)
+        {
+            item.IsSelected = selectedDepotIdSet.Contains(item.Depot.DepotId);
+            if (item.IsSelected)
+            {
+                var dep = distinctDepots.First(d => d.DepotId == item.Depot.DepotId);
+                item.Depot = dep;
+                item.ManifestInputText = dep.ManifestId > 0 ? dep.ManifestId.ToString() : string.Empty;
+            }
+        }
+
         foreach (var dep in distinctDepots)
         {
-            var existing = Depots.FirstOrDefault(d => d.Depot.DepotId == dep.DepotId);
-            if (existing != null)
-            {
-                existing.Depot = dep;
-                existing.IsSelected = true;
-                existing.ManifestInputText = dep.ManifestId > 0 ? dep.ManifestId.ToString() : string.Empty;
-            }
-            else
+            if (!Depots.Any(d => d.Depot.DepotId == dep.DepotId))
             {
                 Depots.Add(new SelectableDepotItem
                 {
@@ -4829,12 +4854,23 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
         var dlcDepotIds = GetDlcDepotIds();
         int selected = 0, skipped = 0;
+        var seenBaseDepotNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var item in Depots)
         {
             bool isDlcDepot = dlcDepotIds.Contains(item.Depot.DepotId);
             bool compatible = IsDepotCompatibleWithCurrentOS(item.Depot);
             bool take = compatible && !isDlcDepot;
+
+            // If multiple base depots share the exact same normalized name and platform, only select the first one.
+            if (take && !string.IsNullOrWhiteSpace(item.Depot.Name))
+            {
+                var normalizedKey = $"{item.Depot.Platform}_{item.Depot.Name.Trim()}";
+                if (!seenBaseDepotNames.Add(normalizedKey))
+                {
+                    take = false;
+                }
+            }
 
             item.IsSelected = take;
             if (take) selected++; else skipped++;
@@ -6994,16 +7030,61 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         if (plat.Equals("Linux", StringComparison.OrdinalIgnoreCase) ||
             plat.Equals("macOS", StringComparison.OrdinalIgnoreCase) ||
             plat.Equals("OSX", StringComparison.OrdinalIgnoreCase) ||
-            plat.Equals("Ubuntu", StringComparison.OrdinalIgnoreCase))
+            plat.Equals("Ubuntu", StringComparison.OrdinalIgnoreCase) ||
+            plat.Contains("Linux", StringComparison.OrdinalIgnoreCase) ||
+            plat.Contains("Mac", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
 
-        // Dedicated 32-bit filter on 64-bit Windows
-        if (Environment.Is64BitOperatingSystem && string.Equals(depot.Architecture, "32-bit", StringComparison.OrdinalIgnoreCase))
+        if (depot.Name != null)
         {
-            if (depot.Name?.Contains("32-bit", StringComparison.OrdinalIgnoreCase) == true ||
-                depot.Name?.Contains("Win32", StringComparison.OrdinalIgnoreCase) == true)
+            if (depot.Name.Contains("Linux", StringComparison.OrdinalIgnoreCase) ||
+                depot.Name.Contains("macOS", StringComparison.OrdinalIgnoreCase) ||
+                depot.Name.Contains("OSX", StringComparison.OrdinalIgnoreCase) ||
+                depot.Name.Contains("Ubuntu", StringComparison.OrdinalIgnoreCase) ||
+                depot.Name.Contains("SteamOS", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        // Dedicated architecture filter on 64-bit Windows: exclude 32-bit depots
+        if (Environment.Is64BitOperatingSystem)
+        {
+            bool is32Arch = string.Equals(depot.Architecture, "32-bit", StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(depot.Architecture, "32", StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(depot.Architecture, "x86", StringComparison.OrdinalIgnoreCase);
+
+            bool is32Name = depot.Name != null && (
+                depot.Name.Contains("32-bit", StringComparison.OrdinalIgnoreCase) ||
+                depot.Name.Contains("32bit", StringComparison.OrdinalIgnoreCase) ||
+                depot.Name.Contains("Win32", StringComparison.OrdinalIgnoreCase) ||
+                (depot.Name.Contains("x86", StringComparison.OrdinalIgnoreCase) && !depot.Name.Contains("x86_64", StringComparison.OrdinalIgnoreCase) && !depot.Name.Contains("x86-64", StringComparison.OrdinalIgnoreCase))
+            );
+
+            if (is32Arch || is32Name)
+            {
+                return false;
+            }
+        }
+        else
+        {
+            // On 32-bit Windows: exclude 64-bit depots
+            bool is64Arch = string.Equals(depot.Architecture, "64-bit", StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(depot.Architecture, "64", StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(depot.Architecture, "x64", StringComparison.OrdinalIgnoreCase);
+
+            bool is64Name = depot.Name != null && (
+                depot.Name.Contains("64-bit", StringComparison.OrdinalIgnoreCase) ||
+                depot.Name.Contains("64bit", StringComparison.OrdinalIgnoreCase) ||
+                depot.Name.Contains("Win64", StringComparison.OrdinalIgnoreCase) ||
+                depot.Name.Contains("x64", StringComparison.OrdinalIgnoreCase) ||
+                depot.Name.Contains("x86_64", StringComparison.OrdinalIgnoreCase) ||
+                depot.Name.Contains("x86-64", StringComparison.OrdinalIgnoreCase)
+            );
+
+            if (is64Arch || is64Name)
             {
                 return false;
             }
@@ -9478,8 +9559,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     {
         if (Instance == null || item == null || _prerequisiteService == null || IsInstallingPrerequisites) return;
 
+        var isSpanish = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("es", StringComparison.OrdinalIgnoreCase);
         IsInstallingPrerequisites = true;
-        StatusMessage = $"⏳ Installing {item.Name}...";
+        StatusMessage = isSpanish ? $"⏳ Instalando {item.Name}..." : $"⏳ Installing {item.Name}...";
         var progress = new Progress<string>(msg =>
         {
             StatusMessage = msg;
@@ -9491,13 +9573,17 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             var success = await _prerequisiteService.InstallPrerequisiteAsync(Instance, item, progress, CancellationToken.None).ConfigureAwait(true);
             if (success)
             {
-                StatusMessage = $"✅ {item.Name} installed successfully.";
-                _notificationService?.ShowSuccess("Prerequisite Installed", $"{item.Name} installed successfully.");
+                StatusMessage = isSpanish ? $"✅ {item.Name} instalado correctamente." : $"✅ {item.Name} installed successfully.";
+                _notificationService?.ShowSuccess(
+                    isSpanish ? "Requisito Instalado" : "Prerequisite Installed",
+                    isSpanish ? $"{item.Name} se instaló correctamente." : $"{item.Name} installed successfully.");
             }
             else
             {
-                StatusMessage = $"❌ Failed to install {item.Name}.";
-                _notificationService?.ShowError("Prerequisite Error", $"Could not install {item.Name}.");
+                StatusMessage = isSpanish ? $"❌ Error al instalar {item.Name}." : $"❌ Failed to install {item.Name}.";
+                _notificationService?.ShowError(
+                    isSpanish ? "Error en Requisito" : "Prerequisite Error",
+                    isSpanish ? $"No se pudo instalar {item.Name}." : $"Could not install {item.Name}.");
             }
 
             await ScanPrerequisitesAsync().ConfigureAwait(true);
@@ -9505,7 +9591,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error installing prerequisite {Name}", item.Name);
-            StatusMessage = $"❌ Error: {ex.Message}";
+            StatusMessage = isSpanish ? $"❌ Error: {ex.Message}" : $"❌ Error: {ex.Message}";
         }
         finally
         {
@@ -9521,8 +9607,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     {
         if (Instance == null || _prerequisiteService == null || IsInstallingPrerequisites) return;
 
+        var isSpanish = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("es", StringComparison.OrdinalIgnoreCase);
         IsInstallingPrerequisites = true;
-        StatusMessage = "⏳ Installing all prerequisites in 1-click...";
+        StatusMessage = isSpanish ? "⏳ Instalando todos los requisitos en 1-clic..." : "⏳ Installing all prerequisites in 1-click...";
         var progress = new Progress<string>(msg =>
         {
             StatusMessage = msg;
@@ -9532,14 +9619,20 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         try
         {
             int count = await _prerequisiteService.InstallAllPrerequisitesAsync(Instance, progress, CancellationToken.None).ConfigureAwait(true);
-            StatusMessage = $"✅ {count} prerequisite(s) configured successfully.";
-            _notificationService?.ShowSuccess("Prerequisites Ready", $"Verified and installed required components for {Instance.Name}.");
+            StatusMessage = isSpanish
+                ? $"✅ {count} requisito(s) configurado(s) correctamente."
+                : $"✅ {count} prerequisite(s) configured successfully.";
+            _notificationService?.ShowSuccess(
+                isSpanish ? "Requisitos Listos" : "Prerequisites Ready",
+                isSpanish ? $"Se verificaron e instalaron los componentes necesarios para {Instance.Name}." : $"Verified and installed required components for {Instance.Name}.");
             await ScanPrerequisitesAsync().ConfigureAwait(true);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error installing all prerequisites for {Name}", Instance.Name);
-            StatusMessage = $"❌ Failed to install prerequisites: {ex.Message}";
+            StatusMessage = isSpanish
+                ? $"❌ Error al instalar los requisitos: {ex.Message}"
+                : $"❌ Failed to install prerequisites: {ex.Message}";
         }
         finally
         {

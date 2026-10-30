@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "BlueStar"
-#define MyAppVersion "1.5.0"
+#define MyAppVersion "1.5.1"
 #define MyAppPublisher "BlueStar Devs"
 #define MyAppURL "https://github.com/Coronitaa/BlueStar"
 #define MyAppExeName "BlueStar.exe"
@@ -78,10 +78,10 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Registry]
-Root: HKCR; Subkey: "nxm"; ValueType: string; ValueName: ""; ValueData: "URL:Nexus Mod Protocol"; Flags: uninsdeletekey
-Root: HKCR; Subkey: "nxm"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
-Root: HKCR; Subkey: "nxm\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"
-Root: HKCR; Subkey: "nxm\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\nxm"; ValueType: string; ValueName: ""; ValueData: "URL:Nexus Mod Protocol"; Flags: uninsdeletekey noerror
+Root: HKA; Subkey: "Software\Classes\nxm"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Flags: noerror
+Root: HKA; Subkey: "Software\Classes\nxm\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"; Flags: noerror
+Root: HKA; Subkey: "Software\Classes\nxm\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Flags: noerror
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
@@ -161,7 +161,7 @@ begin
   Log('Executing ' + DisplayName + ' installer...');
   if not Exec(Installer, Params, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
   begin
-    if Required then
+    if Required and IsAdminInstallMode then
       RaiseException(FmtMessage(CustomMessage('PrereqInstallFailed'), [DisplayName, IntToStr(ResultCode)]));
     Exit;
   end;
@@ -169,7 +169,7 @@ begin
   Log(Format('%s exited with code: %d', [FileName, ResultCode]));
   if ResultCode = 3010 then
     RebootRequiredFlag := True
-  else if Required and (ResultCode <> 0) and (ResultCode <> 1641) and (ResultCode <> 1638) then
+  else if Required and IsAdminInstallMode and (ResultCode <> 0) and (ResultCode <> 1641) and (ResultCode <> 1638) then
     RaiseException(FmtMessage(CustomMessage('PrereqInstallFailed'), [DisplayName, IntToStr(ResultCode)]));
 end;
 
@@ -204,14 +204,14 @@ begin
     if NeedVc64() then
     begin
       InstallPrerequisite('vc_redist.x64.exe', 'Visual C++ 2015-2022 (x64)', '/install /quiet /norestart', True);
-      if NeedVc64() then
+      if NeedVc64() and IsAdminInstallMode then
         RaiseException(FmtMessage(CustomMessage('PrereqVerifyFailed'), ['Visual C++ 2015-2022 (x64)']));
     end;
 
     if NeedVc86() then
     begin
       InstallPrerequisite('vc_redist.x86.exe', 'Visual C++ 2015-2022 (x86)', '/install /quiet /norestart', True);
-      if NeedVc86() then
+      if NeedVc86() and IsAdminInstallMode then
         RaiseException(FmtMessage(CustomMessage('PrereqVerifyFailed'), ['Visual C++ 2015-2022 (x86)']));
     end;
 

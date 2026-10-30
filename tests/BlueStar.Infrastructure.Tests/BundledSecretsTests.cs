@@ -67,6 +67,7 @@ public class BundledSecretsTests : IDisposable
         secrets!.CurseForge.Should().NotBeNullOrEmpty();
         secrets.NexusMods.Should().NotBeNullOrEmpty();
         secrets.ModIo.Should().NotBeNullOrEmpty();
+        secrets.DefaultApiKey.Should().NotBeNullOrEmpty();
     }
 
     [Fact]

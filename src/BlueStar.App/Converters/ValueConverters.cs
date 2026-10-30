@@ -563,12 +563,46 @@ public sealed class PrerequisiteStatusToTextConverter : IValueConverter
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         if (value is not PrerequisiteStatus status) return "Unknown";
+
+        var resourceKey = status switch
+        {
+            PrerequisiteStatus.InstalledInSystem => "String_PrereqStatusInstalledInSystem",
+            PrerequisiteStatus.InstalledSuccess => "String_PrereqStatusInstalledSuccess",
+            PrerequisiteStatus.AvailableInGame => "String_PrereqStatusAvailableInGame",
+            PrerequisiteStatus.NeedsDownload => "String_PrereqStatusNeedsDownload",
+            PrerequisiteStatus.Installing => "String_PrereqStatusInstalling",
+            PrerequisiteStatus.InstallFailed => "String_PrereqStatusInstallFailed",
+            _ => null
+        };
+
+        if (resourceKey != null && Application.Current?.TryFindResource(resourceKey) is string localized && !string.IsNullOrWhiteSpace(localized))
+        {
+            return localized;
+        }
+
+        var isSpanish = (culture?.TwoLetterISOLanguageName.Equals("es", StringComparison.OrdinalIgnoreCase) == true)
+                     || CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("es", StringComparison.OrdinalIgnoreCase);
+
+        if (isSpanish)
+        {
+            return status switch
+            {
+                PrerequisiteStatus.InstalledInSystem => "✓ Instalado en el sistema",
+                PrerequisiteStatus.InstalledSuccess => "✓ Instalado correctamente",
+                PrerequisiteStatus.AvailableInGame => "📦 En carpeta del juego",
+                PrerequisiteStatus.NeedsDownload => "🌐 Descarga oficial",
+                PrerequisiteStatus.Installing => "⏳ Instalando...",
+                PrerequisiteStatus.InstallFailed => "❌ Error de instalación",
+                _ => status.ToString()
+            };
+        }
+
         return status switch
         {
             PrerequisiteStatus.InstalledInSystem => "✓ Installed in system",
             PrerequisiteStatus.InstalledSuccess => "✓ Installed successfully",
             PrerequisiteStatus.AvailableInGame => "📦 Found in game folder",
-            PrerequisiteStatus.NeedsDownload => "🌐 Microsoft official download",
+            PrerequisiteStatus.NeedsDownload => "🌐 Official download",
             PrerequisiteStatus.Installing => "⏳ Installing...",
             PrerequisiteStatus.InstallFailed => "❌ Installation failed",
             _ => status.ToString()

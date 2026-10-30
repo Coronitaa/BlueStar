@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -36,11 +37,26 @@ public sealed class PrerequisiteService : IPrerequisiteService
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+        try
+        {
+            if (_http.DefaultRequestHeaders.UserAgent.Count == 0)
+            {
+                _http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 BlueStar/1.5.1");
+            }
+            if (_http.Timeout < TimeSpan.FromMinutes(10))
+            {
+                _http.Timeout = TimeSpan.FromMinutes(10);
+            }
+        }
+        catch { }
     }
 
     /// <inheritdoc />
     public Task<IReadOnlyList<PrerequisiteItem>> DetectSystemPrerequisitesAsync(CancellationToken ct = default)
     {
+        var isSpanish = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("es", StringComparison.OrdinalIgnoreCase);
+
         var items = new List<PrerequisiteItem>
         {
             new()
@@ -48,7 +64,9 @@ public sealed class PrerequisiteService : IPrerequisiteService
                 Id = "vcredist_2015_2022_x64",
                 Name = "Visual C++ 2015-2022 Redistributable (x64)",
                 Category = "Visual C++",
-                Description = "Required by BlueStar, modern 64-bit Windows games, and injectors (C++ standard libraries & MSVCP140.dll).",
+                Description = isSpanish
+                    ? "Requerido por BlueStar, juegos modernos de 64 bits e inyectores (librerías estándar C++ y MSVCP140.dll)."
+                    : "Required by BlueStar, modern 64-bit Windows games, and injectors (C++ standard libraries & MSVCP140.dll).",
                 DownloadUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe",
                 SilentArguments = "/install /quiet /norestart",
                 IsEssential = true,
@@ -59,7 +77,9 @@ public sealed class PrerequisiteService : IPrerequisiteService
                 Id = "vcredist_2015_2022_x86",
                 Name = "Visual C++ 2015-2022 Redistributable (x86)",
                 Category = "Visual C++",
-                Description = "Required by 32-bit components, legacy game binaries, and Steam overlay hooks.",
+                Description = isSpanish
+                    ? "Requerido por componentes de 32 bits, ejecutables heredados y ganchos de overlay de Steam."
+                    : "Required by 32-bit components, legacy game binaries, and Steam overlay hooks.",
                 DownloadUrl = "https://aka.ms/vs/17/release/vc_redist.x86.exe",
                 SilentArguments = "/install /quiet /norestart",
                 IsEssential = true,
@@ -68,9 +88,13 @@ public sealed class PrerequisiteService : IPrerequisiteService
             new()
             {
                 Id = "directx_enduser",
-                Name = "DirectX End-User Runtime (Legacy D3DX/XAudio2)",
+                Name = isSpanish
+                    ? "DirectX End-User Runtime (D3DX/XAudio2)"
+                    : "DirectX End-User Runtime (Legacy D3DX/XAudio2)",
                 Category = "DirectX",
-                Description = "Provides legacy DirectX 9.0c, D3DX9, D3DCompiler, and XAudio2 DLLs essential for games.",
+                Description = isSpanish
+                    ? "Proporciona librerías esenciales DirectX 9.0c, D3DX9, D3DCompiler y XAudio2 para juegos."
+                    : "Provides legacy DirectX 9.0c, D3DX9, D3DCompiler, and XAudio2 DLLs essential for games.",
                 DownloadUrl = "https://download.microsoft.com/download/1/7/1/1718CCC4-6315-4D8E-9543-8E28A4E18C4C/dxwebsetup.exe",
                 SilentArguments = "/Q",
                 // Only some older games need it; BlueStar itself does not.
@@ -82,7 +106,9 @@ public sealed class PrerequisiteService : IPrerequisiteService
                 Id = "dotnet_desktop_8",
                 Name = ".NET Desktop Runtime 8.0 (x64)",
                 Category = ".NET Runtime",
-                Description = "Required for C# and modern Unity/.NET game frameworks and mods.",
+                Description = isSpanish
+                    ? "Requerido para C# y frameworks modernos de juegos y mods en Unity/.NET."
+                    : "Required for C# and modern Unity/.NET game frameworks and mods.",
                 DownloadUrl = "https://aka.ms/dotnet/8.0/windowsdesktop-runtime-win-x64.exe",
                 SilentArguments = "/install /quiet /norestart",
                 IsEssential = false,
@@ -92,8 +118,10 @@ public sealed class PrerequisiteService : IPrerequisiteService
             {
                 Id = "webview2_runtime",
                 Name = "Microsoft Edge WebView2 Runtime",
-                Category = "Web Browser Engine",
-                Description = "Required for embedded Steam Store, SteamDB, and web navigation panels in BlueStar.",
+                Category = isSpanish ? "Navegador Web" : "Web Browser Engine",
+                Description = isSpanish
+                    ? "Requerido para la Tienda de Steam integrada, SteamDB y paneles de navegación web en BlueStar."
+                    : "Required for embedded Steam Store, SteamDB, and web navigation panels in BlueStar.",
                 DownloadUrl = "https://go.microsoft.com/fwlink/p/?LinkId=2124703",
                 SilentArguments = "/silent /install",
                 IsEssential = true,
@@ -520,6 +548,93 @@ public sealed class PrerequisiteService : IPrerequisiteService
         ["webview2_runtime"] = "MicrosoftEdgeWebview2Setup.exe"
     };
 
+    /// <summary>
+    /// Canonical filenames for redistributable dependency installers.
+    /// </summary>
+    public static readonly Dictionary<string, string> PrerequisiteFileNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["vcredist_2015_2022_x64"] = "vc_redist.x64.exe",
+        ["vcredist_2015_2022_x86"] = "vc_redist.x86.exe",
+        ["directx_enduser"] = "dxwebsetup.exe",
+        ["dotnet_desktop_8"] = "windowsdesktop-runtime-8.0-win-x64.exe",
+        ["webview2_runtime"] = "MicrosoftEdgeWebview2Setup.exe"
+    };
+
+    /// <summary>
+    /// Resolves the primary internal BlueStar directory where dependency installers are stored and cached.
+    /// Prefers the application-local folder ({app}\prerequisites) when writable (e.g. portable builds);
+    /// falls back to %AppData%\BlueStar\prerequisites for standard installed deployments.
+    /// </summary>
+    public static string GetPrimaryPrerequisitesDirectory()
+    {
+        try
+        {
+            var localDir = Path.Combine(AppContext.BaseDirectory, "prerequisites");
+            var portableMarker = Path.Combine(AppContext.BaseDirectory, ".portable");
+            if (File.Exists(portableMarker) || Directory.Exists(localDir))
+            {
+                Directory.CreateDirectory(localDir);
+                var testFile = Path.Combine(localDir, $".probe_{Guid.NewGuid():N}");
+                File.WriteAllText(testFile, "1");
+                File.Delete(testFile);
+                return localDir;
+            }
+        }
+        catch { }
+
+        var appDataDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "BlueStar", "prerequisites");
+        Directory.CreateDirectory(appDataDir);
+        return appDataDir;
+    }
+
+    /// <summary>
+    /// Enumerates all internal search directories where BlueStar stores prerequisite installers.
+    /// </summary>
+    public static IEnumerable<string> GetPrerequisiteSearchDirectories()
+    {
+        var localDir = Path.Combine(AppContext.BaseDirectory, "prerequisites");
+        if (Directory.Exists(localDir))
+            yield return localDir;
+
+        var appDataDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "BlueStar", "prerequisites");
+        if (Directory.Exists(appDataDir))
+            yield return appDataDir;
+    }
+
+    /// <summary>
+    /// Searches for an existing, complete installer in the internal BlueStar prerequisites folders.
+    /// </summary>
+    public static string? FindExistingInstaller(string? id, string? baseDirectory = null)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return null;
+
+        string fileName = PrerequisiteFileNames.TryGetValue(id, out var fn) ? fn : $"{id}.exe";
+
+        if (!string.IsNullOrWhiteSpace(baseDirectory))
+        {
+            var candidate = Path.Combine(baseDirectory, "prerequisites", fileName);
+            return File.Exists(candidate) && new FileInfo(candidate).Length > 0 ? candidate : null;
+        }
+
+        foreach (var dir in GetPrerequisiteSearchDirectories())
+        {
+            var path = Path.Combine(dir, fileName);
+            if (File.Exists(path) && new FileInfo(path).Length > 0)
+                return path;
+
+            // Also check alternate {id}.exe
+            var altPath = Path.Combine(dir, $"{id}.exe");
+            if (File.Exists(altPath) && new FileInfo(altPath).Length > 0)
+                return altPath;
+        }
+
+        return null;
+    }
+
     internal static string? BundledInstallerPath(string? id, string? baseDirectory = null)
     {
         if (id == null || !BundledInstallers.TryGetValue(id, out var fileName)) return null;
@@ -531,66 +646,116 @@ public sealed class PrerequisiteService : IPrerequisiteService
     {
         ArgumentNullException.ThrowIfNull(item);
 
+        bool isSpanish = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("es", StringComparison.OrdinalIgnoreCase);
+
         item.Status = PrerequisiteStatus.Installing;
-        progress?.Report($"Starting installation of {item.Name}...");
+        progress?.Report(isSpanish ? $"Iniciando instalación de {item.Name}..." : $"Starting installation of {item.Name}...");
 
-        string? installerPath = item.LocalInstallerPath;
+        string? installerPath = null;
 
-        // Release builds ship the offline installers in {app}\prerequisites; prefer them over downloading
-        if (string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))
+        // 1. If an official download URL is available, ensure the installer is downloaded first
+        // and stored in the internal BlueStar prerequisites folder.
+        if (!string.IsNullOrWhiteSpace(item.DownloadUrl))
         {
-            var bundled = BundledInstallerPath(item.Id);
-            if (bundled != null)
+            installerPath = FindExistingInstaller(item.Id);
+
+            if (string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))
             {
-                installerPath = bundled;
-                item.LocalInstallerPath = bundled;
+                try
+                {
+                    var targetDir = GetPrimaryPrerequisitesDirectory();
+                    var fileName = PrerequisiteFileNames.TryGetValue(item.Id, out var fn) ? fn : $"{item.Id}.exe";
+                    var targetFile = Path.Combine(targetDir, fileName);
+                    var tempFile = Path.Combine(targetDir, $"{fileName}.tmp_{Guid.NewGuid():N}");
+
+                    progress?.Report(isSpanish
+                        ? $"⏳ Descargando {item.Name} desde el sitio oficial..."
+                        : $"⏳ Downloading {item.Name} from official servers...");
+                    _logger.LogInformation("Downloading prerequisite from official site {Url} to {Dest}", item.DownloadUrl, targetFile);
+
+                    using var request = new HttpRequestMessage(HttpMethod.Get, item.DownloadUrl);
+                    using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+                    response.EnsureSuccessStatusCode();
+
+                    var totalBytes = response.Content.Headers.ContentLength;
+                    await using (var contentStream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false))
+                    await using (var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+                    {
+                        var buffer = new byte[81920];
+                        long totalRead = 0;
+                        int read;
+                        var lastReport = DateTime.UtcNow;
+
+                        while ((read = await contentStream.ReadAsync(buffer, 0, buffer.Length, ct).ConfigureAwait(false)) > 0)
+                        {
+                            await fileStream.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
+                            totalRead += read;
+
+                            if ((DateTime.UtcNow - lastReport).TotalMilliseconds > 300)
+                            {
+                                lastReport = DateTime.UtcNow;
+                                if (totalBytes.HasValue && totalBytes.Value > 0)
+                                {
+                                    var percent = (int)(totalRead * 100 / totalBytes.Value);
+                                    var mbRead = totalRead / (1024.0 * 1024.0);
+                                    var mbTotal = totalBytes.Value / (1024.0 * 1024.0);
+                                    progress?.Report(isSpanish
+                                        ? $"⏳ Descargando {item.Name}... {percent}% ({mbRead:F1}/{mbTotal:F1} MB)"
+                                        : $"⏳ Downloading {item.Name}... {percent}% ({mbRead:F1}/{mbTotal:F1} MB)");
+                                }
+                                else
+                                {
+                                    var mbRead = totalRead / (1024.0 * 1024.0);
+                                    progress?.Report(isSpanish
+                                        ? $"⏳ Descargando {item.Name}... ({mbRead:F1} MB)"
+                                        : $"⏳ Downloading {item.Name}... ({mbRead:F1} MB)");
+                                }
+                            }
+                        }
+                    }
+
+                    if (File.Exists(targetFile))
+                    {
+                        try { File.Delete(targetFile); } catch { }
+                    }
+                    File.Move(tempFile, targetFile, true);
+
+                    installerPath = targetFile;
+                    item.LocalInstallerPath = targetFile;
+                    _logger.LogInformation("Prerequisite downloaded successfully to internal path {Path}", targetFile);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to download prerequisite {Id} from {Url}", item.Id, item.DownloadUrl);
+                    progress?.Report(isSpanish
+                        ? $"❌ Error al descargar {item.Name}: {ex.Message}"
+                        : $"❌ Failed to download {item.Name}: {ex.Message}");
+                    item.Status = PrerequisiteStatus.InstallFailed;
+                    return false;
+                }
+            }
+            else
+            {
+                item.LocalInstallerPath = installerPath;
+            }
+        }
+        else
+        {
+            // For items without an official download URL, use local installer or search internal directories
+            installerPath = item.LocalInstallerPath;
+            if (string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))
+            {
+                installerPath = FindExistingInstaller(item.Id);
             }
         }
 
-        // Download if local installer is not available
         if (string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))
         {
-            if (string.IsNullOrWhiteSpace(item.DownloadUrl))
-            {
-                progress?.Report($"❌ No local installer or download URL found for {item.Name}.");
-                item.Status = PrerequisiteStatus.InstallFailed;
-                return false;
-            }
-
-            try
-            {
-                var prereqDir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "BlueStar", "prerequisites");
-                Directory.CreateDirectory(prereqDir);
-
-                var ext = Path.GetExtension(new Uri(item.DownloadUrl).AbsolutePath);
-                if (string.IsNullOrEmpty(ext)) ext = ".exe";
-                var targetFile = Path.Combine(prereqDir, $"{item.Id}{ext}");
-
-                if (!File.Exists(targetFile) || new FileInfo(targetFile).Length < 1024)
-                {
-                    progress?.Report($"⏳ Downloading {item.Name} from official Microsoft servers...");
-                    _logger.LogInformation("Downloading prerequisite from {Url} to {Dest}", item.DownloadUrl, targetFile);
-
-                    using var response = await _http.GetAsync(item.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-                    response.EnsureSuccessStatusCode();
-
-                    await using var contentStream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-                    await using var fileStream = new FileStream(targetFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
-                    await contentStream.CopyToAsync(fileStream, ct).ConfigureAwait(false);
-                }
-
-                installerPath = targetFile;
-                item.LocalInstallerPath = targetFile;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to download prerequisite {Id}", item.Id);
-                progress?.Report($"❌ Failed to download {item.Name}: {ex.Message}");
-                item.Status = PrerequisiteStatus.InstallFailed;
-                return false;
-            }
+            progress?.Report(isSpanish
+                ? $"❌ No se encontró el instalador ni la URL oficial para {item.Name}."
+                : $"❌ No installer or official URL found for {item.Name}.");
+            item.Status = PrerequisiteStatus.InstallFailed;
+            return false;
         }
 
         try
@@ -602,7 +767,9 @@ public sealed class PrerequisiteService : IPrerequisiteService
             if (item.RequiresExplicitConsent && !item.IsRecognized)
             {
                 // Unrecognized installer: launch interactively without forcing silent flags
-                progress?.Report($"🖥️ Launching installer for {item.Name}. Please complete the setup wizard.");
+                progress?.Report(isSpanish
+                    ? $"🖥️ Ejecutando instalador de {item.Name}. Por favor completa el asistente de instalación."
+                    : $"🖥️ Launching installer for {item.Name}. Please complete the setup wizard.");
                 _logger.LogInformation("Launching unverified installer interactively: {Path}", installerPath);
 
                 if (isMsi)
@@ -619,7 +786,9 @@ public sealed class PrerequisiteService : IPrerequisiteService
             else
             {
                 // Verified prerequisite: apply appropriate silent unattended arguments
-                progress?.Report($"⚙️ Installing {item.Name} silently...");
+                progress?.Report(isSpanish
+                    ? $"⚙️ Instalando {item.Name} de forma silenciosa..."
+                    : $"⚙️ Installing {item.Name} silently...");
                 _logger.LogInformation("Launching verified prerequisite installer: {Path} with arguments: {Args}", installerPath, item.SilentArguments);
 
                 if (isMsi)
@@ -646,7 +815,9 @@ public sealed class PrerequisiteService : IPrerequisiteService
             using var process = Process.Start(psi);
             if (process == null)
             {
-                progress?.Report($"❌ Could not start installer process for {item.Name}.");
+                progress?.Report(isSpanish
+                    ? $"❌ No se pudo iniciar el proceso de instalación de {item.Name}."
+                    : $"❌ Could not start installer process for {item.Name}.");
                 item.Status = PrerequisiteStatus.InstallFailed;
                 return false;
             }
@@ -664,22 +835,39 @@ public sealed class PrerequisiteService : IPrerequisiteService
 
             if (isSuccessCode || isInstalled)
             {
-                var rebootNote = process.ExitCode == 3010 ? " (Reboot required)" : string.Empty;
-                progress?.Report($"✅ {item.Name} installed successfully{rebootNote} (Exit code: {process.ExitCode}).");
+                var rebootNote = process.ExitCode == 3010
+                    ? (isSpanish ? " (Reinicio del sistema requerido)" : " (Reboot required)")
+                    : string.Empty;
+                progress?.Report(isSpanish
+                    ? $"✅ {item.Name} instalado correctamente{rebootNote} (Código de salida: {process.ExitCode})."
+                    : $"✅ {item.Name} installed successfully{rebootNote} (Exit code: {process.ExitCode}).");
                 item.Status = PrerequisiteStatus.InstalledSuccess;
                 return true;
             }
             else
             {
-                progress?.Report($"⚠️ Installer for {item.Name} finished with exit code {process.ExitCode}.");
+                progress?.Report(isSpanish
+                    ? $"⚠️ El instalador de {item.Name} finalizó con código {process.ExitCode}."
+                    : $"⚠️ Installer for {item.Name} finished with exit code {process.ExitCode}.");
                 item.Status = isInstalled ? PrerequisiteStatus.InstalledSuccess : PrerequisiteStatus.InstallFailed;
                 return item.Status == PrerequisiteStatus.InstalledSuccess;
             }
         }
+        catch (System.ComponentModel.Win32Exception w32ex) when (w32ex.NativeErrorCode == 1223)
+        {
+            _logger.LogWarning("User cancelled UAC elevation for {Name}", item.Name);
+            progress?.Report(isSpanish
+                ? $"⚠️ Instalación de {item.Name} cancelada por el usuario (permisos de administrador no otorgados)."
+                : $"⚠️ Installation of {item.Name} cancelled by user (administrator elevation denied).");
+            item.Status = PrerequisiteStatus.InstallFailed;
+            return false;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error executing prerequisite installer for {Id}", item.Id);
-            progress?.Report($"❌ Error executing installation of {item.Name}: {ex.Message}");
+            progress?.Report(isSpanish
+                ? $"❌ Error ejecutando la instalación de {item.Name}: {ex.Message}"
+                : $"❌ Error executing installation of {item.Name}: {ex.Message}");
             item.Status = PrerequisiteStatus.InstallFailed;
             return false;
         }
@@ -688,6 +876,7 @@ public sealed class PrerequisiteService : IPrerequisiteService
     /// <inheritdoc />
     public async Task<int> InstallAllPrerequisitesAsync(IEnumerable<PrerequisiteItem> items, IProgress<string>? progress = null, CancellationToken ct = default)
     {
+        bool isSpanish = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("es", StringComparison.OrdinalIgnoreCase);
         int installedCount = 0;
         int skippedUnverified = 0;
 
@@ -708,10 +897,14 @@ public sealed class PrerequisiteService : IPrerequisiteService
 
         if (skippedUnverified > 0)
         {
-            progress?.Report($"ℹ️ Skipped {skippedUnverified} unverified third-party package(s). You can trigger them individually with manual confirmation.");
+            progress?.Report(isSpanish
+                ? $"ℹ️ Se omitieron {skippedUnverified} paquete(s) de terceros no verificados. Puedes ejecutarlos individualmente con confirmación manual."
+                : $"ℹ️ Skipped {skippedUnverified} unverified third-party package(s). You can trigger them individually with manual confirmation.");
         }
 
-        progress?.Report($"🎉 Prerequisite installation completed ({installedCount} component(s) configured).");
+        progress?.Report(isSpanish
+            ? $"🎉 Instalación de requisitos finalizada ({installedCount} componente(s) configurado(s))."
+            : $"🎉 Prerequisite installation completed ({installedCount} component(s) configured).");
         return installedCount;
     }
 

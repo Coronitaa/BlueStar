@@ -176,6 +176,7 @@ public sealed class ModPlacementResolverTests : IDisposable
         var plan = Resolve(package);
 
         // Assert
+        plan.Strategy.Should().Be("SourceAddons");
         Destinations(plan).Should().Equal("left4dead2/addons/cool.vpk");
     }
 
@@ -246,6 +247,34 @@ public sealed class ModPlacementResolverTests : IDisposable
         plan.Strategy.Should().Be("SteamWorkshopEmulator");
         plan.Confidence.Should().Be(PlacementConfidence.Low);
         Destinations(plan).Should().Equal("Bin/steam_settings/mods/123456/level.dat");
+    }
+
+    [Fact]
+    public void Resolve_WorkshopItem_ForRimWorld_InstallsToNativeModsFolder_WithHighConfidence()
+    {
+        // Arrange
+        _fx.GameFolder("Mods");
+        var rimworldInstance = _fx.Instance(EngineType.Unity) with
+        {
+            AppId = 294100,
+            Name = "RimWorld"
+        };
+        var package = _fx.Package("ws_rim",
+            ("About/About.xml", "<ModMetaData></ModMetaData>"),
+            ("Assemblies/CoolMod.dll", "binary"),
+            ("Defs/ThingDefs.xml", "<Defs></Defs>"));
+
+        // Act
+        var plan = _resolver.Resolve(rimworldInstance, package,
+            new ModPlacementHints { ModName = "CoolMod", Layout = ModPackageLayout.SteamWorkshop, WorkshopItemId = 78910 });
+
+        // Assert
+        plan.Strategy.Should().Be("GameModPathResolver");
+        plan.Confidence.Should().Be(PlacementConfidence.High);
+        Destinations(plan).Should().Equal(
+            "Mods/CoolMod/About/About.xml",
+            "Mods/CoolMod/Assemblies/CoolMod.dll",
+            "Mods/CoolMod/Defs/ThingDefs.xml");
     }
 
     [Fact]

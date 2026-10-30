@@ -55,43 +55,74 @@ public sealed record BundledSecrets
             }
         }
 
-        // Development fallback: check for modkeys.json in app directory or parent directories
-        return LoadFromModKeysJson(baseDirectory);
+        // Development fallback: check for modkeys.json and depotbox.key in app directory or parent directories
+        return LoadFromDevelopmentSecrets(baseDirectory);
     }
 
-    private static BundledSecrets? LoadFromModKeysJson(string? baseDirectory)
+    private static BundledSecrets? LoadFromDevelopmentSecrets(string? baseDirectory)
     {
         if (!string.IsNullOrWhiteSpace(baseDirectory))
         {
-            return SearchUpwardsForModKeys(baseDirectory);
+            return SearchUpwardsForDevelopmentSecrets(baseDirectory);
         }
 
-        var found = SearchUpwardsForModKeys(AppContext.BaseDirectory);
+        var found = SearchUpwardsForDevelopmentSecrets(AppContext.BaseDirectory);
         if (found != null) return found;
 
-        found = SearchUpwardsForModKeys(Directory.GetCurrentDirectory());
+        found = SearchUpwardsForDevelopmentSecrets(Directory.GetCurrentDirectory());
         if (found != null) return found;
 
-        return SearchUpwardsForModKeys(AppDomain.CurrentDomain.BaseDirectory);
+        return SearchUpwardsForDevelopmentSecrets(AppDomain.CurrentDomain.BaseDirectory);
     }
 
-    private static BundledSecrets? SearchUpwardsForModKeys(string startDirectory)
+    private static BundledSecrets? SearchUpwardsForDevelopmentSecrets(string startDirectory)
     {
         try
         {
             var dir = Path.GetFullPath(startDirectory);
+            BundledSecrets? secrets = null;
+            string? depotKey = null;
+
             for (int i = 0; i < 12 && !string.IsNullOrEmpty(dir); i++)
             {
-                var candidate = Path.Combine(dir, "modkeys.json");
-                if (File.Exists(candidate))
+                if (secrets == null)
                 {
-                    var json = File.ReadAllText(candidate);
-                    return JsonSerializer.Deserialize<BundledSecrets>(json);
+                    var modKeysCandidate = Path.Combine(dir, "modkeys.json");
+                    if (File.Exists(modKeysCandidate))
+                    {
+                        var json = File.ReadAllText(modKeysCandidate);
+                        secrets = JsonSerializer.Deserialize<BundledSecrets>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    }
                 }
+
+                if (string.IsNullOrWhiteSpace(depotKey))
+                {
+                    var depotKeyCandidate = Path.Combine(dir, "depotbox.key");
+                    if (File.Exists(depotKeyCandidate))
+                    {
+                        depotKey = File.ReadAllText(depotKeyCandidate).Trim();
+                    }
+                }
+
+                if (secrets != null && !string.IsNullOrWhiteSpace(depotKey))
+                {
+                    break;
+                }
+
                 var parent = Directory.GetParent(dir);
                 if (parent == null) break;
                 dir = parent.FullName;
             }
+
+            if (!string.IsNullOrWhiteSpace(depotKey))
+            {
+                secrets = (secrets ?? new BundledSecrets()) with
+                {
+                    DefaultApiKey = string.IsNullOrWhiteSpace(secrets?.DefaultApiKey) ? depotKey : secrets.DefaultApiKey
+                };
+            }
+
+            return secrets;
         }
         catch
         {

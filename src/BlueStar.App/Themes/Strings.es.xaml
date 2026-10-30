@@ -772,9 +772,18 @@
     <sys:String x:Key="String_AllReqsVerified">¡Todas las librerías del sistema están instaladas y verificadas!</sys:String>
     <sys:String x:Key="String_AllReqsVerifiedDesc">Tu PC cuenta con todos los componentes necesarios de Visual C++, DirectX y .NET para jugar sin problemas.</sys:String>
     <sys:String x:Key="String_MissingReqsDesc">Instala los componentes faltantes para prevenir errores de DLLs (ej. MSVCP140.dll, D3DX9) y cierres inesperados al jugar.</sys:String>
+    <sys:String x:Key="String_MissingPrereqsCountFormat">Componentes requeridos faltantes ({0})</sys:String>
     <sys:String x:Key="String_InstallMissing">Instalar Faltantes</sys:String>
     <sys:String x:Key="String_Rescan">Volver a Escanear</sys:String>
     <sys:String x:Key="String_ContinueToBlueStar">Continuar a BlueStar</sys:String>
+
+    <!-- ═══ PREREQUISITE STATUS LABELS ═══ -->
+    <sys:String x:Key="String_PrereqStatusInstalledInSystem">✓ Instalado en el sistema</sys:String>
+    <sys:String x:Key="String_PrereqStatusInstalledSuccess">✓ Instalado correctamente</sys:String>
+    <sys:String x:Key="String_PrereqStatusAvailableInGame">📦 En carpeta del juego</sys:String>
+    <sys:String x:Key="String_PrereqStatusNeedsDownload">🌐 Descarga oficial</sys:String>
+    <sys:String x:Key="String_PrereqStatusInstalling">⏳ Instalando...</sys:String>
+    <sys:String x:Key="String_PrereqStatusInstallFailed">❌ Error de instalación</sys:String>
 
     <!-- ═══ REMOVE DOWNLOAD CONFIRMATION MODAL ═══ -->
     <sys:String x:Key="String_RemoveDownloadModalTitle">Eliminar Descarga</sys:String>

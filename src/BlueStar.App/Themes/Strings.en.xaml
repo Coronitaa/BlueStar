@@ -772,9 +772,18 @@
     <sys:String x:Key="String_AllReqsVerified">All system runtimes are installed and verified!</sys:String>
     <sys:String x:Key="String_AllReqsVerifiedDesc">Your PC has all the necessary Visual C++, DirectX, and .NET desktop runtimes for seamless gaming.</sys:String>
     <sys:String x:Key="String_MissingReqsDesc">Install missing runtime components to prevent DLL errors (e.g. MSVCP140.dll, D3DX9) and launch crashes.</sys:String>
+    <sys:String x:Key="String_MissingPrereqsCountFormat">Missing prerequisite components ({0})</sys:String>
     <sys:String x:Key="String_InstallMissing">Install Missing</sys:String>
     <sys:String x:Key="String_Rescan">Re-scan</sys:String>
     <sys:String x:Key="String_ContinueToBlueStar">Continue to BlueStar</sys:String>
+
+    <!-- ═══ PREREQUISITE STATUS LABELS ═══ -->
+    <sys:String x:Key="String_PrereqStatusInstalledInSystem">✓ Installed in system</sys:String>
+    <sys:String x:Key="String_PrereqStatusInstalledSuccess">✓ Installed successfully</sys:String>
+    <sys:String x:Key="String_PrereqStatusAvailableInGame">📦 Found in game folder</sys:String>
+    <sys:String x:Key="String_PrereqStatusNeedsDownload">🌐 Official download</sys:String>
+    <sys:String x:Key="String_PrereqStatusInstalling">⏳ Installing...</sys:String>
+    <sys:String x:Key="String_PrereqStatusInstallFailed">❌ Installation failed</sys:String>
 
     <!-- ═══ REMOVE DOWNLOAD CONFIRMATION MODAL ═══ -->
     <sys:String x:Key="String_RemoveDownloadModalTitle">Remove Download</sys:String>

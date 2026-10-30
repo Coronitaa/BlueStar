@@ -931,21 +931,21 @@
                                 </TextBlock.Style>
                             </TextBlock>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                <TextBlock FontWeight="SemiBold" FontSize="13">
+                                <TextBlock FontWeight="SemiBold" FontSize="13" TextWrapping="Wrap">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="Text" Value="{DynamicResource String_AllReqsVerified}"/>
                                             <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding HasMissingRequirements}" Value="True">
-                                                    <Setter Property="Text" Value="{Binding MissingPrerequisitesCount, StringFormat='{}Missing prerequisite components ({0})'}"/>
+                                                    <Setter Property="Text" Value="{Binding MissingRequirementsSummaryText}"/>
                                                     <Setter Property="Foreground" Value="{StaticResource WarningBrush}"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </TextBlock.Style>
                                 </TextBlock>
-                                <TextBlock Margin="0,2,0,0">
+                                <TextBlock Margin="0,2,0,0" TextWrapping="Wrap">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock" BasedOn="{StaticResource Caption}">
                                             <Setter Property="Foreground" Value="{StaticResource SecondaryTextBrush}"/>
@@ -972,7 +972,8 @@
                                             BorderThickness="1"
                                             CornerRadius="{StaticResource RadiusMd}"
                                             Padding="14,10"
-                                            Margin="0,0,0,8">
+                                            Margin="0,0,0,8"
+                                            ClipToBounds="True">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
@@ -981,21 +982,30 @@
                                             </Grid.ColumnDefinitions>
 
                                             <!-- Left details -->
-                                            <StackPanel Grid.Column="0">
-                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                                    <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,10,0"/>
-                                                    <Border CornerRadius="{StaticResource RadiusSm}"
-                                                            Padding="8,2"
+                                            <StackPanel Grid.Column="0" MinWidth="0">
+                                                <Grid Margin="0,0,0,6">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="Bold" FontSize="13"
+                                                               Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,8,0"
+                                                               TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                                    <Border Grid.Column="1" CornerRadius="{StaticResource RadiusSm}"
+                                                            Padding="8,2" VerticalAlignment="Center"
                                                             Background="{Binding Status, Converter={StaticResource PrerequisiteStatusToBgBrushConverter}}">
                                                         <TextBlock Text="{Binding Status, Converter={StaticResource PrerequisiteStatusToTextConverter}}"
                                                                    FontSize="10" FontWeight="SemiBold"
-                                                                   Foreground="{Binding Status, Converter={StaticResource PrerequisiteStatusToBrushConverter}}"/>
+                                                                   Foreground="{Binding Status, Converter={StaticResource PrerequisiteStatusToBrushConverter}}"
+                                                                   TextWrapping="NoWrap"/>
                                                     </Border>
-                                                </StackPanel>
-                                                <TextBlock Text="{Binding Description}" Style="{StaticResource BodySmall}" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                                                </Grid>
+                                                <TextBlock Text="{Binding Description}" Style="{StaticResource BodySmall}"
+                                                           Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,6"
+                                                           TextWrapping="Wrap"/>
                                                 <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="{DynamicResource String_Filter}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,4,0"/>
-                                                    <TextBlock Text="{Binding Category}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                    <TextBlock Text="{DynamicResource String_CategoryLabel}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,4,0"/>
+                                                    <TextBlock Text="{Binding Category}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap"/>
                                                 </StackPanel>
                                             </StackPanel>
 
@@ -1034,7 +1044,8 @@
                                              Background="{StaticResource SubtleBorderBrush}"
                                              BorderThickness="0" Margin="0,0,0,6"/>
                                 <TextBlock Text="{Binding SystemPrerequisitesInstallStatusText, FallbackValue='Installing component...'}"
-                                           Style="{StaticResource Caption}" Foreground="{StaticResource AccentBrush}"/>
+                                           Style="{StaticResource Caption}" Foreground="{StaticResource AccentBrush}"
+                                           TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
 

@@ -1,4 +1,4 @@
-﻿param(
+param(
     [string]$Version = "",
     [string]$ApiKey = "",
     [switch]$Interactive = $false
@@ -14,7 +14,7 @@ $timestampServer = "http://timestamp.digicert.com"
 # ============================================================================
 # 0. Interaccion con el usuario (si se ejecuta en modo interactivo o sin parametros)
 # ============================================================================
-$currentVer = "1.4.6"
+$currentVer = "1.5.1"
 $propsPath = Join-Path $rootDir "Directory.Build.props"
 if (Test-Path $propsPath) {
     $propsContent = [System.IO.File]::ReadAllText($propsPath)
@@ -421,6 +421,7 @@ $webView2FixedUrl = "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamin
 $prerequisites = [ordered]@{
     "vc_redist.x64.exe" = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
     "vc_redist.x86.exe" = "https://aka.ms/vs/17/release/vc_redist.x86.exe"
+    "dxwebsetup.exe" = "https://download.microsoft.com/download/1/7/1/1718CCC4-6315-4D8E-9543-8E28A4E18C4C/dxwebsetup.exe"
     "MicrosoftEdgeWebview2Setup.exe" = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
 }
 

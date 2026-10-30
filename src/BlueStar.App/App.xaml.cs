@@ -602,7 +602,7 @@ public partial class App : Application
 
                     if (!string.IsNullOrWhiteSpace(nxmUrl))
                     {
-                        Dispatcher.BeginInvoke(() =>
+                        _ = Dispatcher.BeginInvoke(() =>
                         {
                             try
                             {

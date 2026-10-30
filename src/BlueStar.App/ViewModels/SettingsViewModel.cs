@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -112,7 +113,7 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     [ObservableProperty]
-    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.5.0";
+    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.5.1";
 
     [ObservableProperty]
     private string _defaultApiUrl = "https://depotbox.org";
@@ -373,7 +374,11 @@ public partial class SettingsViewModel : ObservableObject
         PopulateDefaultExploreOptions();
         _localizationService.LanguageChanged += (_, _) =>
         {
-            App.Current?.Dispatcher?.Invoke(PopulateDefaultExploreOptions);
+            App.Current?.Dispatcher?.Invoke(() =>
+            {
+                PopulateDefaultExploreOptions();
+                _ = ScanRequirementsAsync();
+            });
         };
 
         _ = LoadSettingsAsync();
@@ -654,25 +659,30 @@ public partial class SettingsViewModel : ObservableObject
     {
         if (item == null || _prerequisiteService == null || IsInstallingRequirements) return;
 
+        var isSpanish = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("es", StringComparison.OrdinalIgnoreCase);
         IsInstallingRequirements = true;
-        InstallRequirementsStatusText = $"Installing {item.Name}...";
+        InstallRequirementsStatusText = isSpanish ? $"Instalando {item.Name}..." : $"Installing {item.Name}...";
         try
         {
             var progress = new Progress<string>(msg => InstallRequirementsStatusText = msg);
             var success = await _prerequisiteService.InstallPrerequisiteAsync(item, progress, CancellationToken.None).ConfigureAwait(true);
             if (success)
             {
-                _notificationService.ShowSuccess("Prerequisite Installed", $"{item.Name} installed successfully.");
+                _notificationService.ShowSuccess(
+                    isSpanish ? "Requisito Instalado" : "Prerequisite Installed",
+                    isSpanish ? $"{item.Name} se instaló correctamente." : $"{item.Name} installed successfully.");
             }
             else
             {
-                _notificationService.ShowError("Installation Incomplete", $"Could not install {item.Name}.");
+                _notificationService.ShowError(
+                    isSpanish ? "Instalación Incompleta" : "Installation Incomplete",
+                    isSpanish ? $"No se pudo instalar {item.Name}." : $"Could not install {item.Name}.");
             }
             await ScanRequirementsAsync().ConfigureAwait(true);
         }
         catch (Exception ex)
         {
-            _notificationService.ShowError("Installation Error", ex.Message);
+            _notificationService.ShowError(isSpanish ? "Error de Instalación" : "Installation Error", ex.Message);
         }
         finally
         {
@@ -689,10 +699,13 @@ public partial class SettingsViewModel : ObservableObject
     {
         if (_prerequisiteService == null || IsInstallingRequirements || SystemPrerequisites.Count == 0) return;
 
+        var isSpanish = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("es", StringComparison.OrdinalIgnoreCase);
         var missing = SystemPrerequisites.Where(i => i.Status != PrerequisiteStatus.InstalledInSystem && i.Status != PrerequisiteStatus.InstalledSuccess).ToList();
         if (missing.Count == 0)
         {
-            _notificationService.ShowInfo("System Up to Date", "All essential requirements are already installed.");
+            _notificationService.ShowInfo(
+                isSpanish ? "Sistema Actualizado" : "System Up to Date",
+                isSpanish ? "Todos los requisitos esenciales del sistema ya están instalados." : "All essential requirements are already installed.");
             return;
         }
 
@@ -701,17 +714,25 @@ public partial class SettingsViewModel : ObservableObject
         {
             var progress = new Progress<string>(msg => InstallRequirementsStatusText = msg);
             int installed = await _prerequisiteService.InstallAllPrerequisitesAsync(missing, progress, CancellationToken.None).ConfigureAwait(true);
-            _notificationService.ShowSuccess("System Requirements Updated", $"{installed} requirement(s) configured successfully.");
+            _notificationService.ShowSuccess(
+                isSpanish ? "Requisitos Actualizados" : "System Requirements Updated",
+                isSpanish ? $"{installed} requisito(s) configurado(s) correctamente." : $"{installed} requirement(s) configured successfully.");
             await ScanRequirementsAsync().ConfigureAwait(true);
+
+            if (!HasMissingRequirements)
+            {
+                InstallRequirementsStatusText = isSpanish
+                    ? "¡Todos los requisitos fueron verificados correctamente!"
+                    : "All requirements verified successfully!";
+            }
         }
         catch (Exception ex)
         {
-            _notificationService.ShowError("Installation Error", ex.Message);
+            _notificationService.ShowError(isSpanish ? "Error de Instalación" : "Installation Error", ex.Message);
         }
         finally
         {
             IsInstallingRequirements = false;
-            InstallRequirementsStatusText = string.Empty;
         }
     }
 
