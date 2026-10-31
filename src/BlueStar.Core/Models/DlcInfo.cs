@@ -38,6 +38,11 @@ public record DlcInfo
     public string Platform { get; init; } = "Windows";
 
     /// <summary>
+    /// Gets or sets the target architecture ("x64", "x32", "x32/x64", or null).
+    /// </summary>
+    public string? Architecture { get; init; }
+
+    /// <summary>
     /// Gets total size in bytes for this DLC's depots.
     /// </summary>
     public long TotalSizeBytes => System.Linq.Enumerable.Sum(Depots, d => d.SizeBytes);

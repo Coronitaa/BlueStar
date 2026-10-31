@@ -1072,6 +1072,7 @@ public sealed class SteamStoreApiClient : IMetadataProvider
                         string? osList = null;
                         bool isOptional = false;
                         bool isShared = false;
+                        string? osArch = null;
 
                         if (depotEl.TryGetProperty("config", out var configEl))
                         {
@@ -1083,12 +1084,14 @@ public sealed class SteamStoreApiClient : IMetadataProvider
 
                             if (configEl.TryGetProperty("SharedInstall", out var sharedProp))
                                 isShared = sharedProp.GetString() == "1" || (sharedProp.ValueKind == JsonValueKind.Number && sharedProp.GetInt32() == 1);
+                            if (configEl.TryGetProperty("osarch", out var osArchProp))
+                                osArch = osArchProp.GetString()?.Trim().ToLowerInvariant();
                         }
 
                         if (!isShared && depotEl.TryGetProperty("sharedinstall", out var si))
                             isShared = si.GetString() == "1" || (si.ValueKind == JsonValueKind.Number && si.GetInt32() == 1);
 
-                        depotEnrichment[depotId] = new SteamDepotMeta(depotId, name, osList, isOptional, isShared);
+                        depotEnrichment[depotId] = new SteamDepotMeta(depotId, name, osList, isOptional, isShared, osArch);
                     }
                 }
                 else if (!string.IsNullOrWhiteSpace(appType))
@@ -1349,7 +1352,8 @@ public sealed class SteamStoreApiClient : IMetadataProvider
         /// <summary>True when config.optional = "1" — not auto-installed by Steam.</summary>
         bool IsOptional,
         /// <summary>True when config.SharedInstall = "1" — shared depot, not game-specific content.</summary>
-        bool IsShared
+        bool IsShared,
+        string? OsArch = null
     );
 
     /// <summary>

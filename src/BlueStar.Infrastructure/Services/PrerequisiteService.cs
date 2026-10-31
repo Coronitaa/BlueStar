@@ -42,7 +42,7 @@ public sealed class PrerequisiteService : IPrerequisiteService
         {
             if (_http.DefaultRequestHeaders.UserAgent.Count == 0)
             {
-                _http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 BlueStar/1.5.1");
+                _http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 BlueStar/1.5.2");
             }
             if (_http.Timeout < TimeSpan.FromMinutes(10))
             {

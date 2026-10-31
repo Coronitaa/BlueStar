@@ -704,6 +704,12 @@
     <sys:String x:Key="String_DownloadsCleanupDesc">Recuperación automática de espacio en disco.</sys:String>
     <sys:String x:Key="String_AutoDeleteDepotsCheckbox">Eliminar automáticamente archivos de depots y archivos ZIP tras la instalación</sys:String>
     <sys:String x:Key="String_AutoDeleteDepotsHelp">Borra archivos temporales y ZIPs al terminar de instalar.</sys:String>
+    <sys:String x:Key="String_DownloadServerLabel">Servidor de Descarga (Steam CDN)</sys:String>
+    <sys:String x:Key="String_DownloadServerHelp">Servidor o región de contenido de Steam (Cell ID) utilizado por DepotDownloader. Por defecto "Automático" selecciona dinámicamente el servidor más rápido y cercano según tu conexión.</sys:String>
+    <sys:String x:Key="String_DownloadServerAuto">Automático (El más rápido / Recomendado)</sys:String>
+    <sys:String x:Key="String_DownloadServerCustom">Personalizado (Ingresar Cell ID)...</sys:String>
+    <sys:String x:Key="String_DownloadServerCustomCellIdLabel">Cell ID de Steam personalizado:</sys:String>
+    <sys:String x:Key="String_DownloadServerCustomPlaceholder">Ej. 116 para Argentina, 5 para Alemania, 4 para Reino Unido...</sys:String>
     <sys:String x:Key="String_CatalogContentFiltersTitle">Filtros de Catálogo y Contenido</sys:String>
     <sys:String x:Key="String_CatalogContentFiltersDesc">Filtros de visibilidad para el catálogo.</sys:String>
     <sys:String x:Key="String_ShowNsfwContentLabel">Mostrar contenido para adultos (NSFW 18+)</sys:String>
@@ -933,6 +939,11 @@
     <sys:String x:Key="String_InstallModalLocationTitle">Ubicación de Instalación</sys:String>
     <sys:String x:Key="String_InstallModalFreeSpaceFormat">Espacio libre: {0} · Necesario: {1}</sys:String>
     <sys:String x:Key="String_InstallModalDiskWarning">⚠️ Advertencia: El espacio en la unidad seleccionada es inferior al requerido ({0}).</sys:String>
+    <sys:String x:Key="String_ArchBoth">x32/x64</sys:String>
+    <sys:String x:Key="String_InstallModalArchTitle">Preferencia de Arquitectura</sys:String>
+    <sys:String x:Key="String_InstallModalArchX64Desc">Descargar binarios y contenido de 64 bits (Recomendado para Windows x64)</sys:String>
+    <sys:String x:Key="String_InstallModalArchX32Desc">Descargar binarios y contenido de 32 bits (x86)</sys:String>
+    <sys:String x:Key="String_InstallModalArchBothDesc">Descargar depósitos compatibles con ambas arquitecturas (x32/x64)</sys:String>
     <sys:String x:Key="String_InstallModalVersionTitle">Versión a Instalar</sys:String>
     <sys:String x:Key="String_InstallModalBranchPublic">Última versión disponible (public)</sys:String>
     <sys:String x:Key="String_InstallModalDlcsTitle">DLCs Opcionales</sys:String>

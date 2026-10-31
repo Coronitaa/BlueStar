@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
+using BlueStar.Core.Helpers;
 using BlueStar.Core.Models;
 using Microsoft.Extensions.Logging;
 
@@ -271,13 +272,13 @@ public sealed partial class DepotBoxLuaParser
 
         // Whole-word matching, same reason as DetectPlatform: a title should not be able to
         // smuggle an architecture in as a substring.
-        if (HasPattern(text, @"\b(?:64[\s-]?bit|x64|win64|amd64|x86[_-]64)\b"))
-            return "64-bit";
+        return DepotArchitectureHelper.DetectArchitecture(text);
 
-        if (HasPattern(text, @"\b(?:32[\s-]?bit|x86|win32|i386|i686)\b"))
-            return "32-bit";
 
-        return null;
+
+
+
+
     }
 
     /// <summary>

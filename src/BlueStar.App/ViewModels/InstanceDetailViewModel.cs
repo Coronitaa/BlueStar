@@ -365,7 +365,7 @@ public partial class SelectableDepotItem : ObservableObject
 
     public string CategoryTag => string.IsNullOrWhiteSpace(Depot.Category) ? "Base Game" : Depot.Category;
     public string PlatformTag => string.IsNullOrWhiteSpace(Depot.Platform) ? "Universal" : Depot.Platform;
-    public string? ArchitectureTag => Depot.Architecture;
+    public string ArchitectureTag => DepotArchitectureHelper.GetDepotArchitecture(Depot);
 
     /// <summary>True when Steam auto-installs this depot for the current OS (base game content).</summary>
     public bool IsRecommended => Depot.IsRecommended;
@@ -430,6 +430,7 @@ public partial class SelectableDlcItem : ObservableObject
     public string CategoryTag => string.IsNullOrWhiteSpace(Dlc.Category) ? "DLC" : Dlc.Category;
     public string PlatformTag => string.IsNullOrWhiteSpace(Dlc.Platform) ? "Universal" : Dlc.Platform;
     public string HeaderImageUrl => Dlc.HeaderImageUrl;
+    public string ArchitectureTag => DepotArchitectureHelper.GetDlcArchitecture(Dlc);
 
     public string FormattedSize
     {
@@ -492,7 +493,7 @@ public partial class DepotUpdateItem : ObservableObject
 
     public string CategoryTag => string.IsNullOrWhiteSpace(Category) ? "Base Game" : Category;
     public string PlatformTag => string.IsNullOrWhiteSpace(Platform) ? "Universal" : Platform;
-    public string? ArchitectureTag => Architecture;
+    public string ArchitectureTag => DepotArchitectureHelper.NormalizeArchitecture(Architecture, Name);
 
     public string DisplayCurrentManifest => CurrentManifestId > 0 ? CurrentManifestId.ToString() : "Not downloaded";
     public string DisplayNewManifest => NewManifestId.ToString();
@@ -1382,10 +1383,139 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     }
 
     [ObservableProperty]
+    private string _installModalArchPreference = Environment.Is64BitOperatingSystem ? "x64" : "x32";
+
+    public bool IsInstallModalArchX64
+    {
+        get => string.Equals(InstallModalArchPreference, "x64", StringComparison.OrdinalIgnoreCase);
+        set
+        {
+            if (value && !IsInstallModalArchX64)
+            {
+                InstallModalArchPreference = "x64";
+                NotifyArchPreferenceChanged();
+            }
+        }
+    }
+
+    public bool IsInstallModalArchX32
+    {
+        get => string.Equals(InstallModalArchPreference, "x32", StringComparison.OrdinalIgnoreCase);
+        set
+        {
+            if (value && !IsInstallModalArchX32)
+            {
+                InstallModalArchPreference = "x32";
+                NotifyArchPreferenceChanged();
+            }
+        }
+    }
+
+    public bool IsInstallModalArchBoth
+    {
+        get => string.Equals(InstallModalArchPreference, DepotArchitectureHelper.Both, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(InstallModalArchPreference, "Ambos", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(InstallModalArchPreference, "Both", StringComparison.OrdinalIgnoreCase);
+        set
+        {
+            if (value && !IsInstallModalArchBoth)
+            {
+                InstallModalArchPreference = DepotArchitectureHelper.Both;
+                NotifyArchPreferenceChanged();
+            }
+        }
+    }
+
+    public void NotifyArchPreferenceChanged()
+    {
+        OnPropertyChanged(nameof(InstallModalArchPreference));
+        OnPropertyChanged(nameof(IsInstallModalArchX64));
+        OnPropertyChanged(nameof(IsInstallModalArchX32));
+        OnPropertyChanged(nameof(IsInstallModalArchBoth));
+        ApplyInstallModalArchPreference();
+    }
+
+    public void ApplyInstallModalArchPreference()
+    {
+        if (Instance == null) return;
+
+        bool has64 = Instance.Depots?.Any(d => DepotArchitectureHelper.GetDepotArchitecture(d) == "x64") ?? false;
+        var dlcDepotIds = GetDlcDepotIds();
+
+        // 1. Filter optional DLCs in the modal: directly exclude DLCs with incompatible architectures
+        if (Instance.Dlcs != null)
+        {
+            InstallModalDlcs.Clear();
+            foreach (var dlc in Instance.Dlcs)
+            {
+                if (!IsDlcCompatibleWithArch(dlc, InstallModalArchPreference, has64))
+                    continue;
+
+                var item = new InstallModalDlcItem
+                {
+                    Dlc = dlc,
+                    IsSelected = true,
+                    OnSelectionChanged = () =>
+                    {
+                        UpdateInstallModalDiskSpace();
+                        UpdateModalSelectAllState();
+                    }
+                };
+                InstallModalDlcs.Add(item);
+            }
+            UpdateModalSelectAllState();
+        }
+
+        // 2. Filter depots for the install modal: directly exclude depots with incompatible architectures
+        InstallModalDepots.Clear();
+        if (Depots != null && Depots.Count > 0)
+        {
+            foreach (var item in Depots)
+            {
+                if (IsDepotCompatible(item.Depot, InstallModalArchPreference, has64))
+                {
+                    item.IsSelected = !dlcDepotIds.Contains(item.Depot.DepotId);
+                    InstallModalDepots.Add(item);
+                }
+            }
+        }
+        else if (Instance.Depots != null)
+        {
+            foreach (var d in Instance.Depots)
+            {
+                if (IsDepotCompatible(d, InstallModalArchPreference, has64))
+                {
+                    InstallModalDepots.Add(new SelectableDepotItem
+                    {
+                        Depot = d,
+                        IsSelected = !dlcDepotIds.Contains(d.DepotId),
+                        IsKeyAvailable = !string.IsNullOrWhiteSpace(d.DepotKey),
+                        IsCachedLocally = _manifestCacheService?.HasManifest(d.DepotId, d.ManifestId) ?? false,
+                        SourceProviderName = "Auto",
+                        ManifestInputText = d.ManifestId > 0 ? d.ManifestId.ToString() : string.Empty,
+                        AvailabilityChecker = CheckDepotManifestAvailabilityAsync,
+                        OnSelectionChanged = RecalculateSelectedSize,
+                        OnManifestUpdated = HandleDepotManifestUpdated,
+                        OnManifestTextChanged = RecomputeCustomBuildValidation
+                    });
+                }
+            }
+        }
+
+        InstallModalHasNoDepots = (Instance.Depots == null || Instance.Depots.Count == 0) || (InstallModalDepots.Count == 0);
+
+        // 3. Recalculate disk space with new selection
+        UpdateInstallModalDiskSpace();
+    }
+
+    [ObservableProperty]
     private ObservableCollection<string> _installModalAvailableBranches = [];
 
     [ObservableProperty]
     private ObservableCollection<InstallModalDlcItem> _installModalDlcs = [];
+
+    [ObservableProperty]
+    private ObservableCollection<SelectableDepotItem> _installModalDepots = [];
 
     [ObservableProperty]
     private bool _installModalSelectAllDlcs = true;
@@ -1923,9 +2053,14 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         if (Instance == null) return;
 
         long requiredBytes = 0;
+        bool has64 = Instance.Depots?.Any(d => DepotArchitectureHelper.GetDepotArchitecture(d) == "x64") ?? false;
+        var dlcDepotIds = GetDlcDepotIds();
+
         if (Instance.Depots != null)
         {
-            requiredBytes += Instance.Depots.Where(d => d.SizeBytes > 0).Sum(d => (long)d.SizeBytes);
+            var targetBase = Instance.Depots
+                .Where(d => !dlcDepotIds.Contains(d.DepotId) && IsDepotCompatible(d, InstallModalArchPreference, has64));
+            requiredBytes += targetBase.Where(d => d.SizeBytes > 0).Sum(d => (long)d.SizeBytes);
         }
 
         if (InstallModalDlcs != null)
@@ -1934,7 +2069,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             {
                 if (dlcItem.Dlc.Depots != null)
                 {
-                    requiredBytes += dlcItem.Dlc.Depots.Where(d => d.SizeBytes > 0).Sum(d => (long)d.SizeBytes);
+                    var targetDlcDepots = dlcItem.Dlc.Depots
+                        .Where(d => IsDepotCompatible(d, InstallModalArchPreference, has64));
+                    requiredBytes += targetDlcDepots.Where(d => d.SizeBytes > 0).Sum(d => (long)d.SizeBytes);
                 }
             }
         }
@@ -2004,11 +2141,60 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             ? Instance.ActiveBranch
             : "public";
 
+        bool has64 = Instance.Depots?.Any(d => DepotArchitectureHelper.GetDepotArchitecture(d) == "x64") ?? false;
+        var initialArch = DepotArchitectureHelper.GetDefaultArchitecturePreference(Instance.Depots);
+        InstallModalArchPreference = initialArch;
+        OnPropertyChanged(nameof(InstallModalArchPreference));
+        OnPropertyChanged(nameof(IsInstallModalArchX64));
+        OnPropertyChanged(nameof(IsInstallModalArchX32));
+        OnPropertyChanged(nameof(IsInstallModalArchBoth));
+
+        // Filter depots for install modal: directly exclude depots with incompatible architectures
+        InstallModalDepots.Clear();
+        var dlcDepotIds = GetDlcDepotIds();
+        if (Depots != null && Depots.Count > 0)
+        {
+            foreach (var item in Depots)
+            {
+                if (IsDepotCompatible(item.Depot, InstallModalArchPreference, has64))
+                {
+                    item.IsSelected = !dlcDepotIds.Contains(item.Depot.DepotId);
+                    InstallModalDepots.Add(item);
+                }
+            }
+        }
+        else if (Instance.Depots != null)
+        {
+            foreach (var d in Instance.Depots)
+            {
+                if (IsDepotCompatible(d, InstallModalArchPreference, has64))
+                {
+                    InstallModalDepots.Add(new SelectableDepotItem
+                    {
+                        Depot = d,
+                        IsSelected = !dlcDepotIds.Contains(d.DepotId),
+                        IsKeyAvailable = !string.IsNullOrWhiteSpace(d.DepotKey),
+                        IsCachedLocally = _manifestCacheService?.HasManifest(d.DepotId, d.ManifestId) ?? false,
+                        SourceProviderName = "Auto",
+                        ManifestInputText = d.ManifestId > 0 ? d.ManifestId.ToString() : string.Empty,
+                        AvailabilityChecker = CheckDepotManifestAvailabilityAsync,
+                        OnSelectionChanged = RecalculateSelectedSize,
+                        OnManifestUpdated = HandleDepotManifestUpdated,
+                        OnManifestTextChanged = RecomputeCustomBuildValidation
+                    });
+                }
+            }
+        }
+
+        // Filter DLCs for install modal: directly exclude DLCs with incompatible architectures
         InstallModalDlcs.Clear();
         if (Instance.Dlcs != null && Instance.Dlcs.Count > 0)
         {
             foreach (var dlc in Instance.Dlcs)
             {
+                if (!IsDlcCompatibleWithArch(dlc, InstallModalArchPreference, has64))
+                    continue;
+
                 var item = new InstallModalDlcItem
                 {
                     Dlc = dlc,
@@ -2022,7 +2208,15 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 InstallModalDlcs.Add(item);
             }
         }
-        InstallModalSelectAllDlcs = InstallModalDlcs.Count > 0;
+        _isUpdatingSelectAllInternally = true;
+        try
+        {
+            InstallModalSelectAllDlcs = InstallModalDlcs.Count > 0 && InstallModalDlcs.All(d => d.IsSelected);
+        }
+        finally
+        {
+            _isUpdatingSelectAllInternally = false;
+        }
 
         // No unlocker method is pre-selected: one is only offered once a DLC is actually ticked,
         // and choosing one for a title with no DLC goes through an explicit confirmation.
@@ -2042,8 +2236,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }
         NotifyDlcMethodChanged();
 
-        // Warn up front when the title resolved no depots at all: nothing can be downloaded.
-        InstallModalHasNoDepots = Instance.Depots == null || Instance.Depots.Count == 0;
+        // Warn up front when the title resolved no depots at all or no compatible depots: nothing can be downloaded.
+        InstallModalHasNoDepots = (Instance.Depots == null || Instance.Depots.Count == 0) || (InstallModalDepots.Count == 0);
 
         InstallModalEnableReFix = Instance.EmulatorEnabled;
 
@@ -2276,17 +2470,20 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         var selectedDlcIds = InstallModalDlcs.Where(d => d.IsSelected).Select(d => d.AppId).ToHashSet();
         var dlcDepotIds = GetDlcDepotIds();
 
+        bool has64 = Instance.Depots?.Any(d => DepotArchitectureHelper.GetDepotArchitecture(d) == "x64") ?? false;
+
         // Base game depots + selected DLC depots
         var selectedDepots = new List<DepotInfo>();
-        var selectedBase = Depots.Where(d => d.IsSelected && !dlcDepotIds.Contains(d.Depot.DepotId)).Select(d => d.Depot).ToList();
+        var depotCandidates = InstallModalDepots.Count > 0 ? InstallModalDepots : Depots;
+        var selectedBase = depotCandidates.Where(d => d.IsSelected && !dlcDepotIds.Contains(d.Depot.DepotId)).Select(d => d.Depot).ToList();
         if (selectedBase.Count > 0)
         {
-            selectedDepots.AddRange(selectedBase);
+            selectedDepots.AddRange(selectedBase.Where(d => IsDepotCompatible(d, InstallModalArchPreference, has64)));
         }
         else if (Instance.Depots != null)
         {
             var compatibleBase = Instance.Depots
-                .Where(d => !dlcDepotIds.Contains(d.DepotId) && IsDepotCompatibleWithCurrentOS(d))
+                .Where(d => !dlcDepotIds.Contains(d.DepotId) && IsDepotCompatible(d, InstallModalArchPreference, has64))
                 .ToList();
 
             var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -2306,7 +2503,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             {
                 if (selectedDlcIds.Contains(dlc.AppId) && dlc.Depots != null)
                 {
-                    selectedDepots.AddRange(dlc.Depots.Where(IsDepotCompatibleWithCurrentOS));
+                    selectedDepots.AddRange(dlc.Depots.Where(d => IsDepotCompatible(d, InstallModalArchPreference, has64)));
                 }
             }
         }
@@ -3069,6 +3266,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 catch { }
             }
 
+            bool has64 = Instance.Depots.Any(d => DepotArchitectureHelper.GetDepotArchitecture(d) == "x64");
+            var pref = DepotArchitectureHelper.GetDefaultArchitecturePreference(Instance.Depots);
+
             var selectableDepots = Instance.Depots
                 .Where(d => d.SizeBytes > 0 || !Instance.Depots.Any(other => other.SizeBytes > 0))
                 .Select(d =>
@@ -3078,7 +3278,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                     return new SelectableDepotItem
                     {
                         Depot = d,
-                        IsSelected = IsDepotCompatibleWithCurrentOS(d),
+                        IsSelected = IsDepotCompatible(d, pref, has64),
                         IsKeyAvailable = hasKey,
                         IsCachedLocally = isCached,
                         SourceProviderName = isCached ? "Local Cache" : "Auto",
@@ -3096,7 +3296,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             var selectableDlcs = Instance.Dlcs.Select(d => new SelectableDlcItem
             {
                 Dlc = d,
-                IsSelected = true,
+                IsSelected = IsDlcCompatibleWithArch(d, pref, has64),
                 OnSelectionChanged = RecalculateSelectedSize
             }).ToList();
 
@@ -3402,17 +3602,25 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                         ?? PlatformFromDepotName(item.Depot.Name)
                         ?? item.Depot.Platform;
 
+                    string? newArch = !string.IsNullOrWhiteSpace(meta.OsArch)
+                        ? (meta.OsArch == "64" ? "x64" : meta.OsArch == "32" ? "x32" : DepotArchitectureHelper.Both)
+                        : (DepotArchitectureHelper.DetectArchitecture(newSteamDbName) != DepotArchitectureHelper.Both
+                            ? DepotArchitectureHelper.DetectArchitecture(newSteamDbName)
+                            : item.Depot.Architecture);
+
                     // Skip if nothing changed
                     if (item.Depot.SteamDbName == newSteamDbName &&
                         item.Depot.IsRecommended == isRecommended &&
-                        string.Equals(item.Depot.Platform, newPlatform, StringComparison.Ordinal))
+                        string.Equals(item.Depot.Platform, newPlatform, StringComparison.Ordinal) &&
+                        string.Equals(item.Depot.Architecture, newArch, StringComparison.Ordinal))
                         continue;
 
                     item.Depot = item.Depot with
                     {
                         SteamDbName = newSteamDbName,
                         IsRecommended = isRecommended,
-                        Platform = newPlatform
+                        Platform = newPlatform,
+                        Architecture = newArch ?? item.Depot.Architecture
                     };
 
                     item.NotifyPlatformChanged();
@@ -4848,10 +5056,12 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     /// deselects everything else. This is what makes "Latest" a one-click action instead of a
     /// checklist the user has to reason about.
     /// </summary>
-    public void ApplyLatestAutoSelection()
+    public void ApplyLatestAutoSelection(string? archPreference = null)
     {
         if (Depots.Count == 0) return;
 
+        bool has64 = Depots.Any(d => DepotArchitectureHelper.GetDepotArchitecture(d.Depot) == "x64");
+        var pref = archPreference ?? DepotArchitectureHelper.GetDefaultArchitecturePreference(Depots.Select(d => d.Depot));
         var dlcDepotIds = GetDlcDepotIds();
         int selected = 0, skipped = 0;
         var seenBaseDepotNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -4859,7 +5069,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         foreach (var item in Depots)
         {
             bool isDlcDepot = dlcDepotIds.Contains(item.Depot.DepotId);
-            bool compatible = IsDepotCompatibleWithCurrentOS(item.Depot);
+            bool compatible = IsDepotCompatible(item.Depot, pref, has64);
             bool take = compatible && !isDlcDepot;
 
             // If multiple base depots share the exact same normalized name and platform, only select the first one.
@@ -5243,7 +5453,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
     /// </summary>
     public void RecomputeCustomBuildValidation()
     {
-        if (Depots.Count == 0)
+        var targetDepots = (IsInstallModalOpen && InstallModalDepots.Count > 0) ? InstallModalDepots : Depots;
+        if (targetDepots == null || targetDepots.Count == 0)
         {
             IsCustomBuildValid = false;
             CustomBuildValidationMessage = GetString("String_VersionCustomNoDepots", "This instance has no depots to configure.");
@@ -5254,7 +5465,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         int ready = 0;
         var problems = new List<string>();
 
-        foreach (var item in Depots)
+        foreach (var item in targetDepots)
         {
             var text = (item.ManifestInputText ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(text))
@@ -5298,7 +5509,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         IsCustomBuildValid = problems.Count == 0;
         CustomBuildReadySummary = string.Format(
             GetString("String_VersionCustomReadyFormat", "{0} of {1} depots ready"),
-            ready, Depots.Count);
+            ready, targetDepots.Count);
 
         CustomBuildValidationMessage = problems.Count == 0
             ? GetString("String_VersionCustomAllValid", "Every depot has a valid manifest id.")
@@ -7021,7 +7232,16 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }
     }
 
-    public static bool IsDepotCompatibleWithCurrentOS(DepotInfo depot)
+    public static bool IsDepotCompatibleWithCurrentOS(DepotInfo depot) =>
+        DepotArchitectureHelper.IsDepotCompatible(depot);
+
+    public static bool IsDepotCompatible(DepotInfo depot, string? archPreference = null, bool has64Depots = true) =>
+        DepotArchitectureHelper.IsDepotCompatible(depot, archPreference, has64Depots);
+
+    public static bool IsDlcCompatibleWithArch(DlcInfo dlc, string? archPreference = null, bool has64Depots = true) =>
+        DepotArchitectureHelper.IsDlcCompatible(dlc, archPreference, has64Depots);
+
+    private static bool UnusedLegacyIsDepotCompatibleWithCurrentOS(DepotInfo depot)
     {
         if (depot == null) return false;
         var plat = (depot.Platform ?? "Universal").Trim();
@@ -7722,9 +7942,11 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         try
         {
             // 1. Download missing DLC depot files if any
+            bool has64 = Instance.Depots?.Any(d => DepotArchitectureHelper.GetDepotArchitecture(d) == "x64") ?? false;
+            var pref = DepotArchitectureHelper.GetDefaultArchitecturePreference(Instance.Depots);
             var dlcDepotsToDownload = selectedDlcs
                 .SelectMany(d => d.Dlc.Depots)
-                .Where(dep => !dep.IsDownloaded && dep.SizeBytes > 0)
+                .Where(dep => !dep.IsDownloaded && dep.SizeBytes > 0 && IsDepotCompatible(dep, pref, has64))
                 .DistinctBy(dep => dep.DepotId)
                 .ToList();
 

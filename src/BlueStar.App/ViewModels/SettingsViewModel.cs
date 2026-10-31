@@ -8,6 +8,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using BlueStar.Core.Interfaces;
+using BlueStar.Core.Helpers;
 using BlueStar.Core.Models;
 using BlueStar.Infrastructure.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -15,6 +16,15 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 
 namespace BlueStar.App.ViewModels;
+
+public sealed class DownloadServerOptionItem
+{
+    public int CellId { get; init; }
+    public string DisplayName { get; init; } = string.Empty;
+    public string RegionGroup { get; init; } = string.Empty;
+
+    public override string ToString() => DisplayName;
+}
 
 /// <summary>
 /// ViewModel for application settings with authentication hierarchy and storage management.
@@ -79,6 +89,7 @@ public partial class SettingsViewModel : ObservableObject
         if (_localizationService.CurrentLanguage != targetCode)
         {
             _localizationService.SetLanguage(targetCode);
+            InitializeDownloadServerOptions();
             IsRestartLanguageModalOpen = true;
         }
     }
@@ -113,7 +124,7 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     [ObservableProperty]
-    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.5.1";
+    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.5.2";
 
     [ObservableProperty]
     private string _defaultApiUrl = "https://depotbox.org";
@@ -157,6 +168,104 @@ public partial class SettingsViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(value))
         {
             _ = _appSettings.SetDefaultDownloadDirectoryAsync(value);
+        }
+    }
+
+    public ObservableCollection<DownloadServerOptionItem> DownloadServerOptions { get; } = [];
+
+    [ObservableProperty]
+    private DownloadServerOptionItem? _selectedDownloadServerOption;
+
+    [ObservableProperty]
+    private bool _isCustomServerSelected;
+
+    [ObservableProperty]
+    private string _customDownloadServerCellIdText = string.Empty;
+
+    private bool _isUpdatingServerInternally;
+
+    partial void OnSelectedDownloadServerOptionChanged(DownloadServerOptionItem? value)
+    {
+        if (value == null || _isUpdatingServerInternally) return;
+
+        if (value.CellId == -1)
+        {
+            IsCustomServerSelected = true;
+            if (int.TryParse(CustomDownloadServerCellIdText, out var id) && id >= 0)
+            {
+                _ = _appSettings.SetDownloadServerCellIdAsync(id);
+            }
+        }
+        else
+        {
+            IsCustomServerSelected = false;
+            _ = _appSettings.SetDownloadServerCellIdAsync(value.CellId);
+            _notificationService.ShowSuccess(
+                _localizationService.CurrentLanguage == "es" ? "Servidor de Descarga Actualizado" : "Download Server Updated",
+                _localizationService.CurrentLanguage == "es"
+                    ? $"Servidor de descarga configurado:\n{value.DisplayName}"
+                    : $"Download server set to:\n{value.DisplayName}");
+        }
+    }
+
+    partial void OnCustomDownloadServerCellIdTextChanged(string value)
+    {
+        if (_isUpdatingServerInternally) return;
+        if (IsCustomServerSelected && int.TryParse(value, out var id) && id >= 0)
+        {
+            _ = _appSettings.SetDownloadServerCellIdAsync(id);
+        }
+    }
+
+    public void InitializeDownloadServerOptions()
+    {
+        _isUpdatingServerInternally = true;
+        try
+        {
+            DownloadServerOptions.Clear();
+            var currentLang = _localizationService.CurrentLanguage;
+            bool isEs = currentLang.StartsWith("es", StringComparison.OrdinalIgnoreCase);
+
+            foreach (var entry in SteamDownloadServerCatalog.Entries)
+            {
+                DownloadServerOptions.Add(new DownloadServerOptionItem
+                {
+                    CellId = entry.CellId,
+                    DisplayName = isEs ? entry.NameEs : entry.NameEn,
+                    RegionGroup = entry.RegionGroup
+                });
+            }
+
+            var customItem = new DownloadServerOptionItem
+            {
+                CellId = -1,
+                DisplayName = isEs ? "Personalizado (Ingresar Cell ID)..." : "Custom (Enter Cell ID)...",
+                RegionGroup = "Custom"
+            };
+            DownloadServerOptions.Add(customItem);
+
+            var savedCellId = _appSettings.DownloadServerCellId;
+            var matched = DownloadServerOptions.FirstOrDefault(o => o.CellId == savedCellId);
+            if (matched != null)
+            {
+                SelectedDownloadServerOption = matched;
+                IsCustomServerSelected = false;
+            }
+            else if (savedCellId > 0)
+            {
+                SelectedDownloadServerOption = customItem;
+                IsCustomServerSelected = true;
+                CustomDownloadServerCellIdText = savedCellId.ToString();
+            }
+            else
+            {
+                SelectedDownloadServerOption = DownloadServerOptions.FirstOrDefault();
+                IsCustomServerSelected = false;
+            }
+        }
+        finally
+        {
+            _isUpdatingServerInternally = false;
         }
     }
 
@@ -347,6 +456,7 @@ public partial class SettingsViewModel : ObservableObject
         _updateButtonText = _localizationService.CurrentLanguage == "es" ? "Buscar actualizaciones" : "Check for updates";
 
         DeleteDepotsAfterInstall = _appSettings.DeleteDepotsAfterInstall;
+        InitializeDownloadServerOptions();
         ShowNsfwContent = _appSettings.ShowNsfwContent;
         ShowDrmContent = _appSettings.ShowDrmContent;
         EnableExperimentalMods = _appSettings.EnableExperimentalMods;

@@ -1650,80 +1650,6 @@
                         </Border>
                     </StackPanel>
 
-                    <!-- ═══ IMPORT / BUILD SOURCES (shared across modes) ═══ -->
-                    <Border Style="{StaticResource Card}" Margin="0,16,0,0">
-                        <StackPanel>
-                            <TextBlock Text="{DynamicResource String_GameBuildBranchTitle}" Style="{StaticResource H3}"/>
-                            <TextBlock Text="{DynamicResource String_GameBuildBranchDesc}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,5,0,12"/>
-
-                            <ComboBox ItemsSource="{Binding AvailableBuilds}"
-                                      SelectedItem="{Binding SelectedBuild, Mode=TwoWay}"
-                                      Style="{StaticResource DarkComboBox}"
-                                      HorizontalAlignment="Stretch" Margin="0,0,0,12">
-                                <ComboBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid Margin="0,3">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel Grid.Column="0">
-                                                <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}"/>
-                                                <TextBlock Text="{Binding Description, FallbackValue=''}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0"/>
-                                            </StackPanel>
-                                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
-                                                <TextBlock Text="{Binding FormattedDate}" Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,8,0"/>
-                                                <Border Background="{StaticResource SurfaceCardBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="6,1">
-                                                    <TextBlock Text="{Binding Source}" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
-                                                </Border>
-                                            </StackPanel>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ComboBox.ItemTemplate>
-                            </ComboBox>
-
-                            <WrapPanel Orientation="Horizontal">
-                                <Button Content="{DynamicResource String_ImportZipPackageBtn}" Style="{StaticResource PrimaryButton}"
-                                        Padding="14,8" Margin="0,0,8,6" Command="{Binding ImportDepotZipPackageCommand}"/>
-                                <Button Content="{DynamicResource String_ScanBuildsBtn}" Style="{StaticResource SecondaryButton}"
-                                        Padding="12,8" Margin="0,0,8,6" FontSize="11"
-                                        Command="{Binding LoadAvailableBuildsCommand}"
-                                        IsEnabled="{Binding IsLoadingBuilds, Converter={StaticResource InverseBoolConverter}}"/>
-                                <Button Content="{DynamicResource String_SourcesMenuBtn}" Style="{StaticResource GhostButton}"
-                                        Padding="12,8" Margin="0,0,0,6" FontSize="11"
-                                        Command="{Binding ToggleCommunityLinksMenuCommand}"/>
-                            </WrapPanel>
-
-                            <Border Background="{StaticResource SurfaceInputBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1"
-                                    CornerRadius="{StaticResource RadiusMd}" Padding="14,10" Margin="0,10,0,0"
-                                    Visibility="{Binding IsCommunityLinksMenuOpen, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <StackPanel>
-                                    <Grid Margin="0,0,0,8">
-                                        <TextBlock Text="{DynamicResource String_CommunitySourcesTitle}" Style="{StaticResource CaptionBold}"/>
-                                        <Button Content="✕" Style="{StaticResource GhostButton}" HorizontalAlignment="Right"
-                                                Padding="4,0" FontSize="11" Command="{Binding CloseCommunityLinksMenuCommand}"/>
-                                    </Grid>
-                                    <WrapPanel Orientation="Horizontal">
-                                        <Button Content="{DynamicResource String_SteamDbDepotsBtn}" Style="{StaticResource SecondaryButton}"
-                                                Padding="10,5" Margin="0,0,8,6" FontSize="11"
-                                                Command="{Binding OpenCommunityLinkCommand}" CommandParameter="steamdb_depots"/>
-                                        <Button Content="{DynamicResource String_SteamDbPatchesBtn}" Style="{StaticResource SecondaryButton}"
-                                                Padding="10,5" Margin="0,0,8,6" FontSize="11"
-                                                Command="{Binding OpenCommunityLinkCommand}" CommandParameter="steamdb_patches"/>
-                                        <Button Content="{DynamicResource String_CsRinRuThreadBtn}" Style="{StaticResource SecondaryButton}"
-                                                Padding="10,5" Margin="0,0,8,6" FontSize="11"
-                                                Command="{Binding OpenCommunityLinkCommand}" CommandParameter="csrinru"/>
-                                        <Button Content="{DynamicResource String_DepotBoxHubBtn}" Style="{StaticResource SecondaryButton}"
-                                                Padding="10,5" Margin="0,0,8,6" FontSize="11"
-                                                Command="{Binding OpenCommunityLinkCommand}" CommandParameter="depotbox"/>
-                                        <Button Content="{DynamicResource String_OpenManifestsFolderBtn}" Style="{StaticResource GhostButton}"
-                                                Padding="10,5" Margin="0,0,0,6" FontSize="11"
-                                                Command="{Binding OpenCommunityLinkCommand}" CommandParameter="manifest_dir"/>
-                                    </WrapPanel>
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
-                    </Border>
                 </StackPanel>
                 <!-- ── 3. DLCS & UNLOCKER TAB ── -->
                 <StackPanel Visibility="{Binding SelectedTab, Converter={StaticResource StringMatchToVisibilityConverter}, ConverterParameter=Dlcs}">
@@ -1831,6 +1757,10 @@
                                                         <TextBlock Text="{Binding Dlc.AppId, StringFormat='DLC AppID: {0}'}" Style="{StaticResource Caption}" Margin="0,0,10,0"/>
                                                         <Border Background="{StaticResource SurfaceCardBrush}" BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusXs}" Padding="6,1" Margin="0,0,6,0">
                                                             <TextBlock Text="{Binding CategoryTag}" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                        </Border>
+                                                        <Border Background="{StaticResource PurpleBgBrush}" BorderBrush="{StaticResource PurpleBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusXs}" Padding="6,1" Margin="0,0,6,0"
+                                                                Visibility="{Binding ArchitectureTag, Converter={StaticResource NullToVisibilityConverter}}">
+                                                            <TextBlock Text="{Binding ArchitectureTag}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource PurpleBrush}"/>
                                                         </Border>
                                                     </StackPanel>
                                                 </StackPanel>
@@ -5196,13 +5126,13 @@
                                     <TextBlock Text="{DynamicResource String_VersionCustomNoDepots}"
                                                Style="{StaticResource Caption}" Foreground="{StaticResource MutedTextBrush}"
                                                HorizontalAlignment="Center" Margin="0,6,0,6" TextWrapping="Wrap"
-                                               Visibility="{Binding Depots.Count, Converter={StaticResource ZeroToVisibilityConverter}}"/>
+                                               Visibility="{Binding InstallModalDepots.Count, Converter={StaticResource ZeroToVisibilityConverter}}"/>
 
                                     <Border Background="{StaticResource SurfaceCardBrush}" BorderBrush="{StaticResource SubtleBorderBrush}"
                                             BorderThickness="1" CornerRadius="{StaticResource RadiusMd}" MaxHeight="190"
-                                            Visibility="{Binding Depots.Count, Converter={StaticResource NullToVisibilityConverter}}">
+                                            Visibility="{Binding InstallModalDepots.Count, Converter={StaticResource NullToVisibilityConverter}}">
                                         <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                            <ItemsControl ItemsSource="{Binding Depots}">
+                                            <ItemsControl ItemsSource="{Binding InstallModalDepots}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate>
                                                         <Border BorderBrush="{StaticResource SubtleBorderBrush}" BorderThickness="0,0,0,1" Padding="10,8">
@@ -5219,6 +5149,8 @@
                                                                         <Run Text="{Binding Depot.DepotId, Mode=OneWay}"/>
                                                                         <Run Text=" · "/>
                                                                         <Run Text="{Binding PlatformTag, Mode=OneWay}"/>
+                                                                        <Run Text=" · "/>
+                                                                        <Run Text="{Binding ArchitectureTag, Mode=OneWay}"/>
                                                                     </TextBlock>
                                                                 </StackPanel>
 
@@ -5615,10 +5547,16 @@
                                                             <ColumnDefinition Width="Auto"/>
                                                             <ColumnDefinition Width="*"/>
                                                             <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="Auto"/>
                                                         </Grid.ColumnDefinitions>
                                                         <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" Style="{StaticResource DarkCheckBox}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                                         <TextBlock Grid.Column="1" Text="{Binding Name}" Style="{StaticResource BodySmall}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                                                        <TextBlock Grid.Column="2" Text="{Binding FormattedSize}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                                        <Border Grid.Column="2" Background="{StaticResource PurpleBgBrush}" BorderBrush="{StaticResource PurpleBrush}" BorderThickness="1"
+                                                                CornerRadius="{StaticResource RadiusXs}" Padding="5,1" Margin="6,0,0,0" VerticalAlignment="Center"
+                                                                Visibility="{Binding ArchitectureTag, Converter={StaticResource NullToVisibilityConverter}}">
+                                                            <TextBlock Text="{Binding ArchitectureTag}" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource PurpleBrush}"/>
+                                                        </Border>
+                                                        <TextBlock Grid.Column="3" Text="{Binding FormattedSize}" Style="{StaticResource Caption}" Foreground="{StaticResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>

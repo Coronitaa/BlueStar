@@ -150,6 +150,7 @@ public partial class DepotDownloaderProvider : IDownloadProvider
                 DepotKeysFilePath = keyFilePath,
                 WorkingDirectory = workingDir,
                 StateFilePath = stateFilePath,
+                CellId = _appSettings?.DownloadServerCellId ?? 0,
             };
 
             // Step 4: Create engine and download via direct library call
@@ -390,6 +391,7 @@ public partial class DepotDownloaderProvider : IDownloadProvider
             DepotKeysFilePath = keyFilePath,
             WorkingDirectory = workingDir,
             ValidateExisting = true,
+            CellId = _appSettings?.DownloadServerCellId ?? 0,
         };
 
         using var engine = new DepotDownloadEngine(

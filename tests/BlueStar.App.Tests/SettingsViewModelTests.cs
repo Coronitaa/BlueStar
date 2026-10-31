@@ -149,4 +149,58 @@ public class SettingsViewModelTests : IDisposable
         vm.CanInstallAllRequirements.Should().BeFalse();
         vm.InstallAllRequirementsCommand.CanExecute(null).Should().BeFalse();
     }
+
+    [Fact]
+    public void DownloadServerOptions_DefaultsToAutomatic()
+    {
+        var vm = CreateViewModel();
+
+        vm.DownloadServerOptions.Should().NotBeEmpty();
+        vm.SelectedDownloadServerOption.Should().NotBeNull();
+        vm.SelectedDownloadServerOption!.CellId.Should().Be(0);
+        vm.IsCustomServerSelected.Should().BeFalse();
+        _appSettings.DownloadServerCellId.Should().Be(0);
+    }
+
+    [Fact]
+    public void DownloadServerOptions_ChangingSelection_UpdatesSettings()
+    {
+        var vm = CreateViewModel();
+
+        var argentina = vm.DownloadServerOptions.FirstOrDefault(o => o.CellId == 116);
+        argentina.Should().NotBeNull();
+
+        vm.SelectedDownloadServerOption = argentina;
+
+        _appSettings.DownloadServerCellId.Should().Be(116);
+        vm.IsCustomServerSelected.Should().BeFalse();
+    }
+
+    [Fact]
+    public void DownloadServerOptions_CustomCellId_UpdatesSettings()
+    {
+        var vm = CreateViewModel();
+
+        var customOption = vm.DownloadServerOptions.FirstOrDefault(o => o.CellId == -1);
+        customOption.Should().NotBeNull();
+
+        vm.SelectedDownloadServerOption = customOption;
+        vm.IsCustomServerSelected.Should().BeTrue();
+
+        vm.CustomDownloadServerCellIdText = "5";
+        _appSettings.DownloadServerCellId.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task DownloadServerOptions_InitializesWithSavedCustomCellId()
+    {
+        await _appSettings.SetDownloadServerCellIdAsync(999);
+
+        var vm = CreateViewModel();
+
+        vm.IsCustomServerSelected.Should().BeTrue();
+        vm.SelectedDownloadServerOption.Should().NotBeNull();
+        vm.SelectedDownloadServerOption!.CellId.Should().Be(-1);
+        vm.CustomDownloadServerCellIdText.Should().Be("999");
+    }
 }

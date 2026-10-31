@@ -704,6 +704,12 @@
     <sys:String x:Key="String_DownloadsCleanupDesc">Automatic disk space recovery.</sys:String>
     <sys:String x:Key="String_AutoDeleteDepotsCheckbox">Automatically delete raw depot files and ZIP archives after staging</sys:String>
     <sys:String x:Key="String_AutoDeleteDepotsHelp">Deletes temp depot files and ZIPs after installation.</sys:String>
+    <sys:String x:Key="String_DownloadServerLabel">Download Server (Steam CDN)</sys:String>
+    <sys:String x:Key="String_DownloadServerHelp">Steam content server region (Cell ID) used by DepotDownloader. By default, "Automatic" dynamically chooses the fastest and closest server based on your connection.</sys:String>
+    <sys:String x:Key="String_DownloadServerAuto">Automatic (Fastest / Recommended)</sys:String>
+    <sys:String x:Key="String_DownloadServerCustom">Custom (Enter Cell ID)...</sys:String>
+    <sys:String x:Key="String_DownloadServerCustomCellIdLabel">Custom Steam Cell ID:</sys:String>
+    <sys:String x:Key="String_DownloadServerCustomPlaceholder">e.g. 116 for Argentina, 5 for Germany, 4 for UK...</sys:String>
     <sys:String x:Key="String_CatalogContentFiltersTitle">Catalog &amp; Content Filters</sys:String>
     <sys:String x:Key="String_CatalogContentFiltersDesc">Visibility filters for explore catalog.</sys:String>
     <sys:String x:Key="String_ShowNsfwContentLabel">Show NSFW &amp; Adult Content</sys:String>
@@ -933,6 +939,11 @@
     <sys:String x:Key="String_InstallModalLocationTitle">Installation Directory</sys:String>
     <sys:String x:Key="String_InstallModalFreeSpaceFormat">Free space: {0} · Required: {1}</sys:String>
     <sys:String x:Key="String_InstallModalDiskWarning">⚠️ Warning: Free space on the selected drive is less than required ({0}).</sys:String>
+    <sys:String x:Key="String_ArchBoth">x32/x64</sys:String>
+    <sys:String x:Key="String_InstallModalArchTitle">Architecture Preference</sys:String>
+    <sys:String x:Key="String_InstallModalArchX64Desc">Download 64-bit binaries &amp; content (Recommended for 64-bit OS)</sys:String>
+    <sys:String x:Key="String_InstallModalArchX32Desc">Download 32-bit (x86) binaries &amp; content</sys:String>
+    <sys:String x:Key="String_InstallModalArchBothDesc">Download depots compatible with both architectures (x32/x64)</sys:String>
     <sys:String x:Key="String_InstallModalVersionTitle">Target Version</sys:String>
     <sys:String x:Key="String_InstallModalBranchPublic">Latest available build (public)</sys:String>
     <sys:String x:Key="String_InstallModalDlcsTitle">Optional DLCs</sys:String>

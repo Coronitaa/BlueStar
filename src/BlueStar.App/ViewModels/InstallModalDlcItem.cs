@@ -1,4 +1,5 @@
 using System.Linq;
+using BlueStar.Core.Helpers;
 using BlueStar.Core.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -21,6 +22,8 @@ public partial class InstallModalDlcItem : ObservableObject
     public string Name => Dlc.Name;
 
     public uint AppId => Dlc.AppId;
+
+    public string ArchitectureTag => DepotArchitectureHelper.GetDlcArchitecture(Dlc);
 
     public string FormattedSize
     {

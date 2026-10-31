@@ -13,7 +13,7 @@ namespace BlueStar.App.ViewModels;
 public partial class AboutViewModel : ObservableObject
 {
     [ObservableProperty]
-    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.5.1";
+    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.5.2";
 
     [ObservableProperty]
     private ObservableCollection<ProjectCredit> _projects = [];
@@ -56,8 +56,8 @@ public partial class AboutViewModel : ObservableObject
                 Description = "Community network of multiplayer fixes, dedicated Steamworks bypasses, and cross-client online lobbies with multi-layer composition.",
                 Author = "OnlineFix Community",
                 License = "Community Service",
-                GitHubUrl = "https://onlinefix.manifesthub.uk",
-                WebsiteUrl = "https://onlinefix.manifesthub.uk",
+                GitHubUrl = "https://online-fix.me/",
+                WebsiteUrl = "https://online-fix.me/",
                 CategoryBadge = "Multiplayer",
                 IsCore = true
             },

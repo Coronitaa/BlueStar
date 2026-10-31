@@ -431,6 +431,18 @@ public sealed class AppSettingsService
         await SaveAsync().ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Overridden Steam Content Server Cell ID for DepotDownloader (0 = Automatic / fastest for user).
+    /// </summary>
+    public int DownloadServerCellId => _current.DownloadServerCellId;
+
+    /// <summary>Persists the Steam download server Cell ID setting.</summary>
+    public async Task SetDownloadServerCellIdAsync(int cellId)
+    {
+        _current = _current with { DownloadServerCellId = cellId };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
     private sealed record AppSettings
     {
         public string? Language { get; init; }
@@ -454,6 +466,7 @@ public sealed class AppSettingsService
     public string? DefaultApiKey { get; init; } = "YOUR-API-KEY";
     public bool HideForceDlcWarning { get; init; } = false;
     public int InstancesColumnCount { get; init; } = 3;
+        public int DownloadServerCellId { get; init; } = 0;
     public ModApiKeys? ModApiKeys { get; init; }
 }
 

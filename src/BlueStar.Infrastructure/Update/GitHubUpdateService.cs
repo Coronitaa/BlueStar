@@ -262,7 +262,7 @@ public class GitHubUpdateService : IUpdateService
                 _metrics?.OnProviderRequest("GitHub", GitHubReleasesUrl);
 
                 GitHubRelease? release = null;
-                const string updaterUserAgent = "BlueStar-Updater/1.5.1";
+                const string updaterUserAgent = "BlueStar-Updater/1.5.2";
                 try
                 {
                     var request = new HttpRequestMessage(HttpMethod.Get, GitHubReleasesUrl);
