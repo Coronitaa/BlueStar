@@ -32,8 +32,8 @@ SetupIconFile=src\BlueStar.App\Assets\bluestar.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
-PrivilegesRequired=admin
-PrivilegesRequiredOverridesAllowed=dialog
+PrivilegesRequired=lowest
+; PrivilegesRequiredOverridesAllowed
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
