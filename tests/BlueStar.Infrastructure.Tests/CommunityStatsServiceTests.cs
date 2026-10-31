@@ -98,4 +98,44 @@ public class CommunityStatsServiceTests
         // Assert
         await act.Should().NotThrowAsync();
     }
+
+    [Fact]
+    public async Task ReportGamePlayAsync_SkipsShortDuration()
+    {
+        // Act: sessions under 3 minutes should complete immediately without error
+        Func<Task> act = async () => await _service.ReportGamePlayAsync(730, "Counter-Strike 2", TimeSpan.FromSeconds(30));
+
+        // Assert
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task SyncInstancesAsync_CompletesGracefully()
+    {
+        var instances = new[]
+        {
+            new GameInstance
+            {
+                Name = "Stardew Valley",
+                AppId = 413150,
+                InstallPath = @"C:\Games\Stardew"
+            }
+        };
+
+        Func<Task> act = async () => await _service.SyncInstancesAsync(instances, CancellationToken.None);
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public void CircuitBreaker_TripsAndResetsCorrectly()
+    {
+        CommunityStatsService.ResetCircuit();
+        CommunityStatsService.IsCircuitOpen().Should().BeFalse();
+
+        CommunityStatsService.TripCircuit(TimeSpan.FromMinutes(10), "Test quota hit");
+        CommunityStatsService.IsCircuitOpen().Should().BeTrue();
+
+        CommunityStatsService.ResetCircuit();
+        CommunityStatsService.IsCircuitOpen().Should().BeFalse();
+    }
 }

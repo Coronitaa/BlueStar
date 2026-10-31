@@ -7,6 +7,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Collections.Concurrent;
+using BlueStar.Core.Helpers;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
 using BlueStar.Infrastructure.Storage;
@@ -25,6 +27,14 @@ public class CommunityStatsService : ICommunityStatsService
     private readonly ICacheService _cacheService;
     private readonly AppSettingsService _settingsService;
     private readonly ILogger<CommunityStatsService> _logger;
+    private readonly ILocalCatalogRepository? _localCatalog;
+
+    private readonly ConcurrentDictionary<uint, DateTimeOffset> _reportedInstances = new();
+    private readonly ConcurrentDictionary<int, DateTimeOffset> _reportedPlaytime = new();
+
+    // Circuit breaker state for Cloudflare Workers KV quota preservation & graceful backoff
+    private static DateTimeOffset? _circuitOpenUntil;
+    private static readonly object _circuitLock = new();
 
     private const string DefaultCloudflareWorkerUrl = "https://bluestar-api-worker.blustar.workers.dev";
 
@@ -32,12 +42,65 @@ public class CommunityStatsService : ICommunityStatsService
         HttpClient httpClient,
         ICacheService cacheService,
         AppSettingsService settingsService,
-        ILogger<CommunityStatsService> logger)
+        ILogger<CommunityStatsService> logger,
+        ILocalCatalogRepository? localCatalog = null)
     {
         _httpClient = httpClient;
         _cacheService = cacheService;
         _settingsService = settingsService;
         _logger = logger;
+        _localCatalog = localCatalog;
+    }
+
+    public static bool IsCircuitOpen()
+    {
+        lock (_circuitLock)
+        {
+            if (!_circuitOpenUntil.HasValue) return false;
+            if (DateTimeOffset.UtcNow >= _circuitOpenUntil.Value)
+            {
+                _circuitOpenUntil = null;
+                return false;
+            }
+            return true;
+        }
+    }
+
+    public static void TripCircuit(TimeSpan duration, string reason)
+    {
+        lock (_circuitLock)
+        {
+            _circuitOpenUntil = DateTimeOffset.UtcNow.Add(duration);
+        }
+    }
+
+    public static void ResetCircuit()
+    {
+        lock (_circuitLock)
+        {
+            _circuitOpenUntil = null;
+        }
+    }
+
+    private async Task<string> ResolveCanonicalGameNameAsync(uint appId, string candidateName, CancellationToken ct = default)
+    {
+        if (appId > 0 && _localCatalog != null)
+        {
+            try
+            {
+                var app = await _localCatalog.GetByAppIdAsync(appId, ct).ConfigureAwait(false);
+                if (app != null && !string.IsNullOrWhiteSpace(app.Name))
+                {
+                    return app.Name.Trim();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to resolve canonical game name from local catalog for AppId {AppId}", appId);
+            }
+        }
+
+        return GameNameSanitizer.Sanitize(candidateName, appId);
     }
 
     private string GetWorkerBaseUrl()
@@ -55,25 +118,25 @@ public class CommunityStatsService : ICommunityStatsService
     /// third of a second, so a budget that small only ever fired on the handshake — and the
     /// stack it logged made a routine timeout read like a crash.
     /// </remarks>
-    private static readonly TimeSpan WorkerTimeout = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan WorkerTimeout = TimeSpan.FromSeconds(6);
 
     /// <summary>Pause before the one retry, long enough for a stalled handshake to give up.</summary>
-    private static readonly TimeSpan WorkerRetryDelay = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan WorkerRetryDelay = TimeSpan.FromSeconds(1.5);
 
     /// <summary>
     /// Calls the community worker, once more after a pause if the first attempt ran out of time.
+    /// Automatically trips circuit breaker on 429 quota exhaustion or repeated timeouts.
     /// </summary>
-    /// <remarks>
-    /// Every one of these calls has something to fall back on — a cached list, a built-in list,
-    /// or simply not reporting — so a failure is a quiet line in the log, not a stack trace.
-    /// The caller's own token still cancels immediately: a closing app does not sit through a
-    /// retry.
-    /// </remarks>
-    /// <returns>What the call returned, or <c>null</c> if the worker could not be reached.</returns>
     private async Task<T?> CallWorkerAsync<T>(
         string what, Func<CancellationToken, Task<T?>> call, CancellationToken ct)
         where T : class
     {
+        if (IsCircuitOpen())
+        {
+            _logger.LogDebug("{What}: Community worker circuit breaker is open. Skipping call.", what);
+            return null;
+        }
+
         for (var attempt = 1; attempt <= 2; attempt++)
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -81,7 +144,22 @@ public class CommunityStatsService : ICommunityStatsService
 
             try
             {
-                return await call(cts.Token).ConfigureAwait(false);
+                var result = await call(cts.Token).ConfigureAwait(false);
+                if (result is HttpResponseMessage httpResp)
+                {
+                    if (httpResp.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                    {
+                        _logger.LogWarning("{What}: Cloudflare KV limit hit (HTTP 429). Opening circuit breaker for 1 hour.", what);
+                        TripCircuit(TimeSpan.FromHours(1), "HTTP 429 Too Many Requests");
+                        return null;
+                    }
+                    if ((int)httpResp.StatusCode >= 500)
+                    {
+                        _logger.LogDebug("{What}: Cloudflare worker server error {Status}", what, httpResp.StatusCode);
+                        TripCircuit(TimeSpan.FromMinutes(15), $"HTTP {httpResp.StatusCode}");
+                    }
+                }
+                return result;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -93,8 +171,9 @@ public class CommunityStatsService : ICommunityStatsService
                 if (attempt == 2)
                 {
                     _logger.LogDebug(
-                        "{What}: the community worker did not answer within {Seconds:0}s, twice. Carrying on without it.",
+                        "{What}: the community worker did not answer within {Seconds:0}s, twice. Opening circuit breaker.",
                         what, WorkerTimeout.TotalSeconds);
+                    TripCircuit(TimeSpan.FromMinutes(10), "Worker timeout");
                     return null;
                 }
 
@@ -110,6 +189,15 @@ public class CommunityStatsService : ICommunityStatsService
             catch (HttpRequestException ex)
             {
                 _logger.LogDebug("{What}: the community worker is unreachable ({Message}).", what, ex.Message);
+                if (ex.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                {
+                    _logger.LogWarning("{What}: Cloudflare worker returned 429. Opening circuit breaker for 1 hour.", what);
+                    TripCircuit(TimeSpan.FromHours(1), "HTTP 429 Too Many Requests");
+                }
+                else
+                {
+                    TripCircuit(TimeSpan.FromMinutes(5), "Worker unreachable");
+                }
                 return null;
             }
             catch (JsonException ex)
@@ -222,7 +310,7 @@ public class CommunityStatsService : ICommunityStatsService
 
     private async Task<IReadOnlyList<SearchResult>> FetchTrendingInternalAsync(CancellationToken ct)
     {
-        const string cacheKey = "bluestar_trending_7d_v7";
+        const string cacheKey = "bluestar_trending_7d_v8";
         try
         {
             var cached = await _cacheService.GetAsync<List<SearchResult>>(cacheKey, ct).ConfigureAwait(false);
@@ -237,6 +325,11 @@ public class CommunityStatsService : ICommunityStatsService
             }
         }
         catch { }
+
+        if (IsCircuitOpen())
+        {
+            return DefaultCommunityTrendingFallback;
+        }
 
         var workerUrl = $"{GetWorkerBaseUrl()}/api/stats/trending";
 
@@ -247,18 +340,29 @@ public class CommunityStatsService : ICommunityStatsService
 
         if (response?.Results is { Count: > 0 })
         {
-            var list = Deduplicate(response.Results.Select(r => r.ToSearchResult()));
+            var list = new List<SearchResult>();
+            foreach (var r in response.Results)
+            {
+                var item = r.ToSearchResult();
+                if (item.AppId > 0)
+                {
+                    item.Name = await ResolveCanonicalGameNameAsync(item.AppId, item.Name, ct).ConfigureAwait(false);
+                }
+                list.Add(item);
+            }
+
+            var distinct = Deduplicate(list);
 
             try
             {
-                await _cacheService.SetAsync(cacheKey, list, TimeSpan.FromMinutes(5), ct).ConfigureAwait(false);
+                await _cacheService.SetAsync(cacheKey, distinct, TimeSpan.FromMinutes(30), ct).ConfigureAwait(false);
             }
             catch
             {
                 // A cache write that fails is not worth losing the list over.
             }
 
-            return list;
+            return distinct;
         }
 
         return DefaultCommunityTrendingFallback;
@@ -266,7 +370,7 @@ public class CommunityStatsService : ICommunityStatsService
 
     private async Task<IReadOnlyList<SearchResult>> FetchMostPlayedInternalAsync(CancellationToken ct)
     {
-        const string cacheKey = "bluestar_most_played_alltime_v7";
+        const string cacheKey = "bluestar_most_played_alltime_v8";
         try
         {
             var cached = await _cacheService.GetAsync<List<SearchResult>>(cacheKey, ct).ConfigureAwait(false);
@@ -282,6 +386,11 @@ public class CommunityStatsService : ICommunityStatsService
         }
         catch { }
 
+        if (IsCircuitOpen())
+        {
+            return DefaultCommunityMostPlayedFallback;
+        }
+
         var workerUrl = $"{GetWorkerBaseUrl()}/api/stats/most-played";
 
         var response = await CallWorkerAsync(
@@ -291,18 +400,29 @@ public class CommunityStatsService : ICommunityStatsService
 
         if (response?.Results is { Count: > 0 })
         {
-            var list = Deduplicate(response.Results.Select(r => r.ToSearchResult()));
+            var list = new List<SearchResult>();
+            foreach (var r in response.Results)
+            {
+                var item = r.ToSearchResult();
+                if (item.AppId > 0)
+                {
+                    item.Name = await ResolveCanonicalGameNameAsync(item.AppId, item.Name, ct).ConfigureAwait(false);
+                }
+                list.Add(item);
+            }
+
+            var distinct = Deduplicate(list);
 
             try
             {
-                await _cacheService.SetAsync(cacheKey, list, TimeSpan.FromMinutes(5), ct).ConfigureAwait(false);
+                await _cacheService.SetAsync(cacheKey, distinct, TimeSpan.FromHours(2), ct).ConfigureAwait(false);
             }
             catch
             {
                 // A cache write that fails is not worth losing the list over.
             }
 
-            return list;
+            return distinct;
         }
 
         return DefaultCommunityMostPlayedFallback;
@@ -521,10 +641,19 @@ public class CommunityStatsService : ICommunityStatsService
     /// <inheritdoc />
     public async Task ReportInstanceAddedAsync(uint appId, string name, CancellationToken ct = default)
     {
-        if (appId <= 0) return;
+        if (appId <= 0 || IsCircuitOpen()) return;
 
+        // Rate limit: at most once per AppId per 24 hours per machine to protect Cloudflare KV limits
+        if (_reportedInstances.TryGetValue(appId, out var lastReported) &&
+            DateTimeOffset.UtcNow - lastReported < TimeSpan.FromHours(24))
+        {
+            _logger.LogDebug("Skipping instance report for AppId {AppId} (reported within last 24h)", appId);
+            return;
+        }
+
+        var canonicalName = await ResolveCanonicalGameNameAsync(appId, name, ct).ConfigureAwait(false);
         var workerUrl = $"{GetWorkerBaseUrl()}/api/stats/report-instance";
-        var payload = new { appId, name };
+        var payload = new { appId, name = canonicalName };
 
         var resp = await CallWorkerAsync(
             "Community instance report",
@@ -536,33 +665,42 @@ public class CommunityStatsService : ICommunityStatsService
 
         using (resp)
         {
-            _logger.LogInformation("Reported instance to Cloudflare: {Name} (AppId={AppId}), Status={Status}", name, appId, resp.StatusCode);
-        }
-
-        try
-        {
-            // Invalidate local feeds cache so subsequent refreshes pull new data
-            await _cacheService.RemoveAsync("bluestar_trending_7d_v7", CancellationToken.None).ConfigureAwait(false);
-            await _cacheService.RemoveAsync("bluestar_most_played_alltime_v7", CancellationToken.None).ConfigureAwait(false);
-        }
-        catch
-        {
-            // The next refresh will pick the new data up anyway.
+            if (resp.IsSuccessStatusCode)
+            {
+                _reportedInstances[appId] = DateTimeOffset.UtcNow;
+                _logger.LogInformation("Reported instance to Cloudflare: {Name} (AppId={AppId}), Status={Status}", canonicalName, appId, resp.StatusCode);
+            }
         }
     }
 
     /// <inheritdoc />
     public async Task ReportGamePlayAsync(int appId, string name, TimeSpan duration, CancellationToken ct = default)
     {
-        if (appId <= 0) return;
+        if (appId <= 0 || IsCircuitOpen()) return;
+
+        // Rate limit & filter: ignore short test launches under 3 minutes
+        if (duration.TotalMinutes < 3)
+        {
+            _logger.LogDebug("Skipping playtime report for AppId {AppId}: session duration ({Duration}) is under 3 minutes", appId, duration);
+            return;
+        }
+
+        // Rate limit: at most once per AppId per 6 hours
+        if (_reportedPlaytime.TryGetValue(appId, out var lastPlay) &&
+            DateTimeOffset.UtcNow - lastPlay < TimeSpan.FromHours(6))
+        {
+            _logger.LogDebug("Skipping playtime report for AppId {AppId} (reported within last 6h)", appId);
+            return;
+        }
 
         try
         {
+            var canonicalName = await ResolveCanonicalGameNameAsync((uint)appId, name, ct).ConfigureAwait(false);
             var workerUrl = $"{GetWorkerBaseUrl()}/api/stats/report-instance";
             var payload = new
             {
                 appId,
-                name,
+                name = canonicalName,
                 durationMinutes = Math.Max(1, (int)duration.TotalMinutes)
             };
 
@@ -572,7 +710,16 @@ public class CommunityStatsService : ICommunityStatsService
                     .PostAsJsonAsync(workerUrl, payload, token).ConfigureAwait(false),
                 ct).ConfigureAwait(false);
 
-            resp?.Dispose();
+            if (resp != null)
+            {
+                using (resp)
+                {
+                    if (resp.IsSuccessStatusCode)
+                    {
+                        _reportedPlaytime[appId] = DateTimeOffset.UtcNow;
+                    }
+                }
+            }
         }
         catch { }
     }
@@ -580,16 +727,31 @@ public class CommunityStatsService : ICommunityStatsService
     /// <inheritdoc />
     public async Task SyncInstancesAsync(IEnumerable<GameInstance> instances, CancellationToken ct = default)
     {
-        if (instances == null) return;
-        var valid = instances
-            .Where(i => i.AppId > 0)
-            .Select(i => new { appId = i.AppId, name = i.Name })
-            .ToList();
+        if (instances == null || IsCircuitOpen()) return;
 
-        if (valid.Count == 0) return;
+        // 24-hour rate limit on instance syncing to protect Cloudflare KV free tier
+        var lastSync = _settingsService.LastCommunitySyncUtc;
+        if (lastSync.HasValue && DateTimeOffset.UtcNow - lastSync.Value < TimeSpan.FromHours(24))
+        {
+            _logger.LogDebug("Skipping instance sync: already synced at {LastSync} (rate limit: 24h)", lastSync.Value);
+            return;
+        }
+
+        var validInstances = instances.Where(i => i.AppId > 0).ToList();
+        if (validInstances.Count == 0) return;
+
+        var payloadItems = new List<object>();
+        foreach (var inst in validInstances)
+        {
+            var canonicalName = !string.IsNullOrWhiteSpace(inst.Metadata?.Name)
+                ? inst.Metadata.Name
+                : await ResolveCanonicalGameNameAsync(inst.AppId, inst.Name, ct).ConfigureAwait(false);
+
+            payloadItems.Add(new { appId = inst.AppId, name = canonicalName });
+        }
 
         var workerUrl = $"{GetWorkerBaseUrl()}/api/stats/sync-instances";
-        var payload = new { instances = valid };
+        var payload = new { instances = payloadItems };
 
         var resp = await CallWorkerAsync(
             "Community instance sync",
@@ -601,17 +763,11 @@ public class CommunityStatsService : ICommunityStatsService
 
         using (resp)
         {
-            _logger.LogInformation("Synced {Count} local instances to Cloudflare: Status={Status}", valid.Count, resp.StatusCode);
-        }
-
-        try
-        {
-            await _cacheService.RemoveAsync("bluestar_trending_7d_v7", CancellationToken.None).ConfigureAwait(false);
-            await _cacheService.RemoveAsync("bluestar_most_played_alltime_v7", CancellationToken.None).ConfigureAwait(false);
-        }
-        catch
-        {
-            // The next refresh will pick the new data up anyway.
+            if (resp.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("Synced {Count} local instances to Cloudflare: Status={Status}", payloadItems.Count, resp.StatusCode);
+                await _settingsService.SetLastCommunitySyncUtcAsync(DateTimeOffset.UtcNow).ConfigureAwait(false);
+            }
         }
     }
 

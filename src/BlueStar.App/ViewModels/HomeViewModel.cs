@@ -40,6 +40,7 @@ public partial class HomeViewModel : ObservableObject, IDisposable
     private readonly ISteamCatalogSearchService? _catalogSearch;
     private readonly ILocalCatalogRepository? _localRepo;
     private readonly ILogger<HomeViewModel> _logger;
+    private static bool _hasTriggeredSyncThisSession;
     private readonly CancellationTokenSource _cts = new();
     private bool _isDisposed;
 
@@ -57,6 +58,32 @@ public partial class HomeViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private ObservableCollection<TrendingChipItem> _trendingSuggestionChips = [];
+
+    private void UpdateTrendingChipsFromResults(IEnumerable<SearchResult>? source)
+    {
+        if (source == null) return;
+        var chips = new List<TrendingChipItem>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        int rank = 1;
+
+        foreach (var item in source)
+        {
+            var cleanName = GameNameSanitizer.Sanitize(item.Name, item.AppId);
+            if (!string.IsNullOrWhiteSpace(cleanName) && seen.Add(cleanName))
+            {
+                chips.Add(TrendingChipItem.Create(cleanName, rank++));
+                if (chips.Count >= 5) break;
+            }
+        }
+
+        if (chips.Count > 0)
+        {
+            App.Current?.Dispatcher?.Invoke(() =>
+            {
+                TrendingSuggestionChips = new ObservableCollection<TrendingChipItem>(chips);
+            });
+        }
+    }
 
     [ObservableProperty]
     private DownloadJobItem? _currentActiveDownload;
@@ -461,16 +488,7 @@ public partial class HomeViewModel : ObservableObject, IDisposable
                 // Update search suggestion chips dynamically from top trending games
                 if (filtered.Count > 0)
                 {
-                    var chips = filtered.Take(5)
-                        .Select(t => t.Name)
-                        .Where(n => !string.IsNullOrWhiteSpace(n))
-                        .Select((name, idx) => TrendingChipItem.Create(name, idx + 1))
-                        .ToList();
-
-                    App.Current?.Dispatcher?.Invoke(() =>
-                    {
-                        TrendingSuggestionChips = new ObservableCollection<TrendingChipItem>(chips);
-                    });
+                    UpdateTrendingChipsFromResults(filtered);
                 }
             }
             catch { catTrending.IsLoading = false; }
@@ -613,8 +631,9 @@ public partial class HomeViewModel : ObservableObject, IDisposable
             RecentInstances = new ObservableCollection<GameInstance>(sorted);
             UpdateActiveDownload();
 
-            if (_statsService != null && instances.Count > 0)
+            if (_statsService != null && instances.Count > 0 && !_hasTriggeredSyncThisSession)
             {
+                _hasTriggeredSyncThisSession = true;
                 _ = _statsService.SyncInstancesAsync(instances, CancellationToken.None);
             }
         }
@@ -744,6 +763,11 @@ public partial class HomeViewModel : ObservableObject, IDisposable
                 _logger.LogDebug(ex, "Background metadata enrichment error for AppId={AppId}", result.AppId);
             }
         }).ConfigureAwait(false);
+
+        if (parentCategory != null && parentCategory.Id == "bluestar_trending_7d" && parentCategory.Items != null)
+        {
+            UpdateTrendingChipsFromResults(parentCategory.Items);
+        }
     }
 
     private async Task ReplenishCategoryAsync(CatalogCategory category)

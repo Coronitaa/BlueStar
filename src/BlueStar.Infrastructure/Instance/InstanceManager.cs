@@ -206,7 +206,10 @@ public sealed class InstanceManager : IInstanceManager
 
             if (_statsService != null && newInstance.AppId > 0)
             {
-                _ = _statsService.ReportInstanceAddedAsync(newInstance.AppId, newInstance.Name, CancellationToken.None);
+                var reportedName = !string.IsNullOrWhiteSpace(newInstance.Metadata?.Name)
+                    ? newInstance.Metadata.Name
+                    : newInstance.Name;
+                _ = _statsService.ReportInstanceAddedAsync(newInstance.AppId, reportedName, CancellationToken.None);
             }
 
             if (newInstance.AppId > 0)

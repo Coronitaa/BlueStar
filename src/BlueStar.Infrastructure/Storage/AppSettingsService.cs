@@ -443,6 +443,14 @@ public sealed class AppSettingsService
         await SaveAsync().ConfigureAwait(false);
     }
 
+    public DateTimeOffset? LastCommunitySyncUtc => _current.LastCommunitySyncUtc;
+
+    public async Task SetLastCommunitySyncUtcAsync(DateTimeOffset timestamp)
+    {
+        _current = _current with { LastCommunitySyncUtc = timestamp };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
     private sealed record AppSettings
     {
         public string? Language { get; init; }
@@ -457,6 +465,7 @@ public sealed class AppSettingsService
         public bool EnableAdvancedBuildOptions { get; init; } = false;
         public bool EnableDebugSystem { get; init; } = false;
         public string? CatalogManifestUrl { get; init; }
+        public DateTimeOffset? LastCommunitySyncUtc { get; init; }
 
         public string? DefaultExploreSort { get; init; } = "Reviews";
         public bool DefaultExploreSortDescending { get; init; } = true;

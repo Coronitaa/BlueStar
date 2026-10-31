@@ -176,7 +176,10 @@ public sealed class GameLauncherService : IGameLauncher
 
                 if (_statsService != null && instance.AppId > 0)
                 {
-                    _ = _statsService.ReportGamePlayAsync((int)instance.AppId, instance.Name, duration, CancellationToken.None);
+                    var reportedName = !string.IsNullOrWhiteSpace(instance.Metadata?.Name)
+                        ? instance.Metadata.Name
+                        : instance.Name;
+                    _ = _statsService.ReportGamePlayAsync((int)instance.AppId, reportedName, duration, CancellationToken.None);
                 }
             };
 
