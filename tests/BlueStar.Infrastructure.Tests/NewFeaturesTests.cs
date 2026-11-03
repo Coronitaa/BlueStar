@@ -435,7 +435,7 @@ public class NewFeaturesTests
             {
                 success.Should().BeTrue();
                 File.Exists(Path.Combine(dataFolder, "steam_api64.dll")).Should().BeTrue();
-                File.Exists(Path.Combine(dataFolder, "steam_api64_valve.dll")).Should().BeTrue();
+                File.Exists(Path.Combine(dataFolder, "steam_api64_original.dll")).Should().BeTrue();
                 Directory.Exists(Path.Combine(dataFolder, "steam_settings")).Should().BeTrue();
             }
         }

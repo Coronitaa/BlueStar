@@ -142,7 +142,7 @@ public sealed class EmulatorRatingService : IEmulatorRatingService
             IsActive = isValveActive
         });
 
-        // Re:Goldberg LAN / Offline mode (Available for Unreal, Godot, Unity, Generic)
+        // ReFix LAN / Offline mode (Available for Unreal, Godot, Unity, Generic)
         var goldbergKey = $"{instance.AppId}_refix_goldberg";
         var goldbergStats = _ratings.TryGetValue(goldbergKey, out var gs) ? gs : new RatingData { Positive = 0, Negative = 0 };
         var isGoldbergActive = string.Equals(instance.EmulatorId, "refix_goldberg", StringComparison.OrdinalIgnoreCase);
@@ -151,9 +151,9 @@ public sealed class EmulatorRatingService : IEmulatorRatingService
         {
             Id = "refix_goldberg",
             EmulatorId = "refix",
-            Name = "Re:Goldberg LAN (Steam-Free)",
+            Name = "ReFix LAN (Steam-Free)",
             Mode = "goldberg",
-            Description = "100% standalone local emulation based on Goldberg backend. Enables LAN play and local saves without requiring Steam.",
+            Description = "ReFix's own Steam emulator, no Steam client needed. Players on the same network find each other automatically, every PC gets its own identity and progress is saved locally.",
             BadgeText = "LAN Offline",
             PositiveVotes = goldbergStats.Positive,
             NegativeVotes = goldbergStats.Negative,

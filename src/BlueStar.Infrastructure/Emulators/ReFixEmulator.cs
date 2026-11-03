@@ -24,7 +24,7 @@ public sealed class ReFixEmulator : IEmulator
 
     public string Id => "refix";
     public string DisplayName => "ReFix Emulator";
-    public string Description => "Universal game emulation backend supporting Steam Online (Spacewar 480) and Re:Goldberg LAN multiplayer.";
+    public string Description => "Universal game emulation backend supporting Steam Online (Spacewar 480) and ReFix LAN multiplayer.";
 
     public ReFixEmulator(ILogger<ReFixEmulator> logger)
     {
@@ -89,21 +89,31 @@ public sealed class ReFixEmulator : IEmulator
             current = current.Parent;
         }
 
-        foreach (var path in candidates)
+        var suites = candidates.Where(IsDeploySuite).ToList();
+        if (suites.Count == 0) return null;
+
+        // A suite downloaded into AppData by an earlier ReFix update must not shadow a newer one bundled with the app.
+        var chosen = suites[0];
+        if (string.Equals(chosen, appDataTools, StringComparison.OrdinalIgnoreCase))
         {
-            if (Directory.Exists(path))
+            var bundled = suites.FirstOrDefault(p => !string.Equals(p, appDataTools, StringComparison.OrdinalIgnoreCase));
+            if (bundled != null &&
+                ParseSuiteVersion(GetCurrentVersionInternal(bundled)) > ParseSuiteVersion(GetCurrentVersionInternal(chosen)))
             {
-                var binDir = Path.Combine(path, "bin");
-                if (File.Exists(Path.Combine(binDir, "steam_api64.dll")) ||
-                    File.Exists(Path.Combine(binDir, "deploy_helper.ps1")) ||
-                    File.Exists(Path.Combine(path, "AutoDeploy.bat")) ||
-                    File.Exists(Path.Combine(path, "Uninstall_ReFix.bat")))
-                {
-                    return path;
-                }
+                chosen = bundled;
             }
         }
-        return null;
+        return chosen;
+    }
+
+    private static bool IsDeploySuite(string path)
+    {
+        if (!Directory.Exists(path)) return false;
+        var binDir = Path.Combine(path, "bin");
+        return File.Exists(Path.Combine(binDir, "steam_api64.dll")) ||
+               File.Exists(Path.Combine(binDir, "deploy_helper.ps1")) ||
+               File.Exists(Path.Combine(path, "AutoDeploy.bat")) ||
+               File.Exists(Path.Combine(path, "Uninstall_ReFix.bat"));
     }
 
     /// <summary>
@@ -200,12 +210,12 @@ public sealed class ReFixEmulator : IEmulator
     public Task<EmulatorStatus> GetStatusAsync(GameInstance instance, CancellationToken ct = default)
     {
         bool isInstalled = IsEmulatorInstalled(instance.InstallPath);
-        string installedMode = GetInstalledMode(instance.InstallPath) ?? (instance.EmulatorId?.Contains("goldberg") == true ? "Re:Goldberg LAN" : "ReFix Online (Steam)");
+        string installedMode = GetInstalledMode(instance.InstallPath) ?? (instance.EmulatorId?.Contains("goldberg") == true ? "ReFix LAN" : "ReFix Online (Steam)");
         bool isActive = instance.EmulatorEnabled || isInstalled;
 
         string statusMsg = isInstalled ? $"Installed ({installedMode}) ● Ready" : "Not Installed";
         string backendInfo = isInstalled ? $"ReFix Deploy Suite v1.1.0 ({installedMode})" : "ReFix Suite Deployable";
-        string networkInfo = installedMode.Contains("Goldberg", StringComparison.OrdinalIgnoreCase)
+        string networkInfo = installedMode.Contains("LAN", StringComparison.Ordinal)
             ? "LAN Broadcast / Local Peer-to-Peer"
             : "Steam Online Spacewar (AppID 480)";
 
@@ -245,7 +255,9 @@ public sealed class ReFixEmulator : IEmulator
         {
             var hasReFixIni = Directory.GetFiles(installPath, "ReFix.ini", SafeEnumOptions).Length > 0;
             var hasValveBackup = Directory.GetFiles(installPath, "steam_api64_valve.dll", SafeEnumOptions).Length > 0 ||
-                                 Directory.GetFiles(installPath, "steam_api_valve.dll", SafeEnumOptions).Length > 0;
+                                 Directory.GetFiles(installPath, "steam_api_valve.dll", SafeEnumOptions).Length > 0 ||
+                                 Directory.GetFiles(installPath, "steam_api64_original.dll", SafeEnumOptions).Length > 0 ||
+                                 Directory.GetFiles(installPath, "steam_api_original.dll", SafeEnumOptions).Length > 0;
 
             var hasGoldbergBinary = Directory.GetFiles(installPath, "goldberg_steam_api64.dll", SafeEnumOptions).Length > 0 ||
                                     Directory.GetFiles(installPath, "goldberg_steam_api.dll", SafeEnumOptions).Length > 0 ||
@@ -284,7 +296,7 @@ public sealed class ReFixEmulator : IEmulator
                                     modeVal.Equals("offline", StringComparison.OrdinalIgnoreCase) ||
                                     modeVal.Equals("lan", StringComparison.OrdinalIgnoreCase))
                                 {
-                                    return "Re:Goldberg LAN";
+                                    return "ReFix LAN";
                                 }
                                 if (modeVal.Equals("valve", StringComparison.OrdinalIgnoreCase))
                                 {
@@ -301,11 +313,13 @@ public sealed class ReFixEmulator : IEmulator
             var hasGoldberg = Directory.GetFiles(installPath, "goldberg_steam_api64.dll", SafeEnumOptions).Length > 0 ||
                               Directory.GetFiles(installPath, "goldberg_steam_api.dll", SafeEnumOptions).Length > 0 ||
                               Directory.GetFiles(installPath, "local_save.txt", SafeEnumOptions).Length > 0;
-            if (hasGoldberg) return "Re:Goldberg LAN";
+            if (hasGoldberg) return "ReFix LAN";
 
             // 3. Check for ReFix / Valve indicators
             var hasValveBackup = Directory.GetFiles(installPath, "steam_api64_valve.dll", SafeEnumOptions).Length > 0 ||
-                                 Directory.GetFiles(installPath, "steam_api_valve.dll", SafeEnumOptions).Length > 0;
+                                 Directory.GetFiles(installPath, "steam_api_valve.dll", SafeEnumOptions).Length > 0 ||
+                                 Directory.GetFiles(installPath, "steam_api64_original.dll", SafeEnumOptions).Length > 0 ||
+                                 Directory.GetFiles(installPath, "steam_api_original.dll", SafeEnumOptions).Length > 0;
             if (refixInis.Length > 0 || hasValveBackup) return "ReFix Online (Steam)";
         }
         catch { }
@@ -359,7 +373,7 @@ public sealed class ReFixEmulator : IEmulator
         var binDir = Directory.Exists(Path.Combine(deployPath, "bin")) ? Path.Combine(deployPath, "bin") : deployPath;
         var isGoldberg = optionId.Contains("goldberg", StringComparison.OrdinalIgnoreCase);
         var onlineMode = isGoldberg ? "goldberg" : "valve";
-        var modeDisplayName = isGoldberg ? "Re:Goldberg LAN (No Steam)" : "ReFix Online (Steam Spacewar 480)";
+        var modeDisplayName = isGoldberg ? "ReFix LAN (No Steam)" : "ReFix Online (Steam Spacewar 480)";
 
         _logger.LogInformation("Deploying ReFix ({Mode}) via ReFix_deploy scripts for {Name} at {Path}", onlineMode, instance.Name, instance.InstallPath);
 
@@ -506,23 +520,8 @@ public sealed class ReFixEmulator : IEmulator
                 _logger.LogWarning("deploy_helper.ps1 exited with code {Code}: {Error}", helperExitCode, helperError);
             }
 
-            // ─────────────────────────────────────────────────────────────
-            // STAGE 4: Shortcuts and auxiliary scripts (Steam Shortcuts)
-            // ─────────────────────────────────────────────────────────────
-            progress?.Report(new DeployProgress
-            {
-                Percentage = 75,
-                Message = "Configuring shortcuts and auxiliary scripts...",
-                CurrentStep = "Shortcuts"
-            });
-
-            if (!isGoldberg && Directory.Exists(exeDir) && UsesVersionDeployScripts(instance, deployPath))
-            {
-                var shortcutPs1 = Path.Combine(binDir, "add_steam_shortcut.ps1");
-                var shortcutBat = Path.Combine(binDir, "Install_ReFix_Steam_Shortcut.bat");
-                if (File.Exists(shortcutPs1)) File.Copy(shortcutPs1, Path.Combine(exeDir, "add_steam_shortcut.ps1"), overwrite: true);
-                if (File.Exists(shortcutBat)) File.Copy(shortcutBat, Path.Combine(exeDir, "Install_ReFix_Steam_Shortcut.bat"), overwrite: true);
-            }
+            // BlueStar launches the game itself: the suite's Steam shortcut scripts
+            // (Install_ReFix_Steam_Shortcut.bat / add_steam_shortcut.ps1) are not copied into the game.
 
             // ─────────────────────────────────────────────────────────────
             // STAGE 5: Firewall rule configuration with apply_firewall.ps1
@@ -826,6 +825,34 @@ public sealed class ReFixEmulator : IEmulator
         return (engineType, exeDir, gameExePath, gameName, detectedAppId);
     }
 
+    /// <summary>
+    /// Puts the game's own <paramref name="baseName"/>.dll back from the ReFix backups. *_original.dll is the game's pristine
+    /// DLL (ReFix 2.x keeps it in both modes) and wins over *_valve.dll / *_o.dll, which may hold an emulator backend.
+    /// </summary>
+    private static void RestoreSteamApiBackups(string targetDir, string baseName)
+    {
+        var restoredDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var suffix in new[] { "_original", "_valve", "_o" })
+        {
+            foreach (var backup in Directory.GetFiles(targetDir, $"{baseName}{suffix}.dll", SafeEnumOptions))
+            {
+                var dir = Path.GetDirectoryName(backup);
+                if (string.IsNullOrEmpty(dir)) continue;
+                try
+                {
+                    if (restoredDirs.Contains(dir))
+                    {
+                        File.Delete(backup);
+                        continue;
+                    }
+                    File.Move(backup, Path.Combine(dir, $"{baseName}.dll"), overwrite: true);
+                    restoredDirs.Add(dir);
+                }
+                catch { }
+            }
+        }
+    }
+
     private static void RestoreOriginalFilesFallback(string targetDir)
     {
         // 1. Restore winmm.dll from winmm_o.dll
@@ -852,41 +879,8 @@ public sealed class ReFixEmulator : IEmulator
         // 2. Restore original steam_api64.dll and steam_api.dll from backups
         try
         {
-            var valve64Backups = Directory.GetFiles(targetDir, "steam_api64_valve.dll", SafeEnumOptions)
-                .Concat(Directory.GetFiles(targetDir, "steam_api64_o.dll", SafeEnumOptions));
-
-            foreach (var valve in valve64Backups)
-            {
-                var dir = Path.GetDirectoryName(valve);
-                if (!string.IsNullOrEmpty(dir))
-                {
-                    var dest = Path.Combine(dir, "steam_api64.dll");
-                    try
-                    {
-                        if (File.Exists(dest)) File.Delete(dest);
-                        File.Move(valve, dest, overwrite: true);
-                    }
-                    catch { }
-                }
-            }
-
-            var valve32Backups = Directory.GetFiles(targetDir, "steam_api_valve.dll", SafeEnumOptions)
-                .Concat(Directory.GetFiles(targetDir, "steam_api_o.dll", SafeEnumOptions));
-
-            foreach (var valve in valve32Backups)
-            {
-                var dir = Path.GetDirectoryName(valve);
-                if (!string.IsNullOrEmpty(dir))
-                {
-                    var dest = Path.Combine(dir, "steam_api.dll");
-                    try
-                    {
-                        if (File.Exists(dest)) File.Delete(dest);
-                        File.Move(valve, dest, overwrite: true);
-                    }
-                    catch { }
-                }
-            }
+            RestoreSteamApiBackups(targetDir, "steam_api64");
+            RestoreSteamApiBackups(targetDir, "steam_api");
         }
         catch { }
 

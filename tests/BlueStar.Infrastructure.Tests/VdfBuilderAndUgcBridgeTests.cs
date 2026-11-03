@@ -236,7 +236,7 @@ public class VdfBuilderAndUgcBridgeTests : IDisposable
     }
 
     [Fact]
-    public void GetInstalledMode_ReturnsReGoldbergLan_WhenReFixIniSpecifiesGoldberg()
+    public void GetInstalledMode_ReturnsReFixLan_WhenReFixIniSpecifiesGoldberg()
     {
         var goldbergDir = Path.Combine(_testDir, "GoldbergReFixGame");
         Directory.CreateDirectory(goldbergDir);
@@ -246,7 +246,7 @@ public class VdfBuilderAndUgcBridgeTests : IDisposable
         File.WriteAllText(Path.Combine(goldbergDir, "ReFix.ini"), "[Online]\nMode=goldberg\n");
 
         Emulators.ReFixEmulator.IsEmulatorInstalled(goldbergDir).Should().BeTrue();
-        Emulators.ReFixEmulator.GetInstalledMode(goldbergDir).Should().Be("Re:Goldberg LAN");
+        Emulators.ReFixEmulator.GetInstalledMode(goldbergDir).Should().Be("ReFix LAN");
     }
 
     [Fact]
@@ -260,6 +260,18 @@ public class VdfBuilderAndUgcBridgeTests : IDisposable
 
         Emulators.ReFixEmulator.IsEmulatorInstalled(valveDir).Should().BeTrue();
         Emulators.ReFixEmulator.GetInstalledMode(valveDir).Should().Be("ReFix Online (Steam)");
+    }
+
+    [Fact]
+    public void IsEmulatorInstalled_ReturnsTrue_WhenReFix2OriginalBackupExists()
+    {
+        var refix2Dir = Path.Combine(_testDir, "ReFix2Game");
+        Directory.CreateDirectory(refix2Dir);
+        File.WriteAllText(Path.Combine(refix2Dir, "steam_api64.dll"), "proxy");
+        File.WriteAllText(Path.Combine(refix2Dir, "steam_api64_original.dll"), "game's own steam_api64");
+
+        Emulators.ReFixEmulator.IsEmulatorInstalled(refix2Dir).Should().BeTrue();
+        Emulators.ReFixEmulator.GetInstalledMode(refix2Dir).Should().Be("ReFix Online (Steam)");
     }
 
     [Fact]

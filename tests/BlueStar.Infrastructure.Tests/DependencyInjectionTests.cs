@@ -62,7 +62,9 @@ public class DependencyInjectionTests
     {
         var deployPath = ReFixEmulator.GetReFixDeployPath();
         deployPath.Should().NotBeNullOrWhiteSpace();
-        File.Exists(System.IO.Path.Combine(deployPath!, "bin", "steam_api64.dll")).Should().BeTrue();
+        File.Exists(System.IO.Path.Combine(deployPath!, "bin", "deploy_helper.ps1")).Should().BeTrue();
+        File.Exists(System.IO.Path.Combine(deployPath!, "bin", "lan", "steam_api64.dll")).Should().BeTrue();
+        File.Exists(System.IO.Path.Combine(deployPath!, "bin", "online", "steam_api64.dll")).Should().BeTrue();
     }
 
     [Fact]

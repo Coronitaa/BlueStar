@@ -990,9 +990,9 @@
     <sys:String x:Key="String_InstallModalEmulatorValve">ReFix Online</sys:String>
     <sys:String x:Key="String_InstallModalEmulatorValveDesc">Steam Spacewar (AppID 480).</sys:String>
     <sys:String x:Key="String_InstallModalEmulatorValveInfo">Permite jugar online e invitar amigos mediante Steam utilizando Spacewar (AppID 480). Compatible con guardado en la nube.</sys:String>
-    <sys:String x:Key="String_InstallModalEmulatorGoldberg">Re:Goldberg LAN</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorGoldberg">ReFix LAN</sys:String>
     <sys:String x:Key="String_InstallModalEmulatorGoldbergDesc">Offline / LAN (Steam-Free).</sys:String>
-    <sys:String x:Key="String_InstallModalEmulatorGoldbergInfo">100% independiente de Steam. Permite multijugador en red local (LAN) y guarda las partidas localmente sin requerir que Steam esté abierto.</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorGoldbergInfo">Emulador de Steam propio de ReFix, sin necesidad del cliente de Steam. Los jugadores de la misma red local (LAN) se encuentran automáticamente, cada PC recibe su propia identidad y las partidas se guardan localmente.</sys:String>
     <sys:String x:Key="String_InstallModalEmulatorBadgeOnline">Online</sys:String>
     <sys:String x:Key="String_InstallModalEmulatorBadgeLan">LAN / Offline</sys:String>
     <sys:String x:Key="String_InstallModalEmulatorBadgeVanilla">Vanilla</sys:String>

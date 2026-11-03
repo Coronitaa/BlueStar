@@ -3047,8 +3047,8 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }
         else
         {
-            optionId = Instance.EmulatorId ?? (InstalledEmulatorMode?.Contains("Goldberg", StringComparison.OrdinalIgnoreCase) == true ? "refix_goldberg" : "refix_valve");
-            displayName = InstalledEmulatorMode ?? (optionId == "refix_goldberg" ? "Re:Goldberg LAN" : "ReFix Online (Steam)");
+            optionId = Instance.EmulatorId ?? (InstalledEmulatorMode?.Contains("LAN", StringComparison.Ordinal) == true ? "refix_goldberg" : "refix_valve");
+            displayName = InstalledEmulatorMode ?? (optionId == "refix_goldberg" ? "ReFix LAN" : "ReFix Online (Steam)");
             emulatorVersion = Instance.InstalledEmulatorVersion ?? (_refixUpdateService?.GetCurrentInstalledVersion() ?? ReFixEmulator.GetCurrentVersion());
         }
 
@@ -6400,7 +6400,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 if (IsEmulatorInstalled)
                 {
                     InstalledEmulatorMode = ReFixEmulator.GetInstalledMode(Instance.InstallPath)
-                        ?? (Instance.EmulatorId?.Contains("goldberg", StringComparison.OrdinalIgnoreCase) == true ? "Re:Goldberg LAN" : "ReFix Online (Steam)");
+                        ?? (Instance.EmulatorId?.Contains("goldberg", StringComparison.OrdinalIgnoreCase) == true ? "ReFix LAN" : "ReFix Online (Steam)");
                 }
                 else
                 {
@@ -6981,7 +6981,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
         try
         {
-            var optionId = Instance.EmulatorId ?? (InstalledEmulatorMode?.Contains("Goldberg", StringComparison.OrdinalIgnoreCase) == true ? "refix_goldberg" : "refix_valve");
+            var optionId = Instance.EmulatorId ?? (InstalledEmulatorMode?.Contains("LAN", StringComparison.Ordinal) == true ? "refix_goldberg" : "refix_valve");
 
             var progressReporter = new Progress<DeployProgress>(p =>
             {

@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 setlocal disabledelayedexpansion
-title ReFix - Universal AutoDeploy Tool v1.4.2
+title ReFix LAN - Universal AutoDeploy Tool v2.0.1
 
 set "SCRIPT_DIR=%~dp0"
 if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
@@ -12,9 +12,9 @@ echo                   ReFix Universal AutoDeploy Tool
 echo ====================================================================
 echo:
 
-if not exist "%BIN_DIR%\steam_api64.dll" (
+if not exist "%BIN_DIR%\online\steam_api64.dll" if not exist "%BIN_DIR%\lan\steam_api64.dll" if not exist "%BIN_DIR%\steam_api64.dll" (
     echo [ERROR] Required binaries not found in "%BIN_DIR%"!
-    echo Please make sure the 'bin' folder contains steam_api64.dll, etc.
+    echo Please make sure 'bin\online' ^(ReFix Online^) and/or 'bin\lan' ^(ReFix LAN^) contain steam_api64.dll.
     goto ERROR_EXIT
 )
 
@@ -203,12 +203,15 @@ echo  [1] ReFix Online via Steam
 echo      - Uses Steam client and Spacewar (AppID 480).
 echo      - Enables online multiplayer matchmaking via Steam servers.
 echo:
-echo  [2] Re:Goldberg LAN without Steam
-echo      - 100%% autonomous local emulation based on gbe_fork backend.
-echo      - Allows playing on LAN without requiring Steam installed or running.
-echo      - Local broadcast discovery, portable saves, and persistent identity.
+echo  [2] ReFix LAN without Steam
+echo      - Standalone ReFix LAN emulator: Steam does not need to be installed or running.
+echo      - Finds other ReFix LAN players of the same game on the local network.
+echo      - Automatic per-PC identity: copy the patched game to other PCs as-is.
+echo      - Several instances on the same PC get distinct identities.
 echo:
 set "ONLINE_MODE_CHOICE=1"
+:: Unattended deploys pick the product with REFIX_DEPLOY_MODE=1 (Online) or 2 (LAN)
+if not "%REFIX_DEPLOY_MODE%"=="" set "ONLINE_MODE_CHOICE=%REFIX_DEPLOY_MODE%"
 if not "%REFIX_NON_INTERACTIVE%"=="1" set /p "ONLINE_MODE_CHOICE=Select Option [1-2] (Default: 1): "
 if "%ONLINE_MODE_CHOICE%"=="" set "ONLINE_MODE_CHOICE=1"
 
@@ -247,7 +250,7 @@ goto AFTER_MODE_PROMPTS
 
 :GOLDBERG_PROMPTS
 echo:
-echo [INFO] Selected Mode: Re:Goldberg LAN without Steam
+echo [INFO] Selected Mode: ReFix LAN without Steam
 echo:
 set "CUSTOM_USERNAME=%EXISTING_USERNAME%"
 if "%CUSTOM_USERNAME%"=="" set "CUSTOM_USERNAME=%USERNAME%"
@@ -340,24 +343,25 @@ if exist "%BIN_DIR%\select_dlcs.ps1" (
 set "BYPASS_LICENSE=true"
 if "%DLC_MODE%"=="none" set "BYPASS_LICENSE=false"
 
-if "%ONLINE_MODE_NAME%"=="goldberg" (
-    echo:
-    echo ====================================================================
-    echo             Windows Firewall Configuration for LAN
-    echo ====================================================================
-    echo:
-    echo  Do you want to automatically authorize the game and UDP port %LAN_PORT%
-    echo  in Windows Firewall to ensure LAN discovery?
-    echo:
-    set "FW_CHOICE="
-    set /p "FW_CHOICE=Apply Firewall rules? [Y/N] (Default: Y): "
-    if "%FW_CHOICE%"=="" set "FW_CHOICE=Y"
-    if /i "%FW_CHOICE%"=="N" (
-        set "FIREWALL_AUTO_APPLY=false"
-    ) else (
-        set "FIREWALL_AUTO_APPLY=true"
-    )
-)
+:: Windows Firewall rules for LAN. Labels instead of a parenthesized block: with delayed expansion
+:: disabled, %FW_CHOICE% inside a block is expanded before set /p runs, so "N" was never honoured.
+set "FIREWALL_AUTO_APPLY=false"
+if not "%ONLINE_MODE_NAME%"=="goldberg" goto AFTER_FIREWALL_PROMPT
+echo:
+echo ====================================================================
+echo             Windows Firewall Configuration for LAN
+echo ====================================================================
+echo:
+echo  Do you want to automatically authorize the game and UDP port %LAN_PORT%
+echo  in Windows Firewall to ensure LAN discovery?
+echo:
+set "FW_CHOICE=Y"
+:: Unattended deploys never touch Windows Firewall unless REFIX_FIREWALL=Y is set explicitly
+if "%REFIX_NON_INTERACTIVE%"=="1" set "FW_CHOICE=N"
+if "%REFIX_NON_INTERACTIVE%"=="1" if /i "%REFIX_FIREWALL%"=="Y" set "FW_CHOICE=Y"
+if not "%REFIX_NON_INTERACTIVE%"=="1" set /p "FW_CHOICE=Apply Firewall rules? [Y/N] (Default: Y): "
+if /i not "%FW_CHOICE%"=="N" set "FIREWALL_AUTO_APPLY=true"
+:AFTER_FIREWALL_PROMPT
 
 echo:
 echo ====================================================================
@@ -450,7 +454,7 @@ echo  DLCs: Mode=%DLC_MODE% [%DLCS%]
 goto AFTER_SUMMARY
 
 :SUMMARY_GOLDBERG
-echo  Mode: Re:Goldberg LAN without Steam [Offline / gbe_fork]
+echo  Mode: ReFix LAN without Steam [standalone, no Steam client]
 echo  Location: "%EXE_DIR%"
 echo  AppID: RealAppId=%REAL_APPID%
 echo  DLCs: Mode=%DLC_MODE% [%DLCS%]

@@ -8,6 +8,7 @@ param(
     [string]$PhotonRegion = "",
     [string]$GameName = "",
     [string]$UserName = "",
+    [string]$SteamId = "",
     [string]$RealAppId = "480",
     [string]$MaskAppId = "480",
     [string]$Language = "english",
@@ -30,6 +31,8 @@ if (-not $EngineType -and $env:REFIX_ENGINE_TYPE) { $EngineType = $env:REFIX_ENG
 if (-not $OnlineMode -and $env:REFIX_ONLINE_MODE) { $OnlineMode = $env:REFIX_ONLINE_MODE }
 if (-not $GameName  -and $env:REFIX_GAME_NAME)  { $GameName  = $env:REFIX_GAME_NAME }
 if (-not $UserName  -and $env:REFIX_USERNAME)   { $UserName  = $env:REFIX_USERNAME }
+if (-not $SteamId   -and $env:REFIX_STEAM_ID)   { $SteamId   = $env:REFIX_STEAM_ID }
+if (-not $SteamId   -and $env:REFIX_STEAMID)    { $SteamId   = $env:REFIX_STEAMID }
 if ((-not $RealAppId -or $RealAppId -eq "480") -and $env:REFIX_REAL_APPID) { $RealAppId = $env:REFIX_REAL_APPID }
 if ((-not $MaskAppId -or $MaskAppId -eq "480") -and $env:REFIX_MASK_APPID) { $MaskAppId = $env:REFIX_MASK_APPID }
 if ((-not $ListenPort -or $ListenPort -eq "47584") -and $env:REFIX_LAN_PORT) { $ListenPort = $env:REFIX_LAN_PORT }
@@ -44,6 +47,19 @@ if ($TargetDir) { $TargetDir = $TargetDir.Trim().Trim('"').TrimEnd('\').TrimEnd(
 if ($BinDir)    { $BinDir    = $BinDir.Trim().Trim('"').TrimEnd('\').TrimEnd('/') }
 if ($ExeDir)    { $ExeDir    = $ExeDir.Trim().Trim('"').TrimEnd('\').TrimEnd('/') }
 if (-not $ExeDir) { $ExeDir  = $TargetDir }
+
+# ReFix Online and ReFix LAN are separate products with their own binaries:
+#   bin\online\  steam_api64.dll / winmm.dll / EOSSDK / x86\steam_api.dll built from the ReFix Online branch
+#   bin\lan\     standalone ReFix LAN emulator (no Steam client, no Valve DLL)
+# No fallback to bin\ itself: deploying one product's DLL for the other would silently break the game.
+$productName = if ($OnlineMode -in @("goldberg", "offline", "lan")) { "lan" } else { "online" }
+$ProductBinDir = Join-Path $BinDir $productName
+if (-not (Test-Path -LiteralPath (Join-Path $ProductBinDir "steam_api64.dll"))) {
+    $buildHint = if ($productName -eq "lan") { "build.bat" } else { "build_online.bat" }
+    Write-Host "[ERROR] ReFix $productName binaries not found in $ProductBinDir (run $buildHint)" -ForegroundColor Red
+    exit 1
+}
+Write-Host "[*] ReFix product: $productName (binaries from $ProductBinDir)" -ForegroundColor Cyan
 
 if (-not (Test-Path -LiteralPath $TargetDir)) {
     Write-Host "[ERROR] Target directory does not exist: $TargetDir" -ForegroundColor Red
@@ -67,7 +83,8 @@ function Get-Or-Generate-Identity {
     param(
         [string]$ConfigPath,
         [string]$InputName,
-        [string]$BasePath
+        [string]$BasePath,
+        [string]$InputSteamId = ""
     )
 
     $finalSteamId = ""
@@ -94,6 +111,12 @@ function Get-Or-Generate-Identity {
                 }
             }
         }
+    }
+
+    # If an explicit SteamID was provided during deployment, prioritize it
+    if ($InputSteamId -and $InputSteamId.Trim() -ne "" -and $InputSteamId.Trim() -match "^[0-9]{15,20}$") {
+        $finalSteamId = $InputSteamId.Trim()
+        $autoGenerateSteamId = $false
     }
 
     # If an explicit name was provided during deployment, prioritize it
@@ -404,9 +427,13 @@ BypassLicenseCheck = $bypassVal
 DLCs = $($P.DLCs)
 
 [User]
+; IdentityMode = auto  -> SteamID is derived from each PC (MachineGuid + instance slot). The patched game
+;                         can be copied to other PCs as-is and every player still gets a distinct identity.
+; IdentityMode = fixed -> always use SteamId below (same identity wherever this folder runs).
+IdentityMode = $(if ($P.AutoGenerateSteamId -eq "true") { "auto" } else { "fixed" })
 Name = $($P.UserName)
 AutoGenerateSteamId = $($P.AutoGenerateSteamId)
-SteamId = $($P.SteamId)
+SteamId = $(if ($P.AutoGenerateSteamId -eq "true") { "" } else { $P.SteamId })
 
 [Matchmaking]
 EnableLobbyFilter = false
@@ -427,7 +454,7 @@ Mode = $eosMode
 DeviceIdAuth = $eosAuth
 
 [Debug]
-EnableLog = true
+EnableLog = false
 EnableConsole = false
 "@
     [System.IO.File]::WriteAllText($IniPath, $iniContent)
@@ -599,8 +626,32 @@ if ($pluginDirs32.Count -gt 0) {
 # No steam_api64.dll anywhere: fall back to the exe folder, unless the game is 32-bit only (it never loads it).
 if ($pluginDirs.Count -eq 0 -and $pluginDirs32.Count -eq 0) { $pluginDirs += $ExeDir }
 
-# Set by the Valve branch; other modes must still pass a boolean to Verify-ReFixDeployment.
+# Detect if game is 32-bit (x86) to prevent fatal 64-bit DLL injection into 32-bit processes
 $isX86Game = ($pluginDirs32.Count -gt 0)
+if (-not $isX86Game) {
+    $gameExesInDir = Get-ChildItem -LiteralPath $ExeDir -Filter "*.exe" -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -notlike "*UnityCrashHandler*" -and $_.Name -notlike "*crashpad*" }
+    
+    $candidateExes = @()
+    $mainExe = $gameExesInDir | Where-Object { $_.Name -like "*$GameName*" } | Select-Object -First 1
+    if ($mainExe) { $candidateExes += $mainExe }
+    $candidateExes += ($gameExesInDir | Where-Object { $_.Name -notlike "*Launcher*" -and ($mainExe -eq $null -or $_.FullName -ne $mainExe.FullName) })
+    $candidateExes += ($gameExesInDir | Where-Object { $_.Name -like "*Launcher*" })
+
+    foreach ($ge in $candidateExes) {
+        try {
+            $peBytes = [System.IO.File]::ReadAllBytes($ge.FullName)
+            if ($peBytes.Length -ge 0x40) {
+                $peOffset = [System.BitConverter]::ToInt32($peBytes, 0x3C)
+                if ($peOffset + 6 -le $peBytes.Length) {
+                    $mach = [System.BitConverter]::ToUInt16($peBytes, $peOffset + 4)
+                    if ($mach -eq 0x014c) { $isX86Game = $true; break }
+                    elseif ($mach -eq 0x8664) { $isX86Game = $false; break }
+                }
+            }
+        } catch {}
+    }
+}
 
 switch ($OnlineMode) {
     "valve" {
@@ -608,7 +659,7 @@ switch ($OnlineMode) {
         # Uses ReFix proxy steam_api64.dll forwarding to steam_api64_valve.dll + AppID spoofing.
         # Enables direct .exe launching with full Steam Overlay injection.
         Write-Host "  [Valve Mode] Deploying ReFix proxy steam_api64.dll with Steam Overlay injection..." -ForegroundColor Cyan
-        $proxyPath = Join-Path $BinDir "steam_api64.dll"
+        $proxyPath = Join-Path $ProductBinDir "steam_api64.dll"
         $valveStockDll = Join-Path $BinDir "valve\steam_api64.dll"
         $goldbergDll = Join-Path $BinDir "goldberg\steam_api64.dll"
         if (-not (Test-Path -LiteralPath $proxyPath)) {
@@ -675,7 +726,7 @@ switch ($OnlineMode) {
 
         # Also deploy x86 proxy if 32-bit game detected
         if ($pluginDirs32.Count -gt 0) {
-            $proxyPath32 = Join-Path $BinDir "x86\steam_api.dll"
+            $proxyPath32 = Join-Path $ProductBinDir "x86\steam_api.dll"
             if (Test-Path -LiteralPath $proxyPath32) {
                 foreach ($dir32 in $pluginDirs32) {
                     $valvePath32 = Join-Path $dir32 "steam_api_o.dll"
@@ -705,40 +756,13 @@ switch ($OnlineMode) {
             }
         }
 
-        # Detect if game is 32-bit (x86) to prevent fatal 64-bit DLL injection into 32-bit processes
-        $isX86Game = ($pluginDirs32.Count -gt 0)
-        if (-not $isX86Game) {
-            $gameExesInDir = Get-ChildItem -LiteralPath $ExeDir -Filter "*.exe" -File -ErrorAction SilentlyContinue |
-                Where-Object { $_.Name -notlike "*UnityCrashHandler*" -and $_.Name -notlike "*crashpad*" }
-            
-            $candidateExes = @()
-            $mainExe = $gameExesInDir | Where-Object { $_.Name -like "*$GameName*" } | Select-Object -First 1
-            if ($mainExe) { $candidateExes += $mainExe }
-            $candidateExes += ($gameExesInDir | Where-Object { $_.Name -notlike "*Launcher*" -and ($mainExe -eq $null -or $_.FullName -ne $mainExe.FullName) })
-            $candidateExes += ($gameExesInDir | Where-Object { $_.Name -like "*Launcher*" })
-
-            foreach ($ge in $candidateExes) {
-                try {
-                    $peBytes = [System.IO.File]::ReadAllBytes($ge.FullName)
-                    if ($peBytes.Length -ge 0x40) {
-                        $peOffset = [System.BitConverter]::ToInt32($peBytes, 0x3C)
-                        if ($peOffset + 6 -le $peBytes.Length) {
-                            $mach = [System.BitConverter]::ToUInt16($peBytes, $peOffset + 4)
-                            if ($mach -eq 0x014c) { $isX86Game = $true; break }
-                            elseif ($mach -eq 0x8664) { $isX86Game = $false; break }
-                        }
-                    }
-                } catch {}
-            }
-        }
-
         # Also deploy winmm.dll to ExeDir for early Steam Overlay injection (64-bit only)
         # Note: Games that inspect loaded modules (e.g. Phasmophobia) detect root winmm.dll and self-terminate.
         $skipWinmm = $false
         if ($env:REFIX_SKIP_WINMM -eq "1" -or $GameName -match "Phasmophobia" -or $TargetDir -match "Phasmophobia" -or $ExeDir -match "Phasmophobia") {
             $skipWinmm = $true
         }
-        $winmmPath = Join-Path $BinDir "winmm.dll"
+        $winmmPath = Join-Path $ProductBinDir "winmm.dll"
         if ((Test-Path -LiteralPath $winmmPath) -and (-not $isX86Game) -and (-not $skipWinmm)) {
             $targetWinmm = Join-Path $ExeDir "winmm.dll"
             $targetWinmmOrig = Join-Path $ExeDir "winmm_o.dll"
@@ -779,7 +803,7 @@ switch ($OnlineMode) {
         }
 
         # Deploy ReFix companion tools (such as FusionShared) if present
-        $refixBin = Join-Path $BinDir "ReFix"
+        $refixBin = Join-Path $ProductBinDir "ReFix"
         if (Test-Path -LiteralPath $refixBin) {
             try {
                 $targetRefix = Join-Path $ExeDir "ReFix"
@@ -792,7 +816,7 @@ switch ($OnlineMode) {
 
         # Synchronize ReFix.ini in ExeDir
         $reFixIniPath = Join-Path $ExeDir "ReFix.ini"
-        $identity = Get-Or-Generate-Identity -ConfigPath $reFixIniPath -InputName $UserName -BasePath $TargetDir
+        $identity = Get-Or-Generate-Identity -ConfigPath $reFixIniPath -InputName $UserName -BasePath $TargetDir -InputSteamId $SteamId
         $finalUserName = if ($UserName) { $UserName } else { $identity.Name }
         $finalSteamId = $identity.SteamId
         $filterVal = if ($RealAppId -and $RealAppId -ne "0") { $RealAppId } else { "480" }
@@ -830,7 +854,7 @@ switch ($OnlineMode) {
         # --- Photon Mode (Method 2) ---
         # Deploys ReFix proxy steam_api64.dll and BepInEx + NekogiriFix
         Write-Host "  [Photon Mode] Deploying ReFix proxy steam_api64.dll..." -ForegroundColor Cyan
-        $proxyPath = Join-Path $BinDir "steam_api64.dll"
+        $proxyPath = Join-Path $ProductBinDir "steam_api64.dll"
         if (-not (Test-Path $proxyPath)) {
             Write-Host "  [ERROR] ReFix proxy steam_api64.dll not found at: $proxyPath" -ForegroundColor Red
             exit 1
@@ -860,7 +884,7 @@ switch ($OnlineMode) {
 
         # Synchronize unified ReFix.ini in ExeDir for UNAE and DRPI
         $reFixIniPath = Join-Path $ExeDir "ReFix.ini"
-        $identity = Get-Or-Generate-Identity -ConfigPath $reFixIniPath -InputName $UserName -BasePath $TargetDir
+        $identity = Get-Or-Generate-Identity -ConfigPath $reFixIniPath -InputName $UserName -BasePath $TargetDir -InputSteamId $SteamId
         $finalUserName = if ($UserName) { $UserName } else { $identity.Name }
         $finalSteamId = $identity.SteamId
         $filterVal = if ($RealAppId -and $RealAppId -ne "0") { $RealAppId } else { "480" }
@@ -898,11 +922,25 @@ switch ($OnlineMode) {
         # --- Mode 2: Re:Goldberg LAN sin Steam ---
         # Deploys Goldberg Steam Emulator backend with complete local settings synchronization,
         # persistent identity, LAN matchmaking discovery, and portable saves.
-        Write-Host "  [Re:Goldberg LAN Mode] Deploying Goldberg Steam Emulator backend..." -ForegroundColor Cyan
-        $goldbergDll = Join-Path $BinDir "goldberg\steam_api64.dll"
-        if (-not (Test-Path $goldbergDll)) {
-            Write-Host "  [ERROR] Goldberg steam_api64.dll not found at: $goldbergDll" -ForegroundColor Red
-            exit 1
+        # ReFix LAN emulates Steam inside steam_api64.dll (LanCore): no Steam client, no Valve DLL and no
+        # Goldberg backend are needed on x64. Goldberg is only used as the 32-bit backend further below.
+        Write-Host "  [ReFix LAN Mode] Deploying standalone ReFix LAN Steam emulator..." -ForegroundColor Cyan
+
+        # ReFix LAN has no winmm loader. A ReFix Online winmm.dll left by an earlier Online deploy would load
+        # the Online product into the same process, so remove it and restore the game's own winmm if any.
+        $lanWinmm = Join-Path $ExeDir "winmm.dll"
+        $lanWinmmOrig = Join-Path $ExeDir "winmm_o.dll"
+        if (Test-Path -LiteralPath $lanWinmm) {
+            $winmmText = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($lanWinmm))
+            if ($winmmText.Contains("ReFix")) {
+                Remove-Item -LiteralPath $lanWinmm -Force
+                if (Test-Path -LiteralPath $lanWinmmOrig) {
+                    Rename-Item -LiteralPath $lanWinmmOrig -NewName "winmm.dll" -Force
+                    Write-Host "  [OK] Removed ReFix Online winmm.dll and restored the game's winmm.dll in $ExeDir" -ForegroundColor Green
+                } else {
+                    Write-Host "  [OK] Removed ReFix Online winmm.dll from $ExeDir (not used by ReFix LAN)" -ForegroundColor Green
+                }
+            }
         }
 
         # Step 2a: Generate steam_interfaces.txt from original DLL if interface generator is available
@@ -957,21 +995,13 @@ switch ($OnlineMode) {
                 }
             }
 
-            $proxyPath = Join-Path $BinDir "steam_api64.dll"
+            $proxyPath = Join-Path $ProductBinDir "steam_api64.dll"
             $origPath  = Join-Path $dir "steam_api64_original.dll"
 
-            # Preserve genuine Valve DLL before placing Goldberg as steam_api64_valve.dll
-            if (Test-Path -LiteralPath $valvePath) {
-                if ((Get-Item -LiteralPath $valvePath).Length -ne (Get-Item -LiteralPath $goldbergDll).Length) {
-                    if (-not (Test-Path -LiteralPath $origPath)) {
-                        Copy-Item -LiteralPath $valvePath -Destination $origPath -Force
-                        Write-Host "  [OK] Preserved genuine Valve DLL -> steam_api64_original.dll in $dir" -ForegroundColor Green
-                    }
-                }
-            } elseif (Test-Path -LiteralPath $steamPath) {
+            # Preserve the game's genuine Steam DLL so Uninstall can restore it
+            if (Test-Path -LiteralPath $steamPath) {
                 $isAlreadyProxy = (Test-Path -LiteralPath $proxyPath) -and ((Get-Item -LiteralPath $steamPath).Length -eq (Get-Item -LiteralPath $proxyPath).Length)
-                $isAlreadyGoldberg = ((Get-Item -LiteralPath $steamPath).Length -eq (Get-Item -LiteralPath $goldbergDll).Length)
-                if ((-not $isAlreadyProxy) -and (-not $isAlreadyGoldberg)) {
+                if (-not $isAlreadyProxy) {
                     if (-not (Test-Path -LiteralPath $origPath)) {
                         Copy-Item -LiteralPath $steamPath -Destination $origPath -Force
                         Write-Host "  [OK] Preserved genuine Valve DLL -> steam_api64_original.dll in $dir" -ForegroundColor Green
@@ -980,71 +1010,71 @@ switch ($OnlineMode) {
             }
 
             try {
-                # Place Goldberg DLL as steam_api64_valve.dll
-                Copy-Item -LiteralPath $goldbergDll -Destination $valvePath -Force -ErrorAction Stop
-                if (-not (Test-Path -LiteralPath $valvePath)) { throw "Target file not created: $valvePath" }
-                Write-Host "  [OK] Deployed Goldberg emulator backend as steam_api64_valve.dll to $dir" -ForegroundColor Green
-
-                # Deploy ReFix proxy as steam_api64.dll (provides SteamInternal_SteamAPI_Init and all API exports)
+                # Deploy ReFix LAN as steam_api64.dll (provides SteamInternal_SteamAPI_Init and all API exports)
                 Copy-Item -LiteralPath $proxyPath -Destination $steamPath -Force -ErrorAction Stop
                 if (-not (Test-Path -LiteralPath $steamPath)) { throw "Target file not created: $steamPath" }
                 Write-Host "  [OK] Deployed ReFix proxy steam_api64.dll to $dir" -ForegroundColor Green
             } catch {
-                Write-Host "  [ERROR] Failed to deploy Goldberg backend / proxy to $dir : $_" -ForegroundColor Red
+                Write-Host "  [ERROR] Failed to deploy ReFix LAN proxy to $dir : $_" -ForegroundColor Red
                 exit 1
             }
         }
 
-        # --- x86 deployment: Re:Goldberg for 32-bit games (Unity IL2CPP x86, etc.) ---
-        # Pattern: goldberg x86 -> steam_api_o.dll (backend loaded by proxy32)
-        #          ReFix proxy32 -> steam_api.dll (intercepts Steamworks.NET)
+        # --- x86 deployment: ReFix LAN for 32-bit games ---
+        # Modern Steamworks SDK (flat API, e.g. Unity/Steamworks.NET like Overcooked! 2): the native 32-bit
+        # ReFix LAN emulator (bin\lan\x86\steam_api.dll) replaces steam_api.dll. Same LanCore discovery and
+        # identity rules as x64, no backend DLL and no Steam client.
+        # Pre-flat-API SDKs (CS:GO 1.37, SDK ~1.39) use the same emulator: it serves their interface versions
+        # and exports (verified in-game). Goldberg x86 is only a fallback when bin\lan\x86 was not built.
         if ($pluginDirs32.Count -gt 0) {
             $goldbergDll32 = Join-Path $BinDir "goldberg\steam_api.dll"
-            $proxyDll32    = Join-Path $BinDir "x86\steam_api.dll"
+            $lanDll32      = Join-Path $ProductBinDir "x86\steam_api.dll"
+            $backendPath32 = $null
 
-            if (-not (Test-Path -LiteralPath $goldbergDll32)) {
-                Write-Host "  [NOTICE] Goldberg x86 backend not found at $goldbergDll32 - skipping x86 deployment" -ForegroundColor Yellow
-            } elseif (-not (Test-Path -LiteralPath $proxyDll32)) {
-                Write-Host "  [NOTICE] ReFix proxy x86 not found at $proxyDll32 - skipping x86 deployment (run build_x86.bat first)" -ForegroundColor Yellow
-            } else {
-                Write-Host "  [Re:Goldberg x86] Deploying 32-bit backend + proxy to $($pluginDirs32.Count) location(s)..." -ForegroundColor Cyan
-                foreach ($dir32 in $pluginDirs32) {
-                    $steamPath32   = Join-Path $dir32 "steam_api.dll"
-                    $backendPath32 = Join-Path $dir32 "steam_api_o.dll"     # Goldberg x86 backend
-                    $origPath32    = Join-Path $dir32 "steam_api_original.dll"  # Original Steam (preserved)
+            foreach ($dir32 in $pluginDirs32) {
+                $steamPath32 = Join-Path $dir32 "steam_api.dll"
+                $origPath32  = Join-Path $dir32 "steam_api_original.dll"  # game's genuine DLL (preserved)
 
-                    # Backup original steam_api.dll if it is not our proxy32 (compare sizes)
-                    if (Test-Path -LiteralPath $steamPath32) {
-                        $existingSz = (Get-Item -LiteralPath $steamPath32).Length
-                        $proxySz    = (Get-Item -LiteralPath $proxyDll32).Length
-                        if ($existingSz -ne $proxySz) {
-                            # Not our proxy - could be original Steam or goldberg; preserve as _original
-                            if (-not (Test-Path -LiteralPath $origPath32)) {
-                                Copy-Item -LiteralPath $steamPath32 -Destination $origPath32 -Force
-                                Write-Host "  [OK] Backed up original x86 steam_api.dll -> steam_api_original.dll in $dir32" -ForegroundColor Green
-                            }
-                        }
+                # Preserve the genuine DLL once: anything that is neither ReFix LAN nor Goldberg is the game's own
+                if ((Test-Path -LiteralPath $steamPath32) -and (-not (Test-Path -LiteralPath $origPath32))) {
+                    $existingSz = (Get-Item -LiteralPath $steamPath32).Length
+                    $isOurs = ((Test-Path -LiteralPath $lanDll32) -and $existingSz -eq (Get-Item -LiteralPath $lanDll32).Length) -or
+                              ((Test-Path -LiteralPath $goldbergDll32) -and $existingSz -eq (Get-Item -LiteralPath $goldbergDll32).Length)
+                    if (-not $isOurs) {
+                        Copy-Item -LiteralPath $steamPath32 -Destination $origPath32 -Force
+                        Write-Host "  [OK] Backed up original x86 steam_api.dll -> steam_api_original.dll in $dir32" -ForegroundColor Green
                     }
+                }
 
-                    try {
-                        # Deploy Goldberg x86 as backend (steam_api_o.dll loaded by proxy32's EnsureOrigLoaded)
-                        Copy-Item -LiteralPath $goldbergDll32 -Destination $backendPath32 -Force -ErrorAction Stop
-                        Write-Host "  [OK] Deployed Goldberg x86 emulator as steam_api_o.dll to $dir32" -ForegroundColor Green
-
-                        # Deploy ReFix proxy32 as steam_api.dll
-                        Copy-Item -LiteralPath $proxyDll32 -Destination $steamPath32 -Force -ErrorAction Stop
-                        Write-Host "  [OK] Deployed ReFix proxy x86 steam_api.dll to $dir32" -ForegroundColor Green
-                    } catch {
-                        Write-Host "  [ERROR] Failed to deploy x86 Goldberg emulator / proxy to $dir32 : $_" -ForegroundColor Red
+                try {
+                    if (Test-Path -LiteralPath $lanDll32) {
+                        Copy-Item -LiteralPath $lanDll32 -Destination $steamPath32 -Force -ErrorAction Stop
+                        Write-Host "  [OK] Deployed ReFix LAN x86 steam_api.dll to $dir32" -ForegroundColor Green
+                    } elseif (Test-Path -LiteralPath $goldbergDll32) {
+                        Copy-Item -LiteralPath $goldbergDll32 -Destination $steamPath32 -Force -ErrorAction Stop
+                        $backendPath32 = $steamPath32
+                        Write-Host "  [OK] Deployed standalone Goldberg x86 steam_api.dll to $dir32 (ReFix LAN x86 not built)" -ForegroundColor Green
+                    } else {
+                        Write-Host "  [ERROR] No 32-bit LAN emulator available (bin\lan\x86 or bin\goldberg) for $dir32" -ForegroundColor Red
                         exit 1
                     }
+                    # A previous Re:Goldberg proxy deploy left the backend as steam_api_o.dll; it is unused now
+                    $staleBackend = Join-Path $dir32 "steam_api_o.dll"
+                    if ((Test-Path -LiteralPath $staleBackend) -and (Test-Path -LiteralPath $goldbergDll32) -and
+                        (Get-Item -LiteralPath $staleBackend).Length -eq (Get-Item -LiteralPath $goldbergDll32).Length) {
+                        Remove-Item -LiteralPath $staleBackend -Force -ErrorAction SilentlyContinue
+                    }
+                } catch {
+                    Write-Host "  [ERROR] Failed to deploy 32-bit LAN emulator to $dir32 : $_" -ForegroundColor Red
+                    exit 1
+                }
 
-                    # Generate steam_interfaces.txt for this x86 dir if tool is available
-                    if (Test-Path -LiteralPath $genTool) {
+                    # Generate steam_interfaces.txt for the Goldberg fallback (reads the game's genuine DLL)
+                    if ($backendPath32 -and (Test-Path -LiteralPath $origPath32) -and (Test-Path -LiteralPath $genTool)) {
                         try {
                             $origWd32 = Get-Location
                             Set-Location $dir32
-                            & $genTool $backendPath32 | Out-Null
+                            & $genTool $origPath32 | Out-Null
                             Set-Location $origWd32
                             $genFile32 = Join-Path $dir32 "steam_interfaces.txt"
                             if (Test-Path $genFile32) {
@@ -1054,7 +1084,6 @@ switch ($OnlineMode) {
                             Write-Host "  [NOTICE] x86 interface generator: $_" -ForegroundColor Yellow
                         }
                     }
-                }
             }
         }
     }
@@ -1065,12 +1094,12 @@ switch ($OnlineMode) {
 # ============================================================
 if ($OnlineMode -in @("goldberg", "offline", "lan")) {
     # ------------------------------------------------------------
-    # Mode 2: Re:Goldberg LAN sin Steam - Full Configuration Sync
+    # Mode 2: ReFix LAN sin Steam - Full Configuration Sync
     # ------------------------------------------------------------
-    Write-Host "[3/6] Synchronizing Re:Goldberg LAN Configuration & Persistent Identity..." -ForegroundColor Cyan
+    Write-Host "[3/6] Synchronizing ReFix LAN Configuration & Identity..." -ForegroundColor Cyan
 
     $reFixIniPath = Join-Path $ExeDir "ReFix.ini"
-    $identity = Get-Or-Generate-Identity -ConfigPath $reFixIniPath -InputName $UserName -BasePath $TargetDir
+    $identity = Get-Or-Generate-Identity -ConfigPath $reFixIniPath -InputName $UserName -BasePath $TargetDir -InputSteamId $SteamId
 
     $finalRealAppId = $RealAppId
     if (-not $finalRealAppId -or $finalRealAppId -eq "0") {
@@ -1124,8 +1153,15 @@ if ($OnlineMode -in @("goldberg", "offline", "lan")) {
         # 1. Base legacy text configuration files (guaranteed support across all Goldberg versions)
         [System.IO.File]::WriteAllText((Join-Path $settingsDir "steam_appid.txt"), "$finalRealAppId`r`n")
         [System.IO.File]::WriteAllText((Join-Path $settingsDir "force_account_name.txt"), "$($identity.Name)")
-        [System.IO.File]::WriteAllText((Join-Path $settingsDir "force_steamid.txt"), "$($identity.SteamId)")
-        [System.IO.File]::WriteAllText((Join-Path $settingsDir "user_steam_id.txt"), "$($identity.SteamId)")
+        if ($identity.AutoGenerateSteamId -eq "true") {
+            foreach ($sidFile in @("force_steamid.txt", "user_steam_id.txt")) {
+                $sidPath = Join-Path $settingsDir $sidFile
+                if (Test-Path -LiteralPath $sidPath) { Remove-Item -LiteralPath $sidPath -Force -ErrorAction SilentlyContinue }
+            }
+        } else {
+            [System.IO.File]::WriteAllText((Join-Path $settingsDir "force_steamid.txt"), "$($identity.SteamId)")
+            [System.IO.File]::WriteAllText((Join-Path $settingsDir "user_steam_id.txt"), "$($identity.SteamId)")
+        }
         [System.IO.File]::WriteAllText((Join-Path $settingsDir "force_language.txt"), "$finalLanguage")
         [System.IO.File]::WriteAllText((Join-Path $settingsDir "force_listen_port.txt"), "$finalListenPort")
         [System.IO.File]::WriteAllText((Join-Path $settingsDir "local_save.txt"), "saves")
@@ -1137,7 +1173,7 @@ if ($OnlineMode -in @("goldberg", "offline", "lan")) {
 ; =============================================================================
 [user::general]
 account_name=$($identity.Name)
-account_steamid=$($identity.SteamId)
+$(if ($identity.AutoGenerateSteamId -eq "true") { "" } else { "account_steamid=$($identity.SteamId)" })
 language=$finalLanguage
 
 [user::saves]
@@ -1335,7 +1371,7 @@ unlock_all_dlc=$unlockAllDlcStr
 
     # Audit log
     $auditLogPath = Join-Path $ExeDir "ReFix.log"
-    $logEntry = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [ReFix AutoDeploy] Deployed Mode: Re:Goldberg LAN without Steam | Game: $GameName | AppID: $finalRealAppId | SteamID: $($identity.SteamId) | User: $($identity.Name) | Port: $finalListenPort | LocalSave: saves`r`n"
+    $logEntry = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [ReFix AutoDeploy] Deployed Mode: ReFix LAN without Steam | Game: $GameName | AppID: $finalRealAppId | SteamID: $($identity.SteamId) | User: $($identity.Name) | Port: $finalListenPort | LocalSave: saves`r`n"
     [System.IO.File]::AppendAllText($auditLogPath, $logEntry)
 
 }
@@ -1588,6 +1624,21 @@ if ($EngineType -eq "Unity") {
 
         foreach ($dllItem in $candidateDlls) {
             try {
+                # Re-patch from the pristine backup so earlier (possibly broken) patches never accumulate.
+                $backupPath = "$($dllItem.FullName).orig"
+                if (Test-Path $backupPath) {
+                    try {
+                        $curName = [System.Reflection.AssemblyName]::GetAssemblyName($dllItem.FullName)
+                        $bakName = [System.Reflection.AssemblyName]::GetAssemblyName($backupPath)
+                        if ($curName.FullName -eq $bakName.FullName) {
+                            Copy-Item -Path $backupPath -Destination $dllItem.FullName -Force
+                            Write-Host "  [OK] Restored $($dllItem.Name) from .orig before patching" -ForegroundColor Green
+                        }
+                    } catch {
+                        Write-Host "  [NOTICE] Could not compare $($dllItem.Name) with its .orig backup: $_" -ForegroundColor Yellow
+                    }
+                }
+
                 $readerParams = New-Object Mono.Cecil.ReaderParameters
                 $readerParams.ReadWrite = $true
                 $readerParams.AssemblyResolver = $resolver
@@ -1619,6 +1670,7 @@ if ($EngineType -eq "Unity") {
                         $testPlat = if ($shutdownMethod -and $shutdownMethod.HasBody -and $shutdownMethod.Body.Instructions.Count -gt 0) { $shutdownMethod.Body.Instructions[0].Operand } else { $null }
 
                         $apiInit.Body.Instructions.Clear()
+                        $apiInit.Body.ExceptionHandlers.Clear()
                         $apiInit.Body.Variables.Clear()
 
                         $il = $apiInit.Body.GetILProcessor()
@@ -1645,6 +1697,7 @@ if ($EngineType -eq "Unity") {
                         $apiInitEx = $apiType.Methods | Where-Object { $_.Name -eq "InitEx" }
                         if ($apiInitEx) {
                             $apiInitEx.Body.Instructions.Clear()
+                            $apiInitEx.Body.ExceptionHandlers.Clear()
                             $apiInitEx.Body.Variables.Clear()
 
                             $ilEx = $apiInitEx.Body.GetILProcessor()
@@ -1810,6 +1863,7 @@ if ($EngineType -eq "Unity") {
                                 $targetType = if ($isT1) { $mapType.GenericParameters[1] } else { $mapType.GenericParameters[0] }
 
                                 $m.Body.Instructions.Clear()
+                                $m.Body.ExceptionHandlers.Clear()
                                 $m.Body.Variables.Clear()
 
                                 $var0 = New-Object Mono.Cecil.Cil.VariableDefinition($targetType)
@@ -2021,7 +2075,7 @@ FixedRegion=$effectiveRegion
         exit 1
     }
 
-    $winmmPath = Join-Path $BinDir "winmm.dll"
+    $winmmPath = Join-Path $ProductBinDir "winmm.dll"
     if (Test-Path -LiteralPath $winmmPath) {
         $targetWinmm = Join-Path $ExeDir "winmm.dll"
         $targetWinmmOrig = Join-Path $ExeDir "winmm_o.dll"
@@ -2073,7 +2127,7 @@ FixedRegion=$effectiveRegion
     }
 
     # 2. Deploy winmm.dll proxy to Unreal root folder ExeDir
-    $winmmPath = Join-Path $BinDir "winmm.dll"
+    $winmmPath = Join-Path $ProductBinDir "winmm.dll"
     if (Test-Path -LiteralPath $winmmPath) {
         $targetWinmm = Join-Path $ExeDir "winmm.dll"
         $targetWinmmOrig = Join-Path $ExeDir "winmm_o.dll"
@@ -2117,8 +2171,8 @@ FixedRegion=$effectiveRegion
 # ============================================================
 Write-Host "[5/6] Checking for Epic Online Services (EOS / Redbone)..." -ForegroundColor Cyan
 
-$eosProxyPath = Join-Path $BinDir "EOSSDK-Win64-Shipping.dll"
-$redboneProxyPath = Join-Path $BinDir "RedboneEOS.dll"
+$eosProxyPath = Join-Path $ProductBinDir "EOSSDK-Win64-Shipping.dll"
+$redboneProxyPath = Join-Path $ProductBinDir "RedboneEOS.dll"
 if ((-not (Test-Path -LiteralPath $redboneProxyPath)) -and (Test-Path -LiteralPath $eosProxyPath)) {
     $redboneProxyPath = $eosProxyPath
 }
@@ -2242,7 +2296,7 @@ function Verify-ReFixDeployment {
 
     # 4. Steam API DLL and Backup verification
     if (-not $IsX86) {
-        $proxyPath = Join-Path $BinDir "steam_api64.dll"
+        $proxyPath = Join-Path $ProductBinDir "steam_api64.dll"
         $expectedProxySize = if (Test-Path -LiteralPath $proxyPath) { (Get-Item -LiteralPath $proxyPath).Length } else { 0 }
 
         foreach ($pDir in $PluginDirs) {
@@ -2262,7 +2316,12 @@ function Verify-ReFixDeployment {
             $valveBackup = Join-Path $pDir "steam_api64_valve.dll"
             $origBackup  = Join-Path $pDir "steam_api64_original.dll"
             if ((-not (Test-Path -LiteralPath $valveBackup)) -and (-not (Test-Path -LiteralPath $origBackup))) {
-                $errors += "Mandatory original/backend DLL backup missing in $pDir (neither steam_api64_valve.dll nor steam_api64_original.dll exists)"
+                if ($OnlineMode -eq "valve") {
+                    $errors += "Mandatory original/backend DLL backup missing in $pDir (neither steam_api64_valve.dll nor steam_api64_original.dll exists)"
+                } else {
+                    # ReFix LAN runs without any backend DLL; the backup only matters for Uninstall.
+                    Write-Host "  [VERIFY NOTICE] No original steam_api64.dll backup in $pDir (not needed by ReFix LAN)" -ForegroundColor Yellow
+                }
             } else {
                 $bkName = if (Test-Path -LiteralPath $valveBackup) { "steam_api64_valve.dll" } else { "steam_api64_original.dll" }
                 Write-Host "  [VERIFY OK] Backup DLL $bkName verified in $pDir" -ForegroundColor Green
@@ -2270,7 +2329,7 @@ function Verify-ReFixDeployment {
         }
     } else {
         # x86 game verification
-        $proxyPath32 = Join-Path $BinDir "x86\steam_api.dll"
+        $proxyPath32 = Join-Path $ProductBinDir "x86\steam_api.dll"
         $expectedProxy32Size = if (Test-Path -LiteralPath $proxyPath32) { (Get-Item -LiteralPath $proxyPath32).Length } else { 0 }
 
         foreach ($pDir32 in $PluginDirs32) {
@@ -2300,7 +2359,7 @@ function Verify-ReFixDeployment {
         $skipWinmmVerify = $true
     }
     if ($OnlineMode -eq "valve" -and (-not $IsX86) -and (-not $skipWinmmVerify)) {
-        $winmmPath = Join-Path $BinDir "winmm.dll"
+        $winmmPath = Join-Path $ProductBinDir "winmm.dll"
         if (Test-Path -LiteralPath $winmmPath) {
             $destWinmm = Join-Path $ExeDir "winmm.dll"
             if (-not (Test-Path -LiteralPath $destWinmm)) {

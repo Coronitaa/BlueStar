@@ -5281,7 +5281,7 @@
                                     </StackPanel>
                                 </RadioButton>
 
-                                <!-- Option 3: Re:Goldberg LAN -->
+                                <!-- Option 3: ReFix LAN -->
                                 <RadioButton Style="{StaticResource VersionModeCard}"
                                              GroupName="InstallModalEmulatorGroup"
                                              controls:ToggleableRadio.AllowUncheck="True"
