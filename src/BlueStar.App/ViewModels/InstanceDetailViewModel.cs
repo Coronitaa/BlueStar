@@ -7773,6 +7773,12 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             }
         }
 
+        // The archive fetch at the top only runs when the instance has no manifests at all. An instance
+        // that already holds some manifest (a shared redistributable, an older build, an imported archive)
+        // skipped it, and DepotBox cannot serve single manifests through the registry, so depots that are
+        // only on DepotBox ended up with neither manifest nor key. Fetch the archive for those depots now.
+        var depotBoxError = await RecoverDepotsFromDepotBoxArchiveAsync(combinedDepots, instanceManifestDir).ConfigureAwait(true);
+
         // A depot is downloadable if we hold its manifest locally, or if we hold its decryption
         // key (in which case DepotDownloader can still pull the manifest from the Steam CDN).
         // With neither, the download is guaranteed to produce nothing.
@@ -7792,7 +7798,9 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             var depotList = string.Join(", ", depotsMissingManifest.Take(6));
             var detail =
                 $"No manifest or depot key could be found for {Instance.Name} (AppId {Instance.AppId}). " +
-                $"None of the configured providers (local cache, ManifestHub, DepotBox) has data for depot(s) {depotList}. " +
+                (depotBoxError is null
+                    ? $"None of the configured providers (local cache, ManifestHub, DepotBox) has data for depot(s) {depotList}. "
+                    : $"Local cache and ManifestHub have no data for depot(s) {depotList}, and DepotBox could not be reached: {depotBoxError} ") +
                 "Starting the download would install nothing.";
 
             _logger.LogError("Refusing to queue {Game} (AppId {AppId}): no usable depots. Missing: {Depots}",
@@ -7821,6 +7829,72 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         NotifyDownloadProps();
     }
 
+
+    /// <summary>
+    /// For selected depots that have neither a local manifest nor a key, downloads the DepotBox archive,
+    /// extracts its manifests into the instance and fills in (and remembers) the depot keys it carries.
+    /// Returns null on success or when nothing was missing, otherwise a short reason DepotBox failed.
+    /// </summary>
+    private async Task<string?> RecoverDepotsFromDepotBoxArchiveAsync(List<DepotInfo> combinedDepots, string instanceManifestDir)
+    {
+        if (Instance is null || Instance.AppId == 0 || _apiClient is null || _archiveParser is null) return null;
+
+        bool IsMissing(DepotInfo d)
+        {
+            var manifestFile = Path.Combine(instanceManifestDir, $"{d.DepotId}_{d.ManifestId}.manifest");
+            var hasManifest = File.Exists(manifestFile) && new FileInfo(manifestFile).Length > 32;
+            return !hasManifest && string.IsNullOrWhiteSpace(d.DepotKey);
+        }
+
+        if (!combinedDepots.Any(IsMissing)) return null;
+
+        StatusMessage = "⏳ Fetching manifests and archive from DepotBox...";
+        DepotBoxArchive archive;
+        try
+        {
+            var archivesDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "BlueStar", "archives");
+            Directory.CreateDirectory(archivesDir);
+            var archivePath = await _apiClient.DownloadArchiveAsync(Instance.AppId, archivesDir, null, CancellationToken.None).ConfigureAwait(true);
+            if (!File.Exists(archivePath)) return "the archive download produced no file.";
+
+            archive = await _archiveParser.ParseAsync(archivePath, CancellationToken.None).ConfigureAwait(true);
+            ExtractManifestsToInstanceStorage(archivePath, Instance.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "DepotBox archive fallback failed for {Game} (AppId {AppId})", Instance.Name, Instance.AppId);
+            return ex.Message;
+        }
+
+        var keysByDepot = archive.Games
+            .Where(g => !string.IsNullOrWhiteSpace(g.DepotKey))
+            .SelectMany(g => g.Depots.Select(d => (d.DepotId, g.DepotKey)))
+            .GroupBy(x => x.DepotId)
+            .ToDictionary(g => g.Key, g => g.First().DepotKey);
+
+        for (int i = 0; i < combinedDepots.Count; i++)
+        {
+            var d = combinedDepots[i];
+            if (!IsMissing(d) || !keysByDepot.TryGetValue(d.DepotId, out var key)) continue;
+
+            combinedDepots[i] = d with { DepotKey = key };
+            if (_depotKeyRepository != null)
+            {
+                try
+                {
+                    await _depotKeyRepository.RegisterKeyAsync(d.DepotId, key, "DepotBox").ConfigureAwait(true);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Could not store DepotBox key for depot {DepotId}", d.DepotId);
+                }
+            }
+        }
+
+        return null;
+    }
 
     private static void ExtractManifestsToInstanceStorage(string zipPath, Guid instanceId)
     {
