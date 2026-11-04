@@ -20,7 +20,8 @@ param(
     [string]$AppIdFusion = "",
     [string]$AppIdVoice = "",
     [string]$ArbitrationMode = "auto",
-    [string]$DefaultRegion = "sa"
+    [string]$DefaultRegion = "sa",
+    [string]$OverlayMode = ""
 )
 
 # Fallback to environment variables if parameters were omitted or empty
@@ -41,6 +42,13 @@ if (-not $DLCs      -and $env:REFIX_DLCS)       { $DLCs      = $env:REFIX_DLCS }
 if (-not $CustomBroadcasts -and $env:REFIX_CUSTOM_BROADCASTS) { $CustomBroadcasts = $env:REFIX_CUSTOM_BROADCASTS }
 if (-not $PhotonAppId -and $env:REFIX_PHOTON_APPID) { $PhotonAppId = $env:REFIX_PHOTON_APPID }
 if (-not $PhotonRegion -and $env:REFIX_PHOTON_REGION) { $PhotonRegion = $env:REFIX_PHOTON_REGION }
+if (-not $OverlayMode -and $env:REFIX_OVERLAY_MODE) { $OverlayMode = $env:REFIX_OVERLAY_MODE }
+# In-game overlay of ReFix LAN: refix (default) | steam | none (also 1 / 2 / 3)
+switch -Regex ("$OverlayMode".Trim().ToLower()) {
+    '^(2|steam)$' { $OverlayMode = "steam" }
+    '^(3|none|off)$' { $OverlayMode = "none" }
+    default { $OverlayMode = "refix" }
+}
 
 # Clean paths by trimming whitespace and trailing quotes/slashes
 if ($TargetDir) { $TargetDir = $TargetDir.Trim().Trim('"').TrimEnd('\').TrimEnd('/') }
@@ -331,8 +339,8 @@ LanProbeTimeoutMs = 2500
 ; IPs de difusion adicionales para VPNs (Radmin, Hamachi, ZeroTier) separadas por comas
 CustomBroadcasts = $customBroadcasts
 
-; Registro detallado del motor de arbitraje en ReFix.log
-VerboseArbitrationLog = true
+; Registro detallado del motor de arbitraje en ReFix.log (solo para diagnostico)
+VerboseArbitrationLog = false
 
 
 ; =============================================================================
@@ -434,6 +442,21 @@ IdentityMode = $(if ($P.AutoGenerateSteamId -eq "true") { "auto" } else { "fixed
 Name = $($P.UserName)
 AutoGenerateSteamId = $($P.AutoGenerateSteamId)
 SteamId = $(if ($P.AutoGenerateSteamId -eq "true") { "" } else { $P.SteamId })
+
+[Overlay]
+; Which overlay the game shows:
+;   ReFix overlay -> Enabled = true,  BlockSteamOverlay = true
+;   Steam overlay -> Enabled = false, BlockSteamOverlay = false  (only while the Steam client runs)
+;   No overlay    -> Enabled = false, BlockSteamOverlay = true
+; Enabled: ReFix overlay (Shift+Tab, or the Xbox / PS button of a controller): profiles, players on the
+; LAN, invites and the game's web pages.
+Enabled = $(if ($OverlayMode -eq "refix") { "true" } else { "false" })
+; BlockSteamOverlay: keeps Steam's own overlay out of the game.
+BlockSteamOverlay = $(if ($OverlayMode -eq "steam") { "false" } else { "true" })
+; Short, quiet sounds when the ReFix overlay opens and closes, for invites and for controller navigation.
+Sounds = true
+; Each profile keeps its own Steam Cloud files and the game's known save folder (Unreal SaveGames, Unity LocalLow).
+IsolateSaves = true
 
 [Matchmaking]
 EnableLobbyFilter = false
@@ -1313,8 +1336,9 @@ unlock_all_dlc=$unlockAllDlcStr
         '',
         'net session >nul 2>&1',
         'if !errorlevel! neq 0 (',
-        '    echo [INFO] Requesting Administrator permissions...',
-        '    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList ''/c \"\"%~f0\"\" --elevated'' -Verb RunAs"',
+        '    echo [NOTICE] Windows Firewall rules need administrator rights: right-click this file and choose Run as administrator.',
+        '    echo [NOTICE] Players on the LAN usually find each other without them.',
+        '    pause',
         '    exit /b',
         ')',
         '',
@@ -2163,7 +2187,7 @@ FixedRegion=$effectiveRegion
     }
 }
 
-# Shortcut helper scripts deployment deactivated
+# Shortcut helper scripts deployment deactivated (BlueStar launches the game itself)
 
 # ============================================================
 # Step 5: Universal Epic Online Services (EOS) & Redpoint Deployment

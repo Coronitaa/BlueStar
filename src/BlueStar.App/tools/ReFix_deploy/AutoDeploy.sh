@@ -5,8 +5,11 @@
 # the game's own Steam/EOS DLLs are backed up and replaced by the ReFix binaries for the chosen product.
 #
 #   bash AutoDeploy.sh                         interactive
-#   bash AutoDeploy.sh <game folder|game.exe> [lan|online] [appid]
+#   bash AutoDeploy.sh <game folder|game.exe> [lan|online] [appid] [refix|steam|none]
 #   bash AutoDeploy.sh --uninstall <game folder>
+#
+# The last argument (or REFIX_OVERLAY_MODE) picks the in-game overlay of ReFix LAN: the ReFix overlay
+# (default), Steam's own, or none.
 #
 # ReFix Online needs the Steam client running (launch the game from Steam with Proton).
 # ReFix LAN needs no Steam: players on the same network find each other.
@@ -50,13 +53,97 @@ restore_one() {   # restore_one <dir> <backup name> <live name>
     ok "Restored $live in $dir"
 }
 
+# ReFix LAN profiles swap the game's save folder inside the Wine/Proton prefix; before uninstalling, the
+# game gets this PC's own saves back (same rules as bin/restore_saves.ps1 on Windows). Nothing is deleted.
+u16() { iconv -f UTF-16 -t UTF-8 "$1" 2>/dev/null | tr -d '\r'; }
+sanitize() { printf '%s' "$1" | tr '<>:"/\\|?*' '_________'; }
+move_entries() {   # move_entries <from> <to> [kept names...]
+    local from="$1" to="$2" e name; shift 2
+    [ -d "$from" ] || return 0
+    mkdir -p "$to"
+    for e in "$from"/* "$from"/.[!.]*; do
+        [ -e "$e" ] || continue
+        name="$(basename "$e")"
+        case " $* " in *" $name "*) continue ;; esac
+        mv "$e" "$to/"
+    done
+}
+
+restore_saves() {
+    command -v iconv >/dev/null 2>&1 || { warn "iconv not found: profile saves left as they are"; return 0; }
+    local labels=() lives=() keeps=() info company product w proj name
+    while IFS= read -r info; do
+        company="$(sed -n 1p "$info" | tr -d '\r' | sed 's/^\xEF\xBB\xBF//')"
+        product="$(sed -n 2p "$info" | tr -d '\r')"
+        [ -n "$company" ] && [ -n "$product" ] || continue
+        labels+=("Unity_$(sanitize "$company")_$(sanitize "$product")")
+        lives+=("AppData/LocalLow/$company/$product")
+        keeps+=("Player.log Player-prev.log output_log.txt Unity")
+    done < <(find "$GAME_DIR" -maxdepth 4 -type f -path '*_Data/app.info' 2>/dev/null)
+    while IFS= read -r w; do
+        proj="$(dirname "$(dirname "$w")")"
+        name="$(basename "$proj")"
+        [ "$name" != Engine ] || continue
+        [ -d "$(dirname "$proj")/Engine" ] || [ -d "$proj/Content" ] || continue
+        labels+=("UE_$(sanitize "$name")")
+        lives+=("AppData/Local/$name/Saved/SaveGames")
+        keeps+=("")
+    done < <(find "$GAME_DIR" -maxdepth 5 -type d -path '*/Binaries/Win64' 2>/dev/null)
+    [ ${#labels[@]} -gt 0 ] || return 0
+
+    local prefixes=() lib
+    [ -n "${WINEPREFIX:-}" ] && prefixes+=("$WINEPREFIX")
+    prefixes+=("$HOME/.wine")
+    lib="$(cd "$GAME_DIR/../.." 2>/dev/null && pwd || true)"   # <library>/steamapps when the game is in steamapps/common
+    for c in "$lib/compatdata" "$HOME/.steam/steam/steamapps/compatdata" "$HOME/.local/share/Steam/steamapps/compatdata"; do
+        for pfx in "$c"/*/pfx; do [ -d "$pfx" ] && prefixes+=("$pfx"); done
+    done
+
+    local pfx owners refix user native prof text label owner live out in i changed clash e
+    for pfx in "${prefixes[@]}"; do
+        # AppData/Roaming/ReFix since 2.1, ReFix LAN before (not migrated while the game never ran with 2.1)
+        for owners in "$pfx"/drive_c/users/*/AppData/Roaming/ReFix/saves.ini "$pfx"/drive_c/users/*/AppData/Roaming/"ReFix LAN"/saves.ini; do
+            [ -f "$owners" ] || continue
+            refix="$(dirname "$owners")"
+            user="$(dirname "$(dirname "$(dirname "$refix")")")"
+            native=_pc
+            for prof in "$refix"/Profiles/*/profile.ini; do
+                [ -f "$prof" ] && u16 "$prof" | grep -q '^NativeSaves=1' && native="$(basename "$(dirname "$prof")")"
+            done
+            text="$(u16 "$owners")"
+            changed=0
+            for i in "${!labels[@]}"; do
+                label="${labels[$i]}"
+                owner="$(printf '%s\n' "$text" | awk -v k="$label" 'index($0, k "=") == 1 { print substr($0, length(k) + 2) }')"
+                [ -n "$owner" ] && [ "$owner" != "$native" ] || continue
+                live="$user/${lives[$i]}"
+                if [ "$owner" = _pc ]; then out="$refix/Saves/_pc/$label"; else out="$refix/Profiles/$owner/Saves/$label"; fi
+                if [ "$native" = _pc ]; then in="$refix/Saves/_pc/$label"; else in="$refix/Profiles/$native/Saves/$label"; fi
+                clash=0
+                for e in "$live"/*; do [ -e "$e" ] && [ -e "$out/$(basename "$e")" ] && clash=1; done
+                if [ "$clash" = 1 ]; then warn "$label: $out already has files with the same names; saves left as they are"; continue; fi
+                # shellcheck disable=SC2086
+                move_entries "$live" "$out" ${keeps[$i]}
+                move_entries "$in" "$live"
+                text="$(printf '%s\n' "$text" | awk -v k="$label" -v v="$native" 'index($0, k "=") == 1 { print k "=" v; next } { print }')"
+                changed=1
+                ok "$label: this PC's saves are back in $live; profile $owner keeps its own in $out"
+            done
+            [ "$changed" = 1 ] && printf '%s\n' "$text" | sed 's/$/\r/' | iconv -f UTF-8 -t UTF-16 > "$owners"
+        done
+    done
+    return 0
+}
+
 uninstall() {
     info "Restoring the game's original files in $GAME_DIR"
+    restore_saves
     while IFS= read -r d; do restore_one "$d" steam_api64_original.dll steam_api64.dll; rm -f "$d/steam_api64_valve.dll"; done < <(dirs_with steam_api64_original.dll)
     while IFS= read -r d; do restore_one "$d" steam_api_original.dll steam_api.dll; rm -f "$d/steam_api_o.dll"; done < <(dirs_with steam_api_original.dll)
     while IFS= read -r d; do restore_one "$d" EOSSDK_original.dll EOSSDK-Win64-Shipping.dll; done < <(dirs_with EOSSDK_original.dll)
     while IFS= read -r d; do restore_one "$d" winmm_o.dll winmm.dll; done < <(dirs_with winmm_o.dll)
     ok "Done. ReFix.ini and saves were left in place."
+    echo "    ReFix LAN profiles and their saves stay in the prefix's AppData/Roaming/ReFix (shared by every game)."
 }
 
 # ---------------------------------------------------------------- deploy steps
@@ -180,6 +267,21 @@ Name = ${USER_NAME}
 AutoGenerateSteamId = true
 SteamId =
 
+[Overlay]
+; Which overlay the game shows:
+;   ReFix overlay -> Enabled = true,  BlockSteamOverlay = true
+;   Steam overlay -> Enabled = false, BlockSteamOverlay = false  (only while the Steam client runs)
+;   No overlay    -> Enabled = false, BlockSteamOverlay = true
+; Enabled: ReFix overlay (Shift+Tab, or the Xbox / PS button of a controller): profiles, players on the
+; LAN, invites and the game's web pages.
+Enabled = $OV_ENABLED
+; BlockSteamOverlay: keeps Steam's own overlay out of the game.
+BlockSteamOverlay = $OV_BLOCK
+; Short, quiet sounds when the ReFix overlay opens and closes, for invites and for controller navigation.
+Sounds = true
+; Each profile keeps its own Steam Cloud files and the game's known save folder (Unreal SaveGames, Unity LocalLow).
+IsolateSaves = true
+
 [EOS]
 Mode = $eos
 
@@ -192,6 +294,10 @@ EOF
         ini_set "$ini" Online Mode "$emu"
         ini_set "$ini" EOS Mode "$eos"
         ini_set "$ini" Steam RealAppId "$APP_ID"
+        if [ "$MODE" = lan ]; then
+            ini_set "$ini" Overlay Enabled "$OV_ENABLED"
+            ini_set "$ini" Overlay BlockSteamOverlay "$OV_BLOCK"
+        fi
         ok "Updated ReFix.ini in $EXE_DIR for ReFix $MODE"
     fi
     printf '%s\n' "$APP_ID" > "$EXE_DIR/steam_appid.txt"
@@ -242,6 +348,19 @@ APP_ID="${APP_ID:-480}"
 case "$APP_ID" in *[!0-9]*) die "AppID must be a number: $APP_ID" ;; esac
 USER_NAME="${REFIX_USERNAME:-${USER:-Player}}"
 
+OVERLAY="${4:-${REFIX_OVERLAY_MODE:-}}"
+if [ "$MODE" = lan ] && [ -z "$OVERLAY" ] && [ -t 0 ]; then
+    echo
+    echo "  In-game overlay:"
+    echo "  [1] ReFix overlay (Shift+Tab, or the Xbox / PS button of a controller)"
+    echo "  [2] Steam overlay (only while the Steam client runs)"
+    echo "  [3] No overlay"
+    read -r -p "Overlay [1-3] (Enter = 1): " OVERLAY
+fi
+case "${OVERLAY,,}" in 2|steam) OVERLAY=steam ;; 3|none|off) OVERLAY=none ;; *) OVERLAY=refix ;; esac
+if [ "$OVERLAY" = refix ]; then OV_ENABLED=true; else OV_ENABLED=false; fi
+if [ "$OVERLAY" = steam ]; then OV_BLOCK=false; else OV_BLOCK=true; fi
+
 if [ -z "$(dirs_with steam_api64.dll; dirs_with steam_api.dll; dirs_with steam_api64_original.dll; dirs_with steam_api_original.dll)" ]; then
     die "No steam_api64.dll or steam_api.dll found under $GAME_DIR"
 fi
@@ -249,6 +368,7 @@ fi
 info "Game:   $GAME_DIR"
 info "Mode:   ReFix $MODE (binaries from $PRODUCT_BIN)"
 info "AppID:  $APP_ID"
+[ "$MODE" = lan ] && info "Overlay: $OVERLAY"
 deploy_steam_x64
 deploy_steam_x86
 deploy_eos

@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 setlocal disabledelayedexpansion
-title ReFix LAN - Universal AutoDeploy Tool v2.0.1
+title ReFix LAN - Universal AutoDeploy Tool v2.1.0
 
 set "SCRIPT_DIR=%~dp0"
 if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
@@ -218,6 +218,7 @@ if "%ONLINE_MODE_CHOICE%"=="" set "ONLINE_MODE_CHOICE=1"
 set "ONLINE_MODE_NAME=valve"
 if "%ONLINE_MODE_CHOICE%"=="2" set "ONLINE_MODE_NAME=goldberg"
 
+set "OVERLAY_MODE=refix"
 if "%ONLINE_MODE_NAME%"=="goldberg" goto GOLDBERG_PROMPTS
 
 :VALVE_PROMPTS
@@ -283,6 +284,28 @@ set "CUSTOM_BROADCASTS="
 if not "%REFIX_NON_INTERACTIVE%"=="1" (
     set /p "CUSTOM_BROADCASTS=Enter Custom Broadcast IPs [Comma-separated, Optional]: "
 )
+
+:: In-game overlay (ReFix LAN). Labels, not a parenthesized block: see the firewall prompt below.
+echo:
+echo ====================================================================
+echo                  In-game Overlay
+echo ====================================================================
+echo:
+echo  [1] ReFix overlay (Shift+Tab, or the Xbox / PS button of a controller)
+echo      - Profiles, players on the LAN, invites and the game's web pages.
+echo  [2] Steam overlay
+echo      - Only shows up while the Steam client is running.
+echo  [3] No overlay
+echo:
+set "OVERLAY_CHOICE=1"
+:: Unattended deploys: REFIX_OVERLAY_MODE=1/2/3 or refix/steam/none
+if not "%REFIX_OVERLAY_MODE%"=="" set "OVERLAY_CHOICE=%REFIX_OVERLAY_MODE%"
+if not "%REFIX_NON_INTERACTIVE%"=="1" set /p "OVERLAY_CHOICE=Select Option [1-3] (Default: 1): "
+set "OVERLAY_MODE=refix"
+if "%OVERLAY_CHOICE%"=="2" set "OVERLAY_MODE=steam"
+if /i "%OVERLAY_CHOICE%"=="steam" set "OVERLAY_MODE=steam"
+if "%OVERLAY_CHOICE%"=="3" set "OVERLAY_MODE=none"
+if /i "%OVERLAY_CHOICE%"=="none" set "OVERLAY_MODE=none"
 goto AFTER_MODE_PROMPTS
 
 :AFTER_MODE_PROMPTS
@@ -392,14 +415,14 @@ if not exist "%BIN_DIR%\deploy_helper.ps1" (
 )
 
 echo [1/3] Running ReFix deployment and topology engine...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%BIN_DIR%\deploy_helper.ps1" -TargetDir "%TARGET_DIR%" -BinDir "%BIN_DIR%" -ExeDir "%EXE_DIR%" -EngineType "%ENGINE_TYPE%" -OnlineMode "%ONLINE_MODE_NAME%" -GameName "%GAME_NAME%" -UserName "%CUSTOM_USERNAME%" -RealAppId "%REAL_APPID%" -MaskAppId "%MASK_APPID%" -Language "english" -DLCs "%DLCS%" -DLCMode "%DLC_MODE%" -ListenPort "%LAN_PORT%" -CustomBroadcasts "%CUSTOM_BROADCASTS%" -PhotonAppId "%PHOTON_APPID%" -PhotonRegion "%PHOTON_REGION%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%BIN_DIR%\deploy_helper.ps1" -TargetDir "%TARGET_DIR%" -BinDir "%BIN_DIR%" -ExeDir "%EXE_DIR%" -EngineType "%ENGINE_TYPE%" -OnlineMode "%ONLINE_MODE_NAME%" -GameName "%GAME_NAME%" -UserName "%CUSTOM_USERNAME%" -RealAppId "%REAL_APPID%" -MaskAppId "%MASK_APPID%" -Language "english" -DLCs "%DLCS%" -DLCMode "%DLC_MODE%" -ListenPort "%LAN_PORT%" -CustomBroadcasts "%CUSTOM_BROADCASTS%" -PhotonAppId "%PHOTON_APPID%" -PhotonRegion "%PHOTON_REGION%" -OverlayMode "%OVERLAY_MODE%"
 if errorlevel 1 (
     echo:
     echo [ERROR] Deployment engine reported failure! Aborting.
     goto ERROR_EXIT
 )
 
-:: Finalizing portable configuration
+:: Finalizing portable configuration (BlueStar launches the game itself: no Steam shortcut scripts)
 echo [2/3] Finalizing portable configuration...
 
 :: Apply Windows Firewall Rules dynamically
@@ -459,6 +482,7 @@ echo  Location: "%EXE_DIR%"
 echo  AppID: RealAppId=%REAL_APPID%
 echo  DLCs: Mode=%DLC_MODE% [%DLCS%]
 echo  LAN Port: %LAN_PORT% [UDP Broadcast Discovery]
+echo  Overlay: %OVERLAY_MODE% [ReFix.ini, section Overlay]
 echo  Storage: Portable in saves\ [USB / Flash Drive Compatible]
 echo  Firewall Helper: "%EXE_DIR%\Configure_LAN_Firewall.bat"
 goto AFTER_SUMMARY

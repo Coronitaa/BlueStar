@@ -1,4 +1,4 @@
-﻿ReFix 2.0 - LAN / Online
+﻿ReFix 2.1.0 - LAN / Online
 ========================
 
 1. Run AutoDeploy.bat.
@@ -16,7 +16,13 @@ ReFix LAN
 - Several instances of the same game can run on one PC.
 - Players on the same network find each other automatically.
 
-Uninstall_ReFix.bat restores the game's original files.
+- In-game overlay (AutoDeploy asks, [Overlay] in ReFix.ini): the ReFix overlay (Shift+Tab, or the
+  Xbox / PS button of a controller), Steam's own overlay, or none. Overlay sounds: [Overlay] Sounds.
+- Debug logging is off ([Debug] EnableLog = false); turn it on only to report a problem.
+
+Uninstall_ReFix.bat restores the game's original files and gives the game this PC's own saves back.
+ReFix LAN profiles (and the saves each one keeps) stay in %APPDATA%\ReFix: every ReFix game of the PC
+can use them ("Import from another game" when creating a profile).
 
 Linux (Steam Play / Proton)
 - Run: bash AutoDeploy.sh
