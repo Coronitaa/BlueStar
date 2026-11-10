@@ -176,7 +176,7 @@ public class GitHubUpdateService : IUpdateService
             catch { }
         }
 
-        rawCurrent ??= new Version(1, 5, 5);
+        rawCurrent ??= new Version(1, 5, 6);
 
         return new Version(
             Math.Max(0, rawCurrent.Major),
