@@ -2120,6 +2120,36 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }
     }
 
+    private bool _switchModalToFixWhenLoaded;
+
+    /// <summary>Loads the game's DepotBox fixes behind an open install modal and offers them once they arrive.</summary>
+    private async Task LoadInstallModalFixesAsync()
+    {
+        try
+        {
+            await LoadGameFixesCoreAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to load game fixes for install modal");
+            return;
+        }
+
+        if (_isDisposed || !IsInstallModalOpen || OnlineGameFixes.Count == 0) return;
+
+        SelectedModalSpecificGameFix ??= OnlineGameFixes[0];
+
+        // Follow the curated recommendation only if the person has not picked another option meanwhile
+        if (_switchModalToFixWhenLoaded && string.Equals(InstallModalSelectedEmulator, "refix_valve", StringComparison.OrdinalIgnoreCase))
+        {
+            InstallModalSelectedEmulator = "gamefix_online";
+        }
+        _switchModalToFixWhenLoaded = false;
+
+        // Refreshes the Online-Fix card's visibility and the layerable fixes list
+        NotifyEmulatorSelectionChanged();
+    }
+
     [RelayCommand]
     public async Task OpenInstallModalAsync()
     {
@@ -2287,17 +2317,12 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }
         RecomputeCustomBuildValidation();
 
-        // Query game-specific fixes (Online-Fix / DepotBox catalog) for this title
+        // Game-specific fixes come from DepotBox, which can take over a minute to answer (or time out with a 524):
+        // the modal opens now and they are added when they land instead of keeping it closed until then.
+        _switchModalToFixWhenLoaded = false;
         if (_apiClient != null && OnlineGameFixes.Count == 0)
         {
-            try
-            {
-                await LoadGameFixesCoreAsync().ConfigureAwait(true);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Failed to load game fixes for install modal");
-            }
+            _ = LoadInstallModalFixesAsync();
         }
 
         if (OnlineGameFixes.Count > 0 && SelectedModalSpecificGameFix == null)
@@ -2337,7 +2362,11 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             else if (CuratedRecommendation.RecommendedEmulator.Contains("onlinefix", StringComparison.OrdinalIgnoreCase) && OnlineGameFixes.Count > 0)
                 InstallModalSelectedEmulator = "gamefix_online";
             else
+            {
                 InstallModalSelectedEmulator = "refix_valve";
+                // The recommended Online-Fix may still be on its way from DepotBox
+                _switchModalToFixWhenLoaded = CuratedRecommendation.RecommendedEmulator.Contains("onlinefix", StringComparison.OrdinalIgnoreCase);
+            }
         }
         else if (RecommendedEmulatorOption != null)
         {
