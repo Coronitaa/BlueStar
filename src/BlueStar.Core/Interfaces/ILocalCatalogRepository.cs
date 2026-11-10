@@ -34,6 +34,9 @@ public sealed class LocalCatalogQuery
     public int Offset { get; init; } = 0;
     public int Limit { get; init; } = 50;
     public IReadOnlyCollection<uint>? RestrictToAppIds { get; init; }
+
+    /// <summary>true: only games already out. false: only games not out yet. null: both.</summary>
+    public bool? Released { get; init; }
 }
 
 /// <summary>

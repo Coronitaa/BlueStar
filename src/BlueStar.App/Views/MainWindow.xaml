@@ -743,7 +743,7 @@
         </ItemsControl>
 
         <!-- ═══ STARTUP LOADING OVERLAY SCREEN ═══ -->
-        <Grid x:Name="StartupLoadingOverlay"
+        <Grid ctrl:VisibleStoryboard.Key="StarSpinStoryboard" x:Name="StartupLoadingOverlay"
               Grid.Row="0"
               Grid.RowSpan="3"
               Background="{StaticResource BaseBackgroundBrush}"
@@ -792,11 +792,6 @@
                 </Storyboard>
             </Grid.Resources>
 
-            <Grid.Triggers>
-                <EventTrigger RoutedEvent="FrameworkElement.Loaded">
-                    <BeginStoryboard Storyboard="{StaticResource StarSpinStoryboard}"/>
-                </EventTrigger>
-            </Grid.Triggers>
 
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                 <!-- Spin & Glow Container (In-Place) -->

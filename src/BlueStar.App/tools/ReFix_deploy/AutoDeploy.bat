@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 setlocal disabledelayedexpansion
-title ReFix LAN - Universal AutoDeploy Tool v2.1.0
+title ReFix - Universal AutoDeploy Tool v2.4.0
 
 set "SCRIPT_DIR=%~dp0"
 if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
@@ -12,9 +12,9 @@ echo                   ReFix Universal AutoDeploy Tool
 echo ====================================================================
 echo:
 
-if not exist "%BIN_DIR%\online\steam_api64.dll" if not exist "%BIN_DIR%\lan\steam_api64.dll" if not exist "%BIN_DIR%\steam_api64.dll" (
+if not exist "%BIN_DIR%\online\steam_api64.dll" if not exist "%BIN_DIR%\lan\steam_api64.dll" if not exist "%BIN_DIR%\lan_offline\steam_api64.dll" if not exist "%BIN_DIR%\steam_api64.dll" (
     echo [ERROR] Required binaries not found in "%BIN_DIR%"!
-    echo Please make sure 'bin\online' ^(ReFix Online^) and/or 'bin\lan' ^(ReFix LAN^) contain steam_api64.dll.
+    echo Please make sure 'bin\lan' ^(ReFix Online + LAN^), 'bin\lan_offline' ^(ReFix Offline LAN^) and/or 'bin\online' ^(ReFix Online Legacy^) contain steam_api64.dll.
     goto ERROR_EXIT
 )
 
@@ -199,31 +199,47 @@ echo ====================================================================
 echo                  Select Connectivity Mode
 echo ====================================================================
 echo:
-echo  [1] ReFix Online via Steam
-echo      - Uses Steam client and Spacewar (AppID 480).
+echo  [1] ReFix Online + LAN  (recommended)
+echo      - Plays on the local network: Steam does not need to be installed or running.
+echo      - Optional: the Steam button in the ReFix overlay (Shift+Tab) adds your Steam friends
+echo        to the same rooms over the Internet.
+echo      - Automatic per-PC identity: copy the patched game to other PCs as-is.
+echo      - Profile sync to Google Drive, OneDrive or a USB drive (overlay settings).
+echo:
+echo  [2] ReFix Offline LAN
+echo      - The LAN version of the previous release: local network only, no Steam services.
+echo:
+echo  [3] ReFix Online Legacy via Steam
+echo      - The Online version of the previous release: uses the Steam client and Spacewar (AppID 480).
 echo      - Enables online multiplayer matchmaking via Steam servers.
 echo:
-echo  [2] ReFix LAN without Steam
-echo      - Standalone ReFix LAN emulator: Steam does not need to be installed or running.
-echo      - Finds other ReFix LAN players of the same game on the local network.
-echo      - Automatic per-PC identity: copy the patched game to other PCs as-is.
-echo      - Several instances on the same PC get distinct identities.
-echo:
 set "ONLINE_MODE_CHOICE=1"
-:: Unattended deploys pick the product with REFIX_DEPLOY_MODE=1 (Online) or 2 (LAN)
+:: Unattended deploys pick the product with REFIX_DEPLOY_MODE=1 (Online + LAN), 2 (Offline LAN) or 3 (Online Legacy)
 if not "%REFIX_DEPLOY_MODE%"=="" set "ONLINE_MODE_CHOICE=%REFIX_DEPLOY_MODE%"
-if not "%REFIX_NON_INTERACTIVE%"=="1" set /p "ONLINE_MODE_CHOICE=Select Option [1-2] (Default: 1): "
+if not "%REFIX_NON_INTERACTIVE%"=="1" set /p "ONLINE_MODE_CHOICE=Select Option [1-3] (Default: 1): "
 if "%ONLINE_MODE_CHOICE%"=="" set "ONLINE_MODE_CHOICE=1"
 
-set "ONLINE_MODE_NAME=valve"
-if "%ONLINE_MODE_CHOICE%"=="2" set "ONLINE_MODE_NAME=goldberg"
+:: ONLINE_MODE_NAME drives the prompts ("goldberg" = a LAN product, "valve" = Online Legacy); HELPER_MODE tells
+:: deploy_helper.ps1 which product folder to deploy (bin\lan, bin\lan_offline or bin\online).
+set "ONLINE_MODE_NAME=goldberg"
+set "HELPER_MODE=goldberg"
+set "PRODUCT_LABEL=ReFix Online + LAN"
+if "%ONLINE_MODE_CHOICE%"=="2" (
+    set "HELPER_MODE=lanoffline"
+    set "PRODUCT_LABEL=ReFix Offline LAN"
+)
+if "%ONLINE_MODE_CHOICE%"=="3" (
+    set "ONLINE_MODE_NAME=valve"
+    set "HELPER_MODE=valve"
+    set "PRODUCT_LABEL=ReFix Online Legacy via Steam"
+)
 
 set "OVERLAY_MODE=refix"
 if "%ONLINE_MODE_NAME%"=="goldberg" goto GOLDBERG_PROMPTS
 
 :VALVE_PROMPTS
 echo:
-echo [INFO] Selected Mode: ReFix Online via Steam
+echo [INFO] Selected Mode: ReFix Online Legacy via Steam
 echo:
 set "MASK_APPID=480"
 set "REAL_APPID=%EXISTING_REAL_APPID%"
@@ -251,7 +267,7 @@ goto AFTER_MODE_PROMPTS
 
 :GOLDBERG_PROMPTS
 echo:
-echo [INFO] Selected Mode: ReFix LAN without Steam
+echo [INFO] Selected Mode: %PRODUCT_LABEL%
 echo:
 set "CUSTOM_USERNAME=%EXISTING_USERNAME%"
 if "%CUSTOM_USERNAME%"=="" set "CUSTOM_USERNAME=%USERNAME%"
@@ -388,7 +404,7 @@ if /i not "%FW_CHOICE%"=="N" set "FIREWALL_AUTO_APPLY=true"
 
 echo:
 echo ====================================================================
-echo Starting ReFix Deployment... (Mode: %ONLINE_MODE_NAME%)
+echo Starting ReFix Deployment... (%PRODUCT_LABEL%)
 echo ====================================================================
 
 :: Set process environment variables for 100% path safety transport across CMD/PowerShell boundary
@@ -415,7 +431,7 @@ if not exist "%BIN_DIR%\deploy_helper.ps1" (
 )
 
 echo [1/3] Running ReFix deployment and topology engine...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%BIN_DIR%\deploy_helper.ps1" -TargetDir "%TARGET_DIR%" -BinDir "%BIN_DIR%" -ExeDir "%EXE_DIR%" -EngineType "%ENGINE_TYPE%" -OnlineMode "%ONLINE_MODE_NAME%" -GameName "%GAME_NAME%" -UserName "%CUSTOM_USERNAME%" -RealAppId "%REAL_APPID%" -MaskAppId "%MASK_APPID%" -Language "english" -DLCs "%DLCS%" -DLCMode "%DLC_MODE%" -ListenPort "%LAN_PORT%" -CustomBroadcasts "%CUSTOM_BROADCASTS%" -PhotonAppId "%PHOTON_APPID%" -PhotonRegion "%PHOTON_REGION%" -OverlayMode "%OVERLAY_MODE%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%BIN_DIR%\deploy_helper.ps1" -TargetDir "%TARGET_DIR%" -BinDir "%BIN_DIR%" -ExeDir "%EXE_DIR%" -EngineType "%ENGINE_TYPE%" -OnlineMode "%HELPER_MODE%" -GameName "%GAME_NAME%" -UserName "%CUSTOM_USERNAME%" -RealAppId "%REAL_APPID%" -MaskAppId "%MASK_APPID%" -Language "english" -DLCs "%DLCS%" -DLCMode "%DLC_MODE%" -ListenPort "%LAN_PORT%" -CustomBroadcasts "%CUSTOM_BROADCASTS%" -PhotonAppId "%PHOTON_APPID%" -PhotonRegion "%PHOTON_REGION%" -OverlayMode "%OVERLAY_MODE%"
 if errorlevel 1 (
     echo:
     echo [ERROR] Deployment engine reported failure! Aborting.
@@ -470,14 +486,14 @@ echo  Game: %GAME_NAME%  ^|  Engine: %ENGINE_TYPE%
 if "%ONLINE_MODE_NAME%"=="goldberg" goto SUMMARY_GOLDBERG
 
 :SUMMARY_VALVE
-echo  Mode: ReFix Online via Steam [Spacewar 480]
+echo  Mode: ReFix Online Legacy via Steam [Spacewar 480]
 echo  Location: "%EXE_DIR%"
 echo  AppID: MaskAppId=%MASK_APPID%  /  RealAppId=%REAL_APPID%
 echo  DLCs: Mode=%DLC_MODE% [%DLCS%]
 goto AFTER_SUMMARY
 
 :SUMMARY_GOLDBERG
-echo  Mode: ReFix LAN without Steam [standalone, no Steam client]
+echo  Mode: %PRODUCT_LABEL% [no Steam client needed]
 echo  Location: "%EXE_DIR%"
 echo  AppID: RealAppId=%REAL_APPID%
 echo  DLCs: Mode=%DLC_MODE% [%DLCS%]
@@ -508,6 +524,7 @@ echo [OK] Game started.
 goto SUCCESS_EXIT
 
 :SKIP_LAUNCH_OFFER
+
 goto SUCCESS_EXIT
 
 :SUCCESS_EXIT

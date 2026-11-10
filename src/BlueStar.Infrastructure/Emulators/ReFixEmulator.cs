@@ -24,7 +24,31 @@ public sealed class ReFixEmulator : IEmulator
 
     public string Id => "refix";
     public string DisplayName => "ReFix Emulator";
-    public string Description => "Universal game emulation backend supporting Steam Online (Spacewar 480) and ReFix LAN multiplayer.";
+    public string Description => "Universal game emulation backend: ReFix LAN + Online, ReFix LAN Offline and ReFix Online Legacy (Steam Spacewar 480).";
+
+    /// <summary>Option id of ReFix LAN Offline (bin\lan_offline). Contains "goldberg" so every LAN check still applies to it.</summary>
+    public const string LanOfflineOptionId = "refix_goldberg_offline";
+
+    /// <summary>
+    /// Name of what is deployed in a game. Both LAN products deploy the same files, so for a LAN install the
+    /// instance's option id says which one it is; <paramref name="detectedMode"/> comes from <see cref="GetInstalledMode"/>.
+    /// </summary>
+    public static string DescribeInstalledMode(string? detectedMode, string? optionId)
+    {
+        var optionIsLan = optionId?.Contains("goldberg", StringComparison.OrdinalIgnoreCase) == true;
+        if (detectedMode == null || (optionIsLan && detectedMode.Contains("LAN", StringComparison.Ordinal)))
+            return GetOptionDisplayName(optionId);
+        return detectedMode;
+    }
+
+    public static bool IsLanOfflineOption(string? optionId) =>
+        string.Equals(optionId, LanOfflineOptionId, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>User-facing name of a ReFix option id (refix_goldberg, refix_goldberg_offline, refix_valve).</summary>
+    public static string GetOptionDisplayName(string? optionId) =>
+        IsLanOfflineOption(optionId) ? "ReFix LAN Offline"
+        : optionId?.Contains("goldberg", StringComparison.OrdinalIgnoreCase) == true ? "ReFix LAN + Online"
+        : "ReFix Online Legacy (Steam)";
 
     public ReFixEmulator(ILogger<ReFixEmulator> logger)
     {
@@ -210,14 +234,14 @@ public sealed class ReFixEmulator : IEmulator
     public Task<EmulatorStatus> GetStatusAsync(GameInstance instance, CancellationToken ct = default)
     {
         bool isInstalled = IsEmulatorInstalled(instance.InstallPath);
-        string installedMode = GetInstalledMode(instance.InstallPath) ?? (instance.EmulatorId?.Contains("goldberg") == true ? "ReFix LAN" : "ReFix Online (Steam)");
+        string installedMode = DescribeInstalledMode(GetInstalledMode(instance.InstallPath), instance.EmulatorId);
         bool isActive = instance.EmulatorEnabled || isInstalled;
 
         string statusMsg = isInstalled ? $"Installed ({installedMode}) ● Ready" : "Not Installed";
-        string backendInfo = isInstalled ? $"ReFix Deploy Suite v1.1.0 ({installedMode})" : "ReFix Suite Deployable";
-        string networkInfo = installedMode.Contains("LAN", StringComparison.Ordinal)
-            ? "LAN Broadcast / Local Peer-to-Peer"
-            : "Steam Online Spacewar (AppID 480)";
+        string backendInfo = isInstalled ? $"ReFix Deploy Suite v{GetCurrentVersion(instance)} ({installedMode})" : "ReFix Suite Deployable";
+        string networkInfo = !installedMode.Contains("LAN", StringComparison.Ordinal) ? "Steam Online Spacewar (AppID 480)"
+            : installedMode.Contains("Offline", StringComparison.Ordinal) ? "LAN Broadcast / Local Peer-to-Peer"
+            : "LAN Broadcast + optional Steam friends";
 
         var config = new Dictionary<string, string>();
         if (!string.IsNullOrWhiteSpace(instance.InstallPath))
@@ -373,9 +397,11 @@ public sealed class ReFixEmulator : IEmulator
         var binDir = Directory.Exists(Path.Combine(deployPath, "bin")) ? Path.Combine(deployPath, "bin") : deployPath;
         var isGoldberg = optionId.Contains("goldberg", StringComparison.OrdinalIgnoreCase);
         var onlineMode = isGoldberg ? "goldberg" : "valve";
-        var modeDisplayName = isGoldberg ? "ReFix LAN (No Steam)" : "ReFix Online (Steam Spacewar 480)";
+        // deploy_helper.ps1 picks the product folder from this: goldberg = bin\lan, lanoffline = bin\lan_offline, valve = bin\online
+        var helperMode = IsLanOfflineOption(optionId) ? "lanoffline" : onlineMode;
+        var modeDisplayName = GetOptionDisplayName(optionId);
 
-        _logger.LogInformation("Deploying ReFix ({Mode}) via ReFix_deploy scripts for {Name} at {Path}", onlineMode, instance.Name, instance.InstallPath);
+        _logger.LogInformation("Deploying ReFix ({Mode}) via ReFix_deploy scripts for {Name} at {Path}", helperMode, instance.Name, instance.InstallPath);
 
         // Verify that ReFix digital signature is installed in the system; if not, install it
         // try
@@ -477,7 +503,7 @@ public sealed class ReFixEmulator : IEmulator
             helperArgs.Append($"-BinDir \"{EscapePsArg(binDir)}\" ");
             helperArgs.Append($"-ExeDir \"{EscapePsArg(exeDir)}\" ");
             helperArgs.Append($"-EngineType \"{EscapePsArg(engineType)}\" ");
-            helperArgs.Append($"-OnlineMode \"{EscapePsArg(onlineMode)}\" ");
+            helperArgs.Append($"-OnlineMode \"{EscapePsArg(helperMode)}\" ");
             helperArgs.Append($"-GameName \"{EscapePsArg(gameName)}\" ");
             helperArgs.Append($"-UserName \"{EscapePsArg(userName)}\" ");
             helperArgs.Append($"-RealAppId \"{EscapePsArg(realAppIdStr)}\" ");

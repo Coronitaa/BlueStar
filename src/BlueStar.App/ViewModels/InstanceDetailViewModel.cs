@@ -1717,6 +1717,17 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         }
     }
 
+    public bool IsInstallModalEmulatorLanOffline
+    {
+        get => string.Equals(InstallModalSelectedEmulator, ReFixEmulator.LanOfflineOptionId, StringComparison.OrdinalIgnoreCase);
+        set
+        {
+            if (value == IsInstallModalEmulatorLanOffline) return;
+            InstallModalSelectedEmulator = value ? ReFixEmulator.LanOfflineOptionId : string.Empty;
+            NotifyEmulatorSelectionChanged();
+        }
+    }
+
     public bool IsInstallModalEmulatorSpecific
     {
         get => string.Equals(InstallModalSelectedEmulator, "gamefix_online", StringComparison.OrdinalIgnoreCase);
@@ -1805,6 +1816,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsInstallModalEmulatorNone));
         OnPropertyChanged(nameof(IsInstallModalEmulatorValve));
         OnPropertyChanged(nameof(IsInstallModalEmulatorGoldberg));
+        OnPropertyChanged(nameof(IsInstallModalEmulatorLanOffline));
         OnPropertyChanged(nameof(IsInstallModalEmulatorSpecific));
         OnPropertyChanged(nameof(HasModalSpecificOnlineFix));
         OnPropertyChanged(nameof(SelectedModalSpecificGameFix));
@@ -2305,9 +2317,11 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             }
             else
             {
-                InstallModalSelectedEmulator = Instance.EmulatorId.Contains("goldberg", StringComparison.OrdinalIgnoreCase)
-                    ? "refix_goldberg"
-                    : "refix_valve";
+                InstallModalSelectedEmulator = ReFixEmulator.IsLanOfflineOption(Instance.EmulatorId)
+                    ? ReFixEmulator.LanOfflineOptionId
+                    : Instance.EmulatorId.Contains("goldberg", StringComparison.OrdinalIgnoreCase)
+                        ? "refix_goldberg"
+                        : "refix_valve";
             }
         }
         else if (!Instance.EmulatorEnabled && Instance.Status != InstanceStatus.NotInstalled)
@@ -3048,7 +3062,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         else
         {
             optionId = Instance.EmulatorId ?? (InstalledEmulatorMode?.Contains("LAN", StringComparison.Ordinal) == true ? "refix_goldberg" : "refix_valve");
-            displayName = InstalledEmulatorMode ?? (optionId == "refix_goldberg" ? "ReFix LAN" : "ReFix Online (Steam)");
+            displayName = ReFixEmulator.DescribeInstalledMode(InstalledEmulatorMode, optionId);
             emulatorVersion = Instance.InstalledEmulatorVersion ?? (_refixUpdateService?.GetCurrentInstalledVersion() ?? ReFixEmulator.GetCurrentVersion());
         }
 
@@ -6399,8 +6413,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 IsEmulatorInstalled = ReFixEmulator.IsEmulatorInstalled(Instance.InstallPath);
                 if (IsEmulatorInstalled)
                 {
-                    InstalledEmulatorMode = ReFixEmulator.GetInstalledMode(Instance.InstallPath)
-                        ?? (Instance.EmulatorId?.Contains("goldberg", StringComparison.OrdinalIgnoreCase) == true ? "ReFix LAN" : "ReFix Online (Steam)");
+                    InstalledEmulatorMode = ReFixEmulator.DescribeInstalledMode(ReFixEmulator.GetInstalledMode(Instance.InstallPath), Instance.EmulatorId);
                 }
                 else
                 {

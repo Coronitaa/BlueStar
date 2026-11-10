@@ -5,7 +5,8 @@
 # the game's own Steam/EOS DLLs are backed up and replaced by the ReFix binaries for the chosen product.
 #
 #   bash AutoDeploy.sh                         interactive
-#   bash AutoDeploy.sh <game folder|game.exe> [lan|online] [appid] [refix|steam|none]
+#   bash AutoDeploy.sh <game folder|game.exe> [lan|offline|online] [appid] [refix|steam|none]
+#     lan = ReFix Online + LAN, offline = ReFix Offline LAN (previous release), online = ReFix Online Legacy
 #   bash AutoDeploy.sh --uninstall <game folder>
 #
 # The last argument (or REFIX_OVERLAY_MODE) picks the in-game overlay of ReFix LAN: the ReFix overlay
@@ -43,6 +44,67 @@ ask_game_dir() {
         read -r -p "Game folder (or the game's .exe): " picked
     fi
     printf '%s' "$picked"
+}
+
+# ---------------------------------------------------------------- game mods
+# Mods made for one game (refix_mods/catalog.tsv) go to <exe folder>/refix_mods, where ReFix loads them.
+MODS_URL="${REFIX_MODS_URL:-https://raw.githubusercontent.com/Coronitaa/ReFix/main/refix_mods}"
+
+fetch() {   # fetch <url> <file>
+    if command -v curl >/dev/null 2>&1; then curl -fsSL --max-time 120 -o "$2" "$1"
+    elif command -v wget >/dev/null 2>&1; then wget -q -T 120 -O "$2" "$1"
+    else return 1; fi
+}
+
+sha256_of() { sha256sum "$1" 2>/dev/null | cut -d' ' -f1; }
+
+install_mods() {
+    local catalog="$ROOT/refix_mods/catalog.tsv" tmp="" id product exe mfile mtext file sum exe_path exe_dir dest src
+    if [ ! -f "$catalog" ]; then
+        tmp="$(mktemp)"
+        fetch "$MODS_URL/catalog.tsv" "$tmp" || { rm -f "$tmp"; info "Mod catalog not reachable; no game mods installed"; return 0; }
+        catalog="$tmp"
+    fi
+    while IFS=$'\t' read -r id product exe mfile mtext file sum; do
+        sum="${sum%$'\r'}"
+        case "$id" in ''|'#'*) continue ;; esac
+        [ "$product" = any ] || [ "$product" = "$MODE" ] || continue
+        exe_path="$(find "$GAME_DIR" -maxdepth 3 -type f -iname "$exe" -print -quit 2>/dev/null)"
+        [ -n "$exe_path" ] || continue
+        exe_dir="$(dirname "$exe_path")"
+        if [ -n "$mfile" ] && ! grep -qaF "$mtext" "$exe_dir/$mfile" 2>/dev/null; then continue; fi
+        dest="$exe_dir/refix_mods"
+        mkdir -p "$dest"
+        src="$ROOT/refix_mods/$file"
+        if [ -f "$src" ]; then cp -f "$src" "$dest/$file.part"
+        elif ! fetch "$MODS_URL/$file" "$dest/$file.part"; then
+            rm -f "$dest/$file.part"; warn "Could not download the $id mod"; continue
+        fi
+        if [ "$(sha256_of "$dest/$file.part")" != "$sum" ]; then
+            rm -f "$dest/$file.part"; warn "The $id package does not match the catalog; not installed"; continue
+        fi
+        mv -f "$dest/$file.part" "$dest/$file"
+        grep -qxF "$file" "$dest/.refix_installed" 2>/dev/null || printf '%s\n' "$file" >> "$dest/.refix_installed"
+        ok "Installed the $id mod in $dest"
+        break
+    done < "$catalog"
+    [ -z "$tmp" ] || rm -f "$tmp"
+    return 0
+}
+
+uninstall_mods() {
+    local list d f
+    while IFS= read -r list; do
+        d="$(dirname "$list")"
+        while IFS= read -r f; do f="${f%$'\r'}"; [ -n "$f" ] && rm -f "$d/$f"; done < "$list"
+        rm -f "$list"
+        rmdir "$d" 2>/dev/null || true
+        ok "Removed the game mods ReFix installed in $d"
+    done < <(find "$GAME_DIR" -type f -name .refix_installed 2>/dev/null)
+    # Game files a mod changed keep their original as <file>.refix_orig.
+    while IFS= read -r f; do
+        mv -f "$f" "${f%.refix_orig}" && ok "Restored ${f%.refix_orig}"
+    done < <(find "$GAME_DIR" -type f -name '*.refix_orig' 2>/dev/null)
 }
 
 # ---------------------------------------------------------------- uninstall
@@ -106,14 +168,16 @@ restore_saves() {
             [ -f "$owners" ] || continue
             refix="$(dirname "$owners")"
             user="$(dirname "$(dirname "$(dirname "$refix")")")"
-            native=_pc
-            for prof in "$refix"/Profiles/*/profile.ini; do
-                [ -f "$prof" ] && u16 "$prof" | grep -q '^NativeSaves=1' && native="$(basename "$(dirname "$prof")")"
-            done
             text="$(u16 "$owners")"
             changed=0
             for i in "${!labels[@]}"; do
                 label="${labels[$i]}"
+                native=_pc
+                if [ ! -d "$refix/Saves/_pc/$label" ] || [ -z "$(ls -A "$refix/Saves/_pc/$label" 2>/dev/null)" ]; then
+                    for prof in "$refix"/Profiles/*/profile.ini; do
+                        [ -f "$prof" ] && u16 "$prof" | grep -q '^NativeSaves=1' && native="$(basename "$(dirname "$prof")")"
+                    done
+                fi
                 owner="$(printf '%s\n' "$text" | awk -v k="$label" 'index($0, k "=") == 1 { print substr($0, length(k) + 2) }')"
                 [ -n "$owner" ] && [ "$owner" != "$native" ] || continue
                 live="$user/${lives[$i]}"
@@ -138,11 +202,32 @@ restore_saves() {
 uninstall() {
     info "Restoring the game's original files in $GAME_DIR"
     restore_saves
-    while IFS= read -r d; do restore_one "$d" steam_api64_original.dll steam_api64.dll; rm -f "$d/steam_api64_valve.dll"; done < <(dirs_with steam_api64_original.dll)
-    while IFS= read -r d; do restore_one "$d" steam_api_original.dll steam_api.dll; rm -f "$d/steam_api_o.dll"; done < <(dirs_with steam_api_original.dll)
-    while IFS= read -r d; do restore_one "$d" EOSSDK_original.dll EOSSDK-Win64-Shipping.dll; done < <(dirs_with EOSSDK_original.dll)
+    uninstall_mods
+    while IFS= read -r d; do
+        restore_one "$d" steam_api64_original.dll steam_api64.dll
+        restore_one "$d" steam_api64_valve.dll steam_api64.dll
+        restore_one "$d" steam_api64_o.dll steam_api64.dll
+        rm -f "$d/steam_api64_valve.dll"
+    done < <({ dirs_with steam_api64_original.dll; dirs_with steam_api64_valve.dll; dirs_with steam_api64_o.dll; } | sort -u)
+    while IFS= read -r d; do
+        restore_one "$d" steam_api_original.dll steam_api.dll
+        restore_one "$d" steam_api_valve.dll steam_api.dll
+        restore_one "$d" steam_api_o.dll steam_api.dll
+        rm -f "$d/steam_api_o.dll"
+    done < <({ dirs_with steam_api_original.dll; dirs_with steam_api_valve.dll; dirs_with steam_api_o.dll; } | sort -u)
+    while IFS= read -r d; do
+        restore_one "$d" EOSSDK_original.dll EOSSDK-Win64-Shipping.dll
+        rm -f "$d/RedboneEOS.dll"
+    done < <({ dirs_with EOSSDK_original.dll; dirs_with RedboneEOS.dll; } | sort -u)
     while IFS= read -r d; do restore_one "$d" winmm_o.dll winmm.dll; done < <(dirs_with winmm_o.dll)
-    ok "Done. ReFix.ini and saves were left in place."
+    find "$GAME_DIR" -type f \( -name "steam_appid.txt" -o -name "ReFix.ini" -o -name "ReFix.log" -o -name "local_save.txt" -o -name "refix_steamlink64.dll" -o -name "refix_steamlink.dll" -o -name "refix_steamhost64.exe" -o -name "refix_steamhost.exe" -o -name "ReFixFusionShared.log" \) -delete 2>/dev/null || true
+    # ReFix support tools (Photon Fusion Shared server): only the folder holding ReFix's own server, then its
+    # ReFix parent if nothing else is left in it.
+    while IFS= read -r f; do
+        rm -rf "$(dirname "$f")"
+        rmdir "$(dirname "$(dirname "$f")")" 2>/dev/null || true
+    done < <(find "$GAME_DIR" -type f -name ReFixFusionShared.exe 2>/dev/null)
+    ok "Done. ReFix files removed and backups restored."
     echo "    ReFix LAN profiles and their saves stay in the prefix's AppData/Roaming/ReFix (shared by every game)."
 }
 
@@ -172,6 +257,12 @@ deploy_steam_x64() {
         fi
         cp -f "$src" "$d/steam_api64.dll"
         ok "Deployed ReFix $MODE steam_api64.dll to $d"
+        # ReFix Online + LAN: Valve's DLL and the helper for the optional Steam online services (overlay switch).
+        # Only products that ship the helper have them (not Offline LAN).
+        if [ "$MODE" = lan ] && [ -f "$PRODUCT_BIN/refix_steamhost64.exe" ] && [ -f "$BIN/valve/steam_api64.dll" ]; then
+            cp -f "$BIN/valve/steam_api64.dll" "$d/refix_steamlink64.dll"
+            cp -f "$PRODUCT_BIN/refix_steamhost64.exe" "$d/refix_steamhost64.exe"
+        fi
     done < <({ dirs_with steam_api64.dll; dirs_with steam_api64_original.dll; } | sort -u)
 }
 
@@ -179,10 +270,11 @@ deploy_steam_x86() {
     local src="$PRODUCT_BIN/x86/steam_api.dll" d
     [ -f "$src" ] || die "Missing $src"
     while IFS= read -r d; do
-        backup_original "$d" steam_api.dll steam_api_original.dll
-        if [ "$MODE" = online ] && [ -f "$d/steam_api_original.dll" ]; then
-            cp -f "$d/steam_api_original.dll" "$d/steam_api_o.dll"   # Online x86 forwards to steam_api_o.dll
+        # Installs before 2.2.0 kept a second copy as steam_api_o.dll; the proxy now forwards to steam_api_original.dll.
+        if [ -f "$d/steam_api_o.dll" ]; then
+            if [ -f "$d/steam_api_original.dll" ]; then rm -f "$d/steam_api_o.dll"; else mv -f "$d/steam_api_o.dll" "$d/steam_api_original.dll"; fi
         fi
+        backup_original "$d" steam_api.dll steam_api_original.dll
         cp -f "$src" "$d/steam_api.dll"
         ok "Deployed ReFix $MODE x86 steam_api.dll to $d"
     done < <({ dirs_with steam_api.dll; dirs_with steam_api_original.dll; } | sort -u)
@@ -236,6 +328,15 @@ write_ini() {
     local ini="$EXE_DIR/ReFix.ini" photon eos emu
     if [ "$MODE" = lan ]; then emu=goldberg; eos=emulated; else emu=valve; eos=passthrough; fi
     if uses_photon; then photon=ReFixCloud; else photon=OfficialPhoton; fi
+    # Free-to-play games keep their real AppID online: their backend checks a Steam ticket for it.
+    local mask=480 store="$(mktemp)"
+    if [ "$MODE" = online ] && [ "$APP_ID" != 480 ] &&
+       fetch "https://store.steampowered.com/api/appdetails?appids=$APP_ID&filters=basic" "$store" &&
+       grep -q '"is_free":true' "$store"; then
+        mask="$APP_ID"
+        echo "[INFO] AppID $APP_ID is free to play on Steam: ReFix Online will use it without masking."
+    fi
+    rm -f "$store"
     if [ ! -f "$ini" ]; then
         cat > "$ini" <<EOF
 ; ReFix configuration (written by AutoDeploy.sh). See README.txt for every option.
@@ -255,7 +356,7 @@ Backend = $photon
 Mode = $emu
 
 [Steam]
-MaskAppId = 480
+MaskAppId = $mask
 RealAppId = $APP_ID
 Language = english
 BypassLicenseCheck = true
@@ -281,6 +382,7 @@ BlockSteamOverlay = $OV_BLOCK
 Sounds = true
 ; Each profile keeps its own Steam Cloud files and the game's known save folder (Unreal SaveGames, Unity LocalLow).
 IsolateSaves = true
+FirstRunDialog = false
 
 [EOS]
 Mode = $eos
@@ -300,6 +402,11 @@ EOF
         fi
         ok "Updated ReFix.ini in $EXE_DIR for ReFix $MODE"
     fi
+    # The game's server list (dedicated / community servers) under its real AppID: as Spacewar it shows none.
+    if [ "$APP_ID" != 480 ] && [ "$APP_ID" != "$mask" ]; then
+        ini_set "$ini" ServerBrowser OverrideServerListAppId true
+        ini_set "$ini" ServerBrowser ServerListAppId "$APP_ID"
+    fi
     printf '%s\n' "$APP_ID" > "$EXE_DIR/steam_appid.txt"
     ok "steam_appid.txt = $APP_ID"
 }
@@ -310,6 +417,10 @@ if [ "${1:-}" = "--uninstall" ]; then UNINSTALL=1; shift; fi
 
 TARGET="${1:-}"
 [ -n "$TARGET" ] || TARGET="$(ask_game_dir)"
+if [ -z "$TARGET" ]; then
+    warn "No folder selected or operation cancelled."
+    exit 0
+fi
 TARGET="${TARGET%/}"
 [ -e "$TARGET" ] || die "Not found: $TARGET"
 if [ -f "$TARGET" ]; then
@@ -327,13 +438,17 @@ if [ "$UNINSTALL" = 1 ]; then uninstall; exit 0; fi
 MODE="${2:-}"
 if [ -z "$MODE" ]; then
     echo
-    echo "  [1] ReFix Online via Steam  - uses the Steam client (start the game from Steam)"
-    echo "  [2] ReFix LAN without Steam - plays on the local network, Steam not needed"
-    read -r -p "Mode [1/2]: " choice
-    case "$choice" in 1) MODE=online ;; 2) MODE=lan ;; *) die "Choose 1 or 2" ;; esac
+    echo "  [1] ReFix Online + LAN          - local network; Steam friends optional from the overlay (recommended)"
+    echo "  [2] ReFix Offline LAN           - the LAN version of the previous release, local network only"
+    echo "  [3] ReFix Online Legacy via Steam - uses the Steam client (start the game from Steam)"
+    read -r -p "Mode [1/2/3] (default 1): " choice
+    case "${choice:-1}" in 1) MODE=lan ;; 2) MODE=offline ;; 3) MODE=online ;; *) die "Choose 1, 2 or 3" ;; esac
 fi
-case "$MODE" in online|lan) ;; *) die "Mode must be 'online' or 'lan'" ;; esac
-PRODUCT_BIN="$BIN/$MODE"
+case "$MODE" in online|lan|offline) ;; *) die "Mode must be 'lan', 'offline' or 'online'" ;; esac
+# Offline LAN installs exactly like ReFix LAN, from its own folder (bin/lan_offline).
+PRODUCT_DIR="$MODE"
+if [ "$MODE" = offline ]; then MODE=lan; PRODUCT_DIR=lan_offline; fi
+PRODUCT_BIN="$BIN/$PRODUCT_DIR"
 [ -d "$PRODUCT_BIN" ] || die "ReFix $MODE binaries not found in $PRODUCT_BIN"
 
 APP_ID="${3:-}"
@@ -374,6 +489,11 @@ deploy_steam_x86
 deploy_eos
 clean_online_winmm
 write_ini
+install_mods
+# ReFix Online + LAN: the Photon Fusion Shared server it starts next to the game (shipped with the Online product)
+if [ "$PRODUCT_DIR" = lan ] && [ -d "$BIN/online/ReFix" ]; then
+    cp -rf "$BIN/online/ReFix" "$EXE_DIR/" && ok "Deployed ReFix support tools (Fusion Shared server) to $EXE_DIR/ReFix"
+fi
 
 echo
 ok "ReFix $MODE is installed in $GAME_NAME."

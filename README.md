@@ -3,7 +3,7 @@
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20(x64)-brightgreen.svg)]()
 [![.NET 8.0](https://img.shields.io/badge/.NET-8.0%20WPF-purple.svg)]()
-[![Release: v1.5.5](https://img.shields.io/badge/Release-v1.5.5-orange.svg)](https://github.com/Coronitaa/BlueStar/releases/latest)
+[![Release: v1.5.6](https://img.shields.io/badge/Release-v1.5.6-orange.svg)](https://github.com/Coronitaa/BlueStar/releases/latest)
 
 BlueStar is a Windows launcher for Steam games. It finds a game in its catalog, downloads it from Steam depots, installs what the game needs to run, sets up multiplayer with [ReFix](https://github.com/Coronitaa/ReFix), unlocks DLCs and manages mods, all from one app.
 
@@ -13,9 +13,9 @@ Get the latest version from [Releases](https://github.com/Coronitaa/BlueStar/rel
 
 | Package | File | Notes |
 | :--- | :--- | :--- |
-| Setup (recommended) | `BlueStar-v1.5.5-Setup-win-x64.exe` | Installs for your user without asking for administrator rights. Installs the Visual C++ runtimes if they are missing, and WebView2 only if the PC doesn't have it. |
-| Portable | `BlueStar-v1.5.5-Portable-win-x64.zip` | Extract and run `BlueStar.exe`. Includes WebView2 and the Visual C++ runtime DLLs. |
-| MSIX | `BlueStar-v1.5.5-win-x64.msix` | Windows app package. |
+| Setup (recommended) | `BlueStar-v1.5.6-Setup-win-x64.exe` | Installs for your user without asking for administrator rights. Installs the Visual C++ runtimes if they are missing, and WebView2 only if the PC doesn't have it. |
+| Portable | `BlueStar-v1.5.6-Portable-win-x64.zip` | Extract and run `BlueStar.exe`. Includes WebView2 and the Visual C++ runtime DLLs. |
+| MSIX | `BlueStar-v1.5.6-win-x64.msix` | Windows app package. |
 
 Every package includes .NET 8, so there is nothing else to install.
 
@@ -27,15 +27,16 @@ Every package includes .NET 8, so there is nothing else to install.
 
 ## What it does
 
-**Catalog.** The catalog is a local SQLite snapshot (`catalog.sqlite.zst`), so search and filters work instantly and offline. Each game shows its DRM, launcher and Steam reviews.
+**Catalog.** The catalog is a local SQLite snapshot (`catalog.sqlite.zst`), so search and filters work instantly and offline. Each game shows its DRM, launcher and Steam reviews. Explore can sort by downloads in the BlueStar community; sorting by release date leaves out games that are not out yet, and Coming soon only lists those.
 
 **Downloads.** BlueStar downloads games from Steam depots with its own build of DepotDownloader, using manifests from DepotBox and ManifestHub. The installer only offers the depots and DLCs that match your Windows and its architecture. You can also pick the Steam download server in Settings (26 regions, a custom Cell ID, or automatic), or import a depot ZIP by dragging it in.
 
 **Library.** Games installed by BlueStar, games in your Steam libraries and games in any folder you add show up in one library. BlueStar finds the executable and the engine (Unity Mono/IL2CPP, Unreal, Godot or native) by itself.
 
-**Multiplayer with ReFix 2.1.0.** One click installs ReFix into a game:
-- **ReFix Online** plays over the Internet through the Steam client.
-- **ReFix LAN** plays on your local network with no Steam client. It has its own in-game overlay (Shift+Tab or the controller's Xbox / PS button) to see players on the network, join them and invite them, and player profiles, each with its own name, picture, SteamID and saves.
+**Multiplayer with ReFix 2.4.0.** One click installs ReFix into a game, in one of three modes:
+- **ReFix LAN + Online** (recommended) plays on your local network with no Steam client, and lets the game reach the Internet when it needs to. It has its own in-game overlay (Shift+Tab or the controller's Xbox / PS button) to see players on the network, join them and invite them, and player profiles with their own name, picture, SteamID and saves. With Steam installed, the overlay's Steam button adds your Steam friends to the same rooms.
+- **ReFix LAN Offline** is the previous ReFix LAN: local network only, no Steam services.
+- **ReFix Online Legacy** is the previous ReFix Online: plays over the Internet through the Steam client.
 
 BlueStar never asks for administrator rights while deploying ReFix. Each game page shows how other players rated ReFix in that game, and BlueStar asks for your own rating when you close the game.
 
@@ -53,7 +54,7 @@ BlueStar never asks for administrator rights while deploying ReFix. Each game pa
 ## Requirements
 
 - Windows 10 (64-bit, build 19041 or later) or Windows 11
-- The Steam client, only to play with ReFix Online
+- The Steam client, only to play with ReFix Online Legacy or to add Steam friends in ReFix LAN + Online
 
 ## Building from source
 
@@ -71,7 +72,7 @@ API keys for DepotBox and the mod providers are not in the repository. For local
 To build the release packages (Setup, Portable and MSIX):
 
 ```powershell
-.\build-release.ps1 -Version 1.5.5
+.\build-release.ps1 -Version 1.5.6
 ```
 
 Run it without `-Version` and it asks for the version. Release builds store the keys encrypted inside `bluestar.dat`.

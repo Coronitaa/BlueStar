@@ -36,8 +36,9 @@ public sealed class ImageCacheService
 
     private void SetMemoryCache(string key, BitmapSource bmp)
     {
-        _memoryCache[key] = bmp;
-        _memoryCacheOrder.Enqueue(key);
+        // Only a new key joins the eviction queue: re-setting one used to grow the queue without bound.
+        if (_memoryCache.TryAdd(key, bmp)) _memoryCacheOrder.Enqueue(key);
+        else _memoryCache[key] = bmp;
 
         while (_memoryCache.Count > MaxMemoryCacheEntries && _memoryCacheOrder.TryDequeue(out var oldKey))
         {
@@ -179,6 +180,26 @@ public sealed class ImageCacheService
         catch { }
 
         return null;
+    }
+
+    /// <summary>The in-memory bitmap for a URL, or null. Never touches the disk or the network.</summary>
+    public BitmapSource? GetFromMemory(string? url, uint appId = 0)
+    {
+        if (string.IsNullOrWhiteSpace(url) && appId == 0) return null;
+        return _memoryCache.TryGetValue(BuildKey(url, appId), out var bmp) ? bmp : null;
+    }
+
+    /// <summary>
+    /// Starts loading images in the background (disk cache or network) so they are in memory by the time
+    /// their cards are realized. Already cached or in-flight images cost nothing.
+    /// </summary>
+    public void Prefetch(IEnumerable<string?> urls)
+    {
+        foreach (var url in urls)
+        {
+            if (string.IsNullOrWhiteSpace(url) || GetFromMemory(url) != null) continue;
+            _ = LoadImageAsync(url);
+        }
     }
 
     /// <summary>

@@ -152,7 +152,7 @@
                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                 <Border CornerRadius="11,11,0,0">
                                                     <Border.Background>
-                                                        <ImageBrush ImageSource="{Binding HeaderImageUrl, Converter={StaticResource CachedImageConverter}}"
+                                                        <ImageBrush ctrl:AsyncImage.Url="{Binding HeaderImageUrl}"
                                                                     Stretch="UniformToFill"
                                                                     RenderOptions.BitmapScalingMode="HighQuality"/>
                                                     </Border.Background>
@@ -378,7 +378,7 @@
                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                             <Border CornerRadius="11,11,0,0">
                                                 <Border.Background>
-                                                    <ImageBrush ImageSource="{Binding HeaderImageUrl, Converter={StaticResource CachedImageConverter}}"
+                                                    <ImageBrush ctrl:AsyncImage.Url="{Binding HeaderImageUrl}"
                                                                 Stretch="UniformToFill"
                                                                 RenderOptions.BitmapScalingMode="HighQuality"/>
                                                 </Border.Background>

@@ -1,0 +1,11 @@
+# ReFix mod catalog: AutoDeploy installs the first row that matches the game.
+# Columns (tab separated):
+#   id          mod id (refixmod.json "id")
+#   product     lan, online or any: the ReFix product the mod needs
+#   exe         the game's executable; the package goes to <its folder>\refix_mods
+#   match_file  optional, relative to the exe folder: the row only matches when this file contains match_text
+#   match_text  optional text looked for in match_file (game version, edition...)
+#   file        package in refix_mods/ (next to AutoDeploy, else downloaded from this folder of the repository)
+#   sha256      SHA-256 of the package; a download that does not match is discarded
+# id	product	exe	match_file	match_text	file	sha256
+refix.csgo.lan_overhaul	lan	csgo.exe	csgo/steam.inf	ProductName=csgo	refix.csgo.lan_overhaul.rfmod	768538d1ff60cc869d286f6254d5d031846f49bcb7f8ecbb9f24613fe73f8b2a

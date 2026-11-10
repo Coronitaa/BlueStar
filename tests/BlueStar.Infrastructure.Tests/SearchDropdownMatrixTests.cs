@@ -62,7 +62,7 @@ public class SearchDropdownMatrixTests : IDisposable
                 ReviewPercent = 85,
                 DiscountPercent = 50,
                 PriceText = "$9.99",
-                ReleaseDateText = "10 Dec, 2026",
+                ReleaseDateText = "10 Oct, 2026", // already out: sorting by release date leaves unreleased games out
                 DeckCompatibility = "Unsupported"
             },
             new SearchResult
@@ -110,6 +110,12 @@ public class SearchDropdownMatrixTests : IDisposable
     [InlineData("comingsoon")]
     public async Task ExecuteAsync_AllPools_ReturnResultsWithoutCrashing(string pool)
     {
+        // Coming soon never lists games that are already out, so it needs one that is not
+        if (pool == "comingsoon")
+        {
+            _fakeSteam.StubResults.Add(new SearchResult { AppId = 999001, Name = "Upcoming Game", ReleaseDateText = "Coming soon" });
+        }
+
         var request = new SearchRequest
         {
             Pool = pool,

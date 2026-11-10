@@ -293,14 +293,30 @@ foreach ($dir in $targetDirs) {
 
     # 5. Generate SmokeAPI.config.json
     $smokeJsonPath = Join-Path $dir "SmokeAPI.config.json"
-    $smokeConfig = @{
-        logging = $false
-        unlock_all = $unlockAll
-        dlcs = $dlcList
+    # SmokeAPI 4 config: "all" unlocks every DLC; a list unlocks only those; "none" leaves ownership as it is.
+    # The known DLC list also goes to extra_dlcs, for games whose DLC list Steam does not return in full (Arma 3).
+    $dlcStatus = [ordered]@{}
+    $knownDlcs = [ordered]@{}
+    foreach ($id in ($dlcList.Keys | Sort-Object { [long]$_ })) {
+        $knownDlcs["$id"] = "$($dlcList[$id])"
+        if (-not $unlockAll) { $dlcStatus["$id"] = "unlocked" }
     }
-    $jsonStr = ConvertTo-Json $smokeConfig -Depth 5
-    [System.IO.File]::WriteAllText($smokeJsonPath, $jsonStr + "`r`n", [System.Text.Encoding]::UTF8)
-    Write-Host "  [OK] Generated $smokeJsonPath (unlock_all = $unlockAllStr)" -ForegroundColor Green
+    $extraDlcs = [ordered]@{}
+    if ($knownDlcs.Count -gt 0 -and $finalAppId -ne "480") { $extraDlcs["$finalAppId"] = [ordered]@{ dlcs = $knownDlcs } }
+    $smokeConfig = [ordered]@{
+        '$version' = 4
+        logging = $false
+        log_steam_http = $false
+        default_app_status = if ($unlockAll) { "unlocked" } else { "original" }
+        override_app_status = [ordered]@{}
+        override_dlc_status = $dlcStatus
+        auto_inject_inventory = $true
+        extra_inventory_items = @()
+        extra_dlcs = $extraDlcs
+    }
+    $jsonStr = ConvertTo-Json $smokeConfig -Depth 6
+    [System.IO.File]::WriteAllText($smokeJsonPath, $jsonStr + "`r`n", (New-Object System.Text.UTF8Encoding $false))
+    Write-Host "  [OK] Generated $smokeJsonPath (default_app_status = $($smokeConfig.default_app_status), $($dlcStatus.Count) DLC override(s))" -ForegroundColor Green
 }
 
 Write-Host "`n============================================================" -ForegroundColor Green

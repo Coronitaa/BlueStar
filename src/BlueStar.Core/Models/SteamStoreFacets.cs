@@ -116,8 +116,18 @@ public static class SteamStoreFacets
         ("Reviews", "User reviews (best first)"),
         ("Name", "Name (A-Z)"),
         ("Price", "Price"),
-        ("DeckCompatDate", "Steam Deck review date (newest first)")
+        ("DeckCompatDate", "Steam Deck review date (newest first)"),
+        (SortDownloads, "Downloads (most first)")
     ];
+
+    /// <summary>
+    /// BlueStar community downloads (instances added). Not a Steam token: it is ranked locally from the
+    /// community feed and never sent to the store, which would answer an unknown token with the unsorted catalogue.
+    /// </summary>
+    public const string SortDownloads = "Downloads";
+
+    public static bool IsDownloadsSort(string? sortBase) =>
+        string.Equals(sortBase, SortDownloads, System.StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// The direction Steam actually implements for a field that only has one.
@@ -128,6 +138,7 @@ public static class SteamStoreFacets
         return string.Equals(sortBase, "Released", System.StringComparison.OrdinalIgnoreCase)
             || string.Equals(sortBase, "Reviews", System.StringComparison.OrdinalIgnoreCase)
             || string.Equals(sortBase, "DeckCompatDate", System.StringComparison.OrdinalIgnoreCase)
+            || IsDownloadsSort(sortBase)
             || string.Equals(sortBase, "Deck", System.StringComparison.OrdinalIgnoreCase);
     }
 
@@ -154,7 +165,7 @@ public static class SteamStoreFacets
     /// </remarks>
     public static string ComposeSort(string? sortBase, bool descending)
     {
-        if (string.IsNullOrEmpty(sortBase)) return string.Empty;
+        if (string.IsNullOrEmpty(sortBase) || IsDownloadsSort(sortBase)) return string.Empty;
         if (sortBase.StartsWith('_')) return sortBase;
 
         var canonical = sortBase.ToLowerInvariant() switch

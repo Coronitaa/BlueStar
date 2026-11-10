@@ -92,6 +92,8 @@ public partial class GameCategoryCarousel : UserControl
     private readonly DispatcherTimer _resumeTimer;
     private bool _isPaused;
     private bool _isInsideViewport = true;
+    private ScrollViewer? _parentScrollViewer;
+    private Window? _window;
     private const double ScrollStep = 0.85; // Slow smooth ticker speed
 
     public GameCategoryCarousel()
@@ -112,7 +114,10 @@ public partial class GameCategoryCarousel : UserControl
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
-        LayoutUpdated += OnLayoutUpdated;
+        // Not LayoutUpdated: it fires for every layout pass of the whole window, and this ticker causes one
+        // every 25 ms, so each carousel re-measured its bounds ~40 times a second.
+        IsVisibleChanged += (_, _) => EvaluateTimerState();
+        SizeChanged += (_, _) => CheckViewportVisibility();
     }
 
     private static void OnCategoryChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -125,6 +130,13 @@ public partial class GameCategoryCarousel : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        _parentScrollViewer = FindParentScrollViewer(this);
+        if (_parentScrollViewer != null) _parentScrollViewer.ScrollChanged += OnParentScrollChanged;
+
+        _window = Window.GetWindow(this);
+        if (_window != null) _window.StateChanged += OnWindowStateChanged;
+
+        CheckViewportVisibility();
         EvaluateTimerState();
     }
 
@@ -132,12 +144,19 @@ public partial class GameCategoryCarousel : UserControl
     {
         _scrollTimer.Stop();
         _resumeTimer.Stop();
+
+        if (_parentScrollViewer != null) _parentScrollViewer.ScrollChanged -= OnParentScrollChanged;
+        if (_window != null) _window.StateChanged -= OnWindowStateChanged;
+        _parentScrollViewer = null;
+        _window = null;
     }
 
-    private void OnLayoutUpdated(object? sender, EventArgs e)
+    private void OnParentScrollChanged(object sender, ScrollChangedEventArgs e)
     {
-        CheckViewportVisibility();
+        if (e.VerticalChange != 0 || e.ViewportHeightChange != 0) CheckViewportVisibility();
     }
+
+    private void OnWindowStateChanged(object? sender, EventArgs e) => EvaluateTimerState();
 
     private void CheckViewportVisibility()
     {
@@ -172,6 +191,8 @@ public partial class GameCategoryCarousel : UserControl
         if (_scrollTimer == null) return;
 
         bool shouldRun = _isInsideViewport &&
+                         IsVisible &&
+                         _window?.WindowState != WindowState.Minimized &&
                          !_isPaused &&
                          Category != null &&
                          !Category.IsExpanded &&

@@ -68,11 +68,19 @@ function SetOwner([string]$label, [string]$owner) {
     }
 }
 
-# The profile that kept this PC's saves (NativeSaves=1), else the pre-profile stash.
-$native = "_pc"
-Get-ChildItem -LiteralPath (Join-Path $root "Profiles") -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-    $ini = Join-Path $_.FullName "profile.ini"
-    if ((Test-Path -LiteralPath $ini) -and ((Get-Content -LiteralPath $ini) -match "^\s*NativeSaves\s*=\s*1")) { $native = $_.Name }
+# Restore pristine pre-ReFix saves (_pc) if present, else the profile that kept native saves.
+function Get-NativeOwner([string]$label) {
+    $pcStash = Join-Path $root (Join-Path "Saves\_pc" $label)
+    if (Test-Path -LiteralPath $pcStash) {
+        $items = @(Get-ChildItem -LiteralPath $pcStash -Force -ErrorAction SilentlyContinue)
+        if ($items.Count -gt 0) { return "_pc" }
+    }
+    $found = "_pc"
+    Get-ChildItem -LiteralPath (Join-Path $root "Profiles") -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+        $ini = Join-Path $_.FullName "profile.ini"
+        if ((Test-Path -LiteralPath $ini) -and ((Get-Content -LiteralPath $ini) -match "^\s*NativeSaves\s*=\s*1")) { $found = $_.Name }
+    }
+    return $found
 }
 function StashOf([string]$owner, [string]$label) {
     if ($owner -eq "_pc") { return Join-Path $root (Join-Path "Saves\_pc" $label) }
@@ -81,6 +89,7 @@ function StashOf([string]$owner, [string]$label) {
 
 $changed = $false
 foreach ($loc in $locations) {
+    $native = Get-NativeOwner $loc.Label
     $owner = OwnerOf $loc.Label
     if (-not $owner -or $owner -eq $native) { continue }
     $out = StashOf $owner $loc.Label

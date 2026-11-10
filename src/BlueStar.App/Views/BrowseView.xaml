@@ -441,7 +441,7 @@
                 <Grid>
                     <Border CornerRadius="9,9,0,0">
                         <Border.Background>
-                            <ImageBrush ImageSource="{Binding HeaderImageUrl, Converter={StaticResource CachedImageConverter}}"
+                            <ImageBrush ctrl:AsyncImage.Url="{Binding HeaderImageUrl}"
                                         Stretch="UniformToFill"
                                         RenderOptions.BitmapScalingMode="HighQuality"/>
                         </Border.Background>
@@ -1377,7 +1377,7 @@
         </ctrl:ModalOverlay>
 
         <!-- ═══ EXPLORE FIRST LOAD OVERLAY SCREEN (Replaced by In-Place Skeleton Cards) ═══ -->
-        <Grid x:Name="ExploreLoadingOverlay"
+        <Grid ctrl:VisibleStoryboard.Key="ExploreStarSpinStoryboard" x:Name="ExploreLoadingOverlay"
               Grid.Row="0"
               Grid.RowSpan="3"
               Background="{StaticResource BaseBackgroundBrush}"
@@ -1403,11 +1403,6 @@
                 </Storyboard>
             </Grid.Resources>
 
-            <Grid.Triggers>
-                <EventTrigger RoutedEvent="FrameworkElement.Loaded">
-                    <BeginStoryboard Storyboard="{StaticResource ExploreStarSpinStoryboard}"/>
-                </EventTrigger>
-            </Grid.Triggers>
 
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                 <!-- Spin & Glow Container -->

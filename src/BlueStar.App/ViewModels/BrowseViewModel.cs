@@ -866,6 +866,26 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     /// every call after that appends, which is what the scroll-to-bottom loading relies on.
     /// Preserves existing results during Refreshing to eliminate UI flicker.
     /// </summary>
+    /// <summary>
+    /// AppIds most downloaded by the BlueStar community, most first. Null when the feed is unavailable,
+    /// so the Downloads sort falls back to the unsorted catalogue instead of an empty page.
+    /// </summary>
+    private async Task<IReadOnlyCollection<uint>?> GetDownloadsRankAsync(CancellationToken ct)
+    {
+        if (_statsService is null) return null;
+        try
+        {
+            var feed = await _statsService.GetMostPlayedBlueStarAsync(ct).ConfigureAwait(true);
+            var ids = feed.Select(r => r.AppId).Where(id => id > 0).Distinct().ToList();
+            return ids.Count > 0 ? ids : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Community downloads feed unavailable for the Downloads sort");
+            return null;
+        }
+    }
+
     public async Task RunSearchAsync(bool reset = true)
     {
         if (_catalogSearch is null || _isDisposed) return;
@@ -938,6 +958,11 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                 _selectedTagIds = includedTags;
                 _selectedExcludedTagIds = excludedTags;
 
+                var downloadsRank = SteamStoreFacets.IsDownloadsSort(sortName)
+                    ? await GetDownloadsRankAsync(token).ConfigureAwait(true)
+                    : null;
+                if (_isDisposed || generation != _searchGeneration) return;
+
                 var pipelineLanded = 0;
 
                 for (var hop = 0; hop <= MaxEmptyHops; hop++)
@@ -986,6 +1011,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                         DiscountedOnly = discounted,
                         MaxPriceCents = maxPriceCents,
                         HideAdult = !(_settingsService?.ShowNsfwContent ?? false),
+                        RestrictToAppIds = downloadsRank,
                         Facets = BuildFacets(rung.Tags)
                     };
 
@@ -1008,6 +1034,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                     }
 
                     _fetched.AddRange(fresh);
+                    BlueStar.App.Services.ImageCacheService.Instance.Prefetch(fresh.Select(f => f.HeaderImageUrl));
                     _rungStart = queryStart + PageSize;
                     pipelineLanded += fresh.Count;
 
@@ -1125,6 +1152,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
                 }
 
                 _fetched.AddRange(fresh);
+                BlueStar.App.Services.ImageCacheService.Instance.Prefetch(fresh.Select(f => f.HeaderImageUrl));
                 _rungStart += Math.Max(page.Items.Count, 1);
                 landed += fresh.Count;
 

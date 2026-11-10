@@ -725,6 +725,18 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
             whereClauses.Add($"a.app_id IN ({idList})");
         }
 
+        // Release window: the indexed column narrows the rows first, the exact check (shared with the Steam results) decides
+        if (query.Released.HasValue)
+        {
+            var nowUtc = DateTime.UtcNow;
+            connection.CreateFunction("bs_released",
+                (string? text, long? utc) => Search.SearchPipeline.IsReleased(text, utc, nowUtc));
+            whereClauses.Add(query.Released.Value
+                ? "(a.release_date_utc <= @nowUtc AND bs_released(a.release_date_text, a.release_date_utc))"
+                : "NOT bs_released(a.release_date_text, a.release_date_utc)");
+            parameters.Add(new SqliteParameter("@nowUtc", new DateTimeOffset(nowUtc).ToUnixTimeSeconds()));
+        }
+
         var fromClause = hasFts
             ? "FROM apps_fts f JOIN apps a ON f.rowid = a.app_id"
             : "FROM apps a";
@@ -778,8 +790,15 @@ public sealed class LocalCatalogRepository : ILocalCatalogRepository
 
         // 2. Sorting
         var dir = query.Descending ? "DESC" : "ASC";
+        var downloadsRank = SteamStoreFacets.IsDownloadsSort(query.SortBy) && query.RestrictToAppIds is { Count: > 0 } rankIds
+            ? "," + string.Join(',', rankIds) + ","
+            : null;
+        if (downloadsRank != null) parameters.Add(new SqliteParameter("@downloadsRank", downloadsRank));
+
         var sortSql = (query.SortBy ?? string.Empty).ToLowerInvariant() switch
         {
+            // RestrictToAppIds holds the community-downloads ranking, most downloaded first
+            "downloads" when downloadsRank != null => "ORDER BY instr(@downloadsRank, ',' || a.app_id || ',') ASC, a.app_id ASC",
             "name" => $"ORDER BY a.name {dir}, a.app_id {dir}",
             "released" => $"ORDER BY a.release_date_utc {dir} NULLS LAST, a.app_id {dir}",
             "modified" or "last_modified" => $"ORDER BY a.last_modified {dir}, a.app_id {dir}",

@@ -33,7 +33,7 @@ public class EmulatorRatingServiceTests : IDisposable
         new(NullLogger<EmulatorRatingService>.Instance, dataDirectory: _tempDir);
 
     [Fact]
-    public async Task GetOptionsForInstance_ForUnrealEngine_ReturnsOnlineAndGoldberg()
+    public async Task GetOptionsForInstance_ForUnrealEngine_ReturnsTheThreeReFixProducts()
     {
         var service = CreateService();
         var instance = new GameInstance
@@ -53,15 +53,15 @@ public class EmulatorRatingServiceTests : IDisposable
         var options = await service.GetOptionsForInstanceAsync(instance);
 
         options.Should().NotBeNull();
-        options.Should().HaveCount(2);
-        options.Select(o => o.Id).Should().Contain(new[] { "refix_valve", "refix_goldberg" });
+        options.Should().HaveCount(3);
+        options.Select(o => o.Id).Should().Contain(new[] { "refix_valve", "refix_goldberg", ReFixEmulator.LanOfflineOptionId });
         // With 0 votes, neither option should be recommended or have score enabled
         options.Any(o => o.IsRecommended).Should().BeFalse();
         options.All(o => o.HasEnoughVotesForScore).Should().BeFalse();
     }
 
     [Fact]
-    public async Task GetOptionsForInstance_ForGodotEngine_ReturnsOnlineAndGoldberg()
+    public async Task GetOptionsForInstance_ForGodotEngine_ReturnsTheThreeReFixProducts()
     {
         var service = CreateService();
         var instance = new GameInstance
@@ -81,13 +81,13 @@ public class EmulatorRatingServiceTests : IDisposable
         var options = await service.GetOptionsForInstanceAsync(instance);
 
         options.Should().NotBeNull();
-        options.Should().HaveCount(2);
-        options.Select(o => o.Id).Should().Contain(new[] { "refix_valve", "refix_goldberg" });
+        options.Should().HaveCount(3);
+        options.Select(o => o.Id).Should().Contain(new[] { "refix_valve", "refix_goldberg", ReFixEmulator.LanOfflineOptionId });
         options.Any(o => o.IsRecommended).Should().BeFalse();
     }
 
     [Fact]
-    public async Task GetOptionsForInstance_ForUnityEngine_ReturnsOnlineAndGoldberg()
+    public async Task GetOptionsForInstance_ForUnityEngine_ReturnsTheThreeReFixProducts()
     {
         var service = CreateService();
         var instance = new GameInstance
@@ -107,8 +107,8 @@ public class EmulatorRatingServiceTests : IDisposable
         var options = await service.GetOptionsForInstanceAsync(instance);
 
         options.Should().NotBeNull();
-        options.Should().HaveCount(2);
-        options.Select(o => o.Id).Should().Contain(new[] { "refix_valve", "refix_goldberg" });
+        options.Should().HaveCount(3);
+        options.Select(o => o.Id).Should().Contain(new[] { "refix_valve", "refix_goldberg", ReFixEmulator.LanOfflineOptionId });
     }
 
     [Fact]

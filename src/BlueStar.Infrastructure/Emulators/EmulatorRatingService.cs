@@ -133,9 +133,9 @@ public sealed class EmulatorRatingService : IEmulatorRatingService
         {
             Id = "refix_valve",
             EmulatorId = "refix",
-            Name = "ReFix Online (Steam Spacewar)",
+            Name = "ReFix Online Legacy (Steam Spacewar)",
             Mode = "valve",
-            Description = "Uses Steam client with Spacewar (AppID 480) for matchmaking, invites, and online multiplayer gaming.",
+            Description = "The previous ReFix Online: uses the Steam client with Spacewar (AppID 480) for matchmaking, invites and online multiplayer. The game's public servers show up in its server list.",
             BadgeText = "Steam Online",
             PositiveVotes = valveStats.Positive,
             NegativeVotes = valveStats.Negative,
@@ -151,13 +151,30 @@ public sealed class EmulatorRatingService : IEmulatorRatingService
         {
             Id = "refix_goldberg",
             EmulatorId = "refix",
-            Name = "ReFix LAN (Steam-Free)",
+            Name = "ReFix LAN + Online",
             Mode = "goldberg",
-            Description = "ReFix's own Steam emulator, no Steam client needed. Players on the same network find each other automatically, every PC gets its own identity and progress is saved locally.",
-            BadgeText = "LAN Offline",
+            Description = "ReFix's own Steam emulator, no Steam client needed. Players on the same network find each other automatically and the game reaches the Internet when it needs it; with Steam installed, the overlay's Steam button adds your Steam friends to the same rooms.",
+            BadgeText = "LAN + Online",
             PositiveVotes = goldbergStats.Positive,
             NegativeVotes = goldbergStats.Negative,
             IsActive = isGoldbergActive
+        });
+
+        // ReFix LAN Offline: the previous LAN build, local network only
+        var lanOfflineId = ReFixEmulator.LanOfflineOptionId;
+        var lanOfflineStats = _ratings.TryGetValue($"{instance.AppId}_{lanOfflineId}", out var ls) ? ls : new RatingData { Positive = 0, Negative = 0 };
+
+        available.Add(new EmulatorOptionInfo
+        {
+            Id = lanOfflineId,
+            EmulatorId = "refix",
+            Name = "ReFix LAN Offline",
+            Mode = "lanoffline",
+            Description = "The previous ReFix LAN, unchanged: local network play only, no Steam client and no Steam services.",
+            BadgeText = "LAN Offline",
+            PositiveVotes = lanOfflineStats.Positive,
+            NegativeVotes = lanOfflineStats.Negative,
+            IsActive = ReFixEmulator.IsLanOfflineOption(instance.EmulatorId)
         });
 
         // Rank by ScorePercentage (descending), then PositiveVotes (descending), then TotalVotes (descending)

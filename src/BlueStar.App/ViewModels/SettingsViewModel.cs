@@ -124,7 +124,7 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     [ObservableProperty]
-    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.5.5";
+    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.5.6";
 
     [ObservableProperty]
     private string _defaultApiUrl = "https://depotbox.org";
@@ -518,6 +518,7 @@ public partial class SettingsViewModel : ObservableObject
             ExploreSortOptions.Add(new SortOptionItem("Name", _localizationService.GetString("String_Sort_Name", "Name")));
             ExploreSortOptions.Add(new SortOptionItem("Price", _localizationService.GetString("String_Sort_Price", "Price")));
             ExploreSortOptions.Add(new SortOptionItem("DeckCompatDate", _localizationService.GetString("String_Sort_DeckCompatDate", "Steam Deck review date")));
+            ExploreSortOptions.Add(new SortOptionItem(SteamStoreFacets.SortDownloads, _localizationService.GetString("String_Sort_Downloads", "Downloads")));
             ExploreSortOptions.Add(new SortOptionItem(string.Empty, _localizationService.GetString("String_SortNone", "No particular order")));
 
             ExploreSortDirectionOptions.Clear();

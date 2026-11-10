@@ -112,6 +112,7 @@ public sealed class SearchPipeline : ISearchPipeline
                 IncludedTagIds = request.IncludedTagIds?.ToList(),
                 ExcludedTagIds = request.ExcludedTagIds?.ToList(),
                 RestrictToAppIds = request.RestrictToAppIds?.ToList(),
+                Released = ReleaseWindowFor(request.Pool, sortBase),
                 Offset = request.Start,
                 Limit = request.Count
             };
@@ -434,6 +435,7 @@ public sealed class SearchPipeline : ISearchPipeline
                     IncludedTagIds = request.IncludedTagIds?.ToList(),
                     ExcludedTagIds = request.ExcludedTagIds?.ToList(),
                     RestrictToAppIds = request.RestrictToAppIds?.ToList(),
+                    Released = ReleaseWindowFor(request.Pool, sortBase),
                     Offset = request.Start,
                     Limit = request.Count
                 };
@@ -472,7 +474,9 @@ public sealed class SearchPipeline : ISearchPipeline
 
             // Anomaly validation using actual payload
             var validation = _validator.ValidateResponse(steamQuery, page.RawPayload ?? string.Empty, page.Items, page.TotalCount);
-            IReadOnlyList<SearchResult> items = page.Items.Where(i => MatchesRequestFilters(i, request)).ToList();
+            IReadOnlyList<SearchResult> items = ApplyReleaseWindow(
+                page.Items.Where(i => MatchesRequestFilters(i, request)).ToList(),
+                ReleaseWindowFor(request.Pool, sortBase));
 
             // When browsing "popularnew" (Popular new releases), filter out legacy releases
             // so games released years ago (e.g. Brawlhalla from 2017, Warframe from 2013) are never presented as "new releases".
@@ -508,6 +512,7 @@ public sealed class SearchPipeline : ISearchPipeline
                     IncludedTagIds = request.IncludedTagIds?.ToList(),
                     ExcludedTagIds = request.ExcludedTagIds?.ToList(),
                     RestrictToAppIds = request.RestrictToAppIds?.ToList(),
+                    Released = ReleaseWindowFor(request.Pool, sortBase),
                     Offset = request.Start,
                     Limit = request.Count
                 };
@@ -530,7 +535,7 @@ public sealed class SearchPipeline : ISearchPipeline
 
             if (!string.IsNullOrEmpty(sortBase))
             {
-                items = ApplyLocalSort(items, sortBase, descending);
+                items = ApplyLocalSort(items, sortBase, descending, request.RestrictToAppIds);
             }
 
             // Pre-fill catalog enrichment data into Steam results (DRM, DLC, tags, price, reviews, date)
@@ -597,6 +602,7 @@ public sealed class SearchPipeline : ISearchPipeline
             IncludedTagIds = request.IncludedTagIds?.ToList(),
             ExcludedTagIds = request.ExcludedTagIds?.ToList(),
             RestrictToAppIds = request.RestrictToAppIds?.ToList(),
+            Released = ReleaseWindowFor(request.Pool, sortBase),
             Offset = request.Start,
             Limit = request.Count
         };
@@ -623,7 +629,9 @@ public sealed class SearchPipeline : ISearchPipeline
         {
             var page = await _steamSearchService.SearchAsync(steamQuery, ct).ConfigureAwait(false);
             var validation = _validator.ValidateResponse(steamQuery, page.RawPayload ?? string.Empty, page.Items, page.TotalCount);
-            var items = page.Items.Where(i => MatchesRequestFilters(i, request)).ToList();
+            var items = ApplyReleaseWindow(
+                page.Items.Where(i => MatchesRequestFilters(i, request)).ToList(),
+                ReleaseWindowFor(request.Pool, sortBase)).ToList();
             int hiddenCount = Math.Max(0, page.Items.Count - items.Count);
 
             // Pre-fill catalog enrichment data into Steam results (DRM, DLC, tags, price, reviews, date)
@@ -669,6 +677,7 @@ public sealed class SearchPipeline : ISearchPipeline
                     IncludedTagIds = request.IncludedTagIds?.ToList(),
                     ExcludedTagIds = request.ExcludedTagIds?.ToList(),
                     RestrictToAppIds = request.RestrictToAppIds?.ToList(),
+                    Released = ReleaseWindowFor(request.Pool, sortBase),
                     Offset = request.Start,
                     Limit = request.Count
                 };
@@ -691,7 +700,7 @@ public sealed class SearchPipeline : ISearchPipeline
 
             if (!string.IsNullOrEmpty(sortBase))
             {
-                items = ApplyLocalSort(items, sortBase, descending).ToList();
+                items = ApplyLocalSort(items, sortBase, descending, request.RestrictToAppIds).ToList();
             }
 
             return new SearchResponse
@@ -991,9 +1000,60 @@ public sealed class SearchPipeline : ISearchPipeline
         return decimal.TryParse(cleaned, NumberStyles.Any, CultureInfo.InvariantCulture, out var price) ? price : decimal.MaxValue;
     }
 
-    public static IReadOnlyList<SearchResult> ApplyLocalSort(IReadOnlyList<SearchResult> items, string sortBase, bool descending)
+    /// <summary>
+    /// Which games a query may show, by release: Coming soon never shows a game that is already out, and
+    /// sorting by release date outside Coming soon never shows one that is not out yet.
+    /// </summary>
+    /// <returns>true: released only. false: unreleased only. null: no restriction.</returns>
+    public static bool? ReleaseWindowFor(string? pool, string? sortBase)
+    {
+        if (string.Equals(pool, "comingsoon", StringComparison.OrdinalIgnoreCase)) return false;
+        return string.Equals(sortBase, "Released", StringComparison.OrdinalIgnoreCase) ? true : null;
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex DayOfMonthToken =
+        new(@"(?<![\dQq])\d{1,2}(?![\dQq])", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// Whether a game is already out on <paramref name="nowUtc"/>. A date with a day ("Nov 9, 2026") is exact. Steam
+    /// gives upcoming games approximate dates ("Q1 2026", "Nov 2026", "2026", "Coming soon"), so one of those counts as
+    /// out only once its year is over, and text with no date at all never does.
+    /// </summary>
+    public static bool IsReleased(string? releaseDateText, long? releaseDateUtc, DateTime nowUtc)
+    {
+        if (string.IsNullOrWhiteSpace(releaseDateText))
+        {
+            return releaseDateUtc is > 0 && DateTimeOffset.FromUnixTimeSeconds(releaseDateUtc.Value).UtcDateTime <= nowUtc;
+        }
+
+        var date = ParseReleaseDate(releaseDateText);
+        if (date == null) return false;
+
+        return DayOfMonthToken.IsMatch(releaseDateText)
+            ? date.Value.Date <= nowUtc.Date
+            : date.Value.Year < nowUtc.Year;
+    }
+
+    private static IReadOnlyList<SearchResult> ApplyReleaseWindow(IReadOnlyList<SearchResult> items, bool? released)
+    {
+        if (released == null || items.Count == 0) return items;
+        var now = DateTime.UtcNow;
+        return items.Where(i => IsReleased(i.ReleaseDateText, i.ReleaseDateUtc, now) == released.Value).ToList();
+    }
+
+    /// <param name="downloadsRank">AppIds in community-downloads order, used by the Downloads sort.</param>
+    public static IReadOnlyList<SearchResult> ApplyLocalSort(IReadOnlyList<SearchResult> items, string sortBase, bool descending,
+        IReadOnlyCollection<uint>? downloadsRank = null)
     {
         if (items.Count <= 1 || string.IsNullOrWhiteSpace(sortBase)) return items;
+
+        if (SteamStoreFacets.IsDownloadsSort(sortBase))
+        {
+            if (downloadsRank is not { Count: > 0 }) return items;
+            var position = downloadsRank.Select((id, index) => (id, index))
+                .GroupBy(p => p.id).ToDictionary(g => g.Key, g => g.First().index);
+            return items.OrderBy(i => position.TryGetValue(i.AppId, out var at) ? at : int.MaxValue).ToList();
+        }
 
         var key = sortBase.ToLowerInvariant();
         return key switch

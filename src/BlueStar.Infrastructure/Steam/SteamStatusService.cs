@@ -19,6 +19,10 @@ public sealed class SteamStatusService : ISteamStatusService
     private readonly Timer _timer;
     private SteamStatus _currentStatus;
     private bool _disposed;
+    private int _evaluating;
+
+    // loginusers.vdf is parsed again only when it changes or the active account does
+    private (string Path, DateTime WriteTimeUtc, ulong? SteamId64, string? Persona, string? Account)? _loginUsersCache;
 
     public SteamStatus CurrentStatus => _currentStatus;
     public event EventHandler<SteamStatus>? StatusChanged;
@@ -31,7 +35,7 @@ public sealed class SteamStatusService : ISteamStatusService
         // Evaluate immediately
         EvaluateStatus();
 
-        // Check periodically every 2.5 seconds
+        // Check periodically every 2.5 seconds (cheap: a registry read and one process lookup by id)
         _timer = new Timer(_ => EvaluateStatus(), null, TimeSpan.FromSeconds(2.5), TimeSpan.FromSeconds(2.5));
     }
 
@@ -44,16 +48,12 @@ public sealed class SteamStatusService : ISteamStatusService
     private void EvaluateStatus()
     {
         if (_disposed) return;
+        // A slow tick (disk, AV scan) must not stack with the next one on the thread pool
+        if (Interlocked.Exchange(ref _evaluating, 1) == 1) return;
 
         try
         {
-            var isRunning = false;
-            try
-            {
-                var steamProcesses = Process.GetProcessesByName("steam");
-                isRunning = steamProcesses.Length > 0;
-            }
-            catch { }
+            var isRunning = IsSteamRunning();
 
             if (!isRunning)
             {
@@ -98,7 +98,7 @@ public sealed class SteamStatusService : ISteamStatusService
                 {
                     try
                     {
-                        var (vdfPersona, vdfAccount) = ParseLoginUsers(loginUsersFile, steamId64);
+                        var (vdfPersona, vdfAccount) = ReadLoginUsersCached(loginUsersFile, steamId64);
                         if (!string.IsNullOrWhiteSpace(vdfPersona))
                             personaName = vdfPersona;
                         if (!string.IsNullOrWhiteSpace(vdfAccount))
@@ -115,6 +115,64 @@ public sealed class SteamStatusService : ISteamStatusService
         {
             _logger.LogTrace(ex, "Error while evaluating Steam status");
         }
+        finally
+        {
+            Volatile.Write(ref _evaluating, 0);
+        }
+    }
+
+    /// <summary>
+    /// Steam writes its own PID to HKCU\Software\Valve\Steam\ActiveProcess. Checking that one process is far
+    /// cheaper than snapshotting every process on the machine, which this did every 2.5 seconds.
+    /// </summary>
+    private static bool IsSteamRunning()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            try
+            {
+                using var activeKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam\ActiveProcess");
+                if (activeKey?.GetValue("pid") is int pid)
+                {
+                    if (pid <= 0) return false;
+                    try
+                    {
+                        using var process = Process.GetProcessById(pid);
+                        return !process.HasExited &&
+                               process.ProcessName.StartsWith("steam", StringComparison.OrdinalIgnoreCase);
+                    }
+                    catch (ArgumentException)
+                    {
+                        return false; // no process with that id: Steam is closed
+                    }
+                }
+            }
+            catch { }
+        }
+
+        try
+        {
+            var processes = Process.GetProcessesByName("steam");
+            foreach (var process in processes) process.Dispose();
+            return processes.Length > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private (string? PersonaName, string? AccountName) ReadLoginUsersCached(string vdfPath, ulong? activeSteamId64)
+    {
+        var writeTime = File.GetLastWriteTimeUtc(vdfPath);
+        if (_loginUsersCache is { } c && c.Path == vdfPath && c.WriteTimeUtc == writeTime && c.SteamId64 == activeSteamId64)
+        {
+            return (c.Persona, c.Account);
+        }
+
+        var (persona, account) = ParseLoginUsers(vdfPath, activeSteamId64);
+        _loginUsersCache = (vdfPath, writeTime, activeSteamId64, persona, account);
+        return (persona, account);
     }
 
     private void UpdateStatus(SteamStatus newStatus)

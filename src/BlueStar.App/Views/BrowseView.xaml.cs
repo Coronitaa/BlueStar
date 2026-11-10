@@ -132,7 +132,16 @@ public partial class BrowseView : UserControl
         if (e.PropertyName != nameof(BrowseViewModel.DetailUrl)) return;
 
         var url = _viewModel?.DetailUrl;
-        if (string.IsNullOrWhiteSpace(url)) return;
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            // Detail closed: unload the store page so its videos and scripts stop using CPU and memory
+            if (StorePageView?.CoreWebView2 != null)
+            {
+                _pendingStoreUrl = null;
+                StorePageView.CoreWebView2.Navigate("about:blank");
+            }
+            return;
+        }
 
         _ = LoadStorePageAsync(url);
     }

@@ -987,12 +987,15 @@
     <sys:String x:Key="String_InstallModalEmulatorNone">None</sys:String>
     <sys:String x:Key="String_InstallModalEmulatorNoneDesc">Original Steam (no emulator).</sys:String>
     <sys:String x:Key="String_InstallModalEmulatorNoneInfo">No emulator will be installed. The game files will remain pristine (requires official Steam license).</sys:String>
-    <sys:String x:Key="String_InstallModalEmulatorValve">ReFix Online</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorValve">ReFix Online Legacy</sys:String>
     <sys:String x:Key="String_InstallModalEmulatorValveDesc">Steam Spacewar (AppID 480).</sys:String>
-    <sys:String x:Key="String_InstallModalEmulatorValveInfo">Enables online multiplayer and Steam friend invites using Spacewar (AppID 480). Compatible with Steam cloud saves.</sys:String>
-    <sys:String x:Key="String_InstallModalEmulatorGoldberg">ReFix LAN</sys:String>
-    <sys:String x:Key="String_InstallModalEmulatorGoldbergDesc">Offline / LAN (Steam-Free).</sys:String>
-    <sys:String x:Key="String_InstallModalEmulatorGoldbergInfo">ReFix's own Steam emulator, no Steam client needed. Players on the same local network (LAN) find each other automatically, every PC gets its own identity and progress is saved locally.</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorValveInfo">The previous ReFix Online: uses the Steam client and Spacewar (AppID 480) for online matchmaking and Steam friend invites. The game's public servers show up in its server list.</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorGoldberg">ReFix LAN + Online</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorGoldbergDesc">LAN + Steam friends, no Steam needed.</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorGoldbergInfo">Recommended. ReFix's own Steam emulator, no Steam client needed: players on the same network find each other automatically and the game gets Internet access when it needs it. With Steam installed, the Steam button in the ReFix overlay (Shift+Tab) adds your Steam friends to the same rooms.</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorLanOffline">ReFix LAN Offline</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorLanOfflineDesc">Local network only (Steam-Free).</sys:String>
+    <sys:String x:Key="String_InstallModalEmulatorLanOfflineInfo">The previous ReFix LAN, unchanged: local network play only, no Steam client and no Steam services. Players on the same LAN find each other automatically and progress is saved locally.</sys:String>
     <sys:String x:Key="String_InstallModalEmulatorBadgeOnline">Online</sys:String>
     <sys:String x:Key="String_InstallModalEmulatorBadgeLan">LAN / Offline</sys:String>
     <sys:String x:Key="String_InstallModalEmulatorBadgeVanilla">Vanilla</sys:String>
@@ -1182,6 +1185,7 @@
     <sys:String x:Key="String_Sort_Name">Name</sys:String>
     <sys:String x:Key="String_Sort_Price">Price</sys:String>
     <sys:String x:Key="String_Sort_DeckCompatDate">Steam Deck review date</sys:String>
+    <sys:String x:Key="String_Sort_Downloads">Downloads</sys:String>
     <sys:String x:Key="String_ExploreLoadingFilters">Loading filters and catalog…</sys:String>
     <sys:String x:Key="String_ExploreLoadingDiscover">Discovering games…</sys:String>
 

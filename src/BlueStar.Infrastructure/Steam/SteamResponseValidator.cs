@@ -155,6 +155,8 @@ public sealed class SteamResponseValidator
 
         var canonicalKey = $"{termKey}:{sortKey}";
         var fingerprint = SteamResponseFingerprint.Create(canonicalKey, termKey, sortKey, totalCount, appIds);
+        // Keyed by every typed term: drop the lot past a cap instead of growing for the whole session
+        if (Fingerprints.Count >= 512) Fingerprints.Clear();
         Fingerprints[canonicalKey] = fingerprint;
 
         // 5. Compare against opposing query (e.g. Reviews_DESC vs Reviews_ASC, Name_ASC vs Name_DESC)
