@@ -193,17 +193,28 @@ function Get-Or-Generate-Identity {
 # ------------------------------------------------------------
 # Helper: UNAE Network Topology Detection Engine (PowerShell)
 # ------------------------------------------------------------
+# An older ReFix copied the Fusion Shared server into every game: drop it where the game does not use Fusion.
+function Remove-UnusedFusionServer([string]$Dir) {
+    $fusion = Join-Path $Dir "ReFix\FusionShared"
+    if (-not (Test-Path -LiteralPath (Join-Path $fusion "ReFixFusionShared.exe"))) { return }
+    Remove-Item -LiteralPath $fusion -Recurse -Force -ErrorAction SilentlyContinue
+    $parent = Join-Path $Dir "ReFix"
+    if (-not (Get-ChildItem -LiteralPath $parent -Force -ErrorAction SilentlyContinue)) { Remove-Item -LiteralPath $parent -Force -ErrorAction SilentlyContinue }
+    Write-Host "  [OK] Removed the Fusion Shared server: this game does not use Photon Fusion" -ForegroundColor Green
+}
+
 function Detect-UNAE-Topology {
     param([string]$TargetDir)
 
-    $hasPhotonRealtime = (Get-ChildItem -LiteralPath $TargetDir -Filter "PhotonRealtime.dll" -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0
-    $hasPhoton3Unity   = (Get-ChildItem -LiteralPath $TargetDir -Filter "Photon3Unity3D.dll" -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0
-    $hasPhotonVoice    = (Get-ChildItem -LiteralPath $TargetDir -Filter "PhotonVoice.dll" -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0
-    $hasPhotonFusion   = (Get-ChildItem -LiteralPath $TargetDir -Filter "Fusion.Runtime.dll" -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0
-    $hasNanosockets    = (Get-ChildItem -LiteralPath $TargetDir -Filter "nanosockets.dll" -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0
-    $hasMirror         = (Get-ChildItem -LiteralPath $TargetDir -Filter "Mirror.dll" -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0
-    $hasKcp            = (Get-ChildItem -LiteralPath $TargetDir -Filter "kcp2k.dll" -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0
-    $hasEOS            = (Get-ChildItem -LiteralPath $TargetDir -Filter "*EOSSDK*.dll" -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0
+    # ReFix's own Fusion Shared server (ReFix\FusionShared) carries Fusion/NanoSockets DLLs: never count it as the game's.
+    $hasPhotonRealtime = (Get-ChildItem -LiteralPath $TargetDir -Filter "PhotonRealtime.dll" -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\ReFix\\FusionShared\\' } | Measure-Object).Count -gt 0
+    $hasPhoton3Unity   = (Get-ChildItem -LiteralPath $TargetDir -Filter "Photon3Unity3D.dll" -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\ReFix\\FusionShared\\' } | Measure-Object).Count -gt 0
+    $hasPhotonVoice    = (Get-ChildItem -LiteralPath $TargetDir -Filter "PhotonVoice.dll" -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\ReFix\\FusionShared\\' } | Measure-Object).Count -gt 0
+    $hasPhotonFusion   = (Get-ChildItem -LiteralPath $TargetDir -Filter "Fusion.Runtime.dll" -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\ReFix\\FusionShared\\' } | Measure-Object).Count -gt 0
+    $hasNanosockets    = (Get-ChildItem -LiteralPath $TargetDir -Filter "nanosockets.dll" -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\ReFix\\FusionShared\\' } | Measure-Object).Count -gt 0
+    $hasMirror         = (Get-ChildItem -LiteralPath $TargetDir -Filter "Mirror.dll" -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\ReFix\\FusionShared\\' } | Measure-Object).Count -gt 0
+    $hasKcp            = (Get-ChildItem -LiteralPath $TargetDir -Filter "kcp2k.dll" -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\ReFix\\FusionShared\\' } | Measure-Object).Count -gt 0
+    $hasEOS            = (Get-ChildItem -LiteralPath $TargetDir -Filter "*EOSSDK*.dll" -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\ReFix\\FusionShared\\' } | Measure-Object).Count -gt 0
 
     $il2cppMeta = Get-ChildItem -LiteralPath $TargetDir -Filter "global-metadata.dat" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
     $il2cppPUN = $false
@@ -214,10 +225,14 @@ function Detect-UNAE-Topology {
             $contentStr = [System.Text.Encoding]::ASCII.GetString($bytes, 0, [Math]::Min($bytes.Length, 4194304))
             if ($contentStr -match "Photon\.Pun|ConnectToRegionMaster|PhotonHandler") { $il2cppPUN = $true }
             if ($contentStr -match "Fusion\.NetworkRunner|Fusion\.Runtime") { $il2cppFusion = $true }
+            # The Fusion names can sit past the first 4 MB: look at the whole file before leaving the server out.
+            elseif ([System.Text.Encoding]::ASCII.GetString($bytes) -match "Fusion\.NetworkRunner|Fusion\.Runtime") { $il2cppFusion = $true }
             if ($contentStr -match "Photon\.Voice|VoiceClient") { $hasPhotonVoice = $true }
         } catch {}
     }
 
+    # Only Photon Fusion games need ReFix's Fusion Shared server (ReFix\FusionShared, ~7 MB).
+    $script:usesFusion = $hasPhotonFusion -or $il2cppFusion
     $usesPhoton = $hasPhotonRealtime -or $hasPhoton3Unity -or $hasPhotonVoice -or $hasPhotonFusion -or $il2cppPUN -or $il2cppFusion
 
     # Topology B: hybrid (Fusion + nanosockets, Mirror + EOS WebRTC). Checked before topology C so that
@@ -861,9 +876,10 @@ switch ($OnlineMode) {
             }
         }
 
-        # Deploy ReFix companion tools (such as FusionShared) if present
+        # Deploy ReFix companion tools (the Fusion Shared server) only for Photon Fusion games
         $refixBin = Join-Path $ProductBinDir "ReFix"
-        if (Test-Path -LiteralPath $refixBin) {
+        if (-not $script:usesFusion) { Remove-UnusedFusionServer $ExeDir }
+        elseif (Test-Path -LiteralPath $refixBin) {
             try {
                 $targetRefix = Join-Path $ExeDir "ReFix"
                 Copy-Item -LiteralPath $refixBin -Destination $ExeDir -Recurse -Force -ErrorAction Stop
@@ -1086,7 +1102,8 @@ switch ($OnlineMode) {
                 # Photon Fusion Shared-mode server (ReFix\FusionShared), which the LAN emulator starts next to the game.
                 # The LAN build does not carry its own copy: it is the same companion the Online product ships.
                 $fusionSrc = Join-Path $BinDir "online\ReFix"
-                if ($lanProduct -eq "lan" -and -not $script:fusionDeployed -and (Test-Path -LiteralPath $fusionSrc)) {
+                if (-not $script:usesFusion) { Remove-UnusedFusionServer $ExeDir }
+                elseif ($lanProduct -eq "lan" -and -not $script:fusionDeployed -and (Test-Path -LiteralPath $fusionSrc)) {
                     $script:fusionDeployed = $true
                     try {
                         Copy-Item -LiteralPath $fusionSrc -Destination $ExeDir -Recurse -Force -ErrorAction Stop
@@ -1398,7 +1415,7 @@ unlock_all_dlc=$unlockAllDlcStr
         '',
         'net session >nul 2>&1',
         'if !errorlevel! neq 0 (',
-        '    echo [NOTICE] Windows Firewall rules need administrator rights: right-click this file and choose Run as administrator.',
+        '    echo [NOTICE] Windows Firewall rules need administrator rights: right-click this file and choose Run as administrator to apply them.',
         '    echo [NOTICE] Players on the LAN usually find each other without them.',
         '    pause',
         '    exit /b',
@@ -1501,7 +1518,7 @@ if ($EngineType -eq "Unity") {
     # ------------------------------------------------------------
     # Photon Fusion / nanosockets Detection & Asset Configuration
     # ------------------------------------------------------------
-    $nanosocketsDll = Get-ChildItem -Path $TargetDir -Filter "nanosockets.dll" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    $nanosocketsDll = Get-ChildItem -Path $TargetDir -Filter "nanosockets.dll" -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\ReFix\\FusionShared\\' } | Select-Object -First 1
     if ($nanosocketsDll) {
         Write-Host "  [DETECT] Detected Photon Fusion nanosockets transport: $($nanosocketsDll.FullName)" -ForegroundColor Cyan
         

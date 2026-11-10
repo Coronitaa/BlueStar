@@ -23,7 +23,9 @@ $ignorePatterns = @(
     "*vcredist*", "*dxsetup*", "*dotnet*", "*prereq*", "*F10.exe*",
     "*.unpacked.exe*", "*.steamstub.exe*", "*.original.exe*", "*redist*",
     "*EasyAntiCheat*", "*eac_server*", "*BEService*", "*BattlEye*", "*cefprocess*",
-    "*CefSharp*", "*QtWebEngineProcess*"
+    "*CefSharp*", "*QtWebEngineProcess*",
+    # ReFix's own helpers (Steam host, Fusion Shared server, mods tool) are never the game
+    "*refix_steamhost*", "*ReFixFusionShared*", "*refixmod*"
 )
 
 $deprioritizePatterns = @(

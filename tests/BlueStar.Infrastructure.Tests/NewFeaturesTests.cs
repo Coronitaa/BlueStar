@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -351,6 +351,73 @@ public class NewFeaturesTests
 
         // Assert
         result.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ReFixEmulator_GetCurrentVersion_Returns243()
+    {
+        var version = ReFixEmulator.GetCurrentVersion();
+        version.Should().Be("2.4.3");
+    }
+
+    [Fact]
+    public async Task ReFixEmulator_UninstallAsync_RemovesArtifactsAndRestoresOrigFiles()
+    {
+        var tempFolder = Path.Combine(Path.GetTempPath(), "BlueStar_UninstallTest_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempFolder);
+
+        try
+        {
+            // Artifacts
+            File.WriteAllText(Path.Combine(tempFolder, "ReFix.ini"), "[Online]\nMode=goldberg\n");
+            File.WriteAllText(Path.Combine(tempFolder, "ReFixFusionShared.log"), "fusion log");
+            File.WriteAllText(Path.Combine(tempFolder, "refix_steamlink64.dll"), "dummy link");
+            File.WriteAllText(Path.Combine(tempFolder, "refix_steamhost64.exe"), "dummy host");
+
+            // FusionShared folder
+            var fusionDir = Path.Combine(tempFolder, "ReFix", "FusionShared");
+            Directory.CreateDirectory(fusionDir);
+            File.WriteAllText(Path.Combine(fusionDir, "ReFixFusionShared.exe"), "dummy fusion");
+
+            // .refix_orig restoration
+            File.WriteAllText(Path.Combine(tempFolder, "some_lib.dll"), "modified");
+            File.WriteAllText(Path.Combine(tempFolder, "some_lib.dll.refix_orig"), "original content");
+
+            // .refix_installed mod cleanup
+            var modDir = Path.Combine(tempFolder, "refix_mods");
+            Directory.CreateDirectory(modDir);
+            File.WriteAllText(Path.Combine(modDir, "custom_mod.dll"), "mod content");
+            File.WriteAllText(Path.Combine(modDir, ".refix_installed"), "custom_mod.dll\n");
+
+            var emulator = new ReFixEmulator(NullLogger<ReFixEmulator>.Instance);
+            var instance = new GameInstance
+            {
+                Id = Guid.NewGuid(),
+                AppId = 730,
+                Name = "Uninstall Test Game",
+                InstallPath = tempFolder
+            };
+
+            var success = await emulator.UninstallAsync(instance, CancellationToken.None);
+
+            success.Should().BeTrue();
+            File.Exists(Path.Combine(tempFolder, "ReFix.ini")).Should().BeFalse();
+            File.Exists(Path.Combine(tempFolder, "ReFixFusionShared.log")).Should().BeFalse();
+            File.Exists(Path.Combine(tempFolder, "refix_steamlink64.dll")).Should().BeFalse();
+            File.Exists(Path.Combine(tempFolder, "refix_steamhost64.exe")).Should().BeFalse();
+            Directory.Exists(fusionDir).Should().BeFalse();
+            Directory.Exists(Path.Combine(tempFolder, "ReFix")).Should().BeFalse();
+
+            File.Exists(Path.Combine(tempFolder, "some_lib.dll.refix_orig")).Should().BeFalse();
+            File.ReadAllText(Path.Combine(tempFolder, "some_lib.dll")).Should().Be("original content");
+
+            File.Exists(Path.Combine(modDir, "custom_mod.dll")).Should().BeFalse();
+            File.Exists(Path.Combine(modDir, ".refix_installed")).Should().BeFalse();
+        }
+        finally
+        {
+            try { if (Directory.Exists(tempFolder)) Directory.Delete(tempFolder, recursive: true); } catch { }
+        }
     }
 
     [Fact]

@@ -1011,6 +1011,7 @@ public sealed class ReFixEmulator : IEmulator
         var artifactPatterns = new[]
         {
             "winmm.dll", "winhttp.dll", "doorstop_config.ini", "Kirigiri.ini", "ReFix.ini", "ReFix.log",
+            "ReFixFusionShared.log", "refix_steamlink64.dll", "refix_steamlink.dll", "refix_steamhost64.exe", "refix_steamhost.exe",
             "steam_appid.txt", "local_save.txt", "steam_interfaces.txt",
             "add_steam_shortcut.ps1", "add_steam_shortcut.py", "Install_ReFix_Steam_Shortcut.bat",
             "Configure_LAN_Firewall.bat", "Configurar_Firewall_LAN.bat",
@@ -1030,6 +1031,58 @@ public sealed class ReFixEmulator : IEmulator
             catch { }
         }
 
+        // 7b. Game mods ReFix installed (.refix_installed) and game files they changed (*.refix_orig)
+        try
+        {
+            var installedMarkers = Directory.GetFiles(targetDir, ".refix_installed", SafeEnumOptions);
+            foreach (var marker in installedMarkers)
+            {
+                try
+                {
+                    var markerDir = Path.GetDirectoryName(marker);
+                    if (!string.IsNullOrEmpty(markerDir))
+                    {
+                        var modFiles = File.ReadAllLines(marker);
+                        foreach (var mf in modFiles)
+                        {
+                            var trimmedMf = mf.Trim();
+                            if (!string.IsNullOrEmpty(trimmedMf))
+                            {
+                                var fullModFile = Path.Combine(markerDir, trimmedMf);
+                                try { if (File.Exists(fullModFile)) File.Delete(fullModFile); } catch { }
+                            }
+                        }
+                        File.Delete(marker);
+                        try { Directory.Delete(markerDir, recursive: false); } catch { }
+                    }
+                }
+                catch { }
+            }
+        }
+        catch { }
+
+        try
+        {
+            var refixOrigs = Directory.GetFiles(targetDir, "*.refix_orig", SafeEnumOptions);
+            foreach (var o in refixOrigs)
+            {
+                var dir = Path.GetDirectoryName(o);
+                var origName = Path.GetFileName(o);
+                if (!string.IsNullOrEmpty(dir) && origName.EndsWith(".refix_orig", StringComparison.OrdinalIgnoreCase))
+                {
+                    var restoredName = origName[..^11]; // strip .refix_orig
+                    var dest = Path.Combine(dir, restoredName);
+                    try
+                    {
+                        if (File.Exists(dest)) File.Delete(dest);
+                        File.Move(o, dest, overwrite: true);
+                    }
+                    catch { }
+                }
+            }
+        }
+        catch { }
+
         // 8. Remove ReFix directories recursively (steam_settings, saves, BepInEx)
         var directoryNames = new[] { "steam_settings", "saves", "BepInEx" };
         foreach (var dName in directoryNames)
@@ -1044,6 +1097,32 @@ public sealed class ReFixEmulator : IEmulator
             }
             catch { }
         }
+
+        // 9. Remove ReFix support tools (FusionShared with ReFixFusionShared.exe)
+        try
+        {
+            var fusionDirs = Directory.GetDirectories(targetDir, "FusionShared", SafeEnumOptions);
+            foreach (var fDir in fusionDirs)
+            {
+                if (File.Exists(Path.Combine(fDir, "ReFixFusionShared.exe")))
+                {
+                    try { Directory.Delete(fDir, recursive: true); } catch { }
+                    var parentDir = Path.GetDirectoryName(fDir);
+                    if (!string.IsNullOrEmpty(parentDir) && Path.GetFileName(parentDir).Equals("ReFix", StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            if (Directory.GetFileSystemEntries(parentDir).Length == 0)
+                            {
+                                Directory.Delete(parentDir, recursive: false);
+                            }
+                        }
+                        catch { }
+                    }
+                }
+            }
+        }
+        catch { }
     }
 
     private static void AppendReFixLog(string exeDir, string message)

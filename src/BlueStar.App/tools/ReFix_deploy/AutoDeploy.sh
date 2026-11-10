@@ -306,10 +306,18 @@ clean_online_winmm() {
 
 uses_photon() {
     find "$GAME_DIR" -type f \( -iname 'Photon3Unity3D.dll' -o -iname 'PhotonRealtime.dll' -o -iname 'Fusion.Runtime.dll' \
-        -o -iname 'PhotonUnityNetworking.dll' \) -print -quit 2>/dev/null | grep -q . && return 0
+        -o -iname 'PhotonUnityNetworking.dll' \) -not -path '*/ReFix/FusionShared/*' -print -quit 2>/dev/null | grep -q . && return 0
     local meta
     meta="$(find "$GAME_DIR" -type f -name 'global-metadata.dat' -print -quit 2>/dev/null)"
     [ -n "$meta" ] && grep -qaE 'ExitGames\.Client\.Photon|Photon\.Realtime|Fusion\.NetworkRunner' "$meta"
+}
+
+uses_fusion() {
+    # ReFix's own Fusion Shared server carries Fusion DLLs: never count it as the game's.
+    find "$GAME_DIR" -type f -iname 'Fusion.Runtime.dll' -not -path '*/ReFix/FusionShared/*' -print -quit 2>/dev/null | grep -q . && return 0
+    local meta
+    meta="$(find "$GAME_DIR" -type f -name 'global-metadata.dat' -print -quit 2>/dev/null)"
+    [ -n "$meta" ] && grep -qaE 'Fusion\.NetworkRunner|Fusion\.Runtime' "$meta"
 }
 
 # Sets key=value inside [section] of an INI file, adding the section or key when missing.
@@ -491,8 +499,12 @@ clean_online_winmm
 write_ini
 install_mods
 # ReFix Online + LAN: the Photon Fusion Shared server it starts next to the game (shipped with the Online product)
-if [ "$PRODUCT_DIR" = lan ] && [ -d "$BIN/online/ReFix" ]; then
+# Only for Photon Fusion games; an older ReFix put it in every game, so it is removed elsewhere.
+if [ "$PRODUCT_DIR" = lan ] && [ -d "$BIN/online/ReFix" ] && uses_fusion; then
     cp -rf "$BIN/online/ReFix" "$EXE_DIR/" && ok "Deployed ReFix support tools (Fusion Shared server) to $EXE_DIR/ReFix"
+elif [ -f "$EXE_DIR/ReFix/FusionShared/ReFixFusionShared.exe" ]; then
+    rm -rf "$EXE_DIR/ReFix/FusionShared" && rmdir "$EXE_DIR/ReFix" 2>/dev/null
+    ok "Removed the Fusion Shared server: this game does not use Photon Fusion"
 fi
 
 echo

@@ -33,7 +33,7 @@ Every package includes .NET 8, so there is nothing else to install.
 
 **Library.** Games installed by BlueStar, games in your Steam libraries and games in any folder you add show up in one library. BlueStar finds the executable and the engine (Unity Mono/IL2CPP, Unreal, Godot or native) by itself.
 
-**Multiplayer with ReFix 2.4.0.** One click installs ReFix into a game, in one of three modes:
+**Multiplayer with ReFix 2.4.3.** One click installs ReFix into a game, in one of three modes:
 - **ReFix LAN + Online** (recommended) plays on your local network with no Steam client, and lets the game reach the Internet when it needs to. It has its own in-game overlay (Shift+Tab or the controller's Xbox / PS button) to see players on the network, join them and invite them, and player profiles with their own name, picture, SteamID and saves. With Steam installed, the overlay's Steam button adds your Steam friends to the same rooms.
 - **ReFix LAN Offline** is the previous ReFix LAN: local network only, no Steam services.
 - **ReFix Online Legacy** is the previous ReFix Online: plays over the Internet through the Steam client.
