@@ -176,7 +176,7 @@ public class GitHubUpdateService : IUpdateService
             catch { }
         }
 
-        rawCurrent ??= new Version(1, 5, 6);
+        rawCurrent ??= new Version(1, 5, 7);
 
         return new Version(
             Math.Max(0, rawCurrent.Major),
@@ -262,7 +262,7 @@ public class GitHubUpdateService : IUpdateService
                 _metrics?.OnProviderRequest("GitHub", GitHubReleasesUrl);
 
                 GitHubRelease? release = null;
-                const string updaterUserAgent = "BlueStar-Updater/1.5.6";
+                const string updaterUserAgent = "BlueStar-Updater/1.5.7";
                 try
                 {
                     var request = new HttpRequestMessage(HttpMethod.Get, GitHubReleasesUrl);
