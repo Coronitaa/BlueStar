@@ -9,7 +9,7 @@ namespace BlueStar.App.ViewModels;
 /// ViewModel for the Downloads tab. Exposes the active queue and history log,
 /// plus commands to pause, resume, retry, cancel, and remove jobs.
 /// </summary>
-public partial class DownloadsViewModel : ObservableObject
+public partial class DownloadsViewModel : ObservableObject, ISharedViewModel
 {
     private readonly DownloadQueueManager _queueManager;
     private readonly BlueStar.Core.Interfaces.IInstanceManager? _instanceManager;

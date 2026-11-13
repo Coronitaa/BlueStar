@@ -1,6 +1,8 @@
 using System;
 using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
@@ -150,6 +152,22 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private string _steamTooltipText = "Steam client status";
+
+    // ── App Update Available State ──
+    [ObservableProperty]
+    private bool _isAppUpdateAvailable;
+
+    [ObservableProperty]
+    private string _appUpdateVersion = string.Empty;
+
+    [ObservableProperty]
+    private string _appUpdateButtonText = string.Empty;
+
+    [ObservableProperty]
+    private string _appUpdateTooltipText = string.Empty;
+
+    [ObservableProperty]
+    private UpdateInfo? _availableAppUpdate;
 
     private readonly IMetadataProvider? _metadataProvider;
     private readonly IPrerequisiteService? _prerequisiteService;
@@ -329,12 +347,57 @@ public partial class MainViewModel : ObservableObject, IDisposable
             });
     }
 
+    [RelayCommand]
+    public void ToggleSteam()
+    {
+        if (IsSteamRunning)
+        {
+            _steamStatusService.BringSteamToFront();
+        }
+        else
+        {
+            _steamStatusService.LaunchSteamHidden();
+        }
+    }
+
+    [RelayCommand]
+    public async Task UpdateAppAsync()
+    {
+        var pendingPath = BlueStar.Infrastructure.Update.GitHubUpdateService.GetPendingUpdateFilePath();
+        if (!string.IsNullOrWhiteSpace(pendingPath))
+        {
+            await _updateService.ApplyUpdateAsync(pendingPath, CancellationToken.None).ConfigureAwait(true);
+            return;
+        }
+
+        if (AvailableAppUpdate != null)
+        {
+            if (_updateService.IsPackaged)
+            {
+                _updateService.OpenStoreForUpdates();
+            }
+            else
+            {
+                await DownloadAndPromptUpdateAsync(AvailableAppUpdate).ConfigureAwait(true);
+            }
+        }
+    }
+
     private async Task CheckAppUpdatesOnStartupAsync()
     {
         // 1. Check if a downloaded update from a previous session is pending
         var pendingPath = BlueStar.Infrastructure.Update.GitHubUpdateService.GetPendingUpdateFilePath();
         if (!string.IsNullOrWhiteSpace(pendingPath))
         {
+            var fileName = Path.GetFileNameWithoutExtension(pendingPath);
+            var match = Regex.Match(fileName, @"\d+(\.\d+)+");
+            var pendingVer = match.Success ? match.Value : "nueva";
+
+            IsAppUpdateAvailable = true;
+            AppUpdateVersion = pendingVer;
+            AppUpdateButtonText = $"Actualizar a {pendingVer}";
+            AppUpdateTooltipText = "Actualización lista para instalar. Haz clic para reiniciar y actualizar.";
+
             _notificationService.ShowInfo(
                 "Update Ready",
                 "A newer version of BlueStar was downloaded and is ready to install.",
@@ -354,6 +417,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
             var update = await _updateService.CheckForUpdatesAsync(CancellationToken.None).ConfigureAwait(true);
             if (update != null)
             {
+                AvailableAppUpdate = update;
+                AppUpdateVersion = update.Version;
+                AppUpdateButtonText = $"Actualizar a {update.Version}";
+                AppUpdateTooltipText = $"BlueStar {update.Version} disponible. Haz clic para actualizar.";
+                IsAppUpdateAvailable = true;
+
                 if (_updateService.IsPackaged)
                 {
                     _notificationService.ShowInfo(
@@ -495,11 +564,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (status.IsRunning)
         {
             var idText = status.SteamId64.HasValue ? $" (ID: {status.SteamId64})" : "";
-            SteamTooltipText = $"Steam is Running\nLogged in as: {status.DisplayName}{idText}";
+            SteamTooltipText = $"Steam conectado ({status.DisplayName}{idText})\nHaz clic para traer Steam al frente.";
         }
         else
         {
-            SteamTooltipText = "Steam is Not Running\nLaunch Steam to sync shortcuts and playtime.";
+            SteamTooltipText = "Steam no está conectado\nHaz clic para iniciar Steam en iconos ocultos.";
         }
     }
 
@@ -612,6 +681,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     #region Navigation & History (Mouse 4 & 5 Support)
 
+    private const int MaxHistoryDepth = 30;
     private readonly Stack<NavigationEntry> _backStack = new();
     private readonly Stack<NavigationEntry> _forwardStack = new();
     private bool _isNavigatingHistory;
@@ -634,6 +704,15 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (current != null)
         {
             _backStack.Push(current);
+            if (_backStack.Count > MaxHistoryDepth)
+            {
+                var temp = _backStack.ToArray();
+                _backStack.Clear();
+                for (int i = Math.Min(temp.Length - 1, MaxHistoryDepth - 1); i >= 0; i--)
+                {
+                    _backStack.Push(temp[i]);
+                }
+            }
             _forwardStack.Clear();
             OnPropertyChanged(nameof(CanGoBack));
             OnPropertyChanged(nameof(CanGoForward));
@@ -771,16 +850,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             SelectedNavigation = null;
             CurrentInstanceTitle = inst.Name;
             _currentlyLoadedPage = "InstanceDetail";
-            var view = new InstanceDetailView();
-            var vm = App.Services.GetRequiredService<InstanceDetailViewModel>();
-            vm.OnNavigateBack = () =>
-            {
-                if (CanGoBack) GoBack();
-                else Navigate("Library");
-            };
-            vm.OnFindSimilarRequested = OpenSimilarInExplore;
-            vm.OnOpenTagRequested = OpenTagInExplore;
-            view.DataContext = vm;
+            var (view, vm) = GetInstanceDetailView();
             _ = vm.LoadInstanceAsync(inst, autoCheckDepotUpdates: false);
             if (!string.IsNullOrWhiteSpace(entry.Tab))
             {
@@ -834,6 +904,80 @@ public partial class MainViewModel : ObservableObject, IDisposable
         return vm;
     }
 
+    private HomeView? _homeView;
+    private HomeView GetHomeView() => _homeView ??= new HomeView { DataContext = HomeViewModel };
+
+    private LibraryView? _libraryView;
+    private LibraryViewModel? _libraryViewModel;
+    private (LibraryView View, LibraryViewModel ViewModel) GetLibraryView()
+    {
+        if (_libraryView == null)
+        {
+            _libraryViewModel = App.Services.GetRequiredService<LibraryViewModel>();
+            _libraryViewModel.OnManageInstanceRequested = OpenInstanceDetail;
+            _libraryViewModel.OnManageInstanceRequestedWithUpdate = (inst, autoCheck) => OpenInstanceDetail(inst, autoCheckUpdates: autoCheck);
+            _libraryViewModel.OnNavigateRequested = Navigate;
+            _libraryView = new LibraryView { DataContext = _libraryViewModel };
+        }
+        return (_libraryView, _libraryViewModel!);
+    }
+
+    private DownloadsView? _downloadsView;
+    private DownloadsViewModel? _downloadsViewModel;
+    private (DownloadsView View, DownloadsViewModel ViewModel) GetDownloadsView()
+    {
+        if (_downloadsView == null)
+        {
+            _downloadsViewModel = App.Services.GetRequiredService<DownloadsViewModel>();
+            _downloadsViewModel.OnOpenInstanceRequested = OpenInstanceDetail;
+            _downloadsView = new DownloadsView { DataContext = _downloadsViewModel };
+        }
+        return (_downloadsView, _downloadsViewModel!);
+    }
+
+    private SettingsView? _settingsView;
+    private SettingsViewModel? _settingsViewModel;
+    private SettingsView GetSettingsView()
+    {
+        if (_settingsView == null)
+        {
+            _settingsViewModel = App.Services.GetRequiredService<SettingsViewModel>();
+            _settingsView = new SettingsView { DataContext = _settingsViewModel };
+        }
+        return _settingsView;
+    }
+
+    private AboutView? _aboutView;
+    private AboutViewModel? _aboutViewModel;
+    private AboutView GetAboutView()
+    {
+        if (_aboutView == null)
+        {
+            _aboutViewModel = App.Services.GetRequiredService<AboutViewModel>();
+            _aboutView = new AboutView { DataContext = _aboutViewModel };
+        }
+        return _aboutView;
+    }
+
+    private InstanceDetailView? _instanceDetailView;
+    private InstanceDetailViewModel? _instanceDetailViewModel;
+    private (InstanceDetailView View, InstanceDetailViewModel ViewModel) GetInstanceDetailView()
+    {
+        if (_instanceDetailView == null)
+        {
+            _instanceDetailViewModel = App.Services.GetRequiredService<InstanceDetailViewModel>();
+            _instanceDetailViewModel.OnNavigateBack = () =>
+            {
+                if (CanGoBack) GoBack();
+                else Navigate("Library");
+            };
+            _instanceDetailViewModel.OnFindSimilarRequested = OpenSimilarInExplore;
+            _instanceDetailViewModel.OnOpenTagRequested = OpenTagInExplore;
+            _instanceDetailView = new InstanceDetailView { DataContext = _instanceDetailViewModel };
+        }
+        return (_instanceDetailView, _instanceDetailViewModel!);
+    }
+
     /// <summary>
     /// Navigates to the specified view.
     /// </summary>
@@ -851,21 +995,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         if (page == "Home")
         {
-            var view = new HomeView();
-            view.DataContext = HomeViewModel;
-            CurrentView = view;
+            CurrentView = GetHomeView();
             _ = HomeViewModel.LoadDashboardDataAsync();
             return;
         }
 
         if (page is "Library" or "Instances")
         {
-            var view = new LibraryView();
-            var vm = App.Services.GetRequiredService<LibraryViewModel>();
-            vm.OnManageInstanceRequested = OpenInstanceDetail;
-            vm.OnManageInstanceRequestedWithUpdate = (inst, autoCheck) => OpenInstanceDetail(inst, autoCheckUpdates: autoCheck);
-            vm.OnNavigateRequested = Navigate;
-            view.DataContext = vm;
+            var (view, vm) = GetLibraryView();
             CurrentView = view;
             _ = vm.LoadInstancesAsync();
             return;
@@ -879,18 +1016,24 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         if (page == "Downloads")
         {
-            var view = new DownloadsView();
-            var vm = App.Services.GetRequiredService<DownloadsViewModel>();
-            vm.OnOpenInstanceRequested = OpenInstanceDetail;
-            view.DataContext = vm;
-            CurrentView = view;
+            CurrentView = GetDownloadsView().View;
+            return;
+        }
+
+        if (page == "Settings")
+        {
+            CurrentView = GetSettingsView();
+            return;
+        }
+
+        if (page == "About")
+        {
+            CurrentView = GetAboutView();
             return;
         }
 
         CurrentView = page switch
         {
-            "Settings" => CreateView<SettingsView, SettingsViewModel>(),
-            "About" => CreateView<AboutView, AboutViewModel>(),
             _ => CurrentView
         };
     }
@@ -971,16 +1114,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         CurrentInstanceTitle = instance.Name;
         SelectedNavigation = null;
         _currentlyLoadedPage = "InstanceDetail";
-        var view = new InstanceDetailView();
-        var vm = App.Services.GetRequiredService<InstanceDetailViewModel>();
-        vm.OnNavigateBack = () =>
-        {
-            if (CanGoBack) GoBack();
-            else Navigate("Library");
-        };
-        vm.OnFindSimilarRequested = OpenSimilarInExplore;
-        vm.OnOpenTagRequested = OpenTagInExplore;
-        view.DataContext = vm;
+        var (view, vm) = GetInstanceDetailView();
         _ = vm.LoadInstanceAsync(instance, autoCheckDepotUpdates: autoCheckUpdates);
         CurrentView = view;
     }
@@ -1406,6 +1540,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
             kvp.Key.PropertyChanged -= kvp.Value;
         }
         _subscribedJobs.Clear();
+
+        _homeViewModel?.Dispose();
+        (_libraryViewModel as IDisposable)?.Dispose();
+        (_exploreView?.DataContext as IDisposable)?.Dispose();
+        (_downloadsViewModel as IDisposable)?.Dispose();
+        (_instanceDetailViewModel as IDisposable)?.Dispose();
 
         if (CurrentView?.DataContext is not ISharedViewModel &&
             CurrentView?.DataContext is IDisposable currentDisposable)

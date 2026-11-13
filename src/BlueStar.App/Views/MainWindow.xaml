@@ -75,15 +75,37 @@
                             WindowChrome.IsHitTestVisibleInChrome="True"
                             VerticalAlignment="Center">
 
-                    <!-- Steam Status Indicator Pill -->
-                    <Border Background="{StaticResource SurfaceInputBrush}"
-                            BorderBrush="{StaticResource SubtleBorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="{StaticResource RadiusMd}"
-                            Padding="10,4"
-                            Margin="0,0,14,0"
+                    <!-- Steam Status Button (Toggle: hidden launch / bring to front) -->
+                    <Button Command="{Binding ToggleSteamCommand}"
+                            ToolTip="{Binding SteamTooltipText}"
+                            Cursor="Hand"
                             VerticalAlignment="Center"
-                            ToolTip="{Binding SteamTooltipText}">
+                            Margin="0,0,10,0"
+                            Background="{StaticResource SurfaceInputBrush}"
+                            BorderBrush="{StaticResource SubtleBorderBrush}"
+                            BorderThickness="1">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="border"
+                                        Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="{StaticResource RadiusMd}"
+                                        Padding="10,4"
+                                        SnapsToDevicePixels="True">
+                                    <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="border" Property="Background" Value="{StaticResource SurfaceCardHoverBrush}"/>
+                                        <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="border" Property="Background" Value="{StaticResource SurfaceCardElevatedBrush}"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <!-- Live Status Dot -->
                             <Ellipse Width="7" Height="7" Margin="0,0,7,0" VerticalAlignment="Center">
@@ -106,7 +128,31 @@
                                        Foreground="{StaticResource PrimaryTextBrush}"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
-                    </Border>
+                    </Button>
+
+                    <!-- App Update Available Button -->
+                    <Button Style="{StaticResource UpdateButton}"
+                            Command="{Binding UpdateAppCommand}"
+                            Visibility="{Binding IsAppUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}"
+                            Margin="0,0,12,0"
+                            Padding="10,4"
+                            Height="26"
+                            VerticalAlignment="Center"
+                            ToolTip="{Binding AppUpdateTooltipText}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Path Data="{StaticResource IconDownload}"
+                                  Fill="{StaticResource InverseTextBrush}"
+                                  Width="11" Height="11"
+                                  Stretch="Uniform"
+                                  Margin="0,0,6,0"
+                                  VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding AppUpdateButtonText}"
+                                       FontSize="11"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource InverseTextBrush}"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
 
                     <!-- Window Control Buttons (Minimize, Maximize, Close) -->
                     <Button x:Name="MinimizeButton" Click="MinimizeButton_Click"

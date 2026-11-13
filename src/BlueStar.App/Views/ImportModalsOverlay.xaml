@@ -152,7 +152,7 @@
 
                                                 <!-- Artwork -->
                                                 <Border Grid.Column="0" CornerRadius="4" ClipToBounds="True" Height="42" Background="{StaticResource SurfaceInputBrush}">
-                                                    <Image Source="{Binding HeaderImageUrlFormatted}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                    <Image Source="{Binding HeaderImageUrlFormatted, Converter={StaticResource CachedImageConverter}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                                                 </Border>
 
                                                 <!-- Info -->
@@ -325,7 +325,7 @@
                                     <Grid>
                                         <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}"
                                               Stretch="Uniform" Width="36" Height="36" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        <Image Source="{Binding ZipHeaderImageUrl}" Stretch="UniformToFill" VerticalAlignment="Center"
+                                        <Image Source="{Binding ZipHeaderImageUrl, Converter={StaticResource CachedImageConverter}}" Stretch="UniformToFill" VerticalAlignment="Center"
                                                RenderOptions.BitmapScalingMode="HighQuality"/>
                                     </Grid>
                                 </Border>
@@ -641,7 +641,7 @@
                                         </Grid.ColumnDefinitions>
 
                                         <Border Grid.Column="0" CornerRadius="6" ClipToBounds="True" Height="52" Background="{StaticResource SurfaceInputBrush}">
-                                            <Image Source="{Binding FolderHeaderImageUrl}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                            <Image Source="{Binding FolderHeaderImageUrl, Converter={StaticResource CachedImageConverter}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                                         </Border>
 
                                         <StackPanel Grid.Column="2" VerticalAlignment="Center">
@@ -816,7 +816,7 @@
                                                         <ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
                                                     <Border Grid.Column="0" Height="28" CornerRadius="3" ClipToBounds="True" Background="#121218">
-                                                        <Image Source="{Binding FormattedThumbnail}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                        <Image Source="{Binding FormattedThumbnail, Converter={StaticResource CachedImageConverter}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                                                     </Border>
                                                     <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                                         <TextBlock Text="{Binding Name}" Style="{StaticResource BodySmall}" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>

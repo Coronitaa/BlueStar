@@ -59,4 +59,15 @@ public interface ISteamStatusService : IDisposable
         TimeSpan? timeout = null,
         IProgress<string>? progress = null,
         System.Threading.CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Launches the local Steam client hidden in the system tray / notification area,
+    /// using refix_steamhost if present, with silent steam.exe as fallback.
+    /// </summary>
+    void LaunchSteamHidden();
+
+    /// <summary>
+    /// Restores the running Steam client window and brings it to the foreground.
+    /// </summary>
+    void BringSteamToFront();
 }

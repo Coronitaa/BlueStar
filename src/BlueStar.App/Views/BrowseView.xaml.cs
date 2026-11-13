@@ -62,8 +62,11 @@ public partial class BrowseView : UserControl
     {
         ResultsScroller.ScrollChanged -= OnResultsScrollChanged;
 
-        // The ViewModel outlives the page, so its subscription is left in place: dropping it
-        // here would mean the store panel stopped opening after the first visit.
+        if (_viewModel != null)
+        {
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _viewModel = null;
+        }
     }
 
     private void Attach(BrowseViewModel? viewModel)

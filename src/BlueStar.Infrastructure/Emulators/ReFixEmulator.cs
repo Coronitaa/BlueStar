@@ -725,7 +725,10 @@ public sealed class ReFixEmulator : IEmulator
             }
         }
 
-        process.OutputDataReceived += (_, e) =>
+        DataReceivedEventHandler? outHandler = null;
+        DataReceivedEventHandler? errHandler = null;
+
+        outHandler = (_, e) =>
         {
             if (e.Data != null)
             {
@@ -734,7 +737,7 @@ public sealed class ReFixEmulator : IEmulator
             }
         };
 
-        process.ErrorDataReceived += (_, e) =>
+        errHandler = (_, e) =>
         {
             if (e.Data != null)
             {
@@ -742,15 +745,30 @@ public sealed class ReFixEmulator : IEmulator
             }
         };
 
-        process.Start();
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
+        try
+        {
+            process.OutputDataReceived += outHandler;
+            process.ErrorDataReceived += errHandler;
 
-        // Close stdin immediately so batch scripts (pause >nul) or prompts never block
-        process.StandardInput.Close();
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
 
-        await process.WaitForExitAsync(ct).ConfigureAwait(false);
-        return (process.ExitCode, outputBuilder.ToString(), errorBuilder.ToString());
+            // Close stdin immediately so batch scripts (pause >nul) or prompts never block
+            process.StandardInput.Close();
+
+            await process.WaitForExitAsync(ct).ConfigureAwait(false);
+            return (process.ExitCode, outputBuilder.ToString(), errorBuilder.ToString());
+        }
+        finally
+        {
+            try
+            {
+                process.OutputDataReceived -= outHandler;
+                process.ErrorDataReceived -= errHandler;
+            }
+            catch { }
+        }
     }
 
     public static async Task<(string EngineType, string ExeDir, string? GameExePath, string GameName, string DetectedAppId)> RunGameDetectorAsync(

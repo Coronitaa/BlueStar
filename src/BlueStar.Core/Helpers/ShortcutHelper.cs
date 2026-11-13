@@ -994,7 +994,7 @@ public static class ShortcutHelper
             ? Path.GetFileNameWithoutExtension(targetExePath)
             : shortcutName;
 
-        var safeName = PathHelper.SanitizeFolderName(rawName);
+        var safeName = SanitizeShortcutFileName(rawName);
         var steamShortcutName = CleanSteamShortcutName(rawName);
 
         var workingDir = Path.GetDirectoryName(targetExePath) ?? "";
@@ -1099,13 +1099,46 @@ public static class ShortcutHelper
     /// <summary>
     /// Cleans a shortcut name for Steam's shortcuts.vdf without stripping legitimate symbols
     /// (e.g. colons, hyphens, trademarks, quotes, slashes, unicode) unlike filesystem folder sanitization.
-    /// Only control characters (\0, \r, \n) are removed to preserve VDF binary structure.
+    /// Only null control characters (\0) are filtered to preserve VDF binary structure.
     /// </summary>
     public static string CleanSteamShortcutName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return "Game";
-        var cleaned = name.Replace("\0", "").Replace("\r", "").Replace("\n", "").Trim();
+        var cleaned = name.Replace("\0", "").Trim();
         return string.IsNullOrWhiteSpace(cleaned) ? "Game" : cleaned;
+    }
+
+    /// <summary>
+    /// Sanitizes a shortcut name for filesystem .lnk and .url creation.
+    /// Preserves all NTFS-valid characters and symbols (™, ®, ', &, !, (, ), [, ], -, +, =, @, #, $, %, ~, accents, etc.)
+    /// and replaces only the 9 Win32 forbidden characters (\ / : * ? " &lt; &gt; |) with their visual Unicode homoglyphs
+    /// (∶, ∕, ＊, ？, ”, ＜, ＞, ｜) instead of "_". Only null control characters (\0) are stripped.
+    /// </summary>
+    public static string SanitizeShortcutFileName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "Game";
+        var sb = new StringBuilder(name.Length);
+        foreach (var c in name)
+        {
+            switch (c)
+            {
+                case ':': sb.Append('∶'); break; // U+2236 Ratio
+                case '/': sb.Append('∕'); break; // U+2215 Division Slash
+                case '\\': sb.Append('∕'); break; // U+2215 Division Slash
+                case '*': sb.Append('＊'); break; // U+FF0A Fullwidth Asterisk
+                case '?': sb.Append('？'); break; // U+FF1F Fullwidth Question Mark
+                case '"': sb.Append('”'); break; // U+201D Right Double Quotation Mark
+                case '<': sb.Append('＜'); break; // U+FF1C Fullwidth Less-Than
+                case '>': sb.Append('＞'); break; // U+FF1E Fullwidth Greater-Than
+                case '|': sb.Append('｜'); break; // U+FF5C Fullwidth Vertical Line
+                case '\0': break; // Filter null character
+                default:
+                    sb.Append(c);
+                    break;
+            }
+        }
+        var sanitized = sb.ToString().Trim();
+        return string.IsNullOrWhiteSpace(sanitized) ? "Game" : sanitized;
     }
 
     /// <summary>
@@ -1223,6 +1256,7 @@ public static class ShortcutHelper
             var candidateFileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (!string.IsNullOrWhiteSpace(gameName))
             {
+                candidateFileNames.Add($"{SanitizeShortcutFileName(gameName)}.lnk");
                 candidateFileNames.Add($"{PathHelper.SanitizeFolderName(gameName)}.lnk");
                 candidateFileNames.Add($"{gameName}.lnk");
             }
@@ -1232,6 +1266,7 @@ public static class ShortcutHelper
                 var exeName = Path.GetFileNameWithoutExtension(executablePath);
                 if (!string.IsNullOrWhiteSpace(exeName))
                 {
+                    candidateFileNames.Add($"{SanitizeShortcutFileName(exeName)}.lnk");
                     candidateFileNames.Add($"{PathHelper.SanitizeFolderName(exeName)}.lnk");
                     candidateFileNames.Add($"{exeName}.lnk");
                 }

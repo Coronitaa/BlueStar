@@ -175,19 +175,30 @@ public sealed partial class SteamCmdWorkshopClient
 
         var output = new StringBuilder();
         using var proc = new Process { StartInfo = psi };
-        proc.OutputDataReceived += (_, e) => { if (e.Data != null) lock (output) output.AppendLine(e.Data); };
-        proc.ErrorDataReceived += (_, e) => { if (e.Data != null) lock (output) output.AppendLine(e.Data); };
-        proc.Start();
-        proc.BeginOutputReadLine();
-        proc.BeginErrorReadLine();
+        DataReceivedEventHandler outHandler = (_, e) => { if (e.Data != null) lock (output) output.AppendLine(e.Data); };
+        DataReceivedEventHandler errHandler = (_, e) => { if (e.Data != null) lock (output) output.AppendLine(e.Data); };
         try
         {
+            proc.OutputDataReceived += outHandler;
+            proc.ErrorDataReceived += errHandler;
+            proc.Start();
+            proc.BeginOutputReadLine();
+            proc.BeginErrorReadLine();
             await proc.WaitForExitAsync(ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
             try { proc.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
             throw;
+        }
+        finally
+        {
+            try
+            {
+                proc.OutputDataReceived -= outHandler;
+                proc.ErrorDataReceived -= errHandler;
+            }
+            catch { }
         }
 
         lock (output) return output.ToString();

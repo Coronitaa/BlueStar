@@ -1122,8 +1122,17 @@ public class DownloadQueueManager
             }
         });
 
+        long lastUiProgressTick = 0;
         var progress = new Progress<DownloadProgress>(p =>
         {
+            var now = Environment.TickCount64;
+            var isFinal = p.Percentage >= 100.0;
+            if (!isFinal && now - lastUiProgressTick < 100)
+            {
+                return;
+            }
+            lastUiProgressTick = now;
+
             RunOnUi(() =>
             {
                 lock (job)

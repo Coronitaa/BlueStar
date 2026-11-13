@@ -29,7 +29,7 @@ public sealed class DownloadServerOptionItem
 /// <summary>
 /// ViewModel for application settings with authentication hierarchy and storage management.
 /// </summary>
-public partial class SettingsViewModel : ObservableObject
+public partial class SettingsViewModel : ObservableObject, ISharedViewModel
 {
     private readonly IDepotBoxAuthService _authService;
     private readonly IDepotBoxApiClient _apiClient;
@@ -223,7 +223,7 @@ public partial class SettingsViewModel : ObservableObject
         try
         {
             DownloadServerOptions.Clear();
-            var currentLang = _localizationService.CurrentLanguage;
+            var currentLang = _localizationService.CurrentLanguage ?? "en";
             bool isEs = currentLang.StartsWith("es", StringComparison.OrdinalIgnoreCase);
 
             foreach (var entry in SteamDownloadServerCatalog.Entries)

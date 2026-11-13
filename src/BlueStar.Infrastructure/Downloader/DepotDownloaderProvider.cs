@@ -158,10 +158,19 @@ public partial class DepotDownloaderProvider : IDownloadProvider
                 _logger as ILogger<DepotDownloadEngine>
                 ?? LoggerFactory.Create(b => { }).CreateLogger<DepotDownloadEngine>());
 
-            // Map DownloadProgressInfo → DownloadProgress for BlueStar UI
+            // Map DownloadProgressInfo → DownloadProgress for BlueStar UI with 100ms throttling
+            long lastProgressReportTicks = 0;
             var mappedProgress = progress != null
                 ? new Progress<DownloadProgressInfo>(info =>
                 {
+                    var now = Environment.TickCount64;
+                    var isFinal = info.Phase == DownloadPhase.Completed || info.Percentage >= 100.0;
+                    if (!isFinal && now - lastProgressReportTicks < 100)
+                    {
+                        return;
+                    }
+                    lastProgressReportTicks = now;
+
                     progress.Report(new DownloadProgress
                     {
                         TotalBytes = info.TotalBytes,

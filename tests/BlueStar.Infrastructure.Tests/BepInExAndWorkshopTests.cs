@@ -1641,24 +1641,34 @@ public class BepInExAndWorkshopTests : IDisposable
         var ttsWorkshop = Path.Combine(docs, "My Games", "Tabletop Simulator", "Mods", "Workshop");
         if (!Directory.Exists(ttsWorkshop) || !Directory.EnumerateFiles(ttsWorkshop, "*.png", SearchOption.AllDirectories).Any()) return; // Skip if machine doesn't have TTS workshop files
 
-        var instance = new BlueStar.Core.Models.GameInstance
+        var tempInstall = Path.Combine(Path.GetTempPath(), "TTS_DummyInstall_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempInstall);
+
+        try
         {
-            Id = Guid.NewGuid(),
-            Name = "Tabletop Simulator",
-            AppId = 286160,
-            InstallPath = @"D:\Games\Tabletop Simulator",
-            Engine = new BlueStar.Core.Models.EngineInfo { Id = "unity", Name = "Unity", Type = BlueStar.Core.Models.EngineType.Unity }
-        };
+            var instance = new BlueStar.Core.Models.GameInstance
+            {
+                Id = Guid.NewGuid(),
+                Name = "Tabletop Simulator",
+                AppId = 286160,
+                InstallPath = tempInstall,
+                Engine = new BlueStar.Core.Models.EngineInfo { Id = "unity", Name = "Unity", Type = BlueStar.Core.Models.EngineType.Unity }
+            };
 
-        var manager = new UnityModManager(NullLogger<UnityModManager>.Instance);
-        var mods = await manager.GetInstalledModsAsync(instance);
+            var manager = new UnityModManager(NullLogger<UnityModManager>.Instance);
+            var mods = await manager.GetInstalledModsAsync(instance);
 
-        mods.Should().NotBeEmpty();
-        mods.Should().Contain(m => m.Category == "Steam Workshop" || m.Category == "Tabletop Simulator Mod");
-        
-        // Should find the installed Workshop items
-        var itemWithPng = mods.FirstOrDefault(m => !string.IsNullOrEmpty(m.IconPath) && m.IconPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase));
-        itemWithPng.Should().NotBeNull();
-        itemWithPng!.IconPath.Should().NotBeNullOrEmpty();
+            mods.Should().NotBeEmpty();
+            mods.Should().Contain(m => m.Category == "Steam Workshop" || m.Category == "Tabletop Simulator Mod");
+            
+            // Should find the installed Workshop items
+            var itemWithPng = mods.FirstOrDefault(m => !string.IsNullOrEmpty(m.IconPath) && m.IconPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase));
+            itemWithPng.Should().NotBeNull();
+            itemWithPng!.IconPath.Should().NotBeNullOrEmpty();
+        }
+        finally
+        {
+            try { if (Directory.Exists(tempInstall)) Directory.Delete(tempInstall, recursive: true); } catch { }
+        }
     }
 }

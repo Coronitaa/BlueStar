@@ -81,6 +81,30 @@ public class SidebarAndNavigationInteractionTests
             new Mock<IEmulatorRatingService>().Object,
             mockGameLauncher.Object,
             NullLogger<InstanceDetailViewModel>.Instance));
+        services.AddTransient<BrowseViewModel>(_ => new BrowseViewModel(
+            mockApiClient.Object,
+            mockInstanceManager.Object,
+            mockArchiveParser.Object,
+            mockEngineDetector.Object,
+            NullLogger<BrowseViewModel>.Instance));
+        services.AddTransient<DownloadsViewModel>(_ => new DownloadsViewModel(
+            downloadQueueManager,
+            mockInstanceManager.Object));
+        var mockLocalization = new Mock<ILocalizationService>();
+        mockLocalization.Setup(l => l.CurrentLanguage).Returns("en");
+        mockLocalization.Setup(l => l.GetString(It.IsAny<string>(), It.IsAny<string>())).Returns<string, string>((_, def) => def);
+
+        services.AddTransient<SettingsViewModel>(_ => new SettingsViewModel(
+            new Mock<IDepotBoxAuthService>().Object,
+            mockApiClient.Object,
+            new Mock<ILicenseService>().Object,
+            mockNotifications.Object,
+            new BlueStar.Infrastructure.Storage.AppSettingsService(NullLogger<BlueStar.Infrastructure.Storage.AppSettingsService>.Instance),
+            mockLocalization.Object,
+            NullLogger<SettingsViewModel>.Instance,
+            prerequisiteService: null,
+            debugLogService: new Mock<IDebugLogService>().Object));
+        services.AddTransient<AboutViewModel>();
 
         var sp = services.BuildServiceProvider();
         App.SetTestServices(sp);
@@ -222,6 +246,66 @@ public class SidebarAndNavigationInteractionTests
             Assert.True(mainVm.CanGoForward);
             mainVm.GoForwardCommand.Execute(null);
             Assert.Null(mainVm.SelectedRecentInstanceId);
+        });
+    }
+
+    [Fact]
+    public void NavigationStressTest_MultipleTabSwitchesAndMouseBackForward_MemoryRemainsStable()
+    {
+        RunOnStaThread(() =>
+        {
+            var (mainVm, _) = CreateTestViewModels();
+            var testInstance = new GameInstance
+            {
+                Id = Guid.NewGuid(),
+                Name = "Stress Test Game",
+                AppId = 730,
+                InstallPath = @"C:\Games\Test"
+            };
+
+            // Initial baseline
+            mainVm.Navigate("Home");
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            long initialMemory = GC.GetTotalMemory(true);
+
+            // Simulate rapid tab switching and mouse 4 & 5 forward/back 50 times
+            string[] tabs = ["Library", "Browse", "Downloads", "Settings", "About", "Home"];
+            for (int i = 0; i < 50; i++)
+            {
+                var tab = tabs[i % tabs.Length];
+                mainVm.Navigate(tab);
+
+                if (i % 5 == 0)
+                {
+                    mainVm.OpenInstanceDetail(testInstance);
+                }
+
+                // Simulate mouse button 4 (GoBack)
+                if (mainVm.CanGoBack && (i % 2 == 0))
+                {
+                    mainVm.GoBack();
+                }
+
+                // Simulate mouse button 5 (GoForward)
+                if (mainVm.CanGoForward && (i % 3 == 0))
+                {
+                    mainVm.GoForward();
+                }
+            }
+
+            // Return to Home
+            mainVm.Navigate("Home");
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            long finalMemory = GC.GetTotalMemory(true);
+
+            long deltaMb = (finalMemory - initialMemory) / (1024 * 1024);
+            // Delta must be small (under 15 MB) after 50 intense tab switches and back/forward navigations
+            Assert.True(deltaMb < 15, $"Memory increased by {deltaMb} MB across 50 tab switches and back/forward navigations.");
         });
     }
 }

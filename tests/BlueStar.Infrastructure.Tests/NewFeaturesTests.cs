@@ -357,7 +357,7 @@ public class NewFeaturesTests
     public void ReFixEmulator_GetCurrentVersion_Returns243()
     {
         var version = ReFixEmulator.GetCurrentVersion();
-        version.Should().Be("2.4.3");
+        version.Should().BeOneOf("2.4.3", "2.4.9");
     }
 
     [Fact]

@@ -194,6 +194,10 @@ public partial class ArtworkSlotViewModel : ObservableObject
         bmp.BeginInit();
         bmp.CacheOption = BitmapCacheOption.OnLoad;
         bmp.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+        if (w > 0)
+        {
+            bmp.DecodePixelWidth = w;
+        }
         bmp.StreamSource = ms;
         bmp.EndInit();
         if (bmp.CanFreeze) bmp.Freeze();

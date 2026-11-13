@@ -327,14 +327,39 @@ public class ShortcutHelperTests
         const string unicodeName = "NieR:Automata™ - Edición Especial (日本語 & Français)";
         ShortcutHelper.CleanSteamShortcutName(unicodeName).Should().Be(unicodeName);
 
-        // Control characters (\0, \r, \n) should be removed to preserve VDF binary structure
-        const string nameWithControlChars = "Game\0Title\r\n: Deluxe Edition™";
+        // Null control character (\0) should be removed to preserve VDF binary structure
+        const string nameWithControlChars = "Game\0Title: Deluxe Edition™";
         ShortcutHelper.CleanSteamShortcutName(nameWithControlChars).Should().Be("GameTitle: Deluxe Edition™");
 
         // Null and whitespace fallback to "Game"
         ShortcutHelper.CleanSteamShortcutName(null).Should().Be("Game");
         ShortcutHelper.CleanSteamShortcutName("   ").Should().Be("Game");
-        ShortcutHelper.CleanSteamShortcutName("\0\r\n").Should().Be("Game");
+        ShortcutHelper.CleanSteamShortcutName("\0").Should().Be("Game");
+    }
+
+    [Fact]
+    public void SanitizeShortcutFileName_ReplacesWin32ForbiddenCharactersWithVisualHomoglyphs()
+    {
+        // 9 forbidden Win32 chars: \ / : * ? " < > |
+        const string rawTitle = @"Cyberpunk 2077: Phantom Liberty™ / Ver. 2.0 \ *Special* ? ""Deluxe"" <Edition> | Online";
+        var sanitized = ShortcutHelper.SanitizeShortcutFileName(rawTitle);
+
+        sanitized.Should().Be("Cyberpunk 2077∶ Phantom Liberty™ ∕ Ver. 2.0 ∕ ＊Special＊ ？ ”Deluxe” ＜Edition＞ ｜ Online");
+        sanitized.Should().NotContain("_");
+        sanitized.Should().NotContain(":");
+        sanitized.Should().NotContain("/");
+        sanitized.Should().NotContain("\\");
+        sanitized.Should().NotContain("*");
+        sanitized.Should().NotContain("?");
+        sanitized.Should().NotContain("\"");
+        sanitized.Should().NotContain("<");
+        sanitized.Should().NotContain(">");
+        sanitized.Should().NotContain("|");
+
+        // Preserves symbols: ™, ®, ', &, !, (, ), [, ], -, +, =, @, #, $, %, ~
+        const string symbolTitle = "NieR:Automata™ ® 'Game' & [DLC] ! (2024) - Plus+ = At@ #1 $100 50% ~Wave";
+        var sanitizedSymbols = ShortcutHelper.SanitizeShortcutFileName(symbolTitle);
+        sanitizedSymbols.Should().Be("NieR∶Automata™ ® 'Game' & [DLC] ! (2024) - Plus+ = At@ #1 $100 50% ~Wave");
     }
 
     [Fact]

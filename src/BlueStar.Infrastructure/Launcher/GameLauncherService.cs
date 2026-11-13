@@ -14,7 +14,7 @@ namespace BlueStar.Infrastructure.Launcher;
 /// <summary>
 /// Service that launches, monitors, captures logs, and terminates game processes.
 /// </summary>
-public sealed class GameLauncherService : IGameLauncher
+public sealed class GameLauncherService : IGameLauncher, IDisposable
 {
     private readonly IInstanceManager? _instanceManager;
     private readonly IEngineDetector? _engineDetector;
@@ -127,7 +127,11 @@ public sealed class GameLauncherService : IGameLauncher
 
             var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
 
-            process.OutputDataReceived += (_, e) =>
+            DataReceivedEventHandler? outHandler = null;
+            DataReceivedEventHandler? errHandler = null;
+            EventHandler? exitHandler = null;
+
+            outHandler = (_, e) =>
             {
                 if (string.IsNullOrEmpty(e.Data)) return;
                 _logger.LogDebug("[Game {Game}] {Log}", instance.Name, e.Data);
@@ -135,7 +139,7 @@ public sealed class GameLauncherService : IGameLauncher
                 LogReceived?.Invoke(this, (instance.Id, e.Data));
             };
 
-            process.ErrorDataReceived += (_, e) =>
+            errHandler = (_, e) =>
             {
                 if (string.IsNullOrEmpty(e.Data)) return;
                 _logger.LogWarning("[Game {Game} ERR] {Log}", instance.Name, e.Data);
@@ -145,8 +149,16 @@ public sealed class GameLauncherService : IGameLauncher
 
             var startTime = DateTimeOffset.UtcNow;
 
-            process.Exited += async (_, _) =>
+            exitHandler = async (_, _) =>
             {
+                try
+                {
+                    process.OutputDataReceived -= outHandler;
+                    process.ErrorDataReceived -= errHandler;
+                    process.Exited -= exitHandler;
+                }
+                catch { }
+
                 var duration = DateTimeOffset.UtcNow - startTime;
                 _logger.LogInformation("Game {GameName} exited. Session duration: {Duration}", instance.Name, duration);
 
@@ -181,7 +193,17 @@ public sealed class GameLauncherService : IGameLauncher
                         : instance.Name;
                     _ = _statsService.ReportGamePlayAsync((int)instance.AppId, reportedName, duration, CancellationToken.None);
                 }
+
+                try
+                {
+                    process.Dispose();
+                }
+                catch { }
             };
+
+            process.OutputDataReceived += outHandler;
+            process.ErrorDataReceived += errHandler;
+            process.Exited += exitHandler;
 
             process.Start();
             process.BeginOutputReadLine();
@@ -218,7 +240,7 @@ public sealed class GameLauncherService : IGameLauncher
 
     public Task<bool> KillAsync(Guid instanceId)
     {
-        if (_runningProcesses.TryGetValue(instanceId, out var process))
+        if (_runningProcesses.TryRemove(instanceId, out var process))
         {
             try
             {
@@ -232,8 +254,34 @@ public sealed class GameLauncherService : IGameLauncher
             {
                 _logger.LogWarning(ex, "Failed to kill process for instance {Id}", instanceId);
             }
+            finally
+            {
+                try
+                {
+                    process.Dispose();
+                }
+                catch { }
+            }
         }
         return Task.FromResult(false);
+    }
+
+    public void Dispose()
+    {
+        foreach (var (id, proc) in _runningProcesses)
+        {
+            try
+            {
+                if (!proc.HasExited) proc.Kill(true);
+            }
+            catch { }
+            try
+            {
+                proc.Dispose();
+            }
+            catch { }
+        }
+        _runningProcesses.Clear();
     }
 
     public bool IsRunning(Guid instanceId)

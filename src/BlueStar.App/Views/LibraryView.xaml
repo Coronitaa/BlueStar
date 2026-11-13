@@ -1654,7 +1654,7 @@
                                                     <Border Grid.Column="0" Width="80" Height="36" CornerRadius="4" Background="#161822" ClipToBounds="True">
                                                         <Grid>
                                                             <TextBlock Text="🎮" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                            <Image Source="{Binding HeaderImageUrlFormatted}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                            <Image Source="{Binding HeaderImageUrlFormatted, Converter={StaticResource CachedImageConverter}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                                                         </Grid>
                                                     </Border>
 
@@ -1762,7 +1762,7 @@
                                 <Grid>
                                     <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}"
                                           Stretch="Uniform" Width="36" Height="36" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    <Image Source="{Binding PreviewHeaderImageUrl}" Stretch="UniformToFill" VerticalAlignment="Center"
+                                    <Image Source="{Binding PreviewHeaderImageUrl, Converter={StaticResource CachedImageConverter}}" Stretch="UniformToFill" VerticalAlignment="Center"
                                            RenderOptions.BitmapScalingMode="HighQuality"/>
                                 </Grid>
                             </Border>
@@ -2025,7 +2025,7 @@
                                             <Border Grid.Column="0" CornerRadius="6" ClipToBounds="True" Height="48" Background="{StaticResource SurfaceInputBrush}">
                                                 <Grid>
                                                     <TextBlock Text="🎮" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                    <Image Source="{Binding FolderHeaderImageUrl}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                    <Image Source="{Binding FolderHeaderImageUrl, Converter={StaticResource CachedImageConverter}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                                                 </Grid>
                                             </Border>
 
@@ -2195,7 +2195,7 @@
                                                         <ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
                                                     <Border Grid.Column="0" Height="28" CornerRadius="3" ClipToBounds="True" Background="#121218">
-                                                        <Image Source="{Binding FormattedThumbnail}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                        <Image Source="{Binding FormattedThumbnail, Converter={StaticResource CachedImageConverter}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                                                     </Border>
                                                     <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                                         <TextBlock Text="{Binding Name}" Style="{StaticResource BodySmall}" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>

@@ -1,9 +1,11 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using BlueStar.Core.Helpers;
 using BlueStar.Core.Interfaces;
 using Microsoft.Extensions.Logging;
@@ -378,6 +380,175 @@ public sealed class SteamStatusService : ISteamStatusService
         catch { }
 
         return false;
+    }
+
+    /// <inheritdoc />
+    public void LaunchSteamHidden()
+    {
+        try
+        {
+            // 1. Attempt starting via refix_steamhost if deployed in tools
+            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            var host64 = Path.Combine(baseDir, "tools", "ReFix_deploy", "bin", "lan", "refix_steamhost64.exe");
+            var host32 = Path.Combine(baseDir, "tools", "ReFix_deploy", "bin", "lan", "x86", "refix_steamhost.exe");
+            if (!File.Exists(host64))
+            {
+                host64 = Path.Combine(baseDir, "tools", "ReFix_StandardDeploy", "bin", "lan", "refix_steamhost64.exe");
+                host32 = Path.Combine(baseDir, "tools", "ReFix_StandardDeploy", "bin", "lan", "x86", "refix_steamhost.exe");
+            }
+
+            var hostExe = Environment.Is64BitOperatingSystem && File.Exists(host64) ? host64 : (File.Exists(host32) ? host32 : null);
+
+            if (hostExe != null)
+            {
+                try
+                {
+                    var psiHost = new ProcessStartInfo
+                    {
+                        FileName = hostExe,
+                        Arguments = $"0 \"BlueStar\" {Environment.ProcessId} 0",
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        WindowStyle = ProcessWindowStyle.Hidden
+                    };
+                    using var p = Process.Start(psiHost);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to launch refix_steamhost");
+                }
+            }
+
+            // 2. Launch Steam directly with -silent (hidden in notification tray) to guarantee start
+            var steamPath = ShortcutHelper.GetSteamPath();
+            if (!string.IsNullOrWhiteSpace(steamPath))
+            {
+                var steamExe = Path.Combine(steamPath, "steam.exe");
+                if (File.Exists(steamExe))
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = steamExe,
+                        Arguments = "-silent",
+                        UseShellExecute = true,
+                        WindowStyle = ProcessWindowStyle.Hidden
+                    };
+                    using var p = Process.Start(psi);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to start Steam in hidden tray");
+        }
+        finally
+        {
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(1500).ConfigureAwait(false);
+                CheckStatusNow();
+            });
+        }
+    }
+
+    /// <inheritdoc />
+    public void BringSteamToFront()
+    {
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                TryFocusSteamWindow();
+            }
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "steam://open/main",
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to open Steam via protocol");
+            try
+            {
+                var steamPath = ShortcutHelper.GetSteamPath();
+                if (!string.IsNullOrWhiteSpace(steamPath))
+                {
+                    var steamExe = Path.Combine(steamPath, "steam.exe");
+                    if (File.Exists(steamExe))
+                    {
+                        Process.Start(new ProcessStartInfo(steamExe) { UseShellExecute = true });
+                    }
+                }
+            }
+            catch { }
+        }
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsIconic(IntPtr hWnd);
+
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+    private const int SW_RESTORE = 9;
+    private const int SW_SHOWNORMAL = 1;
+
+    private static void TryFocusSteamWindow()
+    {
+        try
+        {
+            var pids = new System.Collections.Generic.HashSet<uint>();
+            foreach (var name in new[] { "steam", "steamwebhelper" })
+            {
+                foreach (var p in Process.GetProcessesByName(name))
+                {
+                    pids.Add((uint)p.Id);
+                    p.Dispose();
+                }
+            }
+
+            if (pids.Count == 0) return;
+
+            EnumWindows((hWnd, _) =>
+            {
+                GetWindowThreadProcessId(hWnd, out var windowPid);
+                if (pids.Contains(windowPid))
+                {
+                    var sb = new StringBuilder(256);
+                    GetWindowText(hWnd, sb, 256);
+                    var title = sb.ToString();
+
+                    if (!string.IsNullOrWhiteSpace(title) && title.Contains("Steam", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (IsIconic(hWnd))
+                            ShowWindowAsync(hWnd, SW_RESTORE);
+                        else
+                            ShowWindowAsync(hWnd, SW_SHOWNORMAL);
+
+                        SetForegroundWindow(hWnd);
+                        return false;
+                    }
+                }
+                return true;
+            }, IntPtr.Zero);
+        }
+        catch { }
     }
 
     public void Dispose()

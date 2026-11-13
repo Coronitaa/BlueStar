@@ -416,7 +416,7 @@ public sealed class WorkshopService : IWorkshopService
                         $"-app {effectiveAppId} -pubfile {publishedFileId} -dir \"{stagingFolder}\"");
 
                     using var proc = new System.Diagnostics.Process { StartInfo = psi };
-                    proc.OutputDataReceived += (_, e) =>
+                    System.Diagnostics.DataReceivedEventHandler procOutHandler = (_, e) =>
                     {
                         if (string.IsNullOrEmpty(e.Data)) return;
                         var match = PercentageRegex.Match(e.Data);
@@ -427,16 +427,24 @@ public sealed class WorkshopService : IWorkshopService
                         }
                     };
 
-                    proc.Start();
-                    proc.BeginOutputReadLine();
-                    proc.BeginErrorReadLine();
+                    try
+                    {
+                        proc.OutputDataReceived += procOutHandler;
+                        proc.Start();
+                        proc.BeginOutputReadLine();
+                        proc.BeginErrorReadLine();
 
-                    await proc.WaitForExitAsync(ct).ConfigureAwait(false);
-                    var filesCount = Directory.Exists(stagingFolder)
-                        ? Directory.GetFiles(stagingFolder, "*.*", SearchOption.AllDirectories).Length
-                        : 0;
+                        await proc.WaitForExitAsync(ct).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        try { proc.OutputDataReceived -= procOutHandler; } catch { }
+                    }
 
-                    if (proc.ExitCode == 0 && filesCount > 0)
+                    var hasFiles = Directory.Exists(stagingFolder) &&
+                        Directory.EnumerateFiles(stagingFolder, "*.*", SearchOption.AllDirectories).Any();
+
+                    if (proc.ExitCode == 0 && hasFiles)
                     {
                         downloaded = true;
                     }
@@ -648,7 +656,7 @@ public sealed class WorkshopService : IWorkshopService
                     $"-app {effectiveAppId} -pubfile {publishedFileId} -dir \"{modFolder}\"");
 
                 using var proc = new System.Diagnostics.Process { StartInfo = psi };
-                proc.OutputDataReceived += (_, e) =>
+                System.Diagnostics.DataReceivedEventHandler procOutHandler2 = (_, e) =>
                 {
                     if (string.IsNullOrEmpty(e.Data)) return;
                     var match = PercentageRegex.Match(e.Data);
@@ -659,11 +667,19 @@ public sealed class WorkshopService : IWorkshopService
                     }
                 };
 
-                proc.Start();
-                proc.BeginOutputReadLine();
-                proc.BeginErrorReadLine();
+                try
+                {
+                    proc.OutputDataReceived += procOutHandler2;
+                    proc.Start();
+                    proc.BeginOutputReadLine();
+                    proc.BeginErrorReadLine();
 
-                await proc.WaitForExitAsync(ct).ConfigureAwait(false);
+                    await proc.WaitForExitAsync(ct).ConfigureAwait(false);
+                }
+                finally
+                {
+                    try { proc.OutputDataReceived -= procOutHandler2; } catch { }
+                }
 
                 if (proc.ExitCode == 0)
                 {
@@ -891,7 +907,7 @@ public sealed class WorkshopService : IWorkshopService
         var accessDenied = false;
         var needsAccount = false;
         using var proc = new System.Diagnostics.Process { StartInfo = psi };
-        proc.OutputDataReceived += (_, e) =>
+        System.Diagnostics.DataReceivedEventHandler procOutHandler3 = (_, e) =>
         {
             if (string.IsNullOrEmpty(e.Data)) return;
             if (e.Data.Contains("AccessDenied", StringComparison.OrdinalIgnoreCase) ||
@@ -909,22 +925,35 @@ public sealed class WorkshopService : IWorkshopService
                 progress?.Report(Math.Min(95.0, 5.0 + pct * 0.9));
             }
         };
-        proc.ErrorDataReceived += (_, e) =>
+        System.Diagnostics.DataReceivedEventHandler procErrHandler3 = (_, e) =>
         {
             if (!string.IsNullOrWhiteSpace(e.Data)) lastError = e.Data.Trim();
         };
 
-        proc.Start();
-        proc.BeginOutputReadLine();
-        proc.BeginErrorReadLine();
         try
         {
+            proc.OutputDataReceived += procOutHandler3;
+            proc.ErrorDataReceived += procErrHandler3;
+
+            proc.Start();
+            proc.BeginOutputReadLine();
+            proc.BeginErrorReadLine();
+
             await proc.WaitForExitAsync(ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
             try { proc.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
             throw;
+        }
+        finally
+        {
+            try
+            {
+                proc.OutputDataReceived -= procOutHandler3;
+                proc.ErrorDataReceived -= procErrHandler3;
+            }
+            catch { }
         }
 
         // 0x80008083 / 0x80008096: the .NET host could not find a runtime for the downloader.

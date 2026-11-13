@@ -17,8 +17,18 @@ public partial class HomeView : UserControl
     {
         InitializeComponent();
 
+        Loaded += OnLoaded;
         DataContextChanged += OnDataContextChanged;
         Unloaded += OnUnloaded;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel == null && DataContext is ViewModels.HomeViewModel vm)
+        {
+            _viewModel = vm;
+            _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        }
     }
 
     // ── Embedded store page (the same panel Explore opens) ───────────────
@@ -36,6 +46,11 @@ public partial class HomeView : UserControl
     {
         if (_viewModel != null) _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         _viewModel = null;
+
+        if (StorePageView?.CoreWebView2 != null)
+        {
+            try { StorePageView.CoreWebView2.Navigate("about:blank"); } catch { }
+        }
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)

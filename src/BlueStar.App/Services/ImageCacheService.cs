@@ -148,9 +148,15 @@ public sealed class ImageCacheService
                 bmp.UriSource = uri;
                 bmp.CacheOption = BitmapCacheOption.OnLoad;
                 bmp.CreateOptions = BitmapCreateOptions.None;
+                bmp.DecodePixelWidth = 460;
 
-                bmp.DownloadCompleted += (s, e) =>
+                EventHandler? onCompleted = null;
+                EventHandler<ExceptionEventArgs>? onFailed = null;
+
+                onCompleted = (s, e) =>
                 {
+                    bmp.DownloadCompleted -= onCompleted;
+                    bmp.DownloadFailed -= onFailed;
                     try
                     {
                         if (bmp.CanFreeze) bmp.Freeze();
@@ -172,6 +178,15 @@ public sealed class ImageCacheService
                     }
                     catch { }
                 };
+
+                onFailed = (s, e) =>
+                {
+                    bmp.DownloadCompleted -= onCompleted;
+                    bmp.DownloadFailed -= onFailed;
+                };
+
+                bmp.DownloadCompleted += onCompleted;
+                bmp.DownloadFailed += onFailed;
 
                 bmp.EndInit();
                 return bmp;
@@ -354,20 +369,22 @@ public sealed class ImageCacheService
         return null;
     }
 
-    private static BitmapSource? CreateFrozenBitmap(byte[] bytes)
+    private static BitmapSource? CreateFrozenBitmap(byte[] bytes, int decodePixelWidth = 460)
     {
         if (bytes == null || bytes.Length < 100) return null;
         try
         {
-            var ms = new MemoryStream(bytes);
+            using var ms = new MemoryStream(bytes);
             var bitmap = new BitmapImage();
             bitmap.BeginInit();
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
             bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+            if (decodePixelWidth > 0)
+            {
+                bitmap.DecodePixelWidth = decodePixelWidth;
+            }
             bitmap.StreamSource = ms;
             bitmap.EndInit();
-            ms.Close();
-            ms.Dispose();
             if (bitmap.CanFreeze) bitmap.Freeze();
             return bitmap;
         }

@@ -22,8 +22,22 @@ public partial class InstanceDetailView : UserControl
     {
         InitializeComponent();
 
+        Loaded += OnLoaded;
         DataContextChanged += OnDataContextChanged;
         Unloaded += OnUnloaded;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel == null && DataContext is InstanceDetailViewModel vm)
+        {
+            _viewModel = vm;
+            _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            if (_viewModel.ModsTab != null)
+            {
+                _viewModel.ModsTab.OnNavigateModPage += OnNavigateModPageRequested;
+            }
+        }
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -60,6 +74,15 @@ public partial class InstanceDetailView : UserControl
             }
         }
         _viewModel = null;
+
+        if (StorePageView?.CoreWebView2 != null)
+        {
+            try { StorePageView.CoreWebView2.Navigate("about:blank"); } catch { }
+        }
+        if (ModPageView?.CoreWebView2 != null)
+        {
+            try { ModPageView.CoreWebView2.Navigate("about:blank"); } catch { }
+        }
     }
 
     private void OnNavigateModPageRequested(string url)

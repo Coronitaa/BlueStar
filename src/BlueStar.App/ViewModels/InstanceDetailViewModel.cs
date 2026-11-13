@@ -502,7 +502,7 @@ public partial class DepotUpdateItem : ObservableObject
 /// <summary>
 /// ViewModel for the complete Instance Dashboard (Overview, Depots, DLCs, Mods, Emulator, Settings, Logs).
 /// </summary>
-public partial class InstanceDetailViewModel : ObservableObject, IDisposable
+public partial class InstanceDetailViewModel : ObservableObject, ISharedViewModel, IDisposable
 {
     private readonly IInstanceManager _instanceManager;
     private readonly IDlcInstaller _dlcInstaller;
@@ -4004,7 +4004,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                         "BlueStar", "instances", Instance.Id.ToString(), "manifests");
                     if (Directory.Exists(instanceManifestDir))
                     {
-                        foreach (var f in Directory.GetFiles(instanceManifestDir, "*.manifest"))
+                        foreach (var f in Directory.EnumerateFiles(instanceManifestDir, "*.manifest"))
                         {
                             var m = System.Text.RegularExpressions.Regex.Match(Path.GetFileName(f), @"^(\d+)_(\d+)\.manifest$");
                             if (m.Success && uint.TryParse(m.Groups[1].Value, out var did) && ulong.TryParse(m.Groups[2].Value, out var mid))
@@ -4524,7 +4524,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         var localManifestMap = new Dictionary<uint, ulong>();
         if (Directory.Exists(instanceManifestDir))
         {
-            var files = Directory.GetFiles(instanceManifestDir, "*.manifest");
+            var files = Directory.EnumerateFiles(instanceManifestDir, "*.manifest");
             foreach (var f in files)
             {
                 var match = System.Text.RegularExpressions.Regex.Match(Path.GetFileName(f), @"^(\d+)_(\d+)\.manifest$");
@@ -7417,7 +7417,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         {
             try
             {
-                foreach (var file in Directory.GetFiles(installPath, pattern, searchOpts))
+                foreach (var file in Directory.EnumerateFiles(installPath, pattern, searchOpts))
                 {
                     try { File.Delete(file); } catch { }
                 }
@@ -7428,7 +7428,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         // Restore original Steam API DLLs from backups if they exist
         try
         {
-            foreach (var backupFile in Directory.GetFiles(installPath, "steam_api*_valve.dll", searchOpts))
+            foreach (var backupFile in Directory.EnumerateFiles(installPath, "steam_api*_valve.dll", searchOpts))
             {
                 var dir = Path.GetDirectoryName(backupFile)!;
                 var originalName = Path.GetFileName(backupFile).Replace("_valve", "");
@@ -7541,7 +7541,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                         {
                             try { Directory.Delete(d, true); } catch { }
                         }
-                        foreach (var f in Directory.GetFiles(modsDir))
+                        foreach (var f in Directory.EnumerateFiles(modsDir))
                         {
                             try { File.Delete(f); } catch { }
                         }
@@ -7554,7 +7554,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                         {
                             try { Directory.Delete(d, true); } catch { }
                         }
-                        foreach (var f in Directory.GetFiles(modsUpper))
+                        foreach (var f in Directory.EnumerateFiles(modsUpper))
                         {
                             try { File.Delete(f); } catch { }
                         }
@@ -7686,7 +7686,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
             "BlueStar", "instances", Instance.Id.ToString(), "manifests");
 
         bool hasValidManifests = Directory.Exists(instanceManifestDir) &&
-            Directory.GetFiles(instanceManifestDir, "*.manifest").Any(f => new FileInfo(f).Length > 32);
+            Directory.EnumerateFiles(instanceManifestDir, "*.manifest").Any(f => new FileInfo(f).Length > 32);
 
         bool hasSourceArchive = !string.IsNullOrWhiteSpace(Instance.SourceArchivePath) && File.Exists(Instance.SourceArchivePath);
 
@@ -9065,7 +9065,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 "BlueStar", "instances", Instance.Id.ToString(), "manifests");
             if (Directory.Exists(instanceManifestDir))
             {
-                foreach (var f in Directory.GetFiles(instanceManifestDir, "*.manifest"))
+                foreach (var f in Directory.EnumerateFiles(instanceManifestDir, "*.manifest"))
                 {
                     var name = Path.GetFileNameWithoutExtension(f);
                     var parts = name.Split('_');
@@ -9800,7 +9800,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
 
             if (Directory.Exists(instanceManifestDir))
             {
-                var files = Directory.GetFiles(instanceManifestDir, "*.manifest");
+                var files = Directory.EnumerateFiles(instanceManifestDir, "*.manifest");
                 var localManifestMap = new Dictionary<uint, ulong>();
                 foreach (var f in files)
                 {
@@ -10367,6 +10367,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
                 var bmp = new System.Windows.Media.Imaging.BitmapImage();
                 bmp.BeginInit();
                 bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                bmp.DecodePixelWidth = validation.RecommendedWidth > 0 ? validation.RecommendedWidth : 600;
                 bmp.StreamSource = ms;
                 bmp.EndInit();
                 if (bmp.CanFreeze) bmp.Freeze();
@@ -10526,7 +10527,7 @@ public partial class InstanceDetailViewModel : ObservableObject, IDisposable
         {
             var dir = InstanceArtworkService.GetArtworkDirectory(Instance.Id);
             var baseName = InstanceArtworkService.GetCanonicalFileName(type);
-            var filesToDelete = Directory.Exists(dir) ? Directory.GetFiles(dir, $"{baseName}.*") : [];
+            var filesToDelete = Directory.Exists(dir) ? Directory.EnumerateFiles(dir, $"{baseName}.*") : [];
 
             foreach (var f in filesToDelete)
             {

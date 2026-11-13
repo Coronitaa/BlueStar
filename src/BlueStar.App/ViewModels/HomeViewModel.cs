@@ -24,7 +24,7 @@ namespace BlueStar.App.ViewModels;
 /// <summary>
 /// Unified ViewModel for the Home Dashboard Hub (recent/active instances, direct catalog discovery & search, 1-click instance creation, active downloads, stats).
 /// </summary>
-public partial class HomeViewModel : ObservableObject, IDisposable
+public partial class HomeViewModel : ObservableObject, ISharedViewModel, IDisposable
 {
     private readonly IInstanceManager _instanceManager;
     private readonly DownloadQueueManager _downloadQueueManager;
@@ -1717,7 +1717,7 @@ public partial class HomeViewModel : ObservableObject, IDisposable
             var exe = _engineDetector.FindPrimaryExecutable(folder, folderName);
             FolderExecutablePath = exe ?? string.Empty;
 
-            var detectedAppId = DetectAppIdFromFolder(folder);
+            var detectedAppId = await DetectAppIdFromFolderAsync(folder).ConfigureAwait(true);
             if (detectedAppId == 0 || detectedAppId == 480)
             {
                 // Auto-search Steam by folderName
@@ -1755,41 +1755,53 @@ public partial class HomeViewModel : ObservableObject, IDisposable
         }
     }
 
-    private static uint DetectAppIdFromFolder(string folderPath)
+    private static async Task<uint> DetectAppIdFromFolderAsync(string folderPath)
     {
-        try
+        return await Task.Run<uint>(() =>
         {
-            // 1. steam_appid.txt
-            var appIdFiles = Directory.GetFiles(folderPath, "steam_appid.txt", SearchOption.AllDirectories);
-            foreach (var f in appIdFiles)
+            try
             {
-                var text = File.ReadAllText(f).Trim();
-                if (uint.TryParse(text, out var id) && id > 0 && id != 480)
-                    return id;
-            }
+                // 1. steam_appid.txt
+                foreach (var f in Directory.EnumerateFiles(folderPath, "steam_appid.txt", SearchOption.AllDirectories))
+                {
+                    try
+                    {
+                        var text = File.ReadAllText(f).Trim();
+                        if (uint.TryParse(text, out var id) && id > 0 && id != 480)
+                            return id;
+                    }
+                    catch { }
+                }
 
-            // 2. ReFix.ini, steam_emu.ini, etc.
-            var iniFiles = Directory.GetFiles(folderPath, "*.ini", SearchOption.AllDirectories);
-            foreach (var f in iniFiles)
-            {
-                var text = File.ReadAllText(f);
-                var match = Regex.Match(text, @"(?i)^\s*(?:AppId|SteamAppId|MaskAppId)\s*=\s*(\d+)", RegexOptions.Multiline);
-                if (match.Success && uint.TryParse(match.Groups[1].Value, out var id) && id > 0 && id != 480)
-                    return id;
-            }
+                // 2. ReFix.ini, steam_emu.ini, etc.
+                foreach (var f in Directory.EnumerateFiles(folderPath, "*.ini", SearchOption.AllDirectories))
+                {
+                    try
+                    {
+                        var text = File.ReadAllText(f);
+                        var match = Regex.Match(text, @"(?i)^\s*(?:AppId|SteamAppId|MaskAppId)\s*=\s*(\d+)", RegexOptions.Multiline);
+                        if (match.Success && uint.TryParse(match.Groups[1].Value, out var id) && id > 0 && id != 480)
+                            return id;
+                    }
+                    catch { }
+                }
 
-            // 3. SmokeAPI.config.json, SmokeAPI.json
-            var jsonFiles = Directory.GetFiles(folderPath, "*SmokeAPI*.json", SearchOption.AllDirectories);
-            foreach (var f in jsonFiles)
-            {
-                var text = File.ReadAllText(f);
-                var match = Regex.Match(text, @"(?i)""(?:appid|app_id|SteamAppId)""\s*:\s*(\d+)");
-                if (match.Success && uint.TryParse(match.Groups[1].Value, out var id) && id > 0 && id != 480)
-                    return id;
+                // 3. SmokeAPI.config.json, SmokeAPI.json
+                foreach (var f in Directory.EnumerateFiles(folderPath, "*SmokeAPI*.json", SearchOption.AllDirectories))
+                {
+                    try
+                    {
+                        var text = File.ReadAllText(f);
+                        var match = Regex.Match(text, @"(?i)""(?:appid|app_id|SteamAppId)""\s*:\s*(\d+)");
+                        if (match.Success && uint.TryParse(match.Groups[1].Value, out var id) && id > 0 && id != 480)
+                            return id;
+                    }
+                    catch { }
+                }
             }
-        }
-        catch { }
-        return 0;
+            catch { }
+            return 0u;
+        }).ConfigureAwait(false);
     }
 
     [RelayCommand]

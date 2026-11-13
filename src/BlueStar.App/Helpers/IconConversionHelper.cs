@@ -152,6 +152,7 @@ public static class IconConversionHelper
             var bi = new BitmapImage();
             bi.BeginInit();
             bi.CacheOption = BitmapCacheOption.OnLoad;
+            bi.DecodePixelWidth = 256;
             bi.StreamSource = ms;
             bi.EndInit();
             if (bi.CanFreeze) bi.Freeze();

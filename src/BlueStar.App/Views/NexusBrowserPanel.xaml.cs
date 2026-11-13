@@ -21,19 +21,45 @@ public partial class NexusBrowserPanel : UserControl
     public NexusBrowserPanel()
     {
         InitializeComponent();
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
         DataContextChanged += OnDataContextChanged;
         IsVisibleChanged += OnIsVisibleChanged;
     }
 
-    private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel == null && DataContext is NexusBrowserViewModel vm)
+        {
+            AttachViewModel(vm);
+        }
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        DetachViewModel();
+    }
+
+    private void DetachViewModel()
     {
         if (_viewModel != null)
         {
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
             _viewModel.NavigateHomeAction = null;
             _viewModel.NavigateUrlAction = null;
+            _viewModel = null;
         }
-        _viewModel = e.NewValue as NexusBrowserViewModel;
+
+        if (NexusWebView?.CoreWebView2 != null)
+        {
+            try { NexusWebView.CoreWebView2.Navigate("about:blank"); } catch { }
+        }
+    }
+
+    private void AttachViewModel(NexusBrowserViewModel? vm)
+    {
+        DetachViewModel();
+        _viewModel = vm;
         if (_viewModel != null)
         {
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
@@ -53,6 +79,11 @@ public partial class NexusBrowserPanel : UserControl
                 }
             };
         }
+    }
+
+    private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        AttachViewModel(e.NewValue as NexusBrowserViewModel);
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)

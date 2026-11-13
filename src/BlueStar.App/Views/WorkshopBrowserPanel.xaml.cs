@@ -29,8 +29,33 @@ public partial class WorkshopBrowserPanel : UserControl
     public WorkshopBrowserPanel()
     {
         InitializeComponent();
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
         DataContextChanged += OnDataContextChanged;
         IsVisibleChanged += OnIsVisibleChanged;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel == null && DataContext is WorkshopBrowserViewModel vm)
+        {
+            _viewModel = vm;
+            _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        }
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel != null)
+        {
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _viewModel = null;
+        }
+
+        if (WorkshopView?.CoreWebView2 != null)
+        {
+            try { WorkshopView.CoreWebView2.Navigate("about:blank"); } catch { }
+        }
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -23,7 +24,10 @@ public partial class DebugConsoleViewModel : ObservableObject, IDisposable
 {
     private readonly IDebugLogService _debugLogService;
     private readonly INotificationService _notificationService;
+    private const int MaxLogCapacity = 1000;
     private readonly List<LogMessageItem> _allLogs = new();
+    private readonly ConcurrentQueue<LogMessageItem> _incomingQueue = new();
+    private int _isDrainScheduled;
     private readonly object _syncLock = new();
     private bool _disposed;
 
@@ -86,6 +90,10 @@ public partial class DebugConsoleViewModel : ObservableObject, IDisposable
         lock (_syncLock)
         {
             _allLogs.AddRange(recent);
+            while (_allLogs.Count > MaxLogCapacity)
+            {
+                _allLogs.RemoveAt(0);
+            }
         }
 
         UpdateCounters();
@@ -98,28 +106,57 @@ public partial class DebugConsoleViewModel : ObservableObject, IDisposable
     private void OnLogEmitted(LogMessageItem item)
     {
         if (_disposed) return;
+        _incomingQueue.Enqueue(item);
 
-        Application.Current?.Dispatcher?.BeginInvoke(() =>
+        if (Interlocked.CompareExchange(ref _isDrainScheduled, 1, 0) == 0)
         {
-            if (_disposed) return;
+            Application.Current?.Dispatcher?.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, DrainLogs);
+        }
+    }
 
-            lock (_syncLock)
+    private void DrainLogs()
+    {
+        Interlocked.Exchange(ref _isDrainScheduled, 0);
+        if (_disposed) return;
+
+        var batch = new List<LogMessageItem>();
+        while (_incomingQueue.TryDequeue(out var log))
+        {
+            batch.Add(log);
+        }
+
+        if (batch.Count == 0) return;
+
+        lock (_syncLock)
+        {
+            _allLogs.AddRange(batch);
+            while (_allLogs.Count > MaxLogCapacity)
             {
-                _allLogs.Add(item);
+                _allLogs.RemoveAt(0);
             }
+        }
 
-            UpdateCounters();
+        UpdateCounters();
 
+        bool addedToFiltered = false;
+        foreach (var item in batch)
+        {
             if (MatchesFilter(item))
             {
                 FilteredLogs.Add(item);
-
-                if (IsAutoScrollEnabled)
-                {
-                    RequestScrollToEnd?.Invoke();
-                }
+                addedToFiltered = true;
             }
-        });
+        }
+
+        while (FilteredLogs.Count > MaxLogCapacity)
+        {
+            FilteredLogs.RemoveAt(0);
+        }
+
+        if (addedToFiltered && IsAutoScrollEnabled)
+        {
+            RequestScrollToEnd?.Invoke();
+        }
     }
 
     private void UpdateCounters()
@@ -143,7 +180,8 @@ public partial class DebugConsoleViewModel : ObservableObject, IDisposable
         var matching = snapshot.Where(item => MatchesFilter(item, query, level)).ToList();
 
         FilteredLogs.Clear();
-        foreach (var log in matching)
+        var toTake = matching.Count > MaxLogCapacity ? matching.Skip(matching.Count - MaxLogCapacity) : matching;
+        foreach (var log in toTake)
         {
             FilteredLogs.Add(log);
         }
