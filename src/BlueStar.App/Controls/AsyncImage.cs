@@ -9,7 +9,7 @@ namespace BlueStar.App.Controls;
 
 /// <summary>
 /// Loads an image URL off the UI thread into an <see cref="ImageBrush"/> or <see cref="Image"/>.
-/// Supports automatic cancellation when visuals are virtualized/recycled.
+/// Supports cooperative cancellation when visuals are virtualized/recycled.
 /// </summary>
 public static class AsyncImage
 {
@@ -20,6 +20,13 @@ public static class AsyncImage
 
     public static void SetUrl(DependencyObject target, string? value) => target.SetValue(UrlProperty, value);
 
+    public static readonly DependencyProperty AppIdProperty = DependencyProperty.RegisterAttached(
+        "AppId", typeof(uint), typeof(AsyncImage), new PropertyMetadata(0u, OnAppIdChanged));
+
+    public static uint GetAppId(DependencyObject target) => (uint)target.GetValue(AppIdProperty);
+
+    public static void SetAppId(DependencyObject target, uint value) => target.SetValue(AppIdProperty, value);
+
     private static readonly DependencyProperty CancellationTokenSourceProperty = DependencyProperty.RegisterAttached(
         "CancellationTokenSource", typeof(CancellationTokenSource), typeof(AsyncImage));
 
@@ -27,9 +34,25 @@ public static class AsyncImage
 
     private static void SetCts(DependencyObject target, CancellationTokenSource? value) => target.SetValue(CancellationTokenSourceProperty, value);
 
-    private static async void OnUrlChanged(DependencyObject target, DependencyPropertyChangedEventArgs e)
+    private static void OnUrlChanged(DependencyObject target, DependencyPropertyChangedEventArgs e)
     {
-        // Cancel any pending load for a recycled visual
+        var url = e.NewValue as string;
+        var appId = GetAppId(target);
+        Reload(target, url, appId);
+    }
+
+    private static void OnAppIdChanged(DependencyObject target, DependencyPropertyChangedEventArgs e)
+    {
+        var appId = (uint)e.NewValue;
+        var url = GetUrl(target);
+        if (string.IsNullOrWhiteSpace(url) && appId > 0)
+        {
+            Reload(target, null, appId);
+        }
+    }
+
+    private static async void Reload(DependencyObject target, string? url, uint appId)
+    {
         var oldCts = GetCts(target);
         if (oldCts != null)
         {
@@ -38,15 +61,14 @@ public static class AsyncImage
             SetCts(target, null);
         }
 
-        var url = e.NewValue as string;
-        if (string.IsNullOrWhiteSpace(url))
+        if (string.IsNullOrWhiteSpace(url) && appId == 0)
         {
             Apply(target, null);
             return;
         }
 
         var cache = ImageCacheService.Instance;
-        var cached = cache.GetFromMemory(url);
+        var cached = cache.GetFromMemory(url, appId);
         Apply(target, cached);
         if (cached != null) return;
 
@@ -55,7 +77,7 @@ public static class AsyncImage
 
         try
         {
-            var loaded = await cache.LoadImageAsync(url, 0, null, cts.Token);
+            var loaded = await cache.LoadImageAsync(url, appId, null, cts.Token);
 
             if (!cts.IsCancellationRequested &&
                 loaded != null &&

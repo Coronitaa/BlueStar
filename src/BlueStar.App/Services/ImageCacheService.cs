@@ -18,13 +18,13 @@ namespace BlueStar.App.Services;
 
 /// <summary>
 /// High-performance multi-tier image caching engine for BlueStar.
-/// Designed for:
-/// 1. Zero API thrashing: Negative caching (tombstoning) prevents repeated requests for 404s/unreleased games;
-///    local Steam librarycache lookup bypasses network entirely when assets exist locally.
-/// 2. Speed: Instant L1 memory lookup (0ms) and fast async L2 disk hits with in-flight deduplication.
-/// 3. Bounded disk footprint: Automatic LRU disk cache maintenance strictly capped at 60 MB.
-/// 4. CPU/RAM efficiency: Constrained DecodePixelWidth (300px), thread-safe frozen bitmaps, bounded L1 cache,
-///    and cancellation support to stop off-screen image decoding.
+/// Provides:
+/// 1. Instant L1 in-memory cache of frozen BitmapSource instances (0ms).
+/// 2. Direct local disk loading for instance banners, custom artwork, and local files.
+/// 3. Steam appcache/librarycache integration to load local Steam artwork without hitting the network.
+/// 4. L2 persistent disk cache capped strictly at 60 MB with background LRU pruning.
+/// 5. Resilient Steam CDN fallbacks with negative caching (tombstoning) for permanent 404s.
+/// 6. Synchronous BitmapImage return for WPF ValueConverters preventing missing artwork in Library/Home/Detail.
 /// </summary>
 public sealed class ImageCacheService
 {
@@ -75,7 +75,7 @@ public sealed class ImageCacheService
         var handler = new SocketsHttpHandler
         {
             PooledConnectionLifetime = TimeSpan.FromMinutes(10),
-            MaxConnectionsPerServer = 10,
+            MaxConnectionsPerServer = 12,
             AutomaticDecompression = System.Net.DecompressionMethods.All
         };
 
@@ -85,7 +85,6 @@ public sealed class ImageCacheService
         };
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 BlueStar/1.1");
 
-        // Clean up disk cache on startup in background
         TryScheduleDiskPruning(force: true);
     }
 
@@ -127,7 +126,7 @@ public sealed class ImageCacheService
 
     /// <summary>
     /// Synchronously retrieves a cached image from L1 Memory or L2 Disk cache if available.
-    /// If not cached, initializes non-blocking background fetch.
+    /// Supports direct local disk files and returns non-blocking BitmapImage for converters.
     /// </summary>
     public ImageSource? GetOrLoadImage(string? url, uint appId = 0)
     {
@@ -141,10 +140,31 @@ public sealed class ImageCacheService
             return memBitmap;
         }
 
-        // 2. Negative Cache Check (Tombstone)
-        if (IsNegativeCached(key))
+        // 2. Local File Check (Crucial for installed instance custom banners, icons, and local files)
+        var primaryUrl = !string.IsNullOrWhiteSpace(url)
+            ? url
+            : $"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{appId}/header.jpg";
+
+        var localCandidate = primaryUrl.StartsWith("file:", StringComparison.OrdinalIgnoreCase) && Uri.TryCreate(primaryUrl, UriKind.Absolute, out var parsedFileUri)
+            ? parsedFileUri.LocalPath
+            : primaryUrl;
+
+        if (File.Exists(localCandidate))
         {
-            return null;
+            try
+            {
+                var fileBytes = File.ReadAllBytes(localCandidate);
+                if (fileBytes.Length > 0)
+                {
+                    var localBitmap = CreateFrozenBitmap(fileBytes, 300);
+                    if (localBitmap != null)
+                    {
+                        SetMemoryCache(key, localBitmap);
+                        return localBitmap;
+                    }
+                }
+            }
+            catch { }
         }
 
         // 3. L2 Persistent Disk Cache
@@ -187,7 +207,69 @@ public sealed class ImageCacheService
             }
         }
 
-        // 5. Fire async background fetch and return null without blocking UI
+        // 5. Negative Cache Check (Tombstone - applies ONLY to network fetches)
+        if (IsNegativeCached(key))
+        {
+            return null;
+        }
+
+        // 6. Asynchronous WPF Native Image Downloader for ValueConverters (CachedImageConverter)
+        try
+        {
+            if (Uri.TryCreate(primaryUrl, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+            {
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.UriSource = uri;
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+                bmp.DecodePixelWidth = 300;
+
+                EventHandler? onCompleted = null;
+                EventHandler<ExceptionEventArgs>? onFailed = null;
+
+                onCompleted = (s, e) =>
+                {
+                    bmp.DownloadCompleted -= onCompleted;
+                    bmp.DownloadFailed -= onFailed;
+                    try
+                    {
+                        if (bmp.CanFreeze) bmp.Freeze();
+                        SetMemoryCache(key, bmp);
+
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                var encoder = new JpegBitmapEncoder();
+                                encoder.Frames.Add(BitmapFrame.Create(bmp));
+                                using var ms = new MemoryStream();
+                                encoder.Save(ms);
+                                await File.WriteAllBytesAsync(diskPath, ms.ToArray()).ConfigureAwait(false);
+                                TryScheduleDiskPruning();
+                            }
+                            catch { }
+                        });
+                    }
+                    catch { }
+                };
+
+                onFailed = (s, e) =>
+                {
+                    bmp.DownloadCompleted -= onCompleted;
+                    bmp.DownloadFailed -= onFailed;
+                    MarkNegativeCache(key);
+                };
+
+                bmp.DownloadCompleted += onCompleted;
+                bmp.DownloadFailed += onFailed;
+                bmp.EndInit();
+                return bmp;
+            }
+        }
+        catch { }
+
+        // Also trigger background resilient fallback fetch
         _ = LoadImageAsync(url, appId);
         return null;
     }
@@ -229,7 +311,31 @@ public sealed class ImageCacheService
             return memBitmap;
         }
 
-        // 2. L2 Persistent Disk Cache
+        // 2. Local File Check
+        var primaryUrl = !string.IsNullOrWhiteSpace(url) ? url : string.Empty;
+        var localCandidate = primaryUrl.StartsWith("file:", StringComparison.OrdinalIgnoreCase) && Uri.TryCreate(primaryUrl, UriKind.Absolute, out var parsedFileUri)
+            ? parsedFileUri.LocalPath
+            : primaryUrl;
+
+        if (File.Exists(localCandidate))
+        {
+            try
+            {
+                var fileBytes = File.ReadAllBytes(localCandidate);
+                if (fileBytes.Length > 0)
+                {
+                    var localBitmap = CreateFrozenBitmap(fileBytes, 300);
+                    if (localBitmap != null)
+                    {
+                        SetMemoryCache(key, localBitmap);
+                        return localBitmap;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // 3. L2 Persistent Disk Cache
         var diskPath = GetDiskCachePath(key);
         if (File.Exists(diskPath))
         {
@@ -306,7 +412,31 @@ public sealed class ImageCacheService
                 catch { }
             }
 
-            // 2. Check Local Steam librarycache if target AppId is present
+            // 2. Check Local File Path (e.g. file:/// or C:\)
+            var primaryUrl = !string.IsNullOrWhiteSpace(url) ? url : string.Empty;
+            var localCandidate = primaryUrl.StartsWith("file:", StringComparison.OrdinalIgnoreCase) && Uri.TryCreate(primaryUrl, UriKind.Absolute, out var parsedFileUri)
+                ? parsedFileUri.LocalPath
+                : primaryUrl;
+
+            if (File.Exists(localCandidate))
+            {
+                try
+                {
+                    var bytes = await File.ReadAllBytesAsync(localCandidate).ConfigureAwait(false);
+                    if (bytes.Length > 0)
+                    {
+                        var bmp = CreateFrozenBitmap(bytes, 300);
+                        if (bmp != null)
+                        {
+                            SetMemoryCache(key, bmp);
+                            return bmp;
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // 3. Check Local Steam librarycache if target AppId is present
             var targetAppId = appId;
             if (targetAppId == 0 && !string.IsNullOrWhiteSpace(url))
             {
@@ -326,20 +456,29 @@ public sealed class ImageCacheService
                 }
             }
 
-            // 3. Lean Candidate URLs: Direct URL + Max 2 Steam CDN endpoints (NO redundant mirrors)
+            // 4. Build Candidate URLs
             var candidates = new List<string>();
             if (!string.IsNullOrWhiteSpace(url) && (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
             {
                 candidates.Add(url);
+
+                if (url.Contains("capsule_sm_120.jpg", StringComparison.OrdinalIgnoreCase))
+                {
+                    candidates.Add(url.Replace("capsule_sm_120.jpg", "capsule_231x87.jpg", StringComparison.OrdinalIgnoreCase));
+                }
             }
 
             if (targetAppId > 0)
             {
                 candidates.Add($"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{targetAppId}/header.jpg");
+                candidates.Add($"https://cdn.cloudflare.steamstatic.com/steam/apps/{targetAppId}/header.jpg");
                 candidates.Add($"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{targetAppId}/capsule_616x353.jpg");
+                candidates.Add($"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{targetAppId}/capsule_231x87.jpg");
+                candidates.Add($"https://cdn.cloudflare.steamstatic.com/steam/apps/{targetAppId}/capsule_231x87.jpg");
             }
 
             var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
             foreach (var candidate in candidates)
             {
                 if (string.IsNullOrWhiteSpace(candidate) || !seenUrls.Add(candidate))
@@ -350,7 +489,9 @@ public sealed class ImageCacheService
                     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3.5));
                     using var response = await _httpClient.GetAsync(candidate, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false);
                     if (!response.IsSuccessStatusCode)
+                    {
                         continue;
+                    }
 
                     var imageBytes = await response.Content.ReadAsByteArrayAsync(cts.Token).ConfigureAwait(false);
                     if (imageBytes.Length < 300)
@@ -377,7 +518,57 @@ public sealed class ImageCacheService
                 catch { }
             }
 
-            // If all candidates failed: mark key in negative cache to prevent request thrashing
+            // 5. Fallback for newer Steam games with hashed asset directories (e.g. 4576490, 3259780)
+            if (targetAppId > 0)
+            {
+                try
+                {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3.5));
+                    var searchApiUrl = $"https://store.steampowered.com/api/storesearch/?term={targetAppId}&l=english&cc=US";
+                    using var apiResp = await _httpClient.GetAsync(searchApiUrl, cts.Token).ConfigureAwait(false);
+                    if (apiResp.IsSuccessStatusCode)
+                    {
+                        using var doc = System.Text.Json.JsonDocument.Parse(await apiResp.Content.ReadAsStringAsync(cts.Token).ConfigureAwait(false));
+                        if (doc.RootElement.TryGetProperty("items", out var items) && items.GetArrayLength() > 0)
+                        {
+                            var first = items[0];
+                            string? fallbackUrl = null;
+                            if (first.TryGetProperty("tiny_image", out var ti)) fallbackUrl = ti.GetString();
+
+                            if (!string.IsNullOrWhiteSpace(fallbackUrl))
+                            {
+                                using var imgResp = await _httpClient.GetAsync(fallbackUrl, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false);
+                                if (imgResp.IsSuccessStatusCode)
+                                {
+                                    var imageBytes = await imgResp.Content.ReadAsByteArrayAsync(cts.Token).ConfigureAwait(false);
+                                    if (imageBytes.Length >= 300)
+                                    {
+                                        var bitmap = CreateFrozenBitmap(imageBytes, 300);
+                                        if (bitmap != null)
+                                        {
+                                            _ = Task.Run(async () =>
+                                            {
+                                                try
+                                                {
+                                                    await File.WriteAllBytesAsync(diskPath, imageBytes).ConfigureAwait(false);
+                                                    TryScheduleDiskPruning();
+                                                }
+                                                catch { }
+                                            });
+
+                                            SetMemoryCache(key, bitmap);
+                                            return bitmap;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // All candidates and fallbacks failed to yield an image
             MarkNegativeCache(key);
         }
         catch { }

@@ -84,6 +84,9 @@ public sealed partial class SteamCatalogSearchService : ISteamCatalogSearchServi
     [GeneratedRegex("""<div class="discount_final_price[^"]*">(?<price>[^<]*)</div>""")]
     private static partial Regex FinalPriceRegex();
 
+    [GeneratedRegex("""<div[^>]*class="[^"]*search_capsule[^"]*"[^>]*>\s*<img[^>]*?\bsrc=["'](?<src>[^"']+)["']""", RegexOptions.Singleline | RegexOptions.IgnoreCase)]
+    private static partial Regex CapsuleRegex();
+
     /// <inheritdoc />
     public async Task<SteamSearchPage> SearchAsync(SteamSearchQuery query, CancellationToken ct = default)
     {
@@ -400,12 +403,24 @@ public sealed partial class SteamCatalogSearchService : ISteamCatalogSearchServi
             if (ids.Contains(appId)) continue;
             ids.Add(appId);
 
+            string? headerUrl = null;
+            if (item.TryGetProperty("large_capsule_image", out var lc) && !string.IsNullOrWhiteSpace(lc.GetString()))
+                headerUrl = lc.GetString();
+            else if (item.TryGetProperty("header_image", out var hi) && !string.IsNullOrWhiteSpace(hi.GetString()))
+                headerUrl = hi.GetString();
+            else if (item.TryGetProperty("small_capsule_image", out var sc) && !string.IsNullOrWhiteSpace(sc.GetString()))
+                headerUrl = sc.GetString();
+            else if (item.TryGetProperty("tiny_image", out var ti) && !string.IsNullOrWhiteSpace(ti.GetString()))
+                headerUrl = ti.GetString();
+
+            headerUrl ??= $"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{appId}/header.jpg";
+
             var result = new SearchResult
             {
                 AppId = appId,
                 Name = item.TryGetProperty("name", out var n) ? n.GetString() ?? $"App {appId}" : $"App {appId}",
                 AppType = "Game",
-                HeaderImageUrl = $"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{appId}/header.jpg",
+                HeaderImageUrl = headerUrl,
                 HasWindows = !item.TryGetProperty("windows_available", out var w) || w.ValueKind != JsonValueKind.False,
                 HasMac = item.TryGetProperty("mac_available", out var m) && m.ValueKind == JsonValueKind.True,
                 HasLinux = item.TryGetProperty("linux_available", out var l) && l.ValueKind == JsonValueKind.True
@@ -535,12 +550,17 @@ public sealed partial class SteamCatalogSearchService : ISteamCatalogSearchServi
             var isSoftware = string.Equals(appTypes, "994", StringComparison.OrdinalIgnoreCase)
                              || body.Contains("for this software", StringComparison.OrdinalIgnoreCase);
 
+            var capsuleMatch = CapsuleRegex().Match(body);
+            var headerUrl = capsuleMatch.Success
+                ? WebUtility.HtmlDecode(capsuleMatch.Groups["src"].Value).Trim()
+                : $"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{appId}/header.jpg";
+
             var result = new SearchResult
             {
                 AppId = appId,
                 Name = name,
                 AppType = isSoftware ? "Software" : "Game",
-                HeaderImageUrl = $"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{appId}/header.jpg",
+                HeaderImageUrl = headerUrl,
                 HasWindows = hasWin || (!hasMac && !hasLinux),
                 HasMac = hasMac,
                 HasLinux = hasLinux,

@@ -63,20 +63,63 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
     private Size _viewport = new(0, 0);
     private Point _offset = new(0, 0);
 
+    private ItemContainerGenerator? _generator;
+
     public VirtualizingWrapPanel()
     {
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+        IsVisibleChanged += (s, e) =>
+        {
+            if (IsVisible)
+            {
+                InvalidateMeasure();
+                InvalidateArrange();
+            }
+        };
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         HookAncestorScroller();
+        HookGenerator();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         UnhookAncestorScroller();
+        if (_generator != null)
+        {
+            _generator.StatusChanged -= OnGeneratorStatusChanged;
+            _generator = null;
+        }
+    }
+
+    private void HookGenerator()
+    {
+        if (_generator != null)
+        {
+            _generator.StatusChanged -= OnGeneratorStatusChanged;
+        }
+        _generator = ItemContainerGenerator as ItemContainerGenerator;
+        if (_generator != null)
+        {
+            _generator.StatusChanged += OnGeneratorStatusChanged;
+        }
+    }
+
+    private void OnGeneratorStatusChanged(object? sender, EventArgs e)
+    {
+        if (_generator?.Status == GeneratorStatus.ContainersGenerated)
+        {
+            var itemsOwner = ItemsControl.GetItemsOwner(this);
+            var itemCount = itemsOwner?.Items.Count ?? 0;
+            if (itemCount > 0 && InternalChildren.Count == 0)
+            {
+                InvalidateMeasure();
+                InvalidateArrange();
+            }
+        }
     }
 
     private void HookAncestorScroller()
@@ -127,7 +170,10 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
                 break;
         }
 
+        HookGenerator();
         InvalidateMeasure();
+        InvalidateArrange();
+        Dispatcher.InvokeAsync(InvalidateMeasure, System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
     protected override void OnClearChildren()

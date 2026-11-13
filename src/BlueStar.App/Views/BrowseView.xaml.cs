@@ -132,6 +132,15 @@ public partial class BrowseView : UserControl
             return;
         }
 
+        if (e.PropertyName == nameof(BrowseViewModel.SearchState) && _viewModel?.SearchState == SearchState.ShowingResults)
+        {
+            Dispatcher.InvokeAsync(() =>
+            {
+                ResultsScroller?.InvalidateScrollInfo();
+                ResultsScroller?.UpdateLayout();
+            }, System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+
         if (e.PropertyName != nameof(BrowseViewModel.DetailUrl)) return;
 
         var url = _viewModel?.DetailUrl;

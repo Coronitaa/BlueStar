@@ -446,6 +446,7 @@
                     <Border CornerRadius="9,9,0,0">
                         <Border.Background>
                             <ImageBrush ctrl:AsyncImage.Url="{Binding HeaderImageUrl}"
+                                        ctrl:AsyncImage.AppId="{Binding AppId}"
                                         Stretch="UniformToFill"
                                         RenderOptions.BitmapScalingMode="HighQuality"/>
                         </Border.Background>
@@ -487,6 +488,7 @@
                     <Border CornerRadius="8,0,0,8">
                         <Border.Background>
                             <ImageBrush ctrl:AsyncImage.Url="{Binding HeaderImageUrl}"
+                                        ctrl:AsyncImage.AppId="{Binding AppId}"
                                         Stretch="UniformToFill"
                                         RenderOptions.BitmapScalingMode="HighQuality"/>
                         </Border.Background>
@@ -676,7 +678,7 @@
 
         <!-- ═══ SKELETON ROW — LIST ═══ -->
         <DataTemplate x:Key="SkeletonRowTemplate">
-            <Border Style="{StaticResource SkeletonCard}" Padding="0" Margin="0,0,12,8" Height="120">
+            <Border Style="{StaticResource SkeletonCard}" Padding="0" Margin="0,0,12,8" Height="128">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="220"/>
@@ -749,17 +751,17 @@
                                   Command="{Binding DataContext.OpenDetailCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                   CommandParameter="{Binding}"/>
                 </Border.InputBindings>
-                <Grid Height="120">
+                <Grid Height="128">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <ContentControl Grid.Column="0" Width="220" Height="120" Content="{Binding}"
+                    <ContentControl Grid.Column="0" Width="220" Content="{Binding}"
                                     Template="{StaticResource RowCardArtworkTemplate}"/>
 
-                    <StackPanel Grid.Column="1" Margin="16,6,16,6" VerticalAlignment="Center">
+                    <StackPanel Grid.Column="1" Margin="16,8,16,8" VerticalAlignment="Center">
                         <TextBlock Text="{Binding Name}" Style="{StaticResource H3}"
                                    TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
                         <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource CardMetaTemplate}"
@@ -1165,7 +1167,7 @@
                                             <Setter Property="ItemTemplate" Value="{StaticResource SkeletonRowTemplate}"/>
                                             <Setter Property="ItemsPanel">
                                                 <Setter.Value>
-                                                    <ItemsPanelTemplate><ctrl:VirtualizingWrapPanel ItemWidth="0" ItemHeight="128"/></ItemsPanelTemplate>
+                                                    <ItemsPanelTemplate><ctrl:VirtualizingWrapPanel ItemWidth="0" ItemHeight="136"/></ItemsPanelTemplate>
                                                 </Setter.Value>
                                             </Setter>
                                         </DataTrigger>
@@ -1199,7 +1201,7 @@
                                             <Setter Property="ItemsPanel">
                                                 <Setter.Value>
                                                     <ItemsPanelTemplate>
-                                                        <ctrl:VirtualizingWrapPanel ItemWidth="0" ItemHeight="128"/>
+                                                        <ctrl:VirtualizingWrapPanel ItemWidth="0" ItemHeight="136"/>
                                                     </ItemsPanelTemplate>
                                                 </Setter.Value>
                                             </Setter>
