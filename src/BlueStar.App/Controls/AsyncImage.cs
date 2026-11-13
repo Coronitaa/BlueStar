@@ -1,3 +1,5 @@
+using System;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -7,12 +9,8 @@ namespace BlueStar.App.Controls;
 
 /// <summary>
 /// Loads an image URL off the UI thread into an <see cref="ImageBrush"/> or <see cref="Image"/>.
+/// Supports automatic cancellation when visuals are virtualized/recycled.
 /// </summary>
-/// <remarks>
-/// <see cref="Converters.CachedImageConverter"/> reads and decodes cache hits on the UI thread and downloads
-/// misses through BitmapImage's own downloader, so a page of new cards froze scrolling. Here only an in-memory
-/// hit is applied synchronously; disk reads, downloads and decoding run in <see cref="ImageCacheService.LoadImageAsync"/>.
-/// </remarks>
 public static class AsyncImage
 {
     public static readonly DependencyProperty UrlProperty = DependencyProperty.RegisterAttached(
@@ -22,8 +20,24 @@ public static class AsyncImage
 
     public static void SetUrl(DependencyObject target, string? value) => target.SetValue(UrlProperty, value);
 
+    private static readonly DependencyProperty CancellationTokenSourceProperty = DependencyProperty.RegisterAttached(
+        "CancellationTokenSource", typeof(CancellationTokenSource), typeof(AsyncImage));
+
+    private static CancellationTokenSource? GetCts(DependencyObject target) => (CancellationTokenSource?)target.GetValue(CancellationTokenSourceProperty);
+
+    private static void SetCts(DependencyObject target, CancellationTokenSource? value) => target.SetValue(CancellationTokenSourceProperty, value);
+
     private static async void OnUrlChanged(DependencyObject target, DependencyPropertyChangedEventArgs e)
     {
+        // Cancel any pending load for a recycled visual
+        var oldCts = GetCts(target);
+        if (oldCts != null)
+        {
+            oldCts.Cancel();
+            oldCts.Dispose();
+            SetCts(target, null);
+        }
+
         var url = e.NewValue as string;
         if (string.IsNullOrWhiteSpace(url))
         {
@@ -36,12 +50,31 @@ public static class AsyncImage
         Apply(target, cached);
         if (cached != null) return;
 
-        var loaded = await cache.LoadImageAsync(url);
+        var cts = new CancellationTokenSource();
+        SetCts(target, cts);
 
-        // A recycled card may show another game by now: only the URL it still asks for is applied.
-        if (loaded != null && string.Equals(GetUrl(target), url, System.StringComparison.Ordinal))
+        try
         {
-            Apply(target, loaded);
+            var loaded = await cache.LoadImageAsync(url, 0, null, cts.Token);
+
+            if (!cts.IsCancellationRequested &&
+                loaded != null &&
+                string.Equals(GetUrl(target), url, StringComparison.Ordinal))
+            {
+                Apply(target, loaded);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Visual recycled, ignore
+        }
+        finally
+        {
+            if (ReferenceEquals(GetCts(target), cts))
+            {
+                SetCts(target, null);
+                cts.Dispose();
+            }
         }
     }
 
