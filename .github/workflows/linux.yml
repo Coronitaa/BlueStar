@@ -26,6 +26,7 @@ jobs:
         run: dotnet test tests/BlueStar.Core.Tests -c Release --filter "OS!=Windows" --logger "trx;LogFileName=core.trx" --results-directory test-results
 
       - name: Infrastructure tests
+        if: ${{ !cancelled() }}
         run: dotnet test tests/BlueStar.Infrastructure.Tests -c Release --filter "OS!=Windows" --logger "trx;LogFileName=infra.trx" --results-directory test-results
 
       - uses: actions/upload-artifact@v4
