@@ -361,6 +361,7 @@ public class NewFeaturesTests
     }
 
     [Fact]
+    [Trait("OS", "Windows")] // asserts deploy_helper.ps1 / Uninstall_ReFix.bat output; Linux runs AutoDeploy.sh
     public async Task ReFixEmulator_UninstallAsync_RemovesArtifactsAndRestoresOrigFiles()
     {
         var tempFolder = Path.Combine(Path.GetTempPath(), "BlueStar_UninstallTest_" + Guid.NewGuid().ToString("N"));
@@ -421,6 +422,7 @@ public class NewFeaturesTests
     }
 
     [Fact]
+    [Trait("OS", "Windows")] // asserts deploy_helper.ps1 / Uninstall_ReFix.bat output; Linux runs AutoDeploy.sh
     public async Task ReFixEmulator_DeployOptionAsync_GoldbergMode_DeploysSteamSettingsAndProgress()
     {
         // Arrange
@@ -473,6 +475,7 @@ public class NewFeaturesTests
     }
 
     [Fact]
+    [Trait("OS", "Windows")] // asserts deploy_helper.ps1 / Uninstall_ReFix.bat output; Linux runs AutoDeploy.sh
     public async Task ReFixEmulator_DeployOptionAsync_UnityStructure_PrioritizesPluginsFolder()
     {
         // Arrange

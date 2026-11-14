@@ -18,7 +18,7 @@ namespace BlueStar.Infrastructure.Emulators;
 /// Integrates directly with the ReFix_deploy backend suite located at C:\Users\Valen\Desktop\STEAM_EMU\ReFix_deploy
 /// and project tools, executing deploy_helper.ps1, detect_game.ps1, apply_firewall.ps1, and Uninstall_ReFix.bat.
 /// </summary>
-public sealed class ReFixEmulator : IEmulator
+public sealed partial class ReFixEmulator : IEmulator
 {
     private readonly ILogger<ReFixEmulator> _logger;
 
@@ -394,6 +394,9 @@ public sealed class ReFixEmulator : IEmulator
             return false;
         }
 
+        if (!OperatingSystem.IsWindows())
+            return await DeployWithAutoDeployShAsync(instance, optionId, deployPath, progress, ct).ConfigureAwait(false);
+
         var binDir = Directory.Exists(Path.Combine(deployPath, "bin")) ? Path.Combine(deployPath, "bin") : deployPath;
         var isGoldberg = optionId.Contains("goldberg", StringComparison.OrdinalIgnoreCase);
         var onlineMode = isGoldberg ? "goldberg" : "valve";
@@ -623,8 +626,12 @@ public sealed class ReFixEmulator : IEmulator
             var targetDir = instance.InstallPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             var deployPath = GetReFixDeployPath(instance);
 
+            if (deployPath != null && !OperatingSystem.IsWindows())
+            {
+                await RunUninstallShAsync(deployPath, targetDir, ct).ConfigureAwait(false);
+            }
             // 1. Run Uninstall_ReFix.bat directly with targetDir parameter if available
-            if (deployPath != null)
+            else if (deployPath != null)
             {
                 var uninstallerBat = Path.Combine(deployPath, "Uninstall_ReFix.bat");
                 if (File.Exists(uninstallerBat))
