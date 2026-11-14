@@ -14,7 +14,7 @@ $timestampServer = "http://timestamp.digicert.com"
 # ============================================================================
 # 0. Interaccion con el usuario (si se ejecuta en modo interactivo o sin parametros)
 # ============================================================================
-$currentVer = "1.5.7"
+$currentVer = "1.5.8"
 $propsPath = Join-Path $rootDir "Directory.Build.props"
 if (Test-Path $propsPath) {
     $propsContent = [System.IO.File]::ReadAllText($propsPath)
@@ -191,6 +191,26 @@ if (Test-Path $manifestPath) {
     $content = [regex]::Replace($content, '(?<=<Identity\b[^>]*?\bVersion=")[^"]+', $fourPartVersion)
     [System.IO.File]::WriteAllText($manifestPath, $content)
     Write-Host "  [OK] Package.appxmanifest sincronizado (Version $fourPartVersion)" -ForegroundColor Gray
+}
+
+# 1.4.5 app.manifest
+$appManifestPath = Join-Path $rootDir "src\BlueStar.App\app.manifest"
+if (Test-Path $appManifestPath) {
+    $content = [System.IO.File]::ReadAllText($appManifestPath)
+    $content = [regex]::Replace($content, '(?<=<assemblyIdentity\b[^>]*?\bversion=")[^"]+', $fourPartVersion)
+    [System.IO.File]::WriteAllText($appManifestPath, $content)
+    Write-Host "  [OK] app.manifest sincronizado (Version $fourPartVersion)" -ForegroundColor Gray
+}
+
+# 1.4.6 README.md
+$readmePath = Join-Path $rootDir "README.md"
+if (Test-Path $readmePath) {
+    $content = [System.IO.File]::ReadAllText($readmePath)
+    $content = [regex]::Replace($content, 'Release-v[0-9]+\.[0-9]+\.[0-9]+', "Release-v$threePartVersion")
+    $content = [regex]::Replace($content, 'BlueStar-v[0-9]+\.[0-9]+\.[0-9]+', "BlueStar-v$threePartVersion")
+    $content = [regex]::Replace($content, '(?<=\.\\build-release\.ps1 -Version\s+)[0-9]+\.[0-9]+\.[0-9]+', $threePartVersion)
+    [System.IO.File]::WriteAllText($readmePath, $content)
+    Write-Host "  [OK] README.md sincronizado (v$threePartVersion)" -ForegroundColor Gray
 }
 
 # 1.5 SplashWindow.xaml
