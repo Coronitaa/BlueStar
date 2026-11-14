@@ -28,7 +28,10 @@ public static class BlueStarServiceCollectionExtensions
         services.AddSingleton<ITagsService, BlueStar.Infrastructure.Services.TagsService>();
         services.AddSingleton<IEmulatorLifecycleService, BlueStar.Infrastructure.Services.EmulatorLifecycleService>();
         services.AddSingleton<ILicenseService, BlueStar.Infrastructure.Services.LicenseService>();
-        services.AddSingleton<ISecureStorage, SecureStorage>();
+        if (OperatingSystem.IsWindows())
+            services.AddSingleton<ISecureStorage, SecureStorage>();
+        else
+            services.AddSingleton<ISecureStorage, LinuxSecureStorage>();
         services.AddSingleton<IDepotBoxAuthService, BlueStar.Infrastructure.Services.DepotBoxAuthService>();
         services.AddSingleton<ICacheService, FileCacheService>();
         services.AddSingleton<IInstanceManager, InstanceManager>();
