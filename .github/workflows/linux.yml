@@ -117,7 +117,7 @@ jobs:
           test $? -eq 2
 
       - name: AppImage starts (self-test, no game)
-        run: HOME="$(mktemp -d)" APPIMAGE_EXTRACT_AND_RUN=1 dbus-run-session -- xvfb-run -a timeout 180 dist/linux/BlueStar-*.AppImage --selftest
+        run: HOME="$(mktemp -d)" XDG_CONFIG_HOME= XDG_DATA_HOME= APPIMAGE_EXTRACT_AND_RUN=1 dbus-run-session -- xvfb-run -a timeout 180 dist/linux/BlueStar-*.AppImage --selftest
 
       - name: Build the test game (Windows .exe)
         run: |
@@ -133,8 +133,9 @@ jobs:
           echo "$(dirname "$(find "$RUNNER_TEMP" -name umu-run -type f | head -1)")" >> "$GITHUB_PATH"
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
+      # XDG_* emptied: the runner sets XDG_CONFIG_HOME, which would share one BlueStar library across steps.
       - name: Run a Windows game through BlueStar + umu + Proton
-        run: HOME="$(mktemp -d)" dbus-run-session -- xvfb-run -a timeout 1800 dist/linux/BlueStar.AppDir/usr/lib/bluestar/BlueStar --selftest "$RUNNER_TEMP/game/SelfTestGame.exe"
+        run: HOME="$(mktemp -d)" XDG_CONFIG_HOME= XDG_DATA_HOME= dbus-run-session -- xvfb-run -a timeout 1800 dist/linux/BlueStar.AppDir/usr/lib/bluestar/BlueStar --selftest "$RUNNER_TEMP/game/SelfTestGame.exe"
 
       - uses: actions/upload-artifact@v4
         with:
