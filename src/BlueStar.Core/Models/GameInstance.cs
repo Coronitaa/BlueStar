@@ -307,6 +307,12 @@ public record GameInstance
     /// </summary>
     public string? CustomEmulatorSteamId { get; init; }
 
+    /// <summary>Linux only: per-instance Wine/Proton overrides on top of the global compat settings.</summary>
+    public CompatSettings? CompatOverride { get; init; }
+
+    /// <summary>Linux only: the Wine prefix this instance runs in, saved on first launch.</summary>
+    public string? CompatPrefixPath { get; init; }
+
     /// <summary>
     /// Gets the Steam header or custom grid banner image URL/path for this game instance in the library grid.
     /// Prefers CustomGridBannerPath or local header artwork, then falls back to Steam metadata.
