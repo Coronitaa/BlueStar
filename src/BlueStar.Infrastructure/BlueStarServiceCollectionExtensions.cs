@@ -105,7 +105,7 @@ public static class BlueStarServiceCollectionExtensions
     services.AddHttpClient();
 
     // Storage, Linking, and Multi-Instance Services
-    services.AddSingleton<BlueStar.Core.Storage.IWin32Linker, BlueStar.Infrastructure.Storage.Win32Linker>();
+    services.AddSingleton(sp => UnixLinker.ForCurrentOs(sp.GetRequiredService<ILoggerFactory>()));
     services.AddSingleton<BlueStar.Core.Storage.IInstanceStorageManager, BlueStar.Infrastructure.Storage.InstanceStorageManager>();
     services.AddSingleton<IReFixManager, BlueStar.Infrastructure.Emulators.ReFixManager>();
     services.AddSingleton<IModLoaderProvisioner, BlueStar.Infrastructure.Mods.ModLoaderProvisioner>();

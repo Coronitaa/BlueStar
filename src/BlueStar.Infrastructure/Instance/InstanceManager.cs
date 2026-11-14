@@ -68,7 +68,7 @@ public sealed class InstanceManager : IInstanceManager
         Directory.CreateDirectory(_rootPath);
         Directory.CreateDirectory(_depotsRootPath);
 
-        var defaultLinker = new Win32Linker(NullLogger<Win32Linker>.Instance);
+        var defaultLinker = UnixLinker.ForCurrentOs(NullLoggerFactory.Instance);
         _storageManager = storageManager ?? new InstanceStorageManager(defaultLinker, NullLogger<InstanceStorageManager>.Instance);
         _engineDetector = engineDetector ?? new EngineDetector(NullLogger<EngineDetector>.Instance);
         _refixManager = refixManager ?? new ReFixManager(NullLogger<ReFixManager>.Instance);

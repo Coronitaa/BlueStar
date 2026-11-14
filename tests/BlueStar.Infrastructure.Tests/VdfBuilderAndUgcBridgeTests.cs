@@ -1,3 +1,4 @@
+using BlueStar.Core.Storage;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -15,7 +16,7 @@ namespace BlueStar.Infrastructure.Tests;
 public class VdfBuilderAndUgcBridgeTests : IDisposable
 {
     private readonly string _testDir;
-    private readonly Win32Linker _linker;
+    private readonly IWin32Linker _linker;
     private readonly UgcBridge _ugcBridge;
     private readonly HeuristicModDispatcher _dispatcher;
 
@@ -23,7 +24,7 @@ public class VdfBuilderAndUgcBridgeTests : IDisposable
     {
         _testDir = Path.Combine(Path.GetTempPath(), "BlueStar_UgcBridgeTests_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_testDir);
-        _linker = new Win32Linker(NullLogger<Win32Linker>.Instance);
+        _linker = UnixLinker.ForCurrentOs(NullLoggerFactory.Instance);
         _ugcBridge = new UgcBridge(_linker, NullLogger<UgcBridge>.Instance);
         _dispatcher = new HeuristicModDispatcher(_linker, NullLogger<HeuristicModDispatcher>.Instance);
     }

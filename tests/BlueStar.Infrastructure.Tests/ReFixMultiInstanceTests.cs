@@ -1,3 +1,4 @@
+using BlueStar.Core.Storage;
 using System;
 using System.IO;
 using System.Threading.Tasks;
@@ -17,7 +18,7 @@ public class ReFixMultiInstanceTests : IDisposable
 {
     private readonly string _testDir;
     private readonly ReFixManager _refixManager;
-    private readonly Win32Linker _linker;
+    private readonly IWin32Linker _linker;
     private readonly InstanceStorageManager _storageManager;
     private readonly InstanceManager _instanceManager;
 
@@ -27,7 +28,7 @@ public class ReFixMultiInstanceTests : IDisposable
         Directory.CreateDirectory(_testDir);
 
         _refixManager = new ReFixManager(NullLogger<ReFixManager>.Instance);
-        _linker = new Win32Linker(NullLogger<Win32Linker>.Instance);
+        _linker = UnixLinker.ForCurrentOs(NullLoggerFactory.Instance);
         _storageManager = new InstanceStorageManager(_linker, NullLogger<InstanceStorageManager>.Instance);
         var engineDetector = new EngineDetector(NullLogger<EngineDetector>.Instance);
 
