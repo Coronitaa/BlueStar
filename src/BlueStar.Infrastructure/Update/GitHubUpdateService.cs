@@ -286,7 +286,8 @@ public class GitHubUpdateService : IUpdateService
                         if (response.IsSuccessStatusCode)
                         {
                             var releases = await response.Content.ReadFromJsonAsync<List<GitHubRelease>>(cancellationToken: innerCt).ConfigureAwait(false);
-                            release = releases?.FirstOrDefault(r => !string.IsNullOrWhiteSpace(r.TagName));
+                            // Same rule as /releases/latest: prereleases are opt-in testing builds, never offered as updates.
+                            release = releases?.FirstOrDefault(r => !string.IsNullOrWhiteSpace(r.TagName) && !r.Prerelease && !r.Draft);
                         }
                     }
                     catch { }
@@ -538,6 +539,12 @@ del ""%~f0"" & exit
 
         [JsonPropertyName("assets")]
         public List<GitHubAsset>? Assets { get; set; }
+
+        [JsonPropertyName("prerelease")]
+        public bool Prerelease { get; set; }
+
+        [JsonPropertyName("draft")]
+        public bool Draft { get; set; }
     }
 
     private sealed class GitHubAsset
