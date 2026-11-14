@@ -35,6 +35,24 @@ jobs:
           name: linux-test-results
           path: test-results
 
+  scripts:
+    name: ReFix shell scripts (shellcheck + bats)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck and bats
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends shellcheck bats
+
+      # Errors block; warnings are reported only, the script is ReFix's own and updates overwrite it.
+      - name: shellcheck
+        run: |
+          shellcheck -S warning src/BlueStar.App/tools/ReFix_deploy/*.sh || true
+          shellcheck -S error src/BlueStar.App/tools/ReFix_deploy/*.sh
+
+      - name: bats
+        run: bats tests/scripts
+
   avalonia-spike:
     name: Avalonia 12 WebView spike (xvfb)
     runs-on: ubuntu-latest
