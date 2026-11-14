@@ -60,6 +60,7 @@ public class BundledSecretsTests : IDisposable
     }
 
     [Fact]
+    [Trait("Requires", "LocalSecrets")] // needs the developer's gitignored modkeys.json
     public void LoadFromModKeysJson_FindsModKeysJson_InWorkspace()
     {
         var secrets = BundledSecrets.Load();

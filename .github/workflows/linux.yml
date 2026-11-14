@@ -23,11 +23,11 @@ jobs:
 
       # BlueStar.App.Tests is WPF (net10.0-windows) and stays Windows-only.
       - name: Core tests
-        run: dotnet test tests/BlueStar.Core.Tests -c Release --filter "OS!=Windows" --logger "trx;LogFileName=core.trx" --results-directory test-results
+        run: dotnet test tests/BlueStar.Core.Tests -c Release --filter "OS!=Windows&Requires!=LocalSecrets" --logger "trx;LogFileName=core.trx" --results-directory test-results
 
       - name: Infrastructure tests
         if: ${{ !cancelled() }}
-        run: dotnet test tests/BlueStar.Infrastructure.Tests -c Release --filter "OS!=Windows" --logger "trx;LogFileName=infra.trx" --results-directory test-results
+        run: dotnet test tests/BlueStar.Infrastructure.Tests -c Release --filter "OS!=Windows&Requires!=LocalSecrets" --logger "trx;LogFileName=infra.trx" --results-directory test-results
 
       - uses: actions/upload-artifact@v4
         if: always()

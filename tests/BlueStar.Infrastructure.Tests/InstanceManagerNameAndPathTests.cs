@@ -61,6 +61,7 @@ public class InstanceManagerNameAndPathTests
     }
 
     [Fact]
+    [Trait("OS", "Windows")]
     public void ResolveNonCollidingInstallPath_WhenPathCollides_AutoDisambiguatesFolder()
     {
         var existing = new List<GameInstance>
