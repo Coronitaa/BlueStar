@@ -29,14 +29,15 @@ public sealed class RequestCoordinator : IRequestCoordinator
 
         public void SetTask(Task task) => Task = task;
 
-        public void AddSubscriber()
+        /// <summary>Joins this request; false once it finished or every earlier caller cancelled it.</summary>
+        public bool TryAddSubscriber()
         {
             lock (_lock)
             {
-                if (!_completed)
-                {
-                    _subscribers++;
-                }
+                if (_completed || Cts.IsCancellationRequested)
+                    return false;
+                _subscribers++;
+                return true;
             }
         }
 
@@ -81,24 +82,31 @@ public sealed class RequestCoordinator : IRequestCoordinator
 
         ct.ThrowIfCancellationRequested();
 
-        bool wasCreated = false;
-        var lazy = _inFlight.GetOrAdd(key, _ =>
+        InFlightEntry entry;
+        while (true)
         {
-            wasCreated = true;
-            return new Lazy<InFlightEntry>(() =>
+            Lazy<InFlightEntry>? mine = null;
+            mine = new Lazy<InFlightEntry>(() =>
             {
                 var entryInstance = new InFlightEntry();
-                entryInstance.SetTask(RunWithCleanupAsync(key, factory, entryInstance.Cts.Token, entryInstance));
+                entryInstance.SetTask(RunWithCleanupAsync(key, factory, entryInstance.Cts.Token, entryInstance, mine!));
                 return entryInstance;
             });
-        });
 
-        var entry = lazy.Value;
-        if (!wasCreated)
-        {
-            entry.AddSubscriber();
-            _logger?.LogDebug("[RequestCoordinator] Reusing in-flight task for key: {Key}", key);
-            _metrics?.RecordEvent("Coordinator", key, key, cacheHit: false, inFlightReused: true, statusCode: 200, durationMs: 0);
+            var lazy = _inFlight.GetOrAdd(key, mine);
+            entry = lazy.Value;
+            if (ReferenceEquals(lazy, mine))
+                break;
+            if (entry.TryAddSubscriber())
+            {
+                _logger?.LogDebug("[RequestCoordinator] Reusing in-flight task for key: {Key}", key);
+                _metrics?.RecordEvent("Coordinator", key, key, cacheHit: false, inFlightReused: true, statusCode: 200, durationMs: 0);
+                break;
+            }
+
+            // Cancelled by its earlier callers but not finished yet: joining it would hand this caller their
+            // cancellation. Drop it (only if it is still the one mapped) and start a fresh request.
+            _inFlight.TryRemove(new KeyValuePair<string, Lazy<InFlightEntry>>(key, lazy));
         }
 
         if (entry.Task is Task<T> typedTask)
@@ -137,7 +145,8 @@ public sealed class RequestCoordinator : IRequestCoordinator
         string key,
         Func<CancellationToken, Task<T>> factory,
         CancellationToken innerCt,
-        InFlightEntry entry)
+        InFlightEntry entry,
+        Lazy<InFlightEntry> self)
     {
         try
         {
@@ -146,7 +155,8 @@ public sealed class RequestCoordinator : IRequestCoordinator
         finally
         {
             entry.MarkCompleted();
-            _inFlight.TryRemove(key, out _);
+            // Remove only this entry: a newer request for the same key may already be mapped.
+            _inFlight.TryRemove(new KeyValuePair<string, Lazy<InFlightEntry>>(key, self));
         }
     }
 }

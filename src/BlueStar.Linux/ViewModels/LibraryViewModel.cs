@@ -51,8 +51,18 @@ public sealed partial class LibraryViewModel : ObservableObject
         foreach (var instance in all.OrderBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase))
             Games.Add(NewItem(instance));
         Count = Games.Count;
-        foreach (var game in Games)
-            await game.LoadOptionsAsync();
+        await Task.WhenAll(Games.Select(g => g.LoadOptionsAsync())); // one rating request per game: run them together
+    }
+
+    /// <summary>Forgets the game; its files stay where they are (re-import the folder to bring it back).</summary>
+    [RelayCommand]
+    private async Task RemoveAsync(GameItemViewModel game)
+    {
+        if (game.IsRunning) return;
+        await _instances.DeleteAsync(game.Instance.Id);
+        Games.Remove(game);
+        Count = Games.Count;
+        Status = $"{game.Name}: {L.Removed}";
     }
 
     [RelayCommand]

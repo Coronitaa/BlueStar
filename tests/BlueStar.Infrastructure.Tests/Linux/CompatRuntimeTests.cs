@@ -176,6 +176,21 @@ public sealed class CompatRuntimeTests : IDisposable
         new DirectoryInfo(Path.Combine(_root, "pfxdir", "pfx")).LinkTarget.Should().Be(".");
     }
 
+    // A root-owned rwxr--r-- umu-run (seen on a WSL install) must not count as installed: launching it fails with
+    // "Permission denied" instead of falling back to Proton directly.
+    [LinuxFact]
+    public void FindUmuRun_IgnoresACopyThisUserCannotExecute()
+    {
+        var bin = Path.Combine(_root, "bin");
+        var umu = Touch("bin", "umu-run");
+        File.SetUnixFileMode(umu, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+
+        CompatRunnerLocator.FindUmuRun(_root, bin).Should().BeNull();
+
+        File.SetUnixFileMode(umu, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        CompatRunnerLocator.FindUmuRun(_root, bin).Should().Be(umu);
+    }
+
     [Fact]
     public void SplitArguments_HandlesQuotes()
     {

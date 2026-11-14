@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -340,6 +341,7 @@ public class GitHubUpdateService : IUpdateService
                         ReleaseNotes = release.Body ?? string.Empty,
                         DownloadUrl = asset?.BrowserDownloadUrl ?? string.Empty,
                         FileSize = asset?.Size ?? 0,
+                        Sha256 = ParseSha256Digest(asset?.Digest),
                         PublishedAt = DateTimeOffset.UtcNow
                     };
 
@@ -390,38 +392,53 @@ public class GitHubUpdateService : IUpdateService
 
         _logger.LogInformation("Downloading update v{Version} from {Url}", update.Version, update.DownloadUrl);
 
-        using var response = await _httpClient.GetAsync(update.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-
-        var totalBytes = response.Content.Headers.ContentLength ?? update.FileSize;
-        using var contentStream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        using var fileStream = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true);
-
-        var buffer = new byte[8192];
-        long totalRead = 0;
-        int bytesRead;
-
-        var stopwatch = Stopwatch.StartNew();
-
-        while ((bytesRead = await contentStream.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
         {
-            await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct).ConfigureAwait(false);
-            totalRead += bytesRead;
+            using var response = await _httpClient.GetAsync(update.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
 
-            if (totalBytes > 0 && progress is not null)
+            var totalBytes = response.Content.Headers.ContentLength ?? update.FileSize;
+            using var contentStream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            using var fileStream = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true);
+
+            var buffer = new byte[8192];
+            long totalRead = 0;
+            int bytesRead;
+
+            var stopwatch = Stopwatch.StartNew();
+
+            while ((bytesRead = await contentStream.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
             {
-                var elapsedSec = stopwatch.Elapsed.TotalSeconds;
-                var bps = elapsedSec > 0 ? totalRead / elapsedSec : 0;
-                var pct = (double)totalRead / totalBytes * 100.0;
+                await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct).ConfigureAwait(false);
+                totalRead += bytesRead;
 
-                progress.Report(new DownloadProgress
+                if (totalBytes > 0 && progress is not null)
                 {
-                    TotalBytes = totalBytes,
-                    DownloadedBytes = totalRead,
-                    Speed = bps,
-                    Percentage = pct,
-                    CurrentFile = Path.GetFileName(destPath)
-                });
+                    var elapsedSec = stopwatch.Elapsed.TotalSeconds;
+                    var bps = elapsedSec > 0 ? totalRead / elapsedSec : 0;
+                    var pct = (double)totalRead / totalBytes * 100.0;
+
+                    progress.Report(new DownloadProgress
+                    {
+                        TotalBytes = totalBytes,
+                        DownloadedBytes = totalRead,
+                        Speed = bps,
+                        Percentage = pct,
+                        CurrentFile = Path.GetFileName(destPath)
+                    });
+                }
+            }
+        }
+
+        // The installer runs silently afterwards, so a corrupted or altered download must never get that far.
+        if (update.Sha256 != null)
+        {
+            string actual;
+            await using (var downloaded = File.OpenRead(destPath))
+                actual = Convert.ToHexStringLower(await SHA256.HashDataAsync(downloaded, ct).ConfigureAwait(false));
+            if (!string.Equals(actual, update.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                File.Delete(destPath);
+                throw new InvalidDataException($"Update download is corrupted: SHA-256 {actual} does not match the release ({update.Sha256}).");
             }
         }
 
@@ -547,6 +564,12 @@ del ""%~f0"" & exit
         public bool Draft { get; set; }
     }
 
+    /// <summary>"sha256:ABC…" → "abc…"; null for a missing or other-algorithm digest.</summary>
+    internal static string? ParseSha256Digest(string? digest) =>
+        digest != null && digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) && digest.Length == 7 + 64
+            ? digest[7..].ToLowerInvariant()
+            : null;
+
     private sealed class GitHubAsset
     {
         [JsonPropertyName("name")]
@@ -557,5 +580,9 @@ del ""%~f0"" & exit
 
         [JsonPropertyName("size")]
         public long Size { get; set; }
+
+        /// <summary>"sha256:&lt;hex&gt;", computed by GitHub when the asset was uploaded.</summary>
+        [JsonPropertyName("digest")]
+        public string? Digest { get; set; }
     }
 }

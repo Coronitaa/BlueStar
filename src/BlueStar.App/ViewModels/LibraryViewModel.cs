@@ -12,6 +12,7 @@ using System.Windows;
 using BlueStar.Core.Helpers;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
+using BlueStar.Infrastructure.Instance;
 using BlueStar.Infrastructure.Steam;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -1143,44 +1144,15 @@ public partial class LibraryViewModel : ObservableObject, ISharedViewModel, IDis
         DuplicateSteamGame = null;
     }
 
+    /// <summary>Shared with the Linux head: engine detection, main exe, unique name, Steam metadata.</summary>
+    private GameImportService Importer => new(_instanceManager, _engineDetector, _metadataProvider);
+
     private async Task ExecuteImportSteamGameInternalAsync(InstalledSteamGame steamGame)
     {
         IsLoading = true;
         try
         {
-            var engine = await _engineDetector.DetectEngineAsync(steamGame.FullPath, CancellationToken.None).ConfigureAwait(true);
-            var exe = _engineDetector.FindPrimaryExecutable(steamGame.FullPath, steamGame.Name);
-
-            GameMetadata? meta = null;
-            IReadOnlyList<DlcInfo> dlcs = [];
-            if (_metadataProvider != null && steamGame.AppId > 0)
-            {
-                try
-                {
-                    meta = await _metadataProvider.GetMetadataAsync(steamGame.AppId, CancellationToken.None).ConfigureAwait(true);
-                    dlcs = await _metadataProvider.GetDlcListAsync(steamGame.AppId, CancellationToken.None).ConfigureAwait(true);
-                }
-                catch { }
-            }
-
-            var allExisting = await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
-            var existingNames = allExisting.Select(i => i.Name).ToList();
-            var uniqueName = PathHelper.GenerateUniqueInstanceName(existingNames, steamGame.Name);
-
-            var instance = new GameInstance
-            {
-                Name = uniqueName,
-                AppId = steamGame.AppId,
-                InstallPath = steamGame.FullPath,
-                ExecutablePath = exe,
-                Status = File.Exists(exe) ? InstanceStatus.Ready : InstanceStatus.NotInstalled,
-                Metadata = meta,
-                Dlcs = dlcs,
-                Engine = engine,
-                Origin = InstanceOrigin.Steam
-            };
-
-            var created = await _instanceManager.CreateAsync(instance, CancellationToken.None).ConfigureAwait(true);
+            var created = await Importer.ImportSteamGameAsync(steamGame, CancellationToken.None).ConfigureAwait(true);
             Instances.Add(created);
             ApplyFilters();
 
@@ -1623,46 +1595,8 @@ public partial class LibraryViewModel : ObservableObject, ISharedViewModel, IDis
         IsLoading = true;
         try
         {
-            var allExisting = await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
-            var colliding = allExisting.FirstOrDefault(i => string.Equals(i.InstallPath?.TrimEnd('\\', '/'), FolderPath.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase));
-            if (colliding != null)
-            {
-                FolderErrorMessage = $"Location collision: The selected folder is already in use by instance \"{colliding.Name}\".";
-                _notificationService?.ShowError("Folder Collision", $"The folder is already used by instance \"{colliding.Name}\". Please select a different folder.");
-                return;
-            }
-
-            var existingNames = allExisting.Select(i => i.Name).ToList();
-            var rawName = string.IsNullOrWhiteSpace(FolderGameName) ? Path.GetFileName(FolderPath) : FolderGameName.Trim();
-            var uniqueName = PathHelper.GenerateUniqueInstanceName(existingNames, rawName);
-
-            GameMetadata? meta = null;
-            IReadOnlyList<DlcInfo> dlcs = [];
-            if (_metadataProvider != null && FolderAppId > 0 && FolderAppId != 480)
-            {
-                try
-                {
-                    meta = await _metadataProvider.GetMetadataAsync(FolderAppId, CancellationToken.None).ConfigureAwait(true);
-                    dlcs = await _metadataProvider.GetDlcListAsync(FolderAppId, CancellationToken.None).ConfigureAwait(true);
-                }
-                catch { }
-            }
-
-            var instance = new GameInstance
-            {
-                Name = uniqueName,
-                AppId = FolderAppId,
-                InstallPath = FolderPath,
-                ExecutablePath = File.Exists(FolderExecutablePath) ? FolderExecutablePath : null,
-                Engine = FolderEngine,
-                Metadata = meta,
-                Dlcs = dlcs,
-                Origin = InstanceOrigin.ImportedFolder,
-                IsDepotBoxAssociated = false,
-                Status = File.Exists(FolderExecutablePath) ? InstanceStatus.Ready : InstanceStatus.NotInstalled
-            };
-
-            var created = await _instanceManager.CreateAsync(instance, CancellationToken.None).ConfigureAwait(true);
+            // Rejects a folder already in the library; the message lands in FolderErrorMessage below.
+            var created = await Importer.ImportFolderAsync(FolderPath, FolderGameName, FolderAppId, FolderExecutablePath, CancellationToken.None).ConfigureAwait(true);
             Instances.Add(created);
             ApplyFilters();
 
@@ -1686,55 +1620,6 @@ public partial class LibraryViewModel : ObservableObject, ISharedViewModel, IDis
     {
         if (appId == 0) return Task.FromResult(string.Empty);
         return Task.FromResult($"https://cdn.cloudflare.steamstatic.com/steam/apps/{appId}/header.jpg");
-    }
-
-    /// <summary>
-    /// Adds an existing game install folder.
-    /// </summary>
-    [RelayCommand]
-    public async Task AddExistingFolderAsync()
-    {
-        var dialog = new OpenFolderDialog
-        {
-            Title = "Select Existing Game Installation Folder"
-        };
-
-        if (dialog.ShowDialog() != true) return;
-
-        var folder = dialog.FolderName;
-        if (!Directory.Exists(folder)) return;
-
-        IsLoading = true;
-        try
-        {
-            var folderName = Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-            var engine = await _engineDetector.DetectEngineAsync(folder, CancellationToken.None).ConfigureAwait(true);
-            var exe = _engineDetector.FindPrimaryExecutable(folder, folderName);
-
-            var newInstance = new GameInstance
-            {
-                Name = folderName,
-                AppId = 0,
-                InstallPath = folder,
-                ExecutablePath = exe,
-                Engine = engine,
-                Origin = InstanceOrigin.ImportedFolder,
-                Status = File.Exists(exe) ? InstanceStatus.Ready : InstanceStatus.NotInstalled
-            };
-
-            var created = await _instanceManager.CreateAsync(newInstance, CancellationToken.None).ConfigureAwait(true);
-            Instances.Add(created);
-            ApplyFilters();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to add game folder");
-            ErrorMessage = $"Failed to add folder: {ex.Message}";
-        }
-        finally
-        {
-            IsLoading = false;
-        }
     }
 
     [RelayCommand]
@@ -1917,28 +1802,6 @@ public partial class LibraryViewModel : ObservableObject, ISharedViewModel, IDis
         if (instance != null && !string.IsNullOrWhiteSpace(instance.InstallPath) && Directory.Exists(instance.InstallPath))
         {
             Process.Start(new ProcessStartInfo { FileName = instance.InstallPath, UseShellExecute = true });
-        }
-    }
-
-    [RelayCommand]
-    private async Task DeleteInstanceAsync(Guid id)
-    {
-        try
-        {
-            await _instanceManager.DeleteAsync(id, CancellationToken.None).ConfigureAwait(true);
-            var toRemove = Instances.FirstOrDefault(i => i.Id == id);
-            if (toRemove is not null)
-            {
-                Instances.Remove(toRemove);
-                _selectedInstanceIds.Remove(id);
-                UpdateSelectionCounts();
-                ApplyFilters();
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to delete instance {Id}", id);
-            ErrorMessage = $"Delete failed: {ex.Message}";
         }
     }
 

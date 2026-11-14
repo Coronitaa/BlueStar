@@ -55,6 +55,8 @@
                         <Button Content="{x:Static l:L.Play}" Command="{Binding PlayCommand}" Classes="accent" />
                         <Button Content="{x:Static l:L.Stop}" Command="{Binding StopCommand}" />
                         <Button Content="{x:Static l:L.OpenFolder}" Command="{Binding OpenFolderCommand}" />
+                        <Button Content="{x:Static l:L.Remove}" CommandParameter="{Binding}"
+                                Command="{Binding $parent[ItemsControl].((vm:LibraryViewModel)DataContext).RemoveCommand}" />
                       </StackPanel>
                       <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
                         <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding SelectedOption}" MinWidth="260">

@@ -22,16 +22,17 @@ public sealed class GameImportService
         _metadata = metadata;
     }
 
-    public Task<GameInstance> ImportFolderAsync(string folder, string? name = null, uint appId = 0, CancellationToken ct = default)
+    /// <param name="exePath">The exe the user picked; null lets the engine detector choose.</param>
+    public Task<GameInstance> ImportFolderAsync(string folder, string? name = null, uint appId = 0, string? exePath = null, CancellationToken ct = default)
     {
         var fallbackName = Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        return ImportAsync(folder, string.IsNullOrWhiteSpace(name) ? fallbackName : name.Trim(), appId, InstanceOrigin.ImportedFolder, ct);
+        return ImportAsync(folder, string.IsNullOrWhiteSpace(name) ? fallbackName : name.Trim(), appId, InstanceOrigin.ImportedFolder, exePath, ct);
     }
 
     public Task<GameInstance> ImportSteamGameAsync(InstalledSteamGame game, CancellationToken ct = default) =>
-        ImportAsync(game.FullPath, game.Name, game.AppId, InstanceOrigin.Steam, ct);
+        ImportAsync(game.FullPath, game.Name, game.AppId, InstanceOrigin.Steam, null, ct);
 
-    private async Task<GameInstance> ImportAsync(string folder, string name, uint appId, InstanceOrigin origin, CancellationToken ct)
+    private async Task<GameInstance> ImportAsync(string folder, string name, uint appId, InstanceOrigin origin, string? exePath, CancellationToken ct)
     {
         if (!Directory.Exists(folder))
             throw new DirectoryNotFoundException($"Folder not found: {folder}");
@@ -39,11 +40,12 @@ public sealed class GameImportService
         var existing = await _instances.GetAllAsync(ct).ConfigureAwait(false);
         var trimmed = folder.TrimEnd('\\', '/');
         var colliding = existing.FirstOrDefault(i => string.Equals(i.InstallPath?.TrimEnd('\\', '/'), trimmed, PathComparison));
-        if (colliding != null)
+        // Steam imports may repeat on purpose (the WPF library asks first); a plain folder may not.
+        if (colliding != null && origin == InstanceOrigin.ImportedFolder)
             throw new InvalidOperationException($"This folder is already in the library as \"{colliding.Name}\".");
 
         var engine = await _engines.DetectEngineAsync(folder, ct).ConfigureAwait(false);
-        var exe = _engines.FindPrimaryExecutable(folder, name);
+        var exe = File.Exists(exePath) ? exePath : _engines.FindPrimaryExecutable(folder, name);
         var (meta, dlcs) = await TryGetMetadataAsync(appId, ct).ConfigureAwait(false);
 
         var instance = new GameInstance

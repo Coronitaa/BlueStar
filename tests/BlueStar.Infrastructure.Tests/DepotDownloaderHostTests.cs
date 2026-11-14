@@ -39,7 +39,9 @@ public class DepotDownloaderHostTests : IDisposable
         psi.FileName.Should().Be(host);
         psi.Arguments.Should().Be($"{DepotDownloaderHost.HostSwitch} -app 4000 -pubfile 1 -dir \"D:/mods\"");
         psi.RedirectStandardOutput.Should().BeTrue();
-        psi.EnvironmentVariables["DOTNET_ROOT"].Should().NotBe(AppContext.BaseDirectory);
+        // The host path never repoints DOTNET_ROOT; the variable may simply be absent (clean Linux shell).
+        psi.Environment.TryGetValue("DOTNET_ROOT", out var dotnetRoot);
+        dotnetRoot.Should().NotBe(AppContext.BaseDirectory);
     }
 
     [Fact]

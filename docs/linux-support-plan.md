@@ -85,3 +85,9 @@ Base: `main` @ ea94366 (v1.5.8). Build branch: `feat/linux-support`. v1 was revi
 - Build note: AutoDeploy.sh also puts the Fusion `ReFix/` folder and the `winmm` cleanup in the folder it was given; on Unreal (exe in `Binaries/Win64`) check they end up next to the exe like `ReFix.ini`.
 
 Review: architect subagent, 3 rounds, final verdict APPROVE.
+
+## 7. Status (2026-11-14)
+
+- Phase 0 spike result (Avalonia.Controls.WebView 12.1.2 on WebKitGTK 2.52, CI xvfb): script exec PASS, navigation cancel PASS, **cookies FAIL** (the GTK adapter's cookie manager needs WebKitGTK 6.0's network-session API). Decision: Steam login and other HttpOnly-cookie flows go through the system browser. Spike project removed after the decision.
+- Phases 0–2 done. Phase 4 started as a separate, lean Avalonia head (`src/BlueStar.Linux`): Library (folder/Steam import, Play/Stop, ReFix), Settings → Compatibility, Requirements. Shared, UI-free services (`GameImportService`, `ReFixInstanceService`) are used by both heads; the rest of the WPF ViewModels are not shared yet (phase 3).
+- Packaging: `packaging/linux/build-linux.sh` (AppImage + tar.gz). CI job `linux-app` runs a real Windows .exe through BlueStar + umu + UMU-Proton.

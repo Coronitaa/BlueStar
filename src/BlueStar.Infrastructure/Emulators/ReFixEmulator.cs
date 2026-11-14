@@ -150,7 +150,7 @@ public sealed partial class ReFixEmulator : IEmulator
         return GetCurrentVersionInternal(deployPath);
     }
 
-    private static string GetCurrentVersionInternal(string deployPath)
+    internal static string GetCurrentVersionInternal(string deployPath)
     {
         var versionFile = Path.Combine(deployPath, "refix_version.json");
         if (File.Exists(versionFile))

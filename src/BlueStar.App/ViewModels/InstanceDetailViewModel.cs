@@ -6644,12 +6644,6 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
                     await _emulatorLifecycleService.UninstallEmulatorWithDlcPreservationAsync(
                         Instance, null, CancellationToken.None).ConfigureAwait(true);
                 }
-                else
-                {
-                    var refix = _emulatorRegistry.GetById("refix") as ReFixEmulator
-                        ?? new ReFixEmulator(_logger as ILogger<ReFixEmulator> ?? LoggerFactory.Create(_ => {}).CreateLogger<ReFixEmulator>());
-                    await refix.UninstallAsync(Instance, CancellationToken.None).ConfigureAwait(true);
-                }
             }
             catch (Exception ex)
             {
@@ -6845,6 +6839,11 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
     }
 
 
+    /// <summary>Shared with the Linux head: deploy + save + exe detection for a ReFix option.</summary>
+    private ReFixInstanceService? ReFixInstances => _emulatorLifecycleService == null
+        ? null
+        : new ReFixInstanceService(_emulatorLifecycleService, _instanceManager, _refixUpdateService);
+
     [RelayCommand]
     public async Task DeployEmulatorOptionAsync(EmulatorOptionInfo? option)
     {
@@ -6894,51 +6893,16 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
                 StatusMessage = $"⏳ {p.Message}";
             });
 
-            bool success;
-            if (_emulatorLifecycleService != null)
-            {
-                success = await _emulatorLifecycleService.DeployOrUpdateEmulatorWithDlcPreservationAsync(
-                    Instance, option.Id, progressReporter, CancellationToken.None).ConfigureAwait(true);
-            }
-            else
-            {
-                var refix = _emulatorRegistry.GetById("refix") as ReFixEmulator
-                    ?? new ReFixEmulator(_logger as ILogger<ReFixEmulator> ?? LoggerFactory.Create(_ => {}).CreateLogger<ReFixEmulator>());
-                success = await refix.DeployOptionAsync(Instance, option.Id, progressReporter, CancellationToken.None).ConfigureAwait(true);
-            }
+            var saved = ReFixInstances == null
+                ? null
+                : await ReFixInstances.InstallAsync(Instance, option.Id, progressReporter, CancellationToken.None).ConfigureAwait(true);
 
-            if (success)
+            if (saved != null)
             {
-                var activeVer = !string.IsNullOrWhiteSpace(Instance.InstalledEmulatorVersion) 
-                    ? Instance.InstalledEmulatorVersion 
-                    : (_refixUpdateService?.GetCurrentInstalledVersion() ?? ReFixEmulator.GetCurrentVersion(Instance));
-                var updatedInstance = Instance with
-                {
-                    EmulatorEnabled = true,
-                    EmulatorId = option.Id,
-                    InstalledEmulatorVersion = activeVer
-                };
-
-                var targetDir = Instance.InstallPath?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                if (!string.IsNullOrEmpty(targetDir))
-                {
-                    var deployPath = ReFixEmulator.GetReFixDeployPath(updatedInstance);
-                    if (deployPath != null)
-                    {
-                        var binDir = Path.Combine(deployPath, "bin");
-                        var (_, _, gameExePath, _, _) = await ReFixEmulator.RunGameDetectorAsync(targetDir, binDir, Instance.ExecutablePath, CancellationToken.None).ConfigureAwait(true);
-                        if (!string.IsNullOrEmpty(gameExePath) && File.Exists(gameExePath))
-                        {
-                            updatedInstance = updatedInstance with { ExecutablePath = gameExePath };
-                        }
-                    }
-                }
-
-                Instance = updatedInstance;
-                InstanceReFixVersion = activeVer;
-                await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
+                Instance = saved;
+                InstanceReFixVersion = saved.InstalledEmulatorVersion ?? InstanceReFixVersion;
                 StatusMessage = $"✅ {option.Name} installed successfully.";
-                _notificationService?.ShowSuccess("Emulator Installed", $"{option.Name} (v{activeVer}) configured for {Instance.Name}.");
+                _notificationService?.ShowSuccess("Emulator Installed", $"{option.Name} (v{saved.InstalledEmulatorVersion}) configured for {Instance.Name}.");
             }
             else
             {
@@ -7034,46 +6998,14 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
 
             Instance = Instance with { InstalledEmulatorVersion = activeVersion };
 
-            bool success;
-            if (_emulatorLifecycleService != null)
-            {
-                success = await _emulatorLifecycleService.DeployOrUpdateEmulatorWithDlcPreservationAsync(
-                    Instance, optionId, progressReporter, CancellationToken.None).ConfigureAwait(true);
-            }
-            else
-            {
-                var refix = _emulatorRegistry.GetById("refix") as ReFixEmulator
-                    ?? new ReFixEmulator(_logger as ILogger<ReFixEmulator> ?? LoggerFactory.Create(_ => {}).CreateLogger<ReFixEmulator>());
-                success = await refix.DeployOptionAsync(Instance, optionId, progressReporter, CancellationToken.None).ConfigureAwait(true);
-            }
+            var saved = ReFixInstances == null
+                ? null
+                : await ReFixInstances.InstallAsync(Instance, optionId, progressReporter, CancellationToken.None).ConfigureAwait(true);
 
-            if (success)
+            if (saved != null)
             {
-                var updatedInstance = Instance with
-                {
-                    EmulatorEnabled = true,
-                    EmulatorId = optionId,
-                    InstalledEmulatorVersion = activeVersion
-                };
-
-                var targetDir = Instance.InstallPath?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                if (!string.IsNullOrEmpty(targetDir))
-                {
-                    var deployPath = ReFixEmulator.GetReFixDeployPath(updatedInstance);
-                    if (deployPath != null)
-                    {
-                        var binDir = Path.Combine(deployPath, "bin");
-                        var (_, _, gameExePath, _, _) = await ReFixEmulator.RunGameDetectorAsync(targetDir, binDir, Instance.ExecutablePath, CancellationToken.None).ConfigureAwait(true);
-                        if (!string.IsNullOrEmpty(gameExePath) && File.Exists(gameExePath))
-                        {
-                            updatedInstance = updatedInstance with { ExecutablePath = gameExePath };
-                        }
-                    }
-                }
-
-                Instance = updatedInstance;
+                Instance = saved;
                 InstanceReFixVersion = activeVersion;
-                await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
 
                 if (_emulatorRatingService != null)
                 {
@@ -7147,42 +7079,16 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
                 {
                     await _gameFixDeployService.UninstallFixLayerAsync(Instance, onlineLayer, progressReporter, CancellationToken.None).ConfigureAwait(true);
                 }
-            }
-            else
-            {
-                if (_emulatorLifecycleService != null)
-                {
-                    await _emulatorLifecycleService.UninstallEmulatorWithDlcPreservationAsync(
-                        Instance, progressReporter, CancellationToken.None).ConfigureAwait(true);
-                }
-                else
-                {
-                    var refix = _emulatorRegistry.GetById("refix") as ReFixEmulator
-                        ?? new ReFixEmulator(_logger as ILogger<ReFixEmulator> ?? LoggerFactory.Create(_ => {}).CreateLogger<ReFixEmulator>());
-                    await refix.UninstallAsync(Instance, CancellationToken.None).ConfigureAwait(true);
-                }
-            }
 
-            var refreshed = await _instanceManager.GetByIdAsync(Instance.Id, CancellationToken.None).ConfigureAwait(true);
-            if (refreshed != null)
-            {
-                Instance = refreshed with
-                {
-                    EmulatorEnabled = false,
-                    EmulatorId = null,
-                    InstalledEmulatorVersion = null
-                };
+                // Clear the emulator fields the same way ReFixInstanceService does for ReFix.
+                var current = await _instanceManager.GetByIdAsync(Instance.Id, CancellationToken.None).ConfigureAwait(true) ?? Instance;
+                Instance = current with { EmulatorEnabled = false, EmulatorId = null, InstalledEmulatorVersion = null };
+                await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
             }
-            else
+            else if (ReFixInstances != null)
             {
-                Instance = Instance with
-                {
-                    EmulatorEnabled = false,
-                    EmulatorId = null,
-                    InstalledEmulatorVersion = null
-                };
+                Instance = await ReFixInstances.UninstallAsync(Instance, progressReporter, CancellationToken.None).ConfigureAwait(true);
             }
-            await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
 
             StatusMessage = "✅ Emulator uninstalled. Original files restored.";
             _notificationService?.ShowInfo("Emulator Uninstalled", $"Original files restored in {Instance.Name}.");

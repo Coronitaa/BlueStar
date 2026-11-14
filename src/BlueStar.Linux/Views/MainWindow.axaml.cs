@@ -15,7 +15,7 @@ public sealed partial class MainWindow : Window
             vm.Library.PickFolder = PickFolderAsync;
             vm.Requirements.Check();
             await vm.Library.LoadAsync();
-            SelfTest.OnWindowReady(this, vm);
+            await SelfTest.OnWindowReadyAsync(this, vm);
         };
     }
 

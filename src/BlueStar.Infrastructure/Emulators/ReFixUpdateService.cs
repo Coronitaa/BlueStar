@@ -223,22 +223,7 @@ public sealed class ReFixUpdateService : IReFixUpdateService
                     "BlueStar", "tools", "ReFix_deploy");
                 targetDirs.Add(appDataDeployPath);
 
-                // Also check if current deploy path is writable and not inside WindowsApps or Program Files
-                var currentDeploy = ReFixEmulator.GetReFixDeployPath();
-                if (!string.IsNullOrEmpty(currentDeploy) &&
-                    !currentDeploy.Contains("WindowsApps", StringComparison.OrdinalIgnoreCase) &&
-                    IsDirectoryWritable(currentDeploy))
-                {
-                    targetDirs.Add(currentDeploy);
-                }
-
-                // If running in development source tree and it exists and is writable, also update it
-                var srcToolsPath = Path.Combine(Directory.GetCurrentDirectory(), "src", "BlueStar.App", "tools", "ReFix_deploy");
-                if (Directory.Exists(Path.GetDirectoryName(srcToolsPath)) && IsDirectoryWritable(srcToolsPath))
-                {
-                    targetDirs.Add(srcToolsPath);
-                }
-
+                // Never the repo's src/BlueStar.App/tools: running from the source tree must not rewrite tracked files.
                 // If running portable (writable AppContext.BaseDirectory not in WindowsApps)
                 var defaultToolsPath = Path.Combine(AppContext.BaseDirectory, "tools", "ReFix_deploy");
                 if (!defaultToolsPath.Equals(appDataDeployPath, StringComparison.OrdinalIgnoreCase) &&

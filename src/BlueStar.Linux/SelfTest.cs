@@ -59,13 +59,20 @@ public static class SelfTest
         Report("game ran under Proton", File.Exists(marker), marker);
     }
 
-    public static void OnWindowReady(Window window, MainViewModel vm)
+    public static async Task OnWindowReadyAsync(Window window, MainViewModel vm)
     {
         if (!_active) return;
         Report("window opened", window.IsVisible, window.Title ?? "");
-        Report("library shows game", vm.Library.Games.Any(g => g.Name == _gameName), $"{vm.Library.Games.Count} games");
+        var game = vm.Library.Games.FirstOrDefault(g => g.Name == _gameName);
+        Report("library shows game", game != null, $"{vm.Library.Games.Count} games");
         Report("requirements listed", vm.Requirements.Rows.Count > 0, $"{vm.Requirements.Rows.Count} rows");
         Report("settings loaded", vm.Settings.Runners.Count >= 2, $"{vm.Settings.Runners.Count} runners");
+        if (game != null)
+        {
+            await vm.Library.RemoveCommand.ExecuteAsync(game);
+            var exe = game.Instance.ExecutablePath;
+            Report("remove keeps game files", !vm.Library.Games.Contains(game) && File.Exists(exe), exe ?? "no exe");
+        }
         Console.WriteLine(Failures.Count == 0 ? "SELFTEST PASS" : $"SELFTEST FAIL: {string.Join(", ", Failures)}");
         Dispatcher.UIThread.Post(() => Environment.Exit(Failures.Count == 0 ? 0 : 1));
     }

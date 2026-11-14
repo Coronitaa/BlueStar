@@ -31,4 +31,7 @@ public record UpdateInfo
     /// Gets or sets the total file size of the update in bytes.
     /// </summary>
     public long FileSize { get; init; }
+
+    /// <summary>SHA-256 of the asset as GitHub reports it ("digest"), lowercase hex; null when the release has none.</summary>
+    public string? Sha256 { get; init; }
 }

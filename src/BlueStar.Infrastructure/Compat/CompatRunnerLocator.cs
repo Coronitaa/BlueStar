@@ -18,19 +18,31 @@ public static class CompatRunnerLocator
     public static string DataHome(string home) =>
         Environment.GetEnvironmentVariable("XDG_DATA_HOME") is { Length: > 0 } xdg ? xdg : Path.Combine(home, ".local", "share");
 
-    /// <summary>umu-run on PATH, else the copy BlueStar keeps under $XDG_DATA_HOME/BlueStar/runtimes/umu.</summary>
+    /// <summary>
+    /// umu-run on PATH, else the copy BlueStar keeps under $XDG_DATA_HOME/BlueStar/runtimes/umu. Only a copy this user
+    /// can execute counts: a root-owned rwxr--r-- install would fail with "Permission denied" instead of falling back.
+    /// </summary>
     public static string? FindUmuRun(string home, string? pathVariable)
     {
         foreach (var dir in (pathVariable ?? string.Empty).Split(':', StringSplitOptions.RemoveEmptyEntries))
         {
             var candidate = Path.Combine(dir, "umu-run");
-            if (File.Exists(candidate))
+            if (IsExecutable(candidate))
                 return candidate;
         }
 
         var bundled = Path.Combine(DataHome(home), "BlueStar", "runtimes", "umu", "umu-run");
-        return File.Exists(bundled) ? bundled : null;
+        return IsExecutable(bundled) ? bundled : null;
     }
+
+    /// <summary>The file exists and the current user may run it (access X_OK on Unix).</summary>
+    public static bool IsExecutable(string path) =>
+        File.Exists(path) && (OperatingSystem.IsWindows() || access(path, XOk) == 0);
+
+    private const int XOk = 1;
+
+    [System.Runtime.InteropServices.DllImport("libc", SetLastError = true)]
+    private static extern int access(string path, int mode);
 
     /// <summary>
     /// Proton builds in every Steam library (steamapps/common/Proton*) and in the custom tool folders

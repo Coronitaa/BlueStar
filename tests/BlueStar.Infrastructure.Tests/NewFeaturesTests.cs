@@ -233,8 +233,8 @@ public class NewFeaturesTests
         // Arrange
         var jsonResponse = """
         {
-          "tag_name": "v2.5",
-          "name": "ReFix Release v2.5",
+          "tag_name": "v99.5",
+          "name": "ReFix Release v99.5",
           "body": "Fixes and performance improvements",
           "published_at": "2026-08-19T20:00:00Z",
           "assets": [
@@ -268,9 +268,9 @@ public class NewFeaturesTests
 
         // Assert
         release.Should().NotBeNull();
-        release!.TagName.Should().Be("v2.5");
+        release!.TagName.Should().Be("v99.5"); // always newer than whatever ReFix copy this machine has
         release.DownloadUrl.Should().Be("https://github.com/Coronitaa/ReFix/releases/download/v2.5/ReFix_Release_v2.5.zip");
-        release.Version.Should().Be("2.5");
+        release.Version.Should().Be("99.5");
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -354,10 +354,20 @@ public class NewFeaturesTests
     }
 
     [Fact]
-    public void ReFixEmulator_GetCurrentVersion_Returns243()
+    public void ReFixEmulator_CurrentVersion_ReadsRefixVersionJson()
     {
-        var version = ReFixEmulator.GetCurrentVersion();
-        version.Should().BeOneOf("2.4.3", "2.4.9");
+        // Reads a temp deploy folder, not the machine's ReFix copy (AppData updates itself to newer versions).
+        var dir = Directory.CreateTempSubdirectory("bs-refixver-").FullName;
+        try
+        {
+            ReFixEmulator.GetCurrentVersionInternal(dir).Should().Be("1.3", "no refix_version.json means the legacy default");
+            File.WriteAllText(Path.Combine(dir, "refix_version.json"), """{ "version": "v2.4.3", "tag": "v2.4.3" }""");
+            ReFixEmulator.GetCurrentVersionInternal(dir).Should().Be("2.4.3");
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 
     [Fact]

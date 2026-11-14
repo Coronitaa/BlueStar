@@ -20,6 +20,8 @@ public static class L
     public static string Play => T("Jugar", "Play");
     public static string Stop => T("Detener", "Stop");
     public static string OpenFolder => T("Abrir carpeta", "Open folder");
+    public static string Remove => T("Quitar de la biblioteca", "Remove from library");
+    public static string Removed => T("quitado de la biblioteca (los archivos siguen en el disco)", "removed from the library (files stay on disk)");
     public static string Install => T("Instalar", "Install");
     public static string Uninstall => T("Desinstalar ReFix", "Uninstall ReFix");
     public static string Empty => T("Tu biblioteca está vacía. Añade la carpeta de un juego de Windows o importa uno de Steam.",

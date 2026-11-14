@@ -119,6 +119,14 @@ public static class ArchiveExtractor
         }
     }
 
+    /// <summary>True when <paramref name="path"/> is inside <paramref name="root"/> (not just sharing its prefix, as "Foo" and "FooBar" do).</summary>
+    internal static bool IsInside(string root, string path)
+    {
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var rootWithSep = Path.EndsInDirectorySeparator(root) ? root : root + Path.DirectorySeparatorChar;
+        return path.StartsWith(rootWithSep, comparison);
+    }
+
     private static void ExtractArchiveEntries(IArchive archive, string fullDestDir, bool overwrite)
     {
         foreach (var entry in archive.Entries.Where(e => !e.IsDirectory))
@@ -126,8 +134,8 @@ public static class ArchiveExtractor
             var entryKey = entry.Key ?? Path.GetFileName(fullDestDir);
             var destinationPath = Path.GetFullPath(Path.Combine(fullDestDir, entryKey));
 
-            // Path traversal protection
-            if (!destinationPath.StartsWith(fullDestDir, StringComparison.OrdinalIgnoreCase))
+            // Path traversal protection: a mod archive entry like "../FooBar/x.dll" must not escape the folder.
+            if (!IsInside(fullDestDir, destinationPath))
             {
                 continue;
             }
