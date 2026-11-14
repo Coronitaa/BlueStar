@@ -55,4 +55,24 @@ public sealed record CompatSettings
             ExtraDllOverrides = overrides.Length == 0 ? null : overrides,
         };
     }
+
+    /// <summary>"KEY=value" per line; blank lines and # comments skipped. <paramref name="bad"/> is the first invalid line.</summary>
+    public static Dictionary<string, string> ParseEnvironment(string text, out string? bad)
+    {
+        bad = null;
+        var env = new Dictionary<string, string>();
+        foreach (var raw in text.Split('\n'))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0 || line.StartsWith('#')) continue;
+            var eq = line.IndexOf('=');
+            if (eq <= 0)
+            {
+                bad = line;
+                return env;
+            }
+            env[line[..eq].Trim()] = line[(eq + 1)..].Trim();
+        }
+        return env;
+    }
 }

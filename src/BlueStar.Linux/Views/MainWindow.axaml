@@ -1,0 +1,119 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:BlueStar.Linux.ViewModels"
+        xmlns:l="using:BlueStar.Linux"
+        xmlns:steam="using:BlueStar.Infrastructure.Steam"
+        xmlns:core="using:BlueStar.Core.Interfaces"
+        x:Class="BlueStar.Linux.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="{Binding Title}"
+        Icon="avares://BlueStar/Assets/bluestar.png"
+        Width="1100" Height="720" MinWidth="760" MinHeight="480">
+  <TabControl Margin="8" TabStripPlacement="Left">
+
+    <TabItem Header="{x:Static l:L.Library}">
+      <Grid DataContext="{Binding Library}" x:DataType="vm:LibraryViewModel" RowDefinitions="Auto,*,Auto" Margin="12,0,0,0">
+        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,12">
+          <Button Content="{x:Static l:L.AddFolder}" Command="{Binding AddFolderCommand}" Classes="accent" />
+          <Button Content="{x:Static l:L.ScanSteam}" Command="{Binding ScanSteamCommand}" />
+          <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Width="120" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1">
+          <StackPanel>
+            <TextBlock Text="{x:Static l:L.Empty}" IsVisible="{Binding IsEmpty}" TextWrapping="Wrap" Margin="0,24" Opacity="0.7" />
+
+            <ItemsControl ItemsSource="{Binding SteamGames}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="steam:InstalledSteamGame">
+                  <Border Classes="card" Background="#1A3B82F6">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <StackPanel>
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding FullPath}" Classes="muted" />
+                      </StackPanel>
+                      <Button Grid.Column="1" Content="{x:Static l:L.Import}" VerticalAlignment="Center"
+                              Command="{Binding $parent[ItemsControl].((vm:LibraryViewModel)DataContext).ImportSteamCommand}"
+                              CommandParameter="{Binding}" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <ItemsControl ItemsSource="{Binding Games}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:GameItemViewModel">
+                  <Border Classes="card">
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                      <StackPanel>
+                        <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding Subtitle}" Classes="muted" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding ReFixText}" Classes="muted" IsVisible="{Binding HasReFix}" Foreground="#60A5FA" />
+                      </StackPanel>
+                      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <Button Content="{x:Static l:L.Play}" Command="{Binding PlayCommand}" Classes="accent" />
+                        <Button Content="{x:Static l:L.Stop}" Command="{Binding StopCommand}" />
+                        <Button Content="{x:Static l:L.OpenFolder}" Command="{Binding OpenFolderCommand}" />
+                      </StackPanel>
+                      <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+                        <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding SelectedOption}" MinWidth="260">
+                          <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="core:EmulatorOptionInfo">
+                              <TextBlock Text="{Binding Name}" />
+                            </DataTemplate>
+                          </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button Content="{x:Static l:L.Install}" Command="{Binding InstallReFixCommand}" />
+                        <Button Content="{x:Static l:L.Uninstall}" Command="{Binding UninstallReFixCommand}" IsVisible="{Binding HasReFix}" />
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+
+        <TextBlock Grid.Row="2" Text="{Binding Status}" Classes="muted" TextWrapping="Wrap" Margin="0,8,0,0" />
+      </Grid>
+    </TabItem>
+
+    <TabItem Header="{x:Static l:L.Settings}">
+      <ScrollViewer DataContext="{Binding Settings}" x:DataType="vm:SettingsViewModel">
+        <StackPanel Spacing="10" Margin="12,0,0,0" MaxWidth="640" HorizontalAlignment="Left">
+          <TextBlock Text="{x:Static l:L.CompatTitle}" Classes="h1" />
+          <TextBlock Text="{x:Static l:L.Strategy}" />
+          <ComboBox ItemsSource="{Binding Strategies}" SelectedItem="{Binding Strategy}" MinWidth="320" DisplayMemberBinding="{ReflectionBinding Label}" />
+          <TextBlock Text="{x:Static l:L.Runner}" />
+          <ComboBox ItemsSource="{Binding Runners}" SelectedItem="{Binding Runner}" MinWidth="320" DisplayMemberBinding="{ReflectionBinding Label}" />
+          <TextBlock Text="{x:Static l:L.ExtraEnv}" />
+          <TextBox Text="{Binding ExtraEnvironment}" AcceptsReturn="True" MinHeight="90" FontFamily="monospace" />
+          <TextBlock Text="{x:Static l:L.ExtraDll}" />
+          <TextBox Text="{Binding ExtraDllOverrides}" FontFamily="monospace" />
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <Button Content="{x:Static l:L.Save}" Command="{Binding SaveCommand}" Classes="accent" />
+            <TextBlock Text="{Binding Message}" VerticalAlignment="Center" />
+          </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+    </TabItem>
+
+    <TabItem Header="{x:Static l:L.Requirements}">
+      <StackPanel DataContext="{Binding Requirements}" x:DataType="vm:RequirementsViewModel" Margin="12,0,0,0" Spacing="8">
+        <Button Content="{x:Static l:L.Recheck}" Command="{Binding CheckCommand}" />
+        <ItemsControl ItemsSource="{Binding Rows}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:RequirementRow">
+              <Grid ColumnDefinitions="28,220,*" Margin="0,4">
+                <TextBlock Text="{Binding Icon}" FontWeight="Bold" />
+                <TextBlock Grid.Column="1" Text="{Binding Name}" />
+                <TextBlock Grid.Column="2" Text="{Binding Detail}" Classes="muted" TextWrapping="Wrap" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </TabItem>
+  </TabControl>
+</Window>

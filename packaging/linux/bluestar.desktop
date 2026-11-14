@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=BlueStar
+Comment=Game launcher with ReFix, Proton and mods
+Exec=BlueStar %U
+Icon=bluestar
+Categories=Game;
+Terminal=false

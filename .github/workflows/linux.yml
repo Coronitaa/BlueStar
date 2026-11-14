@@ -86,3 +86,60 @@ jobs:
         with:
           name: avalonia-spike-linux-x64
           path: out/spike
+
+  linux-app:
+    name: Linux app (build, package, run a game under Proton)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install test tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64 xvfb xauth dbus-x11
+
+      # Keys are optional: without these secrets the build simply ships without bundled API keys.
+      - name: Build tar.gz + AppImage
+        env:
+          BLUESTAR_DEPOTBOX_API_KEY: ${{ secrets.BLUESTAR_DEPOTBOX_API_KEY }}
+          BLUESTAR_MODKEYS_JSON: ${{ secrets.BLUESTAR_MODKEYS_JSON }}
+        run: bash packaging/linux/build-linux.sh
+
+      - name: Headless --launch rejects a bad id
+        run: |
+          set +e
+          HOME="$(mktemp -d)" dist/linux/BlueStar.AppDir/usr/lib/bluestar/BlueStar --launch not-a-guid
+          test $? -eq 2
+
+      - name: AppImage starts (self-test, no game)
+        run: HOME="$(mktemp -d)" APPIMAGE_EXTRACT_AND_RUN=1 dbus-run-session -- xvfb-run -a timeout 180 dist/linux/BlueStar-*.AppImage --selftest
+
+      - name: Build the test game (Windows .exe)
+        run: |
+          mkdir -p "$RUNNER_TEMP/game"
+          x86_64-w64-mingw32-gcc -O2 -o "$RUNNER_TEMP/game/SelfTestGame.exe" tests/linux/selftest-game.c
+
+      - name: Install umu-launcher (zipapp) and allow user namespaces
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --repo Open-Wine-Components/umu-launcher --pattern '*zipapp.tar' --dir "$RUNNER_TEMP"
+          tar -xf "$RUNNER_TEMP"/*zipapp.tar -C "$RUNNER_TEMP"
+          echo "$(dirname "$(find "$RUNNER_TEMP" -name umu-run -type f | head -1)")" >> "$GITHUB_PATH"
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Run a Windows game through BlueStar + umu + Proton
+        run: HOME="$(mktemp -d)" dbus-run-session -- xvfb-run -a timeout 1800 dist/linux/BlueStar.AppDir/usr/lib/bluestar/BlueStar --selftest "$RUNNER_TEMP/game/SelfTestGame.exe"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bluestar-linux-x64
+          path: |
+            dist/linux/*.tar.gz
+            dist/linux/*.AppImage
+            dist/linux/SHA256SUMS

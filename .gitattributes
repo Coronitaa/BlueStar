@@ -1,3 +1,5 @@
 # Shell scripts run on Linux: CRLF breaks bash ("\r: command not found"), even in builds made on Windows.
 *.sh text eol=lf
 *.bats text eol=lf
+packaging/linux/AppRun text eol=lf
+*.desktop text eol=lf

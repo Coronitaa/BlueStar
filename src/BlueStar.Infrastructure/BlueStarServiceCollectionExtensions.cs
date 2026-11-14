@@ -35,6 +35,7 @@ public static class BlueStarServiceCollectionExtensions
         services.AddSingleton<IDepotBoxAuthService, BlueStar.Infrastructure.Services.DepotBoxAuthService>();
         services.AddSingleton<ICacheService, FileCacheService>();
         services.AddSingleton<IInstanceManager, InstanceManager>();
+        services.AddSingleton<GameImportService>();
         services.AddSingleton<DepotBoxLuaParser>();
         services.AddSingleton<BlueStar.Infrastructure.DepotBox.DepotBoxKeyImporter>();
 
@@ -144,6 +145,7 @@ public static class BlueStarServiceCollectionExtensions
         services.AddHttpClient<IReFixUpdateService, BlueStar.Infrastructure.Emulators.ReFixUpdateService>();
         services.AddHttpClient<IPrerequisiteService, BlueStar.Infrastructure.Services.PrerequisiteService>();
         services.AddSingleton<IGameFixDeployService, BlueStar.Infrastructure.Services.GameFixDeployService>();
+        services.AddSingleton<BlueStar.Infrastructure.Emulators.ReFixInstanceService>();
         if (OperatingSystem.IsLinux())
             services.AddSingleton<BlueStar.Infrastructure.Compat.CompatLauncher>();
         services.AddSingleton<IGameLauncher, BlueStar.Infrastructure.Launcher.GameLauncherService>();
