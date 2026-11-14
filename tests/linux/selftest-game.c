@@ -8,7 +8,7 @@ int main(void)
     char path[MAX_PATH];
     DWORD n = GetModuleFileNameA(NULL, path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return 2;
-    char *slash = strrchr(path, '\');
+    char *slash = strrchr(path, '\\');
     if (!slash) return 3;
     strcpy(slash + 1, "bluestar-selftest.ok");
     HANDLE f = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
