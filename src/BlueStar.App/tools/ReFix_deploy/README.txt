@@ -1,4 +1,4 @@
-﻿ReFix 2.5.0 - LAN / Online
+﻿ReFix 2.4.3 - LAN / Online
 ========================
 
 1. Run AutoDeploy.bat.
