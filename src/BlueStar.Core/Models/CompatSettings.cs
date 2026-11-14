@@ -16,10 +16,10 @@ public enum CompatLaunchStrategy
 /// <summary>Linux compatibility (Wine/Proton) settings: global on AppSettings, optionally overridden per instance.</summary>
 public sealed record CompatSettings
 {
-    /// <summary>umu keyword picked when no runner is chosen: Proton fetched and kept up to date by umu itself.</summary>
+    /// <summary>"UMU-Proton (auto)" in Settings: PROTONPATH left unset, so umu fetches and updates UMU-Proton itself.</summary>
     public const string UmuProtonAuto = "UMU-Proton";
 
-    /// <summary>umu keyword for the latest GE-Proton, also fetched by umu.</summary>
+    /// <summary>umu codename (PROTONPATH=GE-Proton) for the latest GE-Proton, fetched by umu.</summary>
     public const string GeProtonLatest = "GE-Proton";
 
     public CompatLaunchStrategy Strategy { get; init; } = CompatLaunchStrategy.Umu;

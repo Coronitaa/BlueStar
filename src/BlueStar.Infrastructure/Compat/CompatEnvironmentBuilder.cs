@@ -31,16 +31,21 @@ public static class CompatEnvironmentBuilder
         return parts.Count == 0 ? null : string.Join(';', parts);
     }
 
-    /// <summary>umu-run: WINEPREFIX is the prefix, GAMEID picks umu-protonfixes, PROTONPATH a folder or keyword.</summary>
+    /// <summary>
+    /// umu-run: WINEPREFIX is the prefix, GAMEID picks protonfixes (umu-&lt;Steam AppId&gt;; umu's documented
+    /// default umu-default applies none), PROTONPATH a Proton folder or a codename such as GE-Proton. Left unset,
+    /// umu uses and updates UMU-Proton itself.
+    /// </summary>
     public static Dictionary<string, string> ForUmu(CompatSettings settings, GameInstance instance, CompatPrefix prefix, string? dllOverrides)
     {
         var env = new Dictionary<string, string>
         {
             ["WINEPREFIX"] = prefix.WinePrefix,
-            ["GAMEID"] = instance.AppId > 0 ? $"umu-{instance.AppId}" : "umu-0",
+            ["GAMEID"] = instance.AppId > 0 ? $"umu-{instance.AppId}" : "umu-default",
             ["STORE"] = "none",
-            ["PROTONPATH"] = string.IsNullOrWhiteSpace(settings.Runner) ? CompatSettings.UmuProtonAuto : settings.Runner,
         };
+        if (!string.IsNullOrWhiteSpace(settings.Runner) && settings.Runner != CompatSettings.UmuProtonAuto)
+            env["PROTONPATH"] = settings.Runner;
         return Finish(env, settings, dllOverrides);
     }
 

@@ -59,7 +59,8 @@ public sealed class CompatRuntimeTests : IDisposable
         cmd.FileName.Should().Be("/usr/bin/umu-run");
         cmd.Arguments.Should().Equal(exe, "-windowed", "-name Bob");
         cmd.Environment["WINEPREFIX"].Should().Be("/p");
-        cmd.Environment["PROTONPATH"].Should().Be(CompatSettings.UmuProtonAuto);
+        cmd.Environment.Should().NotContainKey("PROTONPATH", "unset lets umu pick and update UMU-Proton");
+        cmd.Environment.Should().ContainKey("STORE");
         cmd.Environment["WINEDLLOVERRIDES"].Should().Be("winhttp=n,b");
         cmd.Environment["DXVK_HUD"].Should().Be("fps");
         cmd.Environment["GAMEID"].Should().Be("umu-custom", "the user's own variables win");
@@ -180,5 +181,16 @@ public sealed class CompatRuntimeTests : IDisposable
     {
         CompatLauncher.SplitArguments("  -a  \"b c\" d ").Should().Equal("-a", "b c", "d");
         CompatLauncher.SplitArguments(null).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Umu_UsesUmuDefaultWithoutAppId_AndPassesGeProtonCodename()
+    {
+        var settings = new CompatSettings { Runner = CompatSettings.GeProtonLatest };
+
+        var env = CompatEnvironmentBuilder.ForUmu(settings, Game(), new CompatPrefix("/p", "/p"), null);
+
+        env["GAMEID"].Should().Be("umu-default");
+        env["PROTONPATH"].Should().Be("GE-Proton");
     }
 }
