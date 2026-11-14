@@ -34,7 +34,8 @@ if [ -n "$secrets_key" ]; then
   KEY_FILE="$work/key.bin" OUT_FILE="$lib/bluestar.dat" python3 - <<'PY'
 import base64, hmac, hashlib, json, os, subprocess
 mod = json.loads(os.environ.get("BLUESTAR_MODKEYS_JSON") or "{}")
-data = {k: (mod.get(k) or None) for k in ["curseForge", "nexusMods", "modIo", "thunderstore", "modIoApiUrl"]}
+clean = lambda v: v.strip() if isinstance(v, str) and v.strip() and v.strip() != "YOUR-API-KEY" else None
+data = {k: clean(mod.get(k)) for k in ["curseForge", "nexusMods", "modIo", "thunderstore", "modIoApiUrl"]}
 data["defaultApiKey"] = (os.environ.get("BLUESTAR_DEPOTBOX_API_KEY") or "").strip() or None
 key = open(os.environ["KEY_FILE"], "rb").read()
 iv = os.urandom(16)

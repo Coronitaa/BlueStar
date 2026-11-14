@@ -101,7 +101,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Install test tools
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64 xvfb xauth dbus-x11
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64 xvfb xauth dbus-x11 desktop-file-utils
 
       # Keys are optional: without these secrets the build simply ships without bundled API keys.
       - name: Build tar.gz + AppImage
