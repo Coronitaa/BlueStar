@@ -431,7 +431,7 @@ if ($cert) {
 #       solo descarga WebView2 si falta; Windows 11 y Windows 10 actualizado ya lo traen)
 #     - Portable: ademas WebView2 Fixed Version en {app}\WebView2Runtime (no requiere instalar nada)
 #     - MSIX: ninguno (ver paso 7); la app los descarga solo si hacen falta
-#     .NET 8 ya va incluido porque la publicacion es self-contained.
+#     .NET 10 ya va incluido porque la publicacion es self-contained.
 # ============================================================================
 Write-Host "[4.5/7] Preparando runtimes y prerrequisitos del sistema..." -ForegroundColor Yellow
 $cacheDir = Join-Path $rootDir "build-cache"

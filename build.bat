@@ -10,8 +10,8 @@ if errorlevel 1 (
     echo.
     echo ========================================================================
     echo   [ERROR] No se encontró el comando 'dotnet'.
-    echo   Por favor asegúrate de tener instalado .NET 8 SDK y que esté en tu PATH.
-    echo   Descarga oficial: https://dotnet.microsoft.com/download/dotnet/8.0
+    echo   Por favor asegúrate de tener instalado .NET 10 SDK y que esté en tu PATH.
+    echo   Descarga oficial: https://dotnet.microsoft.com/download/dotnet/10.0
     echo ========================================================================
     echo.
     pause
