@@ -310,7 +310,11 @@ function Generate-UNAE-ReFixIni {
     $arbMode       = & $Pick "Network" "Mode"         $P.ArbitrationMode
     $defRegion     = & $Pick "Photon" "DefaultRegion" $regionCandidate
     $bypassVal     = if ($P.DLCMode -eq "none") { "false" } else { "true" }
-    $eosMode       = if ($P.OnlineMode -in @("goldberg", "offline", "lan")) { "emulated" } else { "passthrough" }
+    $hasEosOrig    = (Get-ChildItem -LiteralPath $TargetDir -Filter "EOSSDK_original.dll" -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0
+    $eosModeDefault = if ($hasEosOrig) { "passthrough" } elseif ($P.OnlineMode -in @("goldberg", "offline", "lan")) { "emulated" } else { "passthrough" }
+    $eosMode       = & $Pick "EOS" "Mode" $eosModeDefault
+    $eosAuthDefault = if ($eosMode -eq "passthrough") { "true" } elseif ($P.OnlineMode -in @("goldberg", "offline", "lan")) { "false" } else { "true" }
+    $eosAuth       = & $Pick "EOS" "DeviceIdAuth" $eosAuthDefault
     # ReFix decides the Photon backend: a detected Photon stack (PUN2/Realtime/Voice/Fusion) in a
     # no-third-party mode uses the local emulator (ReFixCloud over Steam P2P); otherwise real Photon.
     $photonDefault = if ($P.UsesPhoton -and ($P.OnlineMode -in @("valve","goldberg","offline","lan"))) { "ReFixCloud" } else { "OfficialPhoton" }
@@ -328,7 +332,6 @@ function Generate-UNAE-ReFixIni {
     if ($serverListOverride -ne "true") { $serverListOverride = if ($knowsReal) { "true" } else { "false" } }
     $serverListAppId = & $Pick "ServerBrowser" "ServerListAppId" ""
     if (-not $serverListAppId -or $serverListAppId -eq "480") { $serverListAppId = if ($realId -and $realId -ne "0") { $realId } else { "480" } }
-    $eosAuth       = if ($P.OnlineMode -in @("goldberg", "offline", "lan")) { "false" } else { "true" }
     # Fast-failing cloud TCP (443/80) only helps when there is no internet backend to reach; online it would
     # block EOS sign-in, PlayFab and other official services.
     $fastCloudFailDefault = if ($P.OnlineMode -in @("goldberg", "offline", "lan")) { "true" } else { "false" }
@@ -1415,9 +1418,8 @@ unlock_all_dlc=$unlockAllDlcStr
         '',
         'net session >nul 2>&1',
         'if !errorlevel! neq 0 (',
-        '    echo [NOTICE] Windows Firewall rules need administrator rights: right-click this file and choose Run as administrator to apply them.',
-        '    echo [NOTICE] Players on the LAN usually find each other without them.',
-        '    pause',
+        '    echo [INFO] Requesting Administrator permissions...',
+        '    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList ''/c \"\"%~f0\"\" --elevated'' -Verb RunAs"',
         '    exit /b',
         ')',
         '',
@@ -2186,7 +2188,17 @@ FixedRegion=$effectiveRegion
     }
 }
 
-# Shortcut helper scripts deployment deactivated (BlueStar launches the game itself)
+# Deploy shortcut helper scripts for Valve mode
+if ($OnlineMode -eq "valve") {
+    $srcPs1 = Join-Path $BinDir "add_steam_shortcut.ps1"
+    $srcBat = Join-Path $BinDir "Install_ReFix_Steam_Shortcut.bat"
+    if (Test-Path -LiteralPath $srcPs1) {
+        Copy-Item -LiteralPath $srcPs1 -Destination (Join-Path $ExeDir "add_steam_shortcut.ps1") -Force -ErrorAction SilentlyContinue
+    }
+    if (Test-Path -LiteralPath $srcBat) {
+        Copy-Item -LiteralPath $srcBat -Destination (Join-Path $ExeDir "Install_ReFix_Steam_Shortcut.bat") -Force -ErrorAction SilentlyContinue
+    }
+}
 
 # ============================================================
 # Step 5: Universal Epic Online Services (EOS) & Redpoint Deployment
@@ -2253,6 +2265,80 @@ if ($eosDirs.Count -gt 0 -and (Test-Path -LiteralPath $eosProxyPath)) {
     }
 } else {
     Write-Host "  [INFO] No Epic Online Services (EOS) libraries detected in game files." -ForegroundColor Gray
+}
+
+# ============================================================
+# Step 5b: Universal EasyAntiCheat (EAC) & winhttp.dll Proxy Deployment
+# ============================================================
+Write-Host "[5b/6] Checking for EasyAntiCheat (EAC) / Anti-Cheat protection..." -ForegroundColor Cyan
+
+$eacDirs = Get-ChildItem -LiteralPath $TargetDir -Filter "*EasyAntiCheat*" -Recurse -Directory -ErrorAction SilentlyContinue
+$eacFiles = Get-ChildItem -LiteralPath $TargetDir -Filter "*EasyAntiCheat*" -Recurse -File -ErrorAction SilentlyContinue
+$eacProtected = Get-ChildItem -LiteralPath $TargetDir -Filter "*start_protected_game*" -Recurse -File -ErrorAction SilentlyContinue
+
+$isEacPresent = (($eacDirs.Count -gt 0) -or ($eacFiles.Count -gt 0) -or ($eacProtected.Count -gt 0))
+
+$winhttpProxy = Join-Path $ProductBinDir "winhttp.dll"
+if (-not (Test-Path -LiteralPath $winhttpProxy)) {
+    $winhttpProxy = Join-Path $BinDir "lan\winhttp.dll"
+}
+if (-not (Test-Path -LiteralPath $winhttpProxy)) {
+    $winhttpProxy = Join-Path $BinDir "winhttp.dll"
+}
+
+if ($isEacPresent) {
+    Write-Host "  [DETECTION] EasyAntiCheat (EAC) detected in game directory." -ForegroundColor Yellow
+    $proxyWinhttpSize = 0
+    if (Test-Path -LiteralPath $winhttpProxy) {
+        $proxyWinhttpSize = (Get-Item -LiteralPath $winhttpProxy).Length
+    }
+
+    # Check if ReFix is already hooked through Steam or EOS SDK
+    $hasNativeHook = ($pluginDirs.Count -gt 0 -or $pluginDirs32.Count -gt 0 -or $eosDirs.Count -gt 0)
+    if ($hasNativeHook) {
+        Write-Host "  [INFO] ReFix is already hooked via Steam / EOS SDK. winhttp.dll proxy is omitted to avoid EAC 0xc000007b conflict." -ForegroundColor Gray
+        # Purge any previously deployed winhttp.dll proxy in ExeDir to prevent EAC from blocking it with 0xc000007b
+        $targetWinhttp = Join-Path $ExeDir "winhttp.dll"
+        $targetWinhttpOrig = Join-Path $ExeDir "winhttp_original.dll"
+        if (Test-Path -LiteralPath $targetWinhttp) {
+            $curWSize = (Get-Item -LiteralPath $targetWinhttp).Length
+            if ($curWSize -eq $proxyWinhttpSize -or (Test-Path -LiteralPath $targetWinhttpOrig)) {
+                Remove-Item -LiteralPath $targetWinhttp -Force -ErrorAction SilentlyContinue
+                if (Test-Path -LiteralPath $targetWinhttpOrig) {
+                    Rename-Item -LiteralPath $targetWinhttpOrig -NewName "winhttp.dll" -Force -ErrorAction SilentlyContinue
+                    Write-Host "  [OK] Restored genuine winhttp.dll in $ExeDir" -ForegroundColor Green
+                } else {
+                    Write-Host "  [OK] Removed redundant winhttp.dll proxy from $ExeDir" -ForegroundColor Green
+                }
+            }
+        }
+    } elseif (Test-Path -LiteralPath $winhttpProxy) {
+        # Directories needing winhttp.dll proxy when no Steam/EOS hook exists:
+        $deployDirs = @($ExeDir)
+        foreach ($pExe in $eacProtected) {
+            if ($deployDirs -notcontains $pExe.DirectoryName) {
+                $deployDirs += $pExe.DirectoryName
+            }
+        }
+
+        foreach ($d in $deployDirs) {
+            $targetWinhttp = Join-Path $d "winhttp.dll"
+            $targetWinhttpOrig = Join-Path $d "winhttp_original.dll"
+
+            if (Test-Path -LiteralPath $targetWinhttp) {
+                $curWSize = (Get-Item -LiteralPath $targetWinhttp).Length
+                if ($curWSize -ne $proxyWinhttpSize -and (-not (Test-Path -LiteralPath $targetWinhttpOrig))) {
+                    Rename-Item -LiteralPath $targetWinhttp -NewName "winhttp_original.dll" -Force
+                    Write-Host "  [OK] Preserved original winhttp.dll -> winhttp_original.dll in $d" -ForegroundColor Green
+                }
+            }
+
+            Copy-Item -LiteralPath $winhttpProxy -Destination $targetWinhttp -Force -ErrorAction Stop
+            Write-Host "  [OK] Deployed ReFix winhttp.dll Anti-Cheat bypass proxy to $d" -ForegroundColor Green
+        }
+    }
+} else {
+    Write-Host "  [INFO] No EasyAntiCheat (EAC) detected. winhttp proxy not required." -ForegroundColor Gray
 }
 
 # ============================================================
@@ -2393,6 +2479,29 @@ function Verify-ReFixDeployment {
                     $errors += "winmm.dll in $ExeDir size mismatch (Expected $expectedWSize, got $wSize)"
                 } else {
                     Write-Host "  [VERIFY OK] winmm.dll proxy verified in $ExeDir ($wSize bytes)" -ForegroundColor Green
+                }
+            }
+        }
+    }
+
+    # 5b. Anti-Cheat winhttp.dll verification (only when no native Steam/EOS SDK hook exists)
+    $hasNativeHook = ($pluginDirs.Count -gt 0 -or $pluginDirs32.Count -gt 0 -or $eosDirs.Count -gt 0)
+    $eacCheck = Get-ChildItem -LiteralPath $TargetDir -Filter "*EasyAntiCheat*" -Recurse -File -ErrorAction SilentlyContinue
+    $eacExes = Get-ChildItem -LiteralPath $TargetDir -Filter "*start_protected_game*" -Recurse -File -ErrorAction SilentlyContinue
+    if (($eacCheck.Count -gt 0 -or $eacExes.Count -gt 0) -and (-not $IsX86) -and (-not $hasNativeHook)) {
+        $winhttpPath = Join-Path $ProductBinDir "winhttp.dll"
+        if (-not (Test-Path -LiteralPath $winhttpPath)) { $winhttpPath = Join-Path $BinDir "lan\winhttp.dll" }
+        if (Test-Path -LiteralPath $winhttpPath) {
+            $destWinhttp = Join-Path $ExeDir "winhttp.dll"
+            if (-not (Test-Path -LiteralPath $destWinhttp)) {
+                $errors += "Anti-Cheat proxy winhttp.dll missing in $ExeDir (required for EAC bypass)"
+            } else {
+                $expectedWhSize = (Get-Item -LiteralPath $winhttpPath).Length
+                $whSize = (Get-Item -LiteralPath $destWinhttp).Length
+                if ($whSize -ne $expectedWhSize) {
+                    $errors += "winhttp.dll in $ExeDir size mismatch (Expected $expectedWhSize, got $whSize)"
+                } else {
+                    Write-Host "  [VERIFY OK] winhttp.dll Anti-Cheat bypass proxy verified in $ExeDir ($whSize bytes)" -ForegroundColor Green
                 }
             }
         }

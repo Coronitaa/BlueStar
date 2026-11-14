@@ -117,6 +117,13 @@ for /f "delims=" %%E in ('dir /s /b "%TARGET_DIR%\EOSSDK_original.dll" 2^>nul') 
     echo [OK] Restored original EOSSDK-Win64-Shipping.dll in "%%~dpE"
 )
 
+:: 3b. Restore winhttp_original.dll to winhttp.dll, or remove ReFix winhttp.dll proxy
+for /f "delims=" %%W in ('dir /s /b "%TARGET_DIR%\winhttp_original.dll" 2^>nul') do (
+    if exist "%%~dpEwinhttp.dll" del /f /q "%%~dpEwinhttp.dll"
+    ren "%%W" "winhttp.dll"
+    echo [OK] Restored original winhttp.dll in "%%~dpW"
+)
+
 :: 4. Remove RedboneEOS.dll proxy files
 for /f "delims=" %%R in ('dir /s /b "%TARGET_DIR%\RedboneEOS.dll" 2^>nul') do (
     del /f /q "%%R"

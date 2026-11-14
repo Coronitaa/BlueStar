@@ -32,6 +32,7 @@ jobs:
       # Already part of the run above; repeated with detailed output so the heap numbers show in the log.
       - name: Memory tests (heap growth report)
         if: ${{ !cancelled() }}
+        shell: bash # -eo pipefail: a failing test must fail the step despite the grep
         run: dotnet test tests/BlueStar.Infrastructure.Tests -c Release --no-build --filter "Category=Memory" --logger "console;verbosity=detailed" | grep -E "\[memory\]|Passed|Failed"
 
       - uses: actions/upload-artifact@v4

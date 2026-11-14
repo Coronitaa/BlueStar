@@ -36,16 +36,16 @@ if ($isAdmin) {
     }
     Write-Host "[OK] Firewall rules configured successfully (Direct Admin)." -ForegroundColor Green
 } else {
-    Write-Host "[INFO] Attempting to configure Windows Firewall rules without elevation..." -ForegroundColor Cyan
+    Write-Host "[INFO] Requesting UAC elevation to configure Windows Firewall rules..." -ForegroundColor Cyan
     $tempScript = [System.IO.Path]::GetTempFileName() + ".bat"
     $batchContent = "@echo off`r`n" + ($commands -join "`r`n") + "`r`nexit`r`n"
     [System.IO.File]::WriteAllText($tempScript, $batchContent)
 
     try {
-        $p = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"`"$tempScript`"`"" -WindowStyle Hidden -Wait -PassThru
-        Write-Host "[OK] Firewall rules application attempted." -ForegroundColor Green
+        $p = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"`"$tempScript`"`"" -Verb RunAs -WindowStyle Hidden -Wait -PassThru
+        Write-Host "[OK] Firewall rules applied via UAC." -ForegroundColor Green
     } catch {
-        Write-Host "[NOTICE] Could not apply Firewall rules without elevation (optional): $($_.Exception.Message)" -ForegroundColor Gray
+        Write-Host "[WARNING] Could not apply Firewall rules: $($_.Exception.Message)" -ForegroundColor Yellow
     } finally {
         if (Test-Path $tempScript) { Remove-Item -Path $tempScript -Force -ErrorAction SilentlyContinue }
     }
