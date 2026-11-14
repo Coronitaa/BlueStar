@@ -1,0 +1,35 @@
+name: Linux
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/linux-support]
+
+permissions:
+  contents: read
+
+jobs:
+  dotnet-tests:
+    name: Core + Infrastructure tests (ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # BlueStar.App.Tests is WPF (net10.0-windows) and stays Windows-only.
+      - name: Core tests
+        run: dotnet test tests/BlueStar.Core.Tests -c Release --filter "OS!=Windows" --logger "trx;LogFileName=core.trx" --results-directory test-results
+
+      - name: Infrastructure tests
+        run: dotnet test tests/BlueStar.Infrastructure.Tests -c Release --filter "OS!=Windows" --logger "trx;LogFileName=infra.trx" --results-directory test-results
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-test-results
+          path: test-results
