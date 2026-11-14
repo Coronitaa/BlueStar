@@ -262,6 +262,7 @@ public sealed class ReFixUpdateService : IReFixUpdateService
                 {
                     _logger.LogInformation("Applying ReFix v{Version} update to directory: {Target}", update.Version, target);
                     CopyDirectoryRecursive(sourceDeployDir, target);
+                    MakeScriptsExecutable(target);
 
                     // Write refix_version.json
                     var versionInfoPath = Path.Combine(target, "refix_version.json");
@@ -665,6 +666,16 @@ public sealed class ReFixUpdateService : IReFixUpdateService
         {
             return false;
         }
+    }
+
+    /// <summary>Zip archives drop the exec bit; AutoDeploy.sh and Uninstall_ReFix.sh must stay runnable on their own.</summary>
+    internal static void MakeScriptsExecutable(string dir)
+    {
+        if (OperatingSystem.IsWindows() || !Directory.Exists(dir))
+            return;
+
+        foreach (var script in Directory.EnumerateFiles(dir, "*.sh", SearchOption.AllDirectories))
+            File.SetUnixFileMode(script, File.GetUnixFileMode(script) | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
     }
 
     private static void CopyDirectoryRecursive(string sourceDir, string targetDir)

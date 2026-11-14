@@ -36,7 +36,7 @@ public sealed partial class SteamCmdWorkshopClient
             "BlueStar", "tools", "steamcmd");
     }
 
-    private string SteamCmdExe => Path.Combine(_steamCmdDir, "steamcmd.exe");
+    private string SteamCmdExe => Path.Combine(_steamCmdDir, OperatingSystem.IsWindows() ? "steamcmd.exe" : "steamcmd.sh");
 
     /// <summary>
     /// Downloads the item into SteamCMD's workshop folder and moves it to <paramref name="destinationDirectory"/>.
@@ -100,6 +100,9 @@ public sealed partial class SteamCmdWorkshopClient
 
     private async Task<(bool Ok, string? Error)> EnsureSteamCmdAsync(IProgress<double>? progress, CancellationToken ct)
     {
+        if (!OperatingSystem.IsWindows())
+            return await EnsureLinuxSteamCmdAsync(progress, ct).ConfigureAwait(false);
+
         if (!File.Exists(SteamCmdExe))
         {
             _logger.LogInformation("Downloading SteamCMD from Valve into {Dir}", _steamCmdDir);
