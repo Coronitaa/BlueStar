@@ -424,6 +424,20 @@ public sealed class NexusModsService : INexusModsService
     /// <inheritdoc />
     public void RegisterProtocolHandler()
     {
+        if (OperatingSystem.IsLinux())
+        {
+            try
+            {
+                BlueStar.Infrastructure.Platform.LinuxDesktopIntegration.RegisterNxmHandler(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+                _logger.LogInformation("Registered nxm/vortex handlers through xdg-mime");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+            {
+                _logger.LogWarning(ex, "Could not register the nxm:// handler (.desktop + xdg-mime)");
+            }
+            return;
+        }
+
         if (!OperatingSystem.IsWindows()) return;
 
         try
