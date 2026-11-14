@@ -14,7 +14,7 @@ $timestampServer = "http://timestamp.digicert.com"
 # ============================================================================
 # 0. Interaccion con el usuario (si se ejecuta en modo interactivo o sin parametros)
 # ============================================================================
-$currentVer = "1.5.8"
+$currentVer = "1.6.0"
 $propsPath = Join-Path $rootDir "Directory.Build.props"
 if (Test-Path $propsPath) {
     $propsContent = [System.IO.File]::ReadAllText($propsPath)
