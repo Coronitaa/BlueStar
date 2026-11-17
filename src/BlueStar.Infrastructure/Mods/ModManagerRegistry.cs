@@ -20,6 +20,10 @@ public sealed class ModManagerRegistry : IModManagerRegistry
 
     public IModManager? GetManagerForInstance(GameInstance instance)
     {
+        // Data-driven descriptors (per-game manifest + enable list) win over engine heuristics.
+        var described = _managers.FirstOrDefault(m => m is IDescriptorModManager && m.IsSupported(instance));
+        if (described != null) return described;
+
         if (instance.Engine?.Type == EngineType.Unity)
         {
             var unity = _managers.FirstOrDefault(m => m.Id == "unity");

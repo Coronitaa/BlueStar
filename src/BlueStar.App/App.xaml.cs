@@ -286,6 +286,7 @@ public partial class App : Application
             client.Timeout = TimeSpan.FromSeconds(20);
         });
         services.AddSingleton<ISteamStatusService, BlueStar.Infrastructure.Steam.SteamStatusService>();
+        services.AddSingleton<IModManager, BlueStar.Infrastructure.Mods.DescriptorModManager>();
         services.AddSingleton<IModManager, BlueStar.Infrastructure.Mods.UnrealModManager>();
         services.AddSingleton<IModManager, BlueStar.Infrastructure.Mods.UnityModManager>();
         services.AddSingleton<IModManager, BlueStar.Infrastructure.Mods.GenericModManager>();

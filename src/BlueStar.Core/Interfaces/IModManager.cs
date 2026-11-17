@@ -83,3 +83,13 @@ public interface IModManagerRegistry
     /// </summary>
     IReadOnlyList<IModManager> GetAllManagers();
 }
+
+/// <summary>
+/// A mod manager driven by a data descriptor. It installs whole packages (zip or folder) itself,
+/// so callers should hand it the package instead of going through the file-placement pipeline.
+/// </summary>
+public interface IDescriptorModManager : IModManager
+{
+    /// <summary>True when <paramref name="sourcePath"/> is a .zip or a folder this manager can install for the instance.</summary>
+    bool CanInstall(GameInstance instance, string sourcePath);
+}

@@ -26,6 +26,9 @@
     <ProjectReference Include="..\BlueStar.DepotDownloader\DepotDownloader\DepotDownloaderMod.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Mods\ModDescriptors.json" LogicalName="ModDescriptors.json" />
+  </ItemGroup>
+  <ItemGroup>
     <InternalsVisibleTo Include="BlueStar.Infrastructure.Tests" />
   </ItemGroup>
 </Project>

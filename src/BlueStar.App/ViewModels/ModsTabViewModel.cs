@@ -2457,6 +2457,10 @@ public sealed partial class ModsTabViewModel : ObservableObject
 
     public async Task InstallDroppedFileAsync(string filePath)
     {
+        if (Instance != null && Directory.Exists(filePath) &&
+            await TryInstallWithDescriptorManagerAsync(Instance, filePath, Path.GetFileName(filePath.TrimEnd('\\', '/'))).ConfigureAwait(true))
+            return;
+
         if (Instance == null || string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return;
 
         var ext = Path.GetExtension(filePath);
@@ -2792,6 +2796,30 @@ public sealed partial class ModsTabViewModel : ObservableObject
         }).ConfigureAwait(true);
     }
 
+    /// <summary>Games described by a mod descriptor install whole packages (zip or folder) through their own manager.</summary>
+    private async Task<bool> TryInstallWithDescriptorManagerAsync(GameInstance instance, string path, string name)
+    {
+        if (_legacyRegistry?.GetManagerForInstance(instance) is not IDescriptorModManager manager || !manager.CanInstall(instance, path))
+            return false;
+
+        IsBusy = true;
+        try
+        {
+            ShowStatus(string.Format(T("String_ModInstalling", "📦 Installing {0}..."), name), isError: false);
+            var ok = await manager.InstallModAsync(instance, path, CancellationToken.None).ConfigureAwait(true);
+            ShowStatus(ok
+                ? string.Format(T("String_ModInstalledSimple", "✅ {0} installed. Enable it in the list."), name)
+                : string.Format(T("String_ModInstallFailed", "❌ Could not install {0}: {1}"), name,
+                    T("String_ModInvalidPackage", "not a valid package, or it is already installed.")), isError: !ok);
+            if (ok) await LoadAsync().ConfigureAwait(true);
+            return true;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     /// <summary>
     /// Installs a package through the pipeline. A low-confidence plan opens the confirmation dialog
     /// instead of installing; providers (Workshop, Thunderstore...) call this too.
@@ -2800,6 +2828,9 @@ public sealed partial class ModsTabViewModel : ObservableObject
     {
         var instance = Instance;
         if (instance == null) return null;
+
+        if (await TryInstallWithDescriptorManagerAsync(instance, package.Path, package.Name).ConfigureAwait(true))
+            return null;
 
         if (_pipeline == null)
         {

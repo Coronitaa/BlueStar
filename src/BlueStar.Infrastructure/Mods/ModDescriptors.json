@@ -1,0 +1,24 @@
+[
+  {
+    "id": "barotrauma",
+    "displayName": "Barotrauma content packages",
+    "appIds": [602960],
+    "executables": ["Barotrauma.exe"],
+    "modFolders": ["LocalMods", "WorkshopMods/Installed"],
+    "manifest": {
+      "fileName": "filelist.xml",
+      "format": "xml",
+      "rootElement": "contentpackage",
+      "nameField": "name",
+      "versionField": "modversion",
+      "idField": "steamworkshopid"
+    },
+    "enableList": {
+      "file": "config_player.xml",
+      "format": "xml-path-list",
+      "listElementPath": "contentpackages/regularpackages",
+      "itemElement": "package",
+      "pathAttribute": "path"
+    }
+  }
+]
