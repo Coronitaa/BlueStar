@@ -233,14 +233,14 @@ public class NewFeaturesTests
         // Arrange
         var jsonResponse = """
         {
-          "tag_name": "v2.5",
-          "name": "ReFix Release v2.5",
+          "tag_name": "v99.0",
+          "name": "ReFix Release v99.0",
           "body": "Fixes and performance improvements",
           "published_at": "2026-08-19T20:00:00Z",
           "assets": [
             {
-              "name": "ReFix_Release_v2.5.zip",
-              "browser_download_url": "https://github.com/Coronitaa/ReFix/releases/download/v2.5/ReFix_Release_v2.5.zip",
+              "name": "ReFix_Release_v99.0.zip",
+              "browser_download_url": "https://github.com/Coronitaa/ReFix/releases/download/v99.0/ReFix_Release_v99.0.zip",
               "size": 1048576
             }
           ]
@@ -268,9 +268,9 @@ public class NewFeaturesTests
 
         // Assert
         release.Should().NotBeNull();
-        release!.TagName.Should().Be("v2.5");
-        release.DownloadUrl.Should().Be("https://github.com/Coronitaa/ReFix/releases/download/v2.5/ReFix_Release_v2.5.zip");
-        release.Version.Should().Be("2.5");
+        release!.TagName.Should().Be("v99.0");
+        release.DownloadUrl.Should().Be("https://github.com/Coronitaa/ReFix/releases/download/v99.0/ReFix_Release_v99.0.zip");
+        release.Version.Should().Be("99.0");
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -354,10 +354,10 @@ public class NewFeaturesTests
     }
 
     [Fact]
-    public void ReFixEmulator_GetCurrentVersion_Returns243()
+    public void ReFixEmulator_GetCurrentVersion_ReturnsBundledSemver()
     {
         var version = ReFixEmulator.GetCurrentVersion();
-        version.Should().BeOneOf("2.4.3", "2.4.9");
+        version.Should().MatchRegex(@"^\d+\.\d+\.\d+$"); // bundled ReFix changes every release
     }
 
     [Fact]
