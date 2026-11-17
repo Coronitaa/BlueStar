@@ -255,6 +255,11 @@ public record GameInstance
     public IReadOnlyList<string> PendingRedeployFixLayerIds { get; init; } = [];
 
     /// <summary>
+    /// Gets or sets the admin install preset whose mods and custom emulator are deployed after the download completes.
+    /// </summary>
+    public string? PendingAdminPresetId { get; init; }
+
+    /// <summary>
     /// Gets or sets the specific game fix ID to download and deploy automatically after download completes.
     /// </summary>
     public string? PendingRedeployGameFixId { get; init; }

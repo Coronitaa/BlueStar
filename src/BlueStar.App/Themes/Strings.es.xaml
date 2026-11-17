@@ -1350,4 +1350,6 @@
     <sys:String x:Key="String_SelectModpackIconDialogTitle">Seleccionar imagen de perfil para el modpack</sys:String>
     <sys:String x:Key="String_ExportModpackDialogTitle">Exportar modpack</sys:String>
     <sys:String x:Key="String_WorkshopHomeToolTip">Inicio de Workshop</sys:String>
+    <sys:String x:Key="String_InstallModalPresetPicker">Versión recomendada</sys:String>
+    <sys:String x:Key="String_InstallModalPresetIncludesFormat">Incluye: {0}</sys:String>
 </ResourceDictionary>

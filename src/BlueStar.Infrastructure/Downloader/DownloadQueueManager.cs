@@ -372,6 +372,8 @@ public class DownloadQueueManager
     public double PeakDownloadSpeed { get; private set; }
     public double PeakWriteSpeed { get; private set; }
 
+    private readonly IAdminPresetDeployer? _adminPresetDeployer;
+
     public DownloadQueueManager(
         IDownloadProvider downloadProvider,
         ILogger<DownloadQueueManager> logger,
@@ -381,8 +383,10 @@ public class DownloadQueueManager
         IEmulatorLifecycleService? emulatorLifecycleService = null,
         IGameFixDeployService? gameFixDeployService = null,
         ICacheService? cacheService = null,
-        string? historyFilePath = null)
+        string? historyFilePath = null,
+        IAdminPresetDeployer? adminPresetDeployer = null)
     {
+        _adminPresetDeployer = adminPresetDeployer;
         _downloadProvider = downloadProvider;
         _logger = logger;
         _instanceManager = instanceManager;
@@ -1437,6 +1441,48 @@ public class DownloadQueueManager
                                     job.NotifyMetricsChanged();
                                 });
                             }
+                        }
+
+                        // 1.6. Admin preset extras: custom emulator and mods
+                        if (!string.IsNullOrWhiteSpace(updatedInstance.PendingAdminPresetId) && _adminPresetDeployer != null)
+                        {
+                            RunOnUi(() =>
+                            {
+                                job.Phase = "Installing";
+                                job.StatusMessage = "Installing recommended preset...";
+                                job.NotifyMetricsChanged();
+                            });
+
+                            try
+                            {
+                                var presetProgress = new Progress<DeployProgress>(dp =>
+                                    RunOnUi(() =>
+                                    {
+                                        if (!string.IsNullOrWhiteSpace(dp.Message)) job.StatusMessage = dp.Message;
+                                        job.NotifyMetricsChanged();
+                                    }));
+
+                                var presetOk = await _adminPresetDeployer.DeployPendingAsync(updatedInstance, presetProgress, CancellationToken.None).ConfigureAwait(false);
+                                if (!presetOk)
+                                {
+                                    _notificationService?.ShowError(
+                                        "Preset Incomplete",
+                                        $"{updatedInstance.Name} was installed, but some mods or the preset emulator could not be installed. Check the log for details.");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "Admin preset deploy failed for {Game}", updatedInstance.Name);
+                            }
+
+                            // Cleared either way: a failed preset must not retry on every later download.
+                            updatedInstance = updatedInstance with { PendingAdminPresetId = null };
+                            if (_instanceManager != null)
+                            {
+                                await _instanceManager.UpdateAsync(updatedInstance, CancellationToken.None).ConfigureAwait(false);
+                            }
+                            finalInstance = updatedInstance;
+                            job.Instance = updatedInstance;
                         }
 
                         // 2. Post-installation shortcuts creation

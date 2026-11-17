@@ -121,13 +121,16 @@ public static class ArchiveExtractor
 
     private static void ExtractArchiveEntries(IArchive archive, string fullDestDir, bool overwrite)
     {
+        // With the separator, "C:\Games\X" does not match a sibling such as "C:\Games\X-evil".
+        var rootPrefix = Path.TrimEndingDirectorySeparator(fullDestDir) + Path.DirectorySeparatorChar;
+
         foreach (var entry in archive.Entries.Where(e => !e.IsDirectory))
         {
             var entryKey = entry.Key ?? Path.GetFileName(fullDestDir);
             var destinationPath = Path.GetFullPath(Path.Combine(fullDestDir, entryKey));
 
             // Path traversal protection
-            if (!destinationPath.StartsWith(fullDestDir, StringComparison.OrdinalIgnoreCase))
+            if (!destinationPath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }

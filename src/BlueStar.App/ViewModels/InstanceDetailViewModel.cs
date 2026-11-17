@@ -2295,6 +2295,8 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
             }
         }
 
+        await LoadInstallModalPresetsAsync().ConfigureAwait(true);
+
         if (HasCurationRecommendation)
         {
             InstallModalTargetVersionMode = "Recommended";
@@ -2355,18 +2357,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
         }
         else if (CuratedRecommendation != null && !string.IsNullOrWhiteSpace(CuratedRecommendation.RecommendedEmulator))
         {
-            if (CuratedRecommendation.RecommendedEmulator.Contains("goldberg", StringComparison.OrdinalIgnoreCase))
-                InstallModalSelectedEmulator = "refix_goldberg";
-            else if (string.Equals(CuratedRecommendation.RecommendedEmulator, "none", StringComparison.OrdinalIgnoreCase))
-                InstallModalSelectedEmulator = "none";
-            else if (CuratedRecommendation.RecommendedEmulator.Contains("onlinefix", StringComparison.OrdinalIgnoreCase) && OnlineGameFixes.Count > 0)
-                InstallModalSelectedEmulator = "gamefix_online";
-            else
-            {
-                InstallModalSelectedEmulator = "refix_valve";
-                // The recommended Online-Fix may still be on its way from DepotBox
-                _switchModalToFixWhenLoaded = CuratedRecommendation.RecommendedEmulator.Contains("onlinefix", StringComparison.OrdinalIgnoreCase);
-            }
+            SelectEmulatorForRecommendation(CuratedRecommendation);
         }
         else if (RecommendedEmulatorOption != null)
         {
@@ -2556,13 +2547,15 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
         string? targetBuildId = null;
         bool isBuildPinned = false;
         bool disableUpdates = false;
+        string? pendingPresetId = null;
         var manifestMap = new Dictionary<uint, ulong>(Instance.InstalledManifestMap ?? new Dictionary<uint, ulong>());
 
         if (IsInstallModalVersionRecommended && CuratedRecommendation != null)
         {
             var rec = CuratedRecommendation;
             targetBranch = rec.RecommendedBranch ?? "public";
-            targetBuildId = rec.RecommendedBuildId;
+            targetBuildId = string.IsNullOrWhiteSpace(rec.RecommendedBuildId) ? null : rec.RecommendedBuildId;
+            pendingPresetId = rec.HasPresetExtras ? rec.PresetId : null;
             isBuildPinned = true;
             disableUpdates = true;
 
@@ -2710,6 +2703,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
             PendingRedeployEmulatorId = isSpecificFix ? null : emulatorId,
             PendingRedeployGameFixId = fixLayerIds.Count > 0 ? fixLayerIds[0] : null,
             PendingRedeployFixLayerIds = fixLayerIds,
+            PendingAdminPresetId = pendingPresetId,
             EmulatorEnabled = enableEmulator,
             EmulatorId = emulatorId,
             InstalledEmulatorVersion = installedEmulatorVersion,
@@ -2839,6 +2833,65 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
     private readonly IManifestCacheService? _manifestCacheService;
     private readonly ICacheService? _cacheService;
     private readonly IRecommendationProvider? _recommendationProvider;
+    private readonly IAdminCatalogService? _adminCatalog;
+
+    /// <summary>The admin's install presets for this game, shown as recommended versions in the install modal.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasMultipleInstallModalPresets))]
+    private ObservableCollection<AdminInstallPreset> _installModalPresets = [];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(InstallModalPresetExtrasText))]
+    [NotifyPropertyChangedFor(nameof(HasInstallModalPresetExtras))]
+    private AdminInstallPreset? _selectedInstallModalPreset;
+
+    public bool HasMultipleInstallModalPresets => InstallModalPresets.Count > 1;
+
+    public bool HasInstallModalPresetExtras => !string.IsNullOrEmpty(InstallModalPresetExtrasText);
+
+    /// <summary>What the preset adds on top of the build: its custom emulator and mods.</summary>
+    public string InstallModalPresetExtrasText
+    {
+        get
+        {
+            var p = SelectedInstallModalPreset;
+            if (p == null) return string.Empty;
+            var parts = new List<string>();
+            if (p.Emulator.Type == AdminEmulatorType.Custom) parts.Add(p.Emulator.Name ?? "Custom emulator");
+            if (p.Mods.Count > 0) parts.Add(string.Join(", ", p.Mods.Select(m => m.Name)));
+            return parts.Count == 0
+                ? string.Empty
+                : string.Format(GetString("String_InstallModalPresetIncludesFormat", "Includes: {0}"), string.Join(" · ", parts));
+        }
+    }
+
+    partial void OnSelectedInstallModalPresetChanged(AdminInstallPreset? value)
+    {
+        if (value == null || Instance == null) return;
+        CuratedRecommendation = value.ToRecommendation(Instance.AppId);
+        if (IsInstallModalOpen && Instance.Status == InstanceStatus.NotInstalled)
+        {
+            SelectEmulatorForRecommendation(CuratedRecommendation);
+            NotifyEmulatorSelectionChanged();
+        }
+    }
+
+    /// <summary>Loads the admin presets for the modal; the first one becomes the recommendation.</summary>
+    private async Task LoadInstallModalPresetsAsync()
+    {
+        if (_adminCatalog == null || Instance == null || Instance.AppId == 0) return;
+        try
+        {
+            var presets = await _adminCatalog.GetPresetsAsync(Instance.AppId, _cts.Token).ConfigureAwait(true);
+            InstallModalPresets = new ObservableCollection<AdminInstallPreset>(presets);
+            var keep = presets.FirstOrDefault(p => p.Id == SelectedInstallModalPreset?.Id);
+            SelectedInstallModalPreset = keep ?? presets.FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Admin presets unavailable for {AppId}", Instance.AppId);
+        }
+    }
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, InstanceSessionVerificationState> _verifiedInstancesThisSession = new();
 
@@ -2891,8 +2944,10 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
         IWorkshopModFetcher? workshopModFetcher = null,
         IThunderstoreService? thunderstoreService = null,
         ICurseForgeService? curseForgeService = null,
-        INexusModsService? nexusModsService = null)
+        INexusModsService? nexusModsService = null,
+        IAdminCatalogService? adminCatalog = null)
     {
+        _adminCatalog = adminCatalog;
         ModsTab = new ModsTabViewModel(
             modInstallPipeline,
             modManagerRegistry,
@@ -5192,6 +5247,24 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
     public string CuratedPinnedCountText => CuratedRecommendation == null
         ? "0"
         : CuratedRecommendation.PinnedManifests.Count.ToString();
+
+    private void SelectEmulatorForRecommendation(CurationRecommendation rec)
+    {
+        var emulator = rec.RecommendedEmulator ?? "none";
+        _switchModalToFixWhenLoaded = false;
+        if (emulator.Contains("goldberg", StringComparison.OrdinalIgnoreCase))
+            InstallModalSelectedEmulator = "refix_goldberg";
+        else if (string.Equals(emulator, "none", StringComparison.OrdinalIgnoreCase))
+            InstallModalSelectedEmulator = "none";
+        else if (emulator.Contains("onlinefix", StringComparison.OrdinalIgnoreCase) && OnlineGameFixes.Count > 0)
+            InstallModalSelectedEmulator = "gamefix_online";
+        else
+        {
+            InstallModalSelectedEmulator = "refix_valve";
+            // The recommended Online-Fix may still be on its way from DepotBox
+            _switchModalToFixWhenLoaded = emulator.Contains("onlinefix", StringComparison.OrdinalIgnoreCase);
+        }
+    }
 
     /// <summary>
     /// Loads the curated recommendation for this AppID, if any provider has one.

@@ -332,7 +332,21 @@ public partial class App : Application
 
         // Provider-Agnostic Catalog, Curation, Builds & Planner
         services.AddSingleton<IGameCatalogProvider, BlueStar.Infrastructure.Providers.Catalog.SteamStoreCatalogProvider>();
-        services.AddSingleton<IRecommendationProvider, BlueStar.Infrastructure.Providers.Curation.CommunityCurationProvider>();
+        // Admin catalog (Explore additions, hidden games, install presets) from the admin panel on GitHub Pages.
+        // Singletons built from the factory: a typed client would be transient and lose the loaded catalog.
+        services.AddHttpClient("bluestar-admin", client => client.Timeout = TimeSpan.FromMinutes(30));
+        services.AddSingleton<IAdminCatalogService>(sp => new BlueStar.Infrastructure.Admin.AdminCatalogService(
+            sp.GetRequiredService<System.Net.Http.IHttpClientFactory>().CreateClient("bluestar-admin"),
+            sp.GetRequiredService<ILogger<BlueStar.Infrastructure.Admin.AdminCatalogService>>()));
+        services.AddSingleton<IAdminPresetDeployer>(sp => new BlueStar.Infrastructure.Admin.AdminPresetDeployer(
+            sp.GetRequiredService<System.Net.Http.IHttpClientFactory>().CreateClient("bluestar-admin"),
+            sp.GetRequiredService<IAdminCatalogService>(),
+            sp.GetRequiredService<ILogger<BlueStar.Infrastructure.Admin.AdminPresetDeployer>>(),
+            sp.GetService<IModManagerRegistry>()));
+        services.AddSingleton<BlueStar.Infrastructure.Providers.Curation.CommunityCurationProvider>();
+        services.AddSingleton<IRecommendationProvider>(sp => new BlueStar.Infrastructure.Admin.AdminRecommendationProvider(
+            sp.GetRequiredService<IAdminCatalogService>(),
+            sp.GetRequiredService<BlueStar.Infrastructure.Providers.Curation.CommunityCurationProvider>()));
         services.AddSingleton<IBuildResolver>(sp =>
         {
             var steamClient = sp.GetRequiredService<SteamStoreApiClient>();

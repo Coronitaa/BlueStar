@@ -54,4 +54,14 @@ public record CurationRecommendation
     /// Gets the source of the recommendation ("CuratedDatabase", "CommunityVotes", "SteamPublicLatest").
     /// </summary>
     public string Source { get; init; } = "CuratedDatabase";
+
+    /// <summary>
+    /// Gets the admin preset this recommendation came from, or null for community curation.
+    /// </summary>
+    public string? PresetId { get; init; }
+
+    /// <summary>
+    /// Gets whether the preset also brings mods or a custom emulator, deployed after the download.
+    /// </summary>
+    public bool HasPresetExtras { get; init; }
 }

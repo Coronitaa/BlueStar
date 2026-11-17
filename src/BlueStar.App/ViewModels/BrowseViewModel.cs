@@ -39,6 +39,56 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
     private readonly EventHandler? _settingsChangedHandler;
 
     private readonly object _resultsLock = new();
+
+    private readonly IAdminCatalogService? _adminCatalog;
+
+    /// <summary>AppIds the admin hid from Explore.</summary>
+    private HashSet<uint> _adminHidden = [];
+
+    /// <summary>Games the admin added to Explore, built once per catalog so the cards keep their identity.</summary>
+    private List<SearchResult> _adminGames = [];
+
+    private async Task LoadAdminCatalogAsync()
+    {
+        try
+        {
+            var catalog = await _adminCatalog!.GetAsync().ConfigureAwait(false);
+            _adminHidden = catalog.Games.Where(g => g.Hidden).Select(g => g.AppId).ToHashSet();
+            _adminGames = catalog.Games
+                .Where(g => !g.Hidden && !string.IsNullOrWhiteSpace(g.Name))
+                .Select(g => new SearchResult
+                {
+                    AppId = g.AppId,
+                    Name = g.Name,
+                    HeaderImageUrl = g.HeaderImageUrl
+                        ?? $"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{g.AppId}/header.jpg"
+                })
+                .ToList();
+            if (_adminHidden.Count > 0 || _adminGames.Count > 0) RebuildVisible();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Admin catalog unavailable for Explore");
+        }
+    }
+
+    /// <summary>
+    /// The admin's games go first in the plain catalog view, and in a search when their name matches:
+    /// some of them (delisted titles) are not in Steam's search at all.
+    /// </summary>
+    private List<SearchResult> AdminGamesFor(IReadOnlyCollection<SearchResult> already)
+    {
+        if (_adminGames.Count == 0 || ActiveFilters.Count > 0) return [];
+        var query = SearchQuery?.Trim() ?? string.Empty;
+        var present = already.Select(r => r.AppId).ToHashSet();
+        return _adminGames
+            .Where(g => !present.Contains(g.AppId))
+            .Where(g => query.Length == 0
+                || g.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+                || g.AppId.ToString(System.Globalization.CultureInfo.InvariantCulture) == query)
+            .ToList();
+    }
+
     private readonly object _activeFiltersLock = new();
 
     [ObservableProperty]
@@ -292,8 +342,11 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         ICacheService? cache = null,
         ISearchPipeline? searchPipeline = null,
         ILocalCatalogRepository? localRepo = null,
-        bool autoSearch = true)
+        bool autoSearch = true,
+        IAdminCatalogService? adminCatalog = null)
     {
+        _adminCatalog = adminCatalog;
+        if (adminCatalog != null) _ = LoadAdminCatalogAsync();
         _apiClient = apiClient;
         _instanceManager = instanceManager;
         _archiveParser = archiveParser;
@@ -1328,7 +1381,8 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
             ExactMatchCount = 0;
             HasMoreResults = false;
             RebuildVisible();
-            SearchState = SearchState.Empty;
+            // An AppID Steam does not list can still be one of the admin's games.
+            SearchState = Results.Count > 0 ? SearchState.ShowingResults : SearchState.Empty;
         }
     }
 
@@ -1693,6 +1747,9 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
 
         HiddenByContentFilters = Math.Max(_fetched.Count - visible.Count, _pipelineHiddenCount);
 
+        var pinned = AdminGamesFor(visible);
+        if (pinned.Count > 0) visible = [.. pinned, .. visible];
+
         SyncCollection(Results, visible);
     }
 
@@ -1752,6 +1809,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
 
         if (!allowNsfw && item.IsNsfw) return false;
         if (!allowDrm && item.HasDrm) return false;
+        if (_adminHidden.Contains(item.AppId)) return false;
 
         var content = FilterGroups.FirstOrDefault(g => g.Key == "content");
         var rating = FilterGroups.FirstOrDefault(g => g.Key == "rating");
