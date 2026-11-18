@@ -103,7 +103,7 @@ public sealed class AppSettingsService
                 return envUrl.Trim().TrimEnd('/');
             }
 
-            return string.IsNullOrWhiteSpace(_current.DefaultApiUrl) ? "https://depotbox.org" : _current.DefaultApiUrl;
+            return string.IsNullOrWhiteSpace(_current.DefaultApiUrl) ? "https://depotbox.lol" : _current.DefaultApiUrl;
         }
     }
 
@@ -233,7 +233,7 @@ public sealed class AppSettingsService
 
     public async Task SetDefaultApiUrlAsync(string url)
     {
-        _current = _current with { DefaultApiUrl = string.IsNullOrWhiteSpace(url) ? "https://depotbox.org" : url.Trim().TrimEnd('/') };
+        _current = _current with { DefaultApiUrl = string.IsNullOrWhiteSpace(url) ? "https://depotbox.lol" : url.Trim().TrimEnd('/') };
         await SaveAsync().ConfigureAwait(false);
     }
 
@@ -481,7 +481,7 @@ public sealed class AppSettingsService
         public bool DefaultExploreSortDescending { get; init; } = true;
     public string? DefaultExploreStoreList { get; init; } = "popularnew";
 
-    public string? DefaultApiUrl { get; init; } = "https://depotbox.org";
+    public string? DefaultApiUrl { get; init; } = "https://depotbox.lol";
     public string? DefaultApiKey { get; init; } = "YOUR-API-KEY";
     public bool HideForceDlcWarning { get; init; } = false;
     public int InstancesColumnCount { get; init; } = 3;

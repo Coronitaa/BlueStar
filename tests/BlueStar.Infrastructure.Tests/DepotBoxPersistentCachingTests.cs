@@ -82,7 +82,7 @@ public class DepotBoxPersistentCachingTests : IDisposable
     public async Task GetManifestsAsync_UsesCacheOnSecondCall_AndBypassesWithForceRefresh()
     {
         var handler = new TestManifestsHandler();
-        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://depotbox.org") };
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://depotbox.lol") };
         var authMock = new Mock<IDepotBoxAuthService>();
         authMock.Setup(a => a.GetEffectiveApiKeyAsync(It.IsAny<CancellationToken>())).ReturnsAsync("test-key");
 
@@ -110,7 +110,7 @@ public class DepotBoxPersistentCachingTests : IDisposable
     public async Task InvalidateAppCache_ClearsCache_ForcesNextCallToHitHttp()
     {
         var handler = new TestManifestsHandler();
-        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://depotbox.org") };
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://depotbox.lol") };
         var authMock = new Mock<IDepotBoxAuthService>();
         authMock.Setup(a => a.GetEffectiveApiKeyAsync(It.IsAny<CancellationToken>())).ReturnsAsync("test-key");
 
@@ -136,7 +136,7 @@ public class DepotBoxPersistentCachingTests : IDisposable
     public async Task CheckAvailabilityAsync_UsesCacheOnSecondCall()
     {
         var handler = new TestManifestsHandler();
-        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://depotbox.org") };
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://depotbox.lol") };
         var authMock = new Mock<IDepotBoxAuthService>();
         authMock.Setup(a => a.GetEffectiveApiKeyAsync(It.IsAny<CancellationToken>())).ReturnsAsync("test-key");
 

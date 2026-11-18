@@ -9549,7 +9549,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo($"https://cs.rin.ru/forum/search.php?keywords={query}&terms=all&author=&sc=1&sf=all&sk=t&sd=d&sr=topics&st=0&ch=300&t=0&submit=Search") { UseShellExecute = true });
                     break;
                 case "depotbox":
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://depotbox.org") { UseShellExecute = true });
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://depotbox.lol") { UseShellExecute = true });
                     break;
                 case "manifest_dir":
                     var manifestDir = Path.Combine(

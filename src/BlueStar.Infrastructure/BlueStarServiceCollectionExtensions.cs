@@ -58,7 +58,7 @@ public static class BlueStarServiceCollectionExtensions
         // HTTP clients
         services.AddHttpClient<IDepotBoxApiClient, DepotBoxApiClient>(client =>
         {
-            client.BaseAddress = new Uri("https://depotbox.org");
+            client.BaseAddress = new Uri("https://depotbox.lol");
             client.Timeout = TimeSpan.FromMinutes(15); // ZIPs are built on-the-fly
             client.DefaultRequestHeaders.UserAgent.ParseAdd("BlueStar/1.2.3");
         });

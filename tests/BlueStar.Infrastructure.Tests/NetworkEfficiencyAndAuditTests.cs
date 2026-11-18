@@ -535,7 +535,7 @@ public class NetworkEfficiencyAndAuditTests : IDisposable
         var observer = new NetworkMetricsObserver(logger);
 
         // Act: Log events with sensitive query parameters
-        observer.OnProviderRequest("DepotBox", "https://depotbox.org/api/v1/download?appId=730&token=secret_token_abcdef123456&key=my_password_xyz");
+        observer.OnProviderRequest("DepotBox", "https://depotbox.lol/api/v1/download?appId=730&token=secret_token_abcdef123456&key=my_password_xyz");
         observer.RecordEvent("ManifestHub", "https://manifesthub.uk/api/manifest?auth=bearer_99999&access_token=secret_val", "acquire", false, false, 200, 45);
 
         // Assert: Redaction verification
@@ -785,7 +785,7 @@ public class NetworkEfficiencyAndAuditTests : IDisposable
             return new HttpResponseMessage(HttpStatusCode.NotFound);
         });
 
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://depotbox.org") };
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://depotbox.lol") };
         var authService = new Mock<IDepotBoxAuthService>();
         var metrics = new NetworkMetricsObserver();
         var coordinator = new RequestCoordinator(metrics);
@@ -960,7 +960,7 @@ public class NetworkEfficiencyAndAuditTests : IDisposable
                     Content = new StringContent(@"{""730"":{""success"":true,""data"":{""steam_appid"":730,""name"":""CS2"",""dlc"":[101]}}}", Encoding.UTF8, "application/json")
                 };
             }
-            if (uri.Contains("depotbox.org/api/manifests"))
+            if (uri.Contains("depotbox.lol/api/manifests"))
             {
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -978,7 +978,7 @@ public class NetworkEfficiencyAndAuditTests : IDisposable
             return new HttpResponseMessage(HttpStatusCode.NotFound);
         });
 
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://depotbox.org") };
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://depotbox.lol") };
         var authService = new Mock<IDepotBoxAuthService>();
         var updateService = new BlueStar.Infrastructure.Update.GitHubUpdateService(
             httpClient,
@@ -1073,7 +1073,7 @@ public class NetworkEfficiencyAndAuditTests : IDisposable
             var uri = req.RequestUri?.ToString() ?? "";
             await Task.Delay(30, ct); // Concurrency window
 
-            if (uri.Contains("depotbox.org/api/manifests"))
+            if (uri.Contains("depotbox.lol/api/manifests"))
             {
                 Interlocked.Increment(ref depotBoxHttpCalls);
                 return new HttpResponseMessage(HttpStatusCode.OK)
@@ -1101,7 +1101,7 @@ public class NetworkEfficiencyAndAuditTests : IDisposable
             return new HttpResponseMessage(HttpStatusCode.NotFound);
         });
 
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://depotbox.org") };
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://depotbox.lol") };
         var authService = new Mock<IDepotBoxAuthService>();
         var metrics = new NetworkMetricsObserver();
         var coordinator = new RequestCoordinator(metrics);
@@ -1224,7 +1224,7 @@ public class NetworkEfficiencyAndAuditTests : IDisposable
             }
 
             // 6. DepotBox Manifests
-            if (uri.Contains("depotbox.org/api/manifests"))
+            if (uri.Contains("depotbox.lol/api/manifests"))
             {
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
@@ -1252,7 +1252,7 @@ public class NetworkEfficiencyAndAuditTests : IDisposable
             return new HttpResponseMessage(HttpStatusCode.NotFound);
         });
 
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://depotbox.org") };
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://depotbox.lol") };
         var authService = new Mock<IDepotBoxAuthService>();
         var archiveParser = new Mock<IDepotBoxArchiveParser>();
 

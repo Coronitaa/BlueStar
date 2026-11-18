@@ -51,7 +51,7 @@ BlueStar communicates with the following **third-party services** when you use s
 | Service | When Used | Data Sent | Purpose |
 |---------|-----------|-----------|---------|
 | **Steam CDN / Steam API** | When downloading game depots or viewing store pages | Steam account session tokens (if logged in), requested depot/manifest IDs | Downloading game content and metadata |
-| **DepotBox API** (`depotbox.org`) | When browsing catalog or checking game availability | Search queries, API key | Game availability lookups |
+| **DepotBox API** (`depotbox.lol`) | When browsing catalog or checking game availability | Search queries, API key | Game availability lookups |
 | **GitHub API** (`api.github.com`) | When checking for application updates | Application version number | Update notifications |
 | **Steam Store** (via WebView2) | When viewing embedded store pages | Standard web browsing data (cookies, user agent) | Displaying Steam store content inline |
 | **DigiCert Timestamp Server** | During build process only (not at runtime) | File hash for timestamping | Code signing timestamp verification |
@@ -116,7 +116,7 @@ When you use features that connect to third-party services, those services' priv
 
 - **Steam / Valve:** [store.steampowered.com/privacy_agreement](https://store.steampowered.com/privacy_agreement/)
 - **GitHub:** [docs.github.com/en/site-policy/privacy-policies](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement)
-- **DepotBox:** [depotbox.org](https://depotbox.org)
+- **DepotBox:** [depotbox.lol](https://depotbox.lol)
 
 ---
 

@@ -125,10 +125,10 @@ public partial class SettingsViewModel : ObservableObject, ISharedViewModel
     }
 
     [ObservableProperty]
-    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.6.2";
+    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.6.3";
 
     [ObservableProperty]
-    private string _defaultApiUrl = "https://depotbox.org";
+    private string _defaultApiUrl = "https://depotbox.lol";
 
     [ObservableProperty]
     private string _defaultApiKey = string.Empty;

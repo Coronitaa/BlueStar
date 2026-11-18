@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 namespace BlueStar.Infrastructure.DepotBox;
 
 /// <summary>
-/// HTTP client for the DepotBox REST API (depotbox.org).
+/// HTTP client for the DepotBox REST API (depotbox.lol).
 /// </summary>
 public sealed class DepotBoxApiClient : IDepotBoxApiClient
 {
@@ -818,7 +818,7 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
         {
             var redirectUri = response.Headers.Location.IsAbsoluteUri
                 ? response.Headers.Location
-                : new Uri(new Uri(_appSettings?.DefaultApiUrl ?? "https://depotbox.org"), response.Headers.Location);
+                : new Uri(new Uri(_appSettings?.DefaultApiUrl ?? "https://depotbox.lol"), response.Headers.Location);
 
             response.Dispose();
             using var redirectReq = new HttpRequestMessage(HttpMethod.Get, redirectUri);
@@ -1674,7 +1674,7 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
 
     private async Task<HttpRequestMessage> CreateRequestAsync(HttpMethod method, string endpoint, CancellationToken ct)
     {
-        var baseUrl = _appSettings?.DefaultApiUrl ?? "https://depotbox.org";
+        var baseUrl = _appSettings?.DefaultApiUrl ?? "https://depotbox.lol";
         var uri = new Uri(new Uri(baseUrl.TrimEnd('/') + "/"), endpoint.TrimStart('/'));
         var request = new HttpRequestMessage(method, uri);
 

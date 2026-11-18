@@ -89,7 +89,7 @@ public class BundledSecretsTests : IDisposable
         settings.GetBuiltInModApiKey(ModApiProvider.CurseForge).Should().Be("builtin-cf");
         settings.GetBuiltInModApiBaseUrl(ModApiProvider.ModIo).Should().Be("https://u-1.modapi.io/v1");
 
-        await settings.SetDefaultApiUrlAsync("https://depotbox.org");
+        await settings.SetDefaultApiUrlAsync("https://depotbox.lol");
 
         File.ReadAllText(_settingsPath).Should().NotContain("builtin-depotbox-key").And.NotContain("builtin-cf");
     }

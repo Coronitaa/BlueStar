@@ -74,7 +74,7 @@ public class DepotBoxCatalogCachingTests
     public async Task GetFullGameFixesCatalog_CachesResult_AndHitsNetworkOnce()
     {
         var handler = new MockCountingHandler();
-        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://depotbox.org") };
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://depotbox.lol") };
         var authMock = new Mock<IDepotBoxAuthService>();
         authMock.Setup(a => a.GetEffectiveApiKeyAsync(It.IsAny<CancellationToken>())).ReturnsAsync("test-key");
 
@@ -92,7 +92,7 @@ public class DepotBoxCatalogCachingTests
     public async Task GetFullGameFixesCatalog_ConcurrentCalls_SingleFlightOnlyOneRequest()
     {
         var handler = new MockCountingHandler();
-        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://depotbox.org") };
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://depotbox.lol") };
         var authMock = new Mock<IDepotBoxAuthService>();
         authMock.Setup(a => a.GetEffectiveApiKeyAsync(It.IsAny<CancellationToken>())).ReturnsAsync("test-key");
 
@@ -117,7 +117,7 @@ public class DepotBoxCatalogCachingTests
     public async Task GetGameFixesAsync_WhenParamQueryEmpty_FallsBackToCachedCatalogMatching()
     {
         var handler = new MockCountingHandler();
-        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://depotbox.org") };
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://depotbox.lol") };
         var authMock = new Mock<IDepotBoxAuthService>();
         authMock.Setup(a => a.GetEffectiveApiKeyAsync(It.IsAny<CancellationToken>())).ReturnsAsync("test-key");
 

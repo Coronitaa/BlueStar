@@ -14,7 +14,7 @@ $timestampServer = "http://timestamp.digicert.com"
 # ============================================================================
 # 0. Interaccion con el usuario (si se ejecuta en modo interactivo o sin parametros)
 # ============================================================================
-$currentVer = "1.6.2"
+$currentVer = "1.6.3"
 $propsPath = Join-Path $rootDir "Directory.Build.props"
 if (Test-Path $propsPath) {
     $propsContent = [System.IO.File]::ReadAllText($propsPath)
@@ -376,7 +376,7 @@ $releaseSettings = [ordered]@{
     # "system": BlueStar usa el idioma de Windows en el primer inicio (Espanol -> es, resto -> en).
     # El instalador lo reemplaza por el idioma elegido en el asistente.
     language = "system"
-    defaultApiUrl = "https://depotbox.org"
+    defaultApiUrl = "https://depotbox.lol"
     deleteDepotsAfterInstall = $true
     showNsfwContent = $false
     showDrmContent = $true

@@ -13,7 +13,7 @@ namespace BlueStar.App.ViewModels;
 public partial class AboutViewModel : ObservableObject, ISharedViewModel
 {
     [ObservableProperty]
-    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.6.2";
+    private string _appVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.6.3";
 
     [ObservableProperty]
     private ObservableCollection<ProjectCredit> _projects = [];
@@ -80,8 +80,8 @@ public partial class AboutViewModel : ObservableObject, ISharedViewModel
                 Description = "Manifest archive index, game availability status, and metadata REST API service.",
                 Author = "DepotBox Team",
                 License = "Web Service",
-                GitHubUrl = "https://depotbox.org",
-                WebsiteUrl = "https://depotbox.org",
+                GitHubUrl = "https://depotbox.lol",
+                WebsiteUrl = "https://depotbox.lol",
                 CategoryBadge = "Service",
                 IsCore = true
             },

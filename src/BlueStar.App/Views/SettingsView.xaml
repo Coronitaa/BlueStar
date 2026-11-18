@@ -126,7 +126,7 @@
                                                         <Button Grid.Column="1" Content="{DynamicResource String_GetApiKey}"
                                                                 Style="{StaticResource GhostButton}"
                                                                 Command="{Binding OpenUrlCommand}"
-                                                                CommandParameter="https://depotbox.org/pricing"/>
+                                                                CommandParameter="https://depotbox.lol/pricing"/>
                                                     </Grid>
                                                     <TextBlock Text="{DynamicResource String_ApiKeyHelp}"
                                                                Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,8"/>
