@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace BlueStar.Core.Models;
 
@@ -64,4 +65,20 @@ public record CurationRecommendation
     /// Gets whether the preset also brings mods or a custom emulator, deployed after the download.
     /// </summary>
     public bool HasPresetExtras { get; init; }
+
+    /// <summary>
+    /// The depots to download for this recommendation, pinned to its manifests. An admin preset is a whole
+    /// build: base-game depots it does not pin are left out, so an old build is not mixed with current
+    /// content (CS:GO 2018 has no depots 735-738). DLC depots and community curation keep the old behaviour.
+    /// </summary>
+    public IReadOnlyList<DepotInfo> SelectDepots(IEnumerable<DepotInfo> depots, IReadOnlySet<uint> baseGameDepotIds)
+    {
+        var exclusive = PresetId != null && PinnedManifests.Count > 0;
+        return depots
+            .Where(d => !exclusive || PinnedManifests.ContainsKey(d.DepotId) || !baseGameDepotIds.Contains(d.DepotId))
+            .Select(d => PinnedManifests.TryGetValue(d.DepotId, out var pinned) && pinned > 0
+                ? d with { ManifestId = pinned, IsDownloaded = false }
+                : d)
+            .ToList();
+    }
 }

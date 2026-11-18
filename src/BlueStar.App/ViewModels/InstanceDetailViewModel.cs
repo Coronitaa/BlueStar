@@ -2559,11 +2559,9 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
             isBuildPinned = true;
             disableUpdates = true;
 
-            // Pin base game and DLC depots to the community-verified manifests
-            distinctDepots = distinctDepots.Select(d =>
-                rec.PinnedManifests.TryGetValue(d.DepotId, out var pinned) && pinned > 0
-                    ? d with { ManifestId = pinned, IsDownloaded = false }
-                    : d).ToList();
+            // Pin base game and DLC depots to the recommended manifests (an admin preset installs only its depots)
+            var baseDepotIds = (Instance.Depots ?? []).Select(d => d.DepotId).ToHashSet();
+            distinctDepots = rec.SelectDepots(distinctDepots, baseDepotIds).ToList();
 
             foreach (var kv in rec.PinnedManifests)
             {
