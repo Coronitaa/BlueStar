@@ -475,7 +475,7 @@ New-Item -ItemType Directory -Force -Path $fixedCacheDir | Out-Null
 Get-MicrosoftFile $webView2FixedUrl $fixedCab
 if (-not (Test-Path -LiteralPath (Join-Path $fixedRuntimeDir "msedgewebview2.exe"))) {
     New-Item -ItemType Directory -Force -Path (Join-Path $fixedCacheDir "x64") | Out-Null
-    & expand.exe -F:* $fixedCab (Join-Path $fixedCacheDir "x64") | Out-Null
+    & "$env:SystemRoot\System32\expand.exe" -F:* $fixedCab (Join-Path $fixedCacheDir "x64") | Out-Null
     if (-not (Test-Path -LiteralPath (Join-Path $fixedRuntimeDir "msedgewebview2.exe"))) { throw "No se pudo extraer WebView2 Fixed Version" }
 }
 Write-Host "  [OK] WebView2 Fixed Version $webView2FixedVersion listo para el Portable" -ForegroundColor Gray
