@@ -21,7 +21,8 @@ param(
     [string]$AppIdVoice = "",
     [string]$ArbitrationMode = "auto",
     [string]$DefaultRegion = "sa",
-    [string]$OverlayMode = ""
+    [string]$OverlayMode = "",
+    [string]$PortableRuntime = ""
 )
 
 # Fallback to environment variables if parameters were omitted or empty
@@ -43,6 +44,7 @@ if (-not $CustomBroadcasts -and $env:REFIX_CUSTOM_BROADCASTS) { $CustomBroadcast
 if (-not $PhotonAppId -and $env:REFIX_PHOTON_APPID) { $PhotonAppId = $env:REFIX_PHOTON_APPID }
 if (-not $PhotonRegion -and $env:REFIX_PHOTON_REGION) { $PhotonRegion = $env:REFIX_PHOTON_REGION }
 if (-not $OverlayMode -and $env:REFIX_OVERLAY_MODE) { $OverlayMode = $env:REFIX_OVERLAY_MODE }
+if (-not $PortableRuntime -and $env:REFIX_PORTABLE_RUNTIME) { $PortableRuntime = $env:REFIX_PORTABLE_RUNTIME }
 
 # Free-to-play games (Brawlhalla) are in every Steam library and their own backend checks a Steam ticket for the
 # real AppID, so ReFix Online keeps the real AppID instead of masking it as 480. Offline lookup keeps 480.
@@ -117,10 +119,21 @@ function Get-Or-Generate-Identity {
     $finalName = ""
     $autoGenerateSteamId = $true
 
-    # Check if ReFix.ini exists and already has persistent identity configured
-    if (Test-Path -LiteralPath $ConfigPath) {
-        $iniLines = Get-Content -LiteralPath $ConfigPath -ErrorAction SilentlyContinue
+    # Identity source: the game's ReFix.ini, or on a first deploy the ReFix.ini of the package AutoDeploy runs from
+    # (bin\ReFix.ini), so IdentityMode = fixed + SteamId set once there applies to every new folder (issue #30).
+    $identitySource = $ConfigPath
+    if (-not (Test-Path -LiteralPath $identitySource) -and $BinDir) {
+        $packageIni = Join-Path $BinDir "ReFix.ini"
+        if (Test-Path -LiteralPath $packageIni) { $identitySource = $packageIni }
+    }
+    if (Test-Path -LiteralPath $identitySource) {
+        $iniLines = Get-Content -LiteralPath $identitySource -ErrorAction SilentlyContinue
+        $identityMode = ""
         foreach ($line in $iniLines) {
+            # IdentityMode is the documented switch; AutoGenerateSteamId is kept for older ReFix.ini files.
+            if ($line -match "^\s*IdentityMode\s*=\s*(auto|fixed)\s*(;.*)?$") {
+                $identityMode = $Matches[1].ToLowerInvariant()
+            }
             if ($line -match "^\s*AutoGenerateSteamId\s*=\s*(false|0)\s*$") {
                 $autoGenerateSteamId = $false
             }
@@ -137,6 +150,8 @@ function Get-Or-Generate-Identity {
                 }
             }
         }
+        if ($identityMode -eq "fixed") { $autoGenerateSteamId = $false }
+        elseif ($identityMode -eq "auto") { $autoGenerateSteamId = $true }
     }
 
     # If an explicit SteamID was provided during deployment, prioritize it
@@ -310,7 +325,11 @@ function Generate-UNAE-ReFixIni {
     $arbMode       = & $Pick "Network" "Mode"         $P.ArbitrationMode
     $defRegion     = & $Pick "Photon" "DefaultRegion" $regionCandidate
     $bypassVal     = if ($P.DLCMode -eq "none") { "false" } else { "true" }
-    $eosMode       = if ($P.OnlineMode -in @("goldberg", "offline", "lan")) { "emulated" } else { "passthrough" }
+    $hasEosOrig    = (Get-ChildItem -LiteralPath $TargetDir -Filter "EOSSDK_original.dll" -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0
+    $eosModeDefault = if ($hasEosOrig) { "passthrough" } elseif ($P.OnlineMode -in @("goldberg", "offline", "lan")) { "emulated" } else { "passthrough" }
+    $eosMode       = & $Pick "EOS" "Mode" $eosModeDefault
+    $eosAuthDefault = if ($eosMode -eq "passthrough") { "true" } elseif ($P.OnlineMode -in @("goldberg", "offline", "lan")) { "false" } else { "true" }
+    $eosAuth       = & $Pick "EOS" "DeviceIdAuth" $eosAuthDefault
     # ReFix decides the Photon backend: a detected Photon stack (PUN2/Realtime/Voice/Fusion) in a
     # no-third-party mode uses the local emulator (ReFixCloud over Steam P2P); otherwise real Photon.
     $photonDefault = if ($P.UsesPhoton -and ($P.OnlineMode -in @("valve","goldberg","offline","lan"))) { "ReFixCloud" } else { "OfficialPhoton" }
@@ -328,7 +347,6 @@ function Generate-UNAE-ReFixIni {
     if ($serverListOverride -ne "true") { $serverListOverride = if ($knowsReal) { "true" } else { "false" } }
     $serverListAppId = & $Pick "ServerBrowser" "ServerListAppId" ""
     if (-not $serverListAppId -or $serverListAppId -eq "480") { $serverListAppId = if ($realId -and $realId -ne "0") { $realId } else { "480" } }
-    $eosAuth       = if ($P.OnlineMode -in @("goldberg", "offline", "lan")) { "false" } else { "true" }
     # Fast-failing cloud TCP (443/80) only helps when there is no internet backend to reach; online it would
     # block EOS sign-in, PlayFab and other official services.
     $fastCloudFailDefault = if ($P.OnlineMode -in @("goldberg", "offline", "lan")) { "true" } else { "false" }
@@ -1151,6 +1169,12 @@ switch ($OnlineMode) {
                         $hostSrc32 = Join-Path $ProductBinDir "x86\refix_steamhost.exe"
                         if (Test-Path -LiteralPath $hostSrc32) {
                             Copy-Item -LiteralPath $hostSrc32 -Destination (Join-Path $dir32 "refix_steamhost.exe") -Force -ErrorAction SilentlyContinue
+                            # Steam online services need a current Valve steam_api.dll (flat networking API); the
+                            # game's own copy can be years older (CS:GO 2018 ships SDK 1.40, which lacks it).
+                            $linkSrc32 = Join-Path $BinDir "valve\steam_api.dll"
+                            if (Test-Path -LiteralPath $linkSrc32) {
+                                Copy-Item -LiteralPath $linkSrc32 -Destination (Join-Path $dir32 "refix_steamlink.dll") -Force -ErrorAction SilentlyContinue
+                            }
                         }
                     } elseif (Test-Path -LiteralPath $goldbergDll32) {
                         Copy-Item -LiteralPath $goldbergDll32 -Destination $steamPath32 -Force -ErrorAction Stop
@@ -2186,7 +2210,17 @@ FixedRegion=$effectiveRegion
     }
 }
 
-# Shortcut helper scripts deployment deactivated (BlueStar launches the game itself)
+# Deploy shortcut helper scripts for Valve mode
+if ($OnlineMode -eq "valve") {
+    $srcPs1 = Join-Path $BinDir "add_steam_shortcut.ps1"
+    $srcBat = Join-Path $BinDir "Install_ReFix_Steam_Shortcut.bat"
+    if (Test-Path -LiteralPath $srcPs1) {
+        Copy-Item -LiteralPath $srcPs1 -Destination (Join-Path $ExeDir "add_steam_shortcut.ps1") -Force -ErrorAction SilentlyContinue
+    }
+    if (Test-Path -LiteralPath $srcBat) {
+        Copy-Item -LiteralPath $srcBat -Destination (Join-Path $ExeDir "Install_ReFix_Steam_Shortcut.bat") -Force -ErrorAction SilentlyContinue
+    }
+}
 
 # ============================================================
 # Step 5: Universal Epic Online Services (EOS) & Redpoint Deployment
@@ -2253,6 +2287,80 @@ if ($eosDirs.Count -gt 0 -and (Test-Path -LiteralPath $eosProxyPath)) {
     }
 } else {
     Write-Host "  [INFO] No Epic Online Services (EOS) libraries detected in game files." -ForegroundColor Gray
+}
+
+# ============================================================
+# Step 5b: Universal EasyAntiCheat (EAC) & winhttp.dll Proxy Deployment
+# ============================================================
+Write-Host "[5b/6] Checking for EasyAntiCheat (EAC) / Anti-Cheat protection..." -ForegroundColor Cyan
+
+$eacDirs = Get-ChildItem -LiteralPath $TargetDir -Filter "*EasyAntiCheat*" -Recurse -Directory -ErrorAction SilentlyContinue
+$eacFiles = Get-ChildItem -LiteralPath $TargetDir -Filter "*EasyAntiCheat*" -Recurse -File -ErrorAction SilentlyContinue
+$eacProtected = Get-ChildItem -LiteralPath $TargetDir -Filter "*start_protected_game*" -Recurse -File -ErrorAction SilentlyContinue
+
+$isEacPresent = (($eacDirs.Count -gt 0) -or ($eacFiles.Count -gt 0) -or ($eacProtected.Count -gt 0))
+
+$winhttpProxy = Join-Path $ProductBinDir "winhttp.dll"
+if (-not (Test-Path -LiteralPath $winhttpProxy)) {
+    $winhttpProxy = Join-Path $BinDir "lan\winhttp.dll"
+}
+if (-not (Test-Path -LiteralPath $winhttpProxy)) {
+    $winhttpProxy = Join-Path $BinDir "winhttp.dll"
+}
+
+if ($isEacPresent) {
+    Write-Host "  [DETECTION] EasyAntiCheat (EAC) detected in game directory." -ForegroundColor Yellow
+    $proxyWinhttpSize = 0
+    if (Test-Path -LiteralPath $winhttpProxy) {
+        $proxyWinhttpSize = (Get-Item -LiteralPath $winhttpProxy).Length
+    }
+
+    # Check if ReFix is already hooked through Steam or EOS SDK
+    $hasNativeHook = ($pluginDirs.Count -gt 0 -or $pluginDirs32.Count -gt 0 -or $eosDirs.Count -gt 0)
+    if ($hasNativeHook) {
+        Write-Host "  [INFO] ReFix is already hooked via Steam / EOS SDK. winhttp.dll proxy is omitted to avoid EAC 0xc000007b conflict." -ForegroundColor Gray
+        # Purge any previously deployed winhttp.dll proxy in ExeDir to prevent EAC from blocking it with 0xc000007b
+        $targetWinhttp = Join-Path $ExeDir "winhttp.dll"
+        $targetWinhttpOrig = Join-Path $ExeDir "winhttp_original.dll"
+        if (Test-Path -LiteralPath $targetWinhttp) {
+            $curWSize = (Get-Item -LiteralPath $targetWinhttp).Length
+            if ($curWSize -eq $proxyWinhttpSize -or (Test-Path -LiteralPath $targetWinhttpOrig)) {
+                Remove-Item -LiteralPath $targetWinhttp -Force -ErrorAction SilentlyContinue
+                if (Test-Path -LiteralPath $targetWinhttpOrig) {
+                    Rename-Item -LiteralPath $targetWinhttpOrig -NewName "winhttp.dll" -Force -ErrorAction SilentlyContinue
+                    Write-Host "  [OK] Restored genuine winhttp.dll in $ExeDir" -ForegroundColor Green
+                } else {
+                    Write-Host "  [OK] Removed redundant winhttp.dll proxy from $ExeDir" -ForegroundColor Green
+                }
+            }
+        }
+    } elseif (Test-Path -LiteralPath $winhttpProxy) {
+        # Directories needing winhttp.dll proxy when no Steam/EOS hook exists:
+        $deployDirs = @($ExeDir)
+        foreach ($pExe in $eacProtected) {
+            if ($deployDirs -notcontains $pExe.DirectoryName) {
+                $deployDirs += $pExe.DirectoryName
+            }
+        }
+
+        foreach ($d in $deployDirs) {
+            $targetWinhttp = Join-Path $d "winhttp.dll"
+            $targetWinhttpOrig = Join-Path $d "winhttp_original.dll"
+
+            if (Test-Path -LiteralPath $targetWinhttp) {
+                $curWSize = (Get-Item -LiteralPath $targetWinhttp).Length
+                if ($curWSize -ne $proxyWinhttpSize -and (-not (Test-Path -LiteralPath $targetWinhttpOrig))) {
+                    Rename-Item -LiteralPath $targetWinhttp -NewName "winhttp_original.dll" -Force
+                    Write-Host "  [OK] Preserved original winhttp.dll -> winhttp_original.dll in $d" -ForegroundColor Green
+                }
+            }
+
+            Copy-Item -LiteralPath $winhttpProxy -Destination $targetWinhttp -Force -ErrorAction Stop
+            Write-Host "  [OK] Deployed ReFix winhttp.dll Anti-Cheat bypass proxy to $d" -ForegroundColor Green
+        }
+    }
+} else {
+    Write-Host "  [INFO] No EasyAntiCheat (EAC) detected. winhttp proxy not required." -ForegroundColor Gray
 }
 
 # ============================================================
@@ -2398,6 +2506,29 @@ function Verify-ReFixDeployment {
         }
     }
 
+    # 5b. Anti-Cheat winhttp.dll verification (only when no native Steam/EOS SDK hook exists)
+    $hasNativeHook = ($pluginDirs.Count -gt 0 -or $pluginDirs32.Count -gt 0 -or $eosDirs.Count -gt 0)
+    $eacCheck = Get-ChildItem -LiteralPath $TargetDir -Filter "*EasyAntiCheat*" -Recurse -File -ErrorAction SilentlyContinue
+    $eacExes = Get-ChildItem -LiteralPath $TargetDir -Filter "*start_protected_game*" -Recurse -File -ErrorAction SilentlyContinue
+    if (($eacCheck.Count -gt 0 -or $eacExes.Count -gt 0) -and (-not $IsX86) -and (-not $hasNativeHook)) {
+        $winhttpPath = Join-Path $ProductBinDir "winhttp.dll"
+        if (-not (Test-Path -LiteralPath $winhttpPath)) { $winhttpPath = Join-Path $BinDir "lan\winhttp.dll" }
+        if (Test-Path -LiteralPath $winhttpPath) {
+            $destWinhttp = Join-Path $ExeDir "winhttp.dll"
+            if (-not (Test-Path -LiteralPath $destWinhttp)) {
+                $errors += "Anti-Cheat proxy winhttp.dll missing in $ExeDir (required for EAC bypass)"
+            } else {
+                $expectedWhSize = (Get-Item -LiteralPath $winhttpPath).Length
+                $whSize = (Get-Item -LiteralPath $destWinhttp).Length
+                if ($whSize -ne $expectedWhSize) {
+                    $errors += "winhttp.dll in $ExeDir size mismatch (Expected $expectedWhSize, got $whSize)"
+                } else {
+                    Write-Host "  [VERIFY OK] winhttp.dll Anti-Cheat bypass proxy verified in $ExeDir ($whSize bytes)" -ForegroundColor Green
+                }
+            }
+        }
+    }
+
     # 6. Goldberg mode specific verification
     if ($OnlineMode -in @("goldberg", "offline", "lan")) {
         $settingsDir = Join-Path $ExeDir "steam_settings"
@@ -2435,6 +2566,13 @@ function Verify-ReFixDeployment {
 # downloaded from the repository, and must match the catalog's SHA-256.
 # ============================================================
 function Install-GameMods {
+    # REFIX_GAME_MODS (set by BlueStar's install presets): unset = the first catalog row that matches the game,
+    # "none" = no mods, otherwise a comma-separated list of mod ids; each listed mod is installed if it matches.
+    $only = $null
+    if ($env:REFIX_GAME_MODS) {
+        if ($env:REFIX_GAME_MODS.Trim() -ieq "none") { Write-Host "  [*] Game mods disabled (REFIX_GAME_MODS=none)" -ForegroundColor DarkGray; return }
+        $only = @($env:REFIX_GAME_MODS -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    }
     $modsUrl = if ($env:REFIX_MODS_URL) { $env:REFIX_MODS_URL } else { "https://raw.githubusercontent.com/Coronitaa/ReFix/main/refix_mods" }
     $localMods = Join-Path (Split-Path -Parent $BinDir) "refix_mods"
     $catalogPath = Join-Path $localMods "catalog.tsv"
@@ -2451,6 +2589,7 @@ function Install-GameMods {
         $c = $line -split "`t"
         if ($c.Count -lt 7) { continue }
         $id, $product, $exe, $matchFile, $matchText, $file, $sum = $c[0..6]
+        if ($only -and $only -notcontains $id) { continue }
         if ($product -ne "any" -and $product -ne $productName) { continue }
         $exeItem = Get-ChildItem -LiteralPath $TargetDir -Filter $exe -Recurse -Depth 2 -File -ErrorAction SilentlyContinue | Select-Object -First 1
         if (-not $exeItem) { continue }
@@ -2479,8 +2618,72 @@ function Install-GameMods {
         $marker = Join-Path $dest ".refix_installed"
         if (-not ((Test-Path -LiteralPath $marker) -and (Get-Content -LiteralPath $marker) -contains $file)) { Add-Content -LiteralPath $marker -Value $file }
         Write-Host "  [OK] Installed the $id mod in $dest" -ForegroundColor Green
-        return
+        if (-not $only) { return }
     }
+}
+
+# ============================================================
+# Portable DirectX runtime: a game copied to a clean PC (no Steam, no DirectX June 2010 runtime) fails silently when its
+# binaries import d3dx9_43.dll & co. Steam would run the game's directx_installer on first launch; instead extract just
+# the referenced legacy DLLs from the redistributable cabs the game itself ships, next to the exe (the application
+# folder is always searched first). Nothing is downloaded or installed system-wide. Only files that were absent are
+# extracted, and they are listed in <exe folder>\.refix_installed so Uninstall_ReFix.bat removes exactly those.
+# ============================================================
+function Install-BundledDirectXRuntime {
+    param([string]$GameDir, [string]$ExeFolder, [bool]$IsX86)
+    $arch = if ($IsX86) { "x86" } else { "x64" }
+    $cabs = @(Get-ChildItem -LiteralPath $GameDir -Filter "*.cab" -Recurse -Depth 4 -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -like "*_$arch.cab" })
+    if ($cabs.Count -eq 0) { return }
+    # Cheap case-insensitive scan: import and delay-import tables hold the DLL name as plain ASCII, so a regex over the
+    # file finds them (it also catches LoadLibrary("d3dx9_43.dll") strings, which need the same DLL).
+    $rx = [regex]'(?i)\b(d3dx9_\d\d|d3dx10_\d\d|d3dx11_\d\d|d3dcompiler_(?:3\d|4[0-6])|xinput1_[1-3]|xaudio2_[0-7]|x3daudio1_[0-7]|xapofx1_[0-5])\.dll'
+    # dll -> folders of the binaries that reference it. Engines often load their DLLs with an altered search path
+    # (e.g. Source loads bin\shaderapidx9.dll so only bin\ and System32 are searched), so the runtime DLL must sit next
+    # to each referencing binary; next to the exe alone is not enough.
+    $needed = @{}
+    $cabDirs = @($cabs | ForEach-Object { $_.DirectoryName } | Sort-Object -Unique)  # the redist installer itself is not the game
+    $bins = Get-ChildItem -LiteralPath $ExeFolder -Recurse -Depth 3 -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Extension -in '.exe', '.dll' -and $_.Length -lt 100MB -and $cabDirs -notcontains $_.DirectoryName -and
+                       $_.Name -notmatch '^(d3dx|d3dcompiler_|xinput1_|xaudio2_|x3daudio1_|xapofx1_)' }
+    foreach ($b in $bins) {
+        try { $text = [Text.Encoding]::GetEncoding(28591).GetString([IO.File]::ReadAllBytes($b.FullName)) } catch { continue }
+        foreach ($m in $rx.Matches($text)) {
+            $dll = $m.Groups[1].Value.ToLowerInvariant() + ".dll"
+            if (-not $needed.ContainsKey($dll)) { $needed[$dll] = @{} }
+            $needed[$dll][$b.DirectoryName] = $true
+        }
+    }
+    foreach ($dll in ($needed.Keys | Sort-Object)) {
+        $base = $dll.Substring(0, $dll.Length - 4)
+        # d3dx*/d3dcompiler cabs are named after the DLL; xinput/xaudio/x3daudio cabs hold several versions, so try each.
+        $family = $base -replace '[\d_.]+$', ''
+        $cands = @($cabs | Where-Object { $_.Name -like "*_${base}_$arch.cab" })
+        if ($cands.Count -eq 0) { $cands = @($cabs | Where-Object { $_.Name -like "*_${family}_$arch.cab" }) }
+        foreach ($dir in ($needed[$dll].Keys | Sort-Object)) {
+            if (Test-Path -LiteralPath (Join-Path $dir $dll)) { continue }
+            foreach ($cab in $cands) {
+                & "$env:windir\System32\expand.exe" $cab.FullName "-F:$dll" $dir 2>&1 | Out-Null
+                if (Test-Path -LiteralPath (Join-Path $dir $dll)) {
+                    $marker = Join-Path $dir ".refix_installed"
+                    if (-not ((Test-Path -LiteralPath $marker) -and (Get-Content -LiteralPath $marker) -contains $dll)) { Add-Content -LiteralPath $marker -Value $dll }
+                    Write-Host "  [OK] Extracted $dll ($arch) from $($cab.Name) into $dir (portable DirectX runtime)" -ForegroundColor Green
+                    break
+                }
+            }
+            if (-not (Test-Path -LiteralPath (Join-Path $dir $dll))) {
+                Write-Host "  [NOTICE] $dll is referenced in $dir but no bundled $arch cab provides it" -ForegroundColor DarkGray
+            }
+        }
+    }
+}
+
+# Opt-out only: AutoDeploy asks (default yes); BlueStar passes the choice through REFIX_PORTABLE_RUNTIME.
+if ("$PortableRuntime".Trim() -match '^(?i:n|no|false|0|off)$') {
+    Write-Host "  [INFO] Portable runtime libraries skipped (PortableRuntime=$PortableRuntime)" -ForegroundColor DarkGray
+} else {
+    try { Install-BundledDirectXRuntime -GameDir $TargetDir -ExeFolder $ExeDir -IsX86 ([bool]$isX86Game) }
+    catch { Write-Host "  [WARN] Could not extract the bundled DirectX runtime: $_" -ForegroundColor Yellow }
 }
 
 Install-GameMods

@@ -204,12 +204,15 @@ uninstall() {
     restore_saves
     uninstall_mods
     while IFS= read -r d; do
+        # The game's own DLL wins over the stock Valve copy ReFix Online adds (same rule as Uninstall_ReFix.bat).
+        [ -f "$d/steam_api64_original.dll" ] && rm -f "$d/steam_api64_valve.dll" "$d/steam_api64_o.dll"
         restore_one "$d" steam_api64_original.dll steam_api64.dll
         restore_one "$d" steam_api64_valve.dll steam_api64.dll
         restore_one "$d" steam_api64_o.dll steam_api64.dll
         rm -f "$d/steam_api64_valve.dll"
     done < <({ dirs_with steam_api64_original.dll; dirs_with steam_api64_valve.dll; dirs_with steam_api64_o.dll; } | sort -u)
     while IFS= read -r d; do
+        [ -f "$d/steam_api_original.dll" ] && rm -f "$d/steam_api_valve.dll" "$d/steam_api_o.dll"
         restore_one "$d" steam_api_original.dll steam_api.dll
         restore_one "$d" steam_api_valve.dll steam_api.dll
         restore_one "$d" steam_api_o.dll steam_api.dll
@@ -220,7 +223,12 @@ uninstall() {
         rm -f "$d/RedboneEOS.dll"
     done < <({ dirs_with EOSSDK_original.dll; dirs_with RedboneEOS.dll; } | sort -u)
     while IFS= read -r d; do restore_one "$d" winmm_o.dll winmm.dll; done < <(dirs_with winmm_o.dll)
-    find "$GAME_DIR" -type f \( -name "steam_appid.txt" -o -name "ReFix.ini" -o -name "ReFix.log" -o -name "local_save.txt" -o -name "refix_steamlink64.dll" -o -name "refix_steamlink.dll" -o -name "refix_steamhost64.exe" -o -name "refix_steamhost.exe" -o -name "ReFixFusionShared.log" \) -delete 2>/dev/null || true
+    while IFS= read -r d; do restore_one "$d" winhttp_original.dll winhttp.dll; done < <(dirs_with winhttp_original.dll)
+    # ReFix loader proxies with no original behind them: the game would still load ReFix after uninstalling.
+    while IFS= read -r f; do
+        is_refix "$f" && rm -f "$f" && ok "Removed ReFix $(basename "$f") from $(dirname "$f")"
+    done < <(find "$GAME_DIR" -type f \( -iname winmm.dll -o -iname winhttp.dll \) 2>/dev/null)
+    find "$GAME_DIR" -type f \( -name "steam_appid.txt" -o -name "ReFix.ini" -o -name "ReFix.log" -o -name "local_save.txt" -o -name "refix_steamlink64.dll" -o -name "refix_steamlink.dll" -o -name "refix_steamhost64.exe" -o -name "refix_steamhost.exe" -o -name "ReFixFusionShared.log" -o -name ".refix_launch_options.txt" \) -delete 2>/dev/null || true
     # ReFix support tools (Photon Fusion Shared server): only the folder holding ReFix's own server, then its
     # ReFix parent if nothing else is left in it.
     while IFS= read -r f; do
@@ -295,6 +303,22 @@ deploy_eos() {
     done < <({ dirs_with EOSSDK-Win64-Shipping.dll; dirs_with EOSSDK_original.dll; } | sort -u)
 }
 
+deploy_eac() {
+    local src="$PRODUCT_BIN/winhttp.dll"
+    [ -f "$src" ] || src="$BIN/lan/winhttp.dll"
+    [ -f "$src" ] || return 0
+    local eac
+    eac="$(find "$GAME_DIR" -type f \( -iname '*easyanticheat*' -o -iname '*start_protected_game*' \) -print -quit 2>/dev/null)"
+    [ -n "$eac" ] || return 0
+    local d="$EXE_DIR"
+    if [ -f "$d/winhttp.dll" ] && [ ! -f "$d/winhttp_original.dll" ] && ! is_refix "$d/winhttp.dll"; then
+        mv -f "$d/winhttp.dll" "$d/winhttp_original.dll"
+        ok "Backed up original winhttp.dll -> winhttp_original.dll in $d"
+    fi
+    cp -f "$src" "$d/winhttp.dll"
+    ok "Deployed ReFix winhttp.dll Anti-Cheat bypass proxy to $d"
+}
+
 # ReFix LAN has no winmm loader: drop a ReFix Online winmm.dll left by an earlier Online deploy.
 clean_online_winmm() {
     local w="$EXE_DIR/winmm.dll"
@@ -302,6 +326,26 @@ clean_online_winmm() {
     rm -f "$w"
     [ -f "$EXE_DIR/winmm_o.dll" ] && mv -f "$EXE_DIR/winmm_o.dll" "$w"
     ok "Removed the ReFix Online winmm.dll from $EXE_DIR"
+}
+
+# ReFix Online Legacy (Option 3): Deploy winmm.dll proxy for early Steam Overlay / API injection
+deploy_online_winmm() {
+    [ "$MODE" = online ] || return 0
+    local src="$PRODUCT_BIN/winmm.dll"
+    [ -f "$src" ] || src="$BIN/online/winmm.dll"
+    [ -f "$src" ] || return 0
+
+    # Skip winmm for games with known integrity blacklists (e.g. Phasmophobia)
+    case "${GAME_NAME,,}" in *phasmophobia*) return 0 ;; esac
+
+    local d="$EXE_DIR"
+    local w="$d/winmm.dll"
+    if [ -f "$w" ] && [ ! -f "$d/winmm_o.dll" ] && ! is_refix "$w"; then
+        mv -f "$w" "$d/winmm_o.dll"
+        ok "Backed up original winmm.dll -> winmm_o.dll in $d"
+    fi
+    cp -f "$src" "$w"
+    ok "Deployed ReFix winmm.dll overlay loader proxy to $d"
 }
 
 uses_photon() {
@@ -408,7 +452,13 @@ EOF
             ini_set "$ini" Overlay Enabled "$OV_ENABLED"
             ini_set "$ini" Overlay BlockSteamOverlay "$OV_BLOCK"
         fi
+        if [ "$PRODUCT_DIR" = lan_offline ]; then
+            ini_set "$ini" SteamLink Enabled 0
+        fi
         ok "Updated ReFix.ini in $EXE_DIR for ReFix $MODE"
+    fi
+    if [ "$PRODUCT_DIR" = lan_offline ]; then
+        ini_set "$ini" SteamLink Enabled 0
     fi
     # The game's server list (dedicated / community servers) under its real AppID: as Spacewar it shows none.
     if [ "$APP_ID" != 480 ] && [ "$APP_ID" != "$mask" ]; then
@@ -495,7 +545,9 @@ info "AppID:  $APP_ID"
 deploy_steam_x64
 deploy_steam_x86
 deploy_eos
+deploy_eac
 clean_online_winmm
+deploy_online_winmm
 write_ini
 install_mods
 # ReFix Online + LAN: the Photon Fusion Shared server it starts next to the game (shipped with the Online product)
@@ -503,16 +555,20 @@ install_mods
 if [ "$PRODUCT_DIR" = lan ] && [ -d "$BIN/online/ReFix" ] && uses_fusion; then
     cp -rf "$BIN/online/ReFix" "$EXE_DIR/" && ok "Deployed ReFix support tools (Fusion Shared server) to $EXE_DIR/ReFix"
 elif [ -f "$EXE_DIR/ReFix/FusionShared/ReFixFusionShared.exe" ]; then
-    rm -rf "$EXE_DIR/ReFix/FusionShared" && rmdir "$EXE_DIR/ReFix" 2>/dev/null
+    rm -rf "$EXE_DIR/ReFix/FusionShared"
+    rmdir "$EXE_DIR/ReFix" 2>/dev/null || true   # set -e: a non-empty ReFix folder must not abort the deploy
     ok "Removed the Fusion Shared server: this game does not use Photon Fusion"
 fi
 
 echo
 ok "ReFix $MODE is installed in $GAME_NAME."
+printf 'WINEDLLOVERRIDES="winmm,winhttp=n,b" %%command%%\n' > "$EXE_DIR/.refix_launch_options.txt"
 if [ "$MODE" = online ]; then
     echo "    Start the game from Steam (Proton). Steam must be running."
+    echo "    Proton Launch Options: WINEDLLOVERRIDES=\"winmm,winhttp=n,b\" %command%"
 else
     echo "    Start the game's .exe with Proton or Wine, or add it to Steam as a non-Steam game."
+    echo "    Proton Launch Options: WINEDLLOVERRIDES=\"winmm,winhttp=n,b\" %command%"
     echo "    Every PC and every instance gets its own identity; players on the same network find each other."
     echo "    Allow UDP 47584 and the game's ports in your firewall if players do not see each other."
 fi

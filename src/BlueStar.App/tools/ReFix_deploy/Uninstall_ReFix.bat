@@ -117,6 +117,13 @@ for /f "delims=" %%E in ('dir /s /b "%TARGET_DIR%\EOSSDK_original.dll" 2^>nul') 
     echo [OK] Restored original EOSSDK-Win64-Shipping.dll in "%%~dpE"
 )
 
+:: 3b. Restore winhttp_original.dll to winhttp.dll, or remove ReFix winhttp.dll proxy
+for /f "delims=" %%W in ('dir /s /b "%TARGET_DIR%\winhttp_original.dll" 2^>nul') do (
+    if exist "%%~dpWwinhttp.dll" del /f /q "%%~dpWwinhttp.dll"
+    ren "%%W" "winhttp.dll"
+    echo [OK] Restored original winhttp.dll in "%%~dpW"
+)
+
 :: 4. Remove RedboneEOS.dll proxy files
 for /f "delims=" %%R in ('dir /s /b "%TARGET_DIR%\RedboneEOS.dll" 2^>nul') do (
     del /f /q "%%R"
@@ -143,7 +150,11 @@ for /f "delims=" %%S in ('dir /s /b "%TARGET_DIR%\*.steamstub.exe" "%TARGET_DIR%
 )
 
 :: 6. Remove ReFix proxies, DLC unlocker files, and artifacts
-for /f "delims=" %%F in ('dir /s /b "%TARGET_DIR%\winmm.dll" "%TARGET_DIR%\winhttp.dll" "%TARGET_DIR%\doorstop_config.ini" "%TARGET_DIR%\Kirigiri.ini" "%TARGET_DIR%\ReFix.ini" "%TARGET_DIR%\ReFix.log" "%TARGET_DIR%\ReFixFusionShared.log" "%TARGET_DIR%\refix_steamlink64.dll" "%TARGET_DIR%\refix_steamlink.dll" "%TARGET_DIR%\refix_steamhost64.exe" "%TARGET_DIR%\refix_steamhost.exe" "%TARGET_DIR%\steam_appid.txt" "%TARGET_DIR%\local_save.txt" "%TARGET_DIR%\steam_interfaces.txt" "%TARGET_DIR%\add_steam_shortcut.ps1" "%TARGET_DIR%\add_steam_shortcut.py" "%TARGET_DIR%\Install_ReFix_Steam_Shortcut.bat" "%TARGET_DIR%\Configure_LAN_Firewall.bat" "%TARGET_DIR%\Configurar_Firewall_LAN.bat" "%TARGET_DIR%\cream_api.ini" "%TARGET_DIR%\SmokeAPI.config.json" "%TARGET_DIR%\SmokeAPI.json" "%TARGET_DIR%\SmokeAPI.log" "%TARGET_DIR%\SmokeAPI.cache.json" 2^>nul') do (
+:: winmm.dll / winhttp.dll only when they are ReFix's: steps 1 and 3b just put the game's own ones back.
+for /f "delims=" %%F in ('dir /s /b "%TARGET_DIR%\winmm.dll" "%TARGET_DIR%\winhttp.dll" 2^>nul') do (
+    findstr /m /c:"ReFix" "%%F" >nul 2>&1 && del /f /q "%%F" && echo [OK] Removed ReFix file: %%F
+)
+for /f "delims=" %%F in ('dir /s /b "%TARGET_DIR%\doorstop_config.ini" "%TARGET_DIR%\Kirigiri.ini" "%TARGET_DIR%\ReFix.ini" "%TARGET_DIR%\ReFix.log" "%TARGET_DIR%\ReFixFusionShared.log" "%TARGET_DIR%\refix_steamlink64.dll" "%TARGET_DIR%\refix_steamlink.dll" "%TARGET_DIR%\refix_steamhost64.exe" "%TARGET_DIR%\refix_steamhost.exe" "%TARGET_DIR%\steam_appid.txt" "%TARGET_DIR%\local_save.txt" "%TARGET_DIR%\steam_interfaces.txt" "%TARGET_DIR%\add_steam_shortcut.ps1" "%TARGET_DIR%\add_steam_shortcut.py" "%TARGET_DIR%\Install_ReFix_Steam_Shortcut.bat" "%TARGET_DIR%\Configure_LAN_Firewall.bat" "%TARGET_DIR%\Configurar_Firewall_LAN.bat" "%TARGET_DIR%\cream_api.ini" "%TARGET_DIR%\SmokeAPI.config.json" "%TARGET_DIR%\SmokeAPI.json" "%TARGET_DIR%\SmokeAPI.log" "%TARGET_DIR%\SmokeAPI.cache.json" 2^>nul') do (
     del /f /q "%%F"
     echo [OK] Removed ReFix file: %%F
 )

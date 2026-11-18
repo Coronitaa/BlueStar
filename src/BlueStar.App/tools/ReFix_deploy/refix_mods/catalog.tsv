@@ -8,4 +8,4 @@
 #   file        package in refix_mods/ (next to AutoDeploy, else downloaded from this folder of the repository)
 #   sha256      SHA-256 of the package; a download that does not match is discarded
 # id	product	exe	match_file	match_text	file	sha256
-refix.csgo.lan_overhaul	lan	csgo.exe	csgo/steam.inf	ProductName=csgo	refix.csgo.lan_overhaul.rfmod	768538d1ff60cc869d286f6254d5d031846f49bcb7f8ecbb9f24613fe73f8b2a
+refix.csgo.lan_overhaul	lan	csgo.exe	csgo/steam.inf	ProductName=csgo	refix.csgo.lan_overhaul.rfmod	40e50d2bc8c1f7cf45fdc79415967ca1e0c1d255b36d56cc016db44fc47ecfcb

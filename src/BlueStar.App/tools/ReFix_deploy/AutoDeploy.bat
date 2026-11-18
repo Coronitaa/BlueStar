@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 setlocal disabledelayedexpansion
-title ReFix - Universal AutoDeploy Tool v2.4.3
+title ReFix - Universal AutoDeploy Tool v2.5.3
 
 set "SCRIPT_DIR=%~dp0"
 if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
@@ -97,6 +97,7 @@ if exist "%BIN_DIR%\detect_game.ps1" (
         if /i "%%A"=="GAME_EXE_PATH" set "GAME_EXE_PATH=%%B"
         if /i "%%A"=="GAME_NAME" set "DEFAULT_GAME_NAME=%%B"
         if /i "%%A"=="DETECTED_APPID" set "DETECTED_APPID=%%B"
+        if /i "%%A"=="HAS_EAC" set "HAS_EAC=%%B"
         if /i "%%A"=="CANDIDATE_EXES" set "CANDIDATE_EXES=%%B"
     )
 )
@@ -109,6 +110,7 @@ echo [DETECTION] Detected Engine Type: %ENGINE_TYPE%
 echo [DETECTION] Executable Location: "%EXE_DIR%"
 if not "%GAME_EXE_PATH%"=="" echo [DETECTION] Game Executable: "%GAME_EXE_PATH%"
 if not "%DETECTED_APPID%"=="" echo [DETECTION] Detected Steam AppID: %DETECTED_APPID%
+if /i "%HAS_EAC%"=="True" echo [DETECTION] Detected Anti-Cheat: EasyAntiCheat (EAC)
 echo:
 
 :: Executable Location and Selection Prompt
@@ -402,6 +404,24 @@ if not "%REFIX_NON_INTERACTIVE%"=="1" set /p "FW_CHOICE=Apply Firewall rules? [Y
 if /i not "%FW_CHOICE%"=="N" set "FIREWALL_AUTO_APPLY=true"
 :AFTER_FIREWALL_PROMPT
 
+:: Portable runtime libraries. Labels, not a parenthesized block (same reason as the firewall prompt).
+echo:
+echo ====================================================================
+echo                  Portable Runtime Libraries
+echo ====================================================================
+echo:
+echo  Copy the DirectX runtime DLLs the game needs (d3dx9, XAudio2, XInput...)
+echo  from its own redist folder next to its binaries, so it runs on PCs
+echo  without the DirectX June 2010 runtime. Nothing is installed system-wide.
+echo:
+set "PORTABLE_CHOICE=Y"
+:: Unattended deploys: REFIX_PORTABLE_RUNTIME=Y/N (default Y)
+if not "%REFIX_PORTABLE_RUNTIME%"=="" set "PORTABLE_CHOICE=%REFIX_PORTABLE_RUNTIME%"
+if not "%REFIX_NON_INTERACTIVE%"=="1" set /p "PORTABLE_CHOICE=Include portable runtime libraries? [Y/N] (Default: Y): "
+set "PORTABLE_RUNTIME=true"
+if /i "%PORTABLE_CHOICE%"=="N" set "PORTABLE_RUNTIME=false"
+if /i "%PORTABLE_CHOICE%"=="NO" set "PORTABLE_RUNTIME=false"
+
 echo:
 echo ====================================================================
 echo Starting ReFix Deployment... (%PRODUCT_LABEL%)
@@ -431,15 +451,26 @@ if not exist "%BIN_DIR%\deploy_helper.ps1" (
 )
 
 echo [1/3] Running ReFix deployment and topology engine...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%BIN_DIR%\deploy_helper.ps1" -TargetDir "%TARGET_DIR%" -BinDir "%BIN_DIR%" -ExeDir "%EXE_DIR%" -EngineType "%ENGINE_TYPE%" -OnlineMode "%HELPER_MODE%" -GameName "%GAME_NAME%" -UserName "%CUSTOM_USERNAME%" -RealAppId "%REAL_APPID%" -MaskAppId "%MASK_APPID%" -Language "english" -DLCs "%DLCS%" -DLCMode "%DLC_MODE%" -ListenPort "%LAN_PORT%" -CustomBroadcasts "%CUSTOM_BROADCASTS%" -PhotonAppId "%PHOTON_APPID%" -PhotonRegion "%PHOTON_REGION%" -OverlayMode "%OVERLAY_MODE%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%BIN_DIR%\deploy_helper.ps1" -TargetDir "%TARGET_DIR%" -BinDir "%BIN_DIR%" -ExeDir "%EXE_DIR%" -EngineType "%ENGINE_TYPE%" -OnlineMode "%HELPER_MODE%" -GameName "%GAME_NAME%" -UserName "%CUSTOM_USERNAME%" -RealAppId "%REAL_APPID%" -MaskAppId "%MASK_APPID%" -Language "english" -DLCs "%DLCS%" -DLCMode "%DLC_MODE%" -ListenPort "%LAN_PORT%" -CustomBroadcasts "%CUSTOM_BROADCASTS%" -PhotonAppId "%PHOTON_APPID%" -PhotonRegion "%PHOTON_REGION%" -OverlayMode "%OVERLAY_MODE%" -PortableRuntime "%PORTABLE_RUNTIME%"
 if errorlevel 1 (
     echo:
     echo [ERROR] Deployment engine reported failure! Aborting.
     goto ERROR_EXIT
 )
 
-:: Finalizing portable configuration (BlueStar launches the game itself: no Steam shortcut scripts)
-echo [2/3] Finalizing portable configuration...
+:: Copy Steam Shortcut Installer & PowerShell helper (Valve mode only)
+if "%ONLINE_MODE_NAME%"=="valve" (
+    echo [2/3] Copying Steam Shortcut scripts...
+    if exist "%BIN_DIR%\add_steam_shortcut.ps1" (
+        copy /y "%BIN_DIR%\add_steam_shortcut.ps1" "%EXE_DIR%\add_steam_shortcut.ps1" >nul
+    )
+    if exist "%BIN_DIR%\Install_ReFix_Steam_Shortcut.bat" (
+        copy /y "%BIN_DIR%\Install_ReFix_Steam_Shortcut.bat" "%EXE_DIR%\Install_ReFix_Steam_Shortcut.bat" >nul
+    )
+    echo [OK] Deployed Steam Shortcut scripts to "%EXE_DIR%"
+) else (
+    echo [2/3] Finalizing portable configuration...
+)
 
 :: Apply Windows Firewall Rules dynamically
 if "%FIREWALL_AUTO_APPLY%"=="true" (
@@ -525,7 +556,20 @@ goto SUCCESS_EXIT
 
 :SKIP_LAUNCH_OFFER
 
-goto SUCCESS_EXIT
+if "%ONLINE_MODE_NAME%"=="valve" (
+    if "%REFIX_NON_INTERACTIVE%"=="1" goto SUCCESS_EXIT
+    set "RUN_INSTALLER=Y"
+    set /p "RUN_INSTALLER=Add to Steam as Non-Steam Game? [Y/N] (Default: Y): "
+    if /i "%RUN_INSTALLER%"=="N" goto SUCCESS_EXIT
+
+    echo:
+    echo [INFO] Running Steam Shortcut Auto-Installer...
+    pushd "%EXE_DIR%"
+    if exist "Install_ReFix_Steam_Shortcut.bat" (
+        call Install_ReFix_Steam_Shortcut.bat "%GAME_NAME%" "%GAME_EXE_PATH%"
+    )
+    popd
+)
 
 :SUCCESS_EXIT
 echo:
