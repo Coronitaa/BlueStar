@@ -565,6 +565,10 @@ public partial class App : Application
                     var catalog = await admin.GetAsync().ConfigureAwait(false);
                     var rows = catalog.Games.Where(g => !g.Hidden && !string.IsNullOrWhiteSpace(g.Name)).Select(g => g.ToCatalogItem()).ToList();
                     if (rows.Count > 0) await repo.UpsertAppsAsync(rows).ConfigureAwait(false);
+
+                    var keys = Services.GetService<IDepotKeyRepository>();
+                    var depotKeys = catalog.Games.SelectMany(g => g.DepotKeys).ToList();
+                    if (keys != null && depotKeys.Count > 0) await keys.RegisterKeysAsync(depotKeys, "BlueStar admin").ConfigureAwait(false);
                 }
             }
             catch (Exception ex)

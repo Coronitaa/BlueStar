@@ -37,6 +37,9 @@ public sealed record AdminCatalogGame
     /// <summary>Steam store tag ids, so Explore's tag filters find the game.</summary>
     public IReadOnlyList<int> TagIds { get; init; } = [];
 
+    /// <summary>Depot decryption keys (hex) for the depots the presets pin, so old builds can be downloaded.</summary>
+    public IReadOnlyDictionary<uint, string> DepotKeys { get; init; } = new Dictionary<uint, string>();
+
     public IReadOnlyList<AdminInstallPreset> Presets { get; init; } = [];
 
     /// <summary>The row Explore's local catalog needs for the game to be part of the feed.</summary>

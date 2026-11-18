@@ -235,6 +235,9 @@ public sealed class ManifestHubProvider : IManifestProvider
     }
 
     /// <inheritdoc />
+    /// <summary>Where the admin panel publishes manifests for its presets.</summary>
+    public const string AdminManifestBaseUrl = "https://coronitaa.github.io/bluestar/manifests/";
+
     public async Task<string> DownloadManifestAsync(uint depotId, ulong manifestId, string targetDirectory, uint appId = 0, CancellationToken ct = default)
     {
         // 1. Check local cache first
@@ -275,6 +278,9 @@ public sealed class ManifestHubProvider : IManifestProvider
             }
 
             candidateUrls.Add($"https://raw.githubusercontent.com/qwe213312/k25FCdfEOoEJ42S6/main/{depotId}_{manifestId}.manifest");
+
+            // Last: manifests the admin published for a preset (old builds Steam only serves to a logged-in owner).
+            candidateUrls.Add($"{AdminManifestBaseUrl}{depotId}_{manifestId}.manifest");
 
             // 3. Try each candidate URL
             foreach (var url in candidateUrls)

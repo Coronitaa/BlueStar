@@ -176,6 +176,27 @@ public sealed class AdminCatalogTests : IDisposable
     }
 
     [Fact]
+    public void Parse_DepotKeys_KeepsValidHexAndDropsTheRest()
+    {
+        var key = new string('A', 64);
+        var json = $$"""{ "schemaVersion": 1, "games": [ { "appId": 9, "name": "G", "depotKeys": { "731": "{{key}}", "732": "nothex", "x": "{{key}}" } } ] }""";
+
+        var result = AdminCatalogParser.Parse(json);
+
+        result.Catalog.Games.Single().DepotKeys.Should().ContainSingle().Which.Should().Be(new KeyValuePair<uint, string>(731, new string('a', 64)));
+        result.Errors.Should().HaveCount(2);
+    }
+
+    [Theory]
+    [InlineData("<!DOCTYPE html><html><head><title>DepotBox is Permanently Closed: Here Is the Truth</title><style>x</style>", "DepotBox is Permanently Closed: Here Is the Truth")]
+    [InlineData("{\"error\":\"bad key\"}", "{\"error\":\"bad key\"}")]
+    [InlineData("", "(empty response)")]
+    public void DepotBoxErrors_AreSummarized(string body, string expected)
+    {
+        BlueStar.Infrastructure.DepotBox.DepotBoxApiClient.SummarizeBody(body).Should().Be(expected);
+    }
+
+    [Fact]
     public void ToRecommendation_MapsEmulatorAndExtras()
     {
         var presets = AdminCatalogParser.Parse(ValidCatalog).Catalog.Games[0].Presets;

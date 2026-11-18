@@ -165,6 +165,18 @@ public static partial class AdminCatalogParser
             }
         }
 
+        var depotKeys = new Dictionary<uint, string>();
+        if (g.TryGetProperty("depotKeys", out var dk) && dk.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var kv in dk.EnumerateObject().Take(MaxManifests))
+            {
+                var key = kv.Value.ValueKind == JsonValueKind.String ? kv.Value.GetString()?.ToLowerInvariant() : null;
+                if (uint.TryParse(kv.Name, NumberStyles.None, CultureInfo.InvariantCulture, out var depot) && depot > 0
+                    && key != null && Sha256Regex().IsMatch(key)) depotKeys[depot] = key;
+                else errors.Add($"game {appId}: invalid depot key for '{kv.Name}', ignored");
+            }
+        }
+
         long? release = null;
         if (g.TryGetProperty("releaseDateUtc", out var rd) && rd.ValueKind == JsonValueKind.Number
             && rd.TryGetInt64(out var r) && r > 0 && r < 4102444800) release = r;
@@ -194,6 +206,7 @@ public static partial class AdminCatalogParser
             Publisher = CleanText(GetString(g, "publisher"), 120),
             ReleaseDateUtc = release,
             TagIds = tagIds,
+            DepotKeys = depotKeys,
             Presets = presets
         };
     }

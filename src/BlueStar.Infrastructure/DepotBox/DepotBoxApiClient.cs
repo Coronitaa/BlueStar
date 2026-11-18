@@ -1661,6 +1661,17 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
         return null;
     }
 
+    /// <summary>An HTML error page becomes its title; anything else is cut short for a readable message.</summary>
+    internal static string SummarizeBody(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return "(empty response)";
+        var m = System.Text.RegularExpressions.Regex.Match(body, "<title>(.*?)</title>",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+        if (m.Success) return System.Net.WebUtility.HtmlDecode(m.Groups[1].Value).Trim();
+        var text = body.Trim();
+        return text.Length > 200 ? text[..200] + "…" : text;
+    }
+
     private async Task<HttpRequestMessage> CreateRequestAsync(HttpMethod method, string endpoint, CancellationToken ct)
     {
         var baseUrl = _appSettings?.DefaultApiUrl ?? "https://depotbox.org";
@@ -1696,7 +1707,7 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
         {
             401 => new UnauthorizedAccessException($"DepotBox API: Invalid or missing API key. {body}"),
             429 => new HttpRequestException($"DepotBox API: Rate limit exceeded. {body}", null, response.StatusCode),
-            _ => new HttpRequestException($"DepotBox API error {statusCode}: {body}", null, response.StatusCode)
+            _ => new HttpRequestException($"DepotBox API error {statusCode}: {SummarizeBody(body)}", null, response.StatusCode)
         };
     }
 }
