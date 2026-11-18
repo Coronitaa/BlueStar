@@ -24,8 +24,34 @@ public sealed record AdminCatalogGame
     public string Name { get; init; } = string.Empty;
     public bool Hidden { get; init; }
     public string? HeaderImageUrl { get; init; }
+    public string? CapsuleImageUrl { get; init; }
+    public string? HeroImageUrl { get; init; }
+    public string? LogoImageUrl { get; init; }
     public string? Description { get; init; }
+    public string? Developer { get; init; }
+    public string? Publisher { get; init; }
+
+    /// <summary>Release date as unix seconds.</summary>
+    public long? ReleaseDateUtc { get; init; }
+
+    /// <summary>Steam store tag ids, so Explore's tag filters find the game.</summary>
+    public IReadOnlyList<int> TagIds { get; init; } = [];
+
     public IReadOnlyList<AdminInstallPreset> Presets { get; init; } = [];
+
+    /// <summary>The row Explore's local catalog needs for the game to be part of the feed.</summary>
+    public CatalogAppItem ToCatalogItem() => new()
+    {
+        AppId = AppId,
+        Name = Name,
+        NormalizedName = Helpers.DeterministicNormalizer.Normalize(Name),
+        CompactName = Helpers.DeterministicNormalizer.ToCompactKey(Name),
+        AppType = "game",
+        HeaderImageUrl = HeaderImageUrl,
+        ReleaseDateUtc = ReleaseDateUtc,
+        TagIds = TagIds,
+        IsEnriched = false
+    };
 }
 
 /// <summary>A recommended way to install a game: a pinned build, an emulator, mods and a note.</summary>
@@ -50,9 +76,11 @@ public sealed record AdminInstallPreset
         PinnedManifests = Manifests,
         RecommendedEmulator = Emulator.Type switch
         {
-            AdminEmulatorType.ReFix => "ReFix",
-            AdminEmulatorType.ReFixGoldberg => "ReFix Goldberg",
-            AdminEmulatorType.OnlineFix => "OnlineFix",
+            // The install modal's own option ids, so the choice maps one to one.
+            AdminEmulatorType.ReFixLan => "refix_goldberg_offline",
+            AdminEmulatorType.ReFixLanOnline => "refix_goldberg",
+            AdminEmulatorType.ReFixOnlineLegacy => "refix_valve",
+            AdminEmulatorType.OnlineFix => "onlinefix",
             // A custom emulator is laid down by the preset deployer, not by BlueStar's own emulator.
             _ => "none"
         },
@@ -66,8 +94,12 @@ public sealed record AdminInstallPreset
 public enum AdminEmulatorType
 {
     None,
-    ReFix,
-    ReFixGoldberg,
+    /// <summary>ReFix LAN (offline).</summary>
+    ReFixLan,
+    /// <summary>ReFix LAN + Online.</summary>
+    ReFixLanOnline,
+    /// <summary>ReFix Online Legacy (Steam Spacewar 480).</summary>
+    ReFixOnlineLegacy,
     OnlineFix,
     Custom
 }

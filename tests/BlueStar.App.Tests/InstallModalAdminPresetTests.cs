@@ -23,7 +23,7 @@ public class InstallModalAdminPresetTests
         Id = "cs-go-con-refix",
         Name = "CS:GO con ReFix",
         Manifests = new Dictionary<uint, ulong> { [4465481] = 1234567890123456789 },
-        Emulator = new AdminEmulator { Type = AdminEmulatorType.ReFix },
+        Emulator = new AdminEmulator { Type = AdminEmulatorType.ReFixOnlineLegacy },
         Note = "Versión recomendada para jugar en LAN con ReFix."
     };
 
@@ -110,6 +110,20 @@ public class InstallModalAdminPresetTests
         vm.CuratedRecommendation.HasPresetExtras.Should().BeTrue();
         vm.IsInstallModalEmulatorNone.Should().BeTrue("a custom emulator replaces BlueStar's own");
         vm.InstallModalPresetExtrasText.Should().Contain("MyEmu").And.Contain("Mapas");
+    }
+
+    [Theory]
+    [InlineData(AdminEmulatorType.ReFixLan, "refix_goldberg_offline")]
+    [InlineData(AdminEmulatorType.ReFixLanOnline, "refix_goldberg")]
+    [InlineData(AdminEmulatorType.ReFixOnlineLegacy, "refix_valve")]
+    [InlineData(AdminEmulatorType.None, "none")]
+    public async Task EachReFixOption_SelectsTheMatchingModalEmulator(AdminEmulatorType type, string expected)
+    {
+        var vm = CreateViewModel([ReFixPreset with { Emulator = new AdminEmulator { Type = type } }]);
+
+        await vm.OpenInstallModalAsync();
+
+        vm.InstallModalSelectedEmulator.Should().Be(expected);
     }
 
     [Fact]

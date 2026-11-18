@@ -23,6 +23,7 @@ public static partial class AdminCatalogParser
     private const int MaxManifests = 64;
     private const int MaxMods = 50;
     private const int MaxSettings = 64;
+    private const int MaxTags = 40;
 
     /// <summary>Owner of the repos whose GitHub-hosted files are trusted without a checksum.</summary>
     private const string TrustedGitHubOwner = "Coronitaa";
@@ -146,13 +147,27 @@ public static partial class AdminCatalogParser
             return null;
         }
 
-        string? header = null;
-        var headerRaw = GetString(g, "headerImageUrl");
-        if (!string.IsNullOrEmpty(headerRaw))
+        string? Image(string field)
         {
-            if (TryHttpsUri(headerRaw, out var headerUri) && ImageHosts.Contains(headerUri.Host)) header = headerUri.AbsoluteUri;
-            else errors.Add($"game {appId}: headerImageUrl must be https on an image host, ignored");
+            var raw = GetString(g, field);
+            if (string.IsNullOrEmpty(raw)) return null;
+            if (TryHttpsUri(raw, out var uri) && ImageHosts.Contains(uri.Host)) return uri.AbsoluteUri;
+            errors.Add($"game {appId}: {field} must be https on an image host, ignored");
+            return null;
         }
+
+        var tagIds = new List<int>();
+        if (g.TryGetProperty("tagIds", out var ta) && ta.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var t in ta.EnumerateArray().Take(MaxTags))
+            {
+                if (t.ValueKind == JsonValueKind.Number && t.TryGetInt32(out var tag) && tag > 0 && !tagIds.Contains(tag)) tagIds.Add(tag);
+            }
+        }
+
+        long? release = null;
+        if (g.TryGetProperty("releaseDateUtc", out var rd) && rd.ValueKind == JsonValueKind.Number
+            && rd.TryGetInt64(out var r) && r > 0 && r < 4102444800) release = r;
 
         var presets = new List<AdminInstallPreset>();
         var presetIds = new HashSet<string>(StringComparer.Ordinal);
@@ -170,8 +185,15 @@ public static partial class AdminCatalogParser
             AppId = appId,
             Name = name ?? string.Empty,
             Hidden = hidden,
-            HeaderImageUrl = header,
+            HeaderImageUrl = Image("headerImageUrl"),
+            CapsuleImageUrl = Image("capsuleImageUrl"),
+            HeroImageUrl = Image("heroImageUrl"),
+            LogoImageUrl = Image("logoImageUrl"),
             Description = CleanText(GetString(g, "description"), 2000, allowNewlines: true),
+            Developer = CleanText(GetString(g, "developer"), 120),
+            Publisher = CleanText(GetString(g, "publisher"), 120),
+            ReleaseDateUtc = release,
+            TagIds = tagIds,
             Presets = presets
         };
     }
@@ -263,8 +285,9 @@ public static partial class AdminCatalogParser
         AdminEmulatorType? type = GetString(e, "type") switch
         {
             null or "none" => AdminEmulatorType.None,
-            "refix" => AdminEmulatorType.ReFix,
-            "refix_goldberg" => AdminEmulatorType.ReFixGoldberg,
+            "refix_lan" => AdminEmulatorType.ReFixLan,
+            "refix_lan_online" => AdminEmulatorType.ReFixLanOnline,
+            "refix_online_legacy" => AdminEmulatorType.ReFixOnlineLegacy,
             "onlinefix" => AdminEmulatorType.OnlineFix,
             "custom" => AdminEmulatorType.Custom,
             _ => null

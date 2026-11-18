@@ -42,11 +42,11 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
 
     private readonly IAdminCatalogService? _adminCatalog;
 
-    /// <summary>AppIds the admin hid from Explore.</summary>
+    /// <summary>
+    /// AppIds the admin hid from Explore. The games the admin added need nothing here: they are
+    /// written into the local catalog at startup and come through the feed like any other game.
+    /// </summary>
     private HashSet<uint> _adminHidden = [];
-
-    /// <summary>Games the admin added to Explore, built once per catalog so the cards keep their identity.</summary>
-    private List<SearchResult> _adminGames = [];
 
     private async Task LoadAdminCatalogAsync()
     {
@@ -54,39 +54,12 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         {
             var catalog = await _adminCatalog!.GetAsync().ConfigureAwait(false);
             _adminHidden = catalog.Games.Where(g => g.Hidden).Select(g => g.AppId).ToHashSet();
-            _adminGames = catalog.Games
-                .Where(g => !g.Hidden && !string.IsNullOrWhiteSpace(g.Name))
-                .Select(g => new SearchResult
-                {
-                    AppId = g.AppId,
-                    Name = g.Name,
-                    HeaderImageUrl = g.HeaderImageUrl
-                        ?? $"https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{g.AppId}/header.jpg"
-                })
-                .ToList();
-            if (_adminHidden.Count > 0 || _adminGames.Count > 0) RebuildVisible();
+            if (_adminHidden.Count > 0) RebuildVisible();
         }
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "Admin catalog unavailable for Explore");
         }
-    }
-
-    /// <summary>
-    /// The admin's games go first in the plain catalog view, and in a search when their name matches:
-    /// some of them (delisted titles) are not in Steam's search at all.
-    /// </summary>
-    private List<SearchResult> AdminGamesFor(IReadOnlyCollection<SearchResult> already)
-    {
-        if (_adminGames.Count == 0 || ActiveFilters.Count > 0) return [];
-        var query = SearchQuery?.Trim() ?? string.Empty;
-        var present = already.Select(r => r.AppId).ToHashSet();
-        return _adminGames
-            .Where(g => !present.Contains(g.AppId))
-            .Where(g => query.Length == 0
-                || g.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase)
-                || g.AppId.ToString(System.Globalization.CultureInfo.InvariantCulture) == query)
-            .ToList();
     }
 
     private readonly object _activeFiltersLock = new();
@@ -1381,8 +1354,7 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
             ExactMatchCount = 0;
             HasMoreResults = false;
             RebuildVisible();
-            // An AppID Steam does not list can still be one of the admin's games.
-            SearchState = Results.Count > 0 ? SearchState.ShowingResults : SearchState.Empty;
+            SearchState = SearchState.Empty;
         }
     }
 
@@ -1746,9 +1718,6 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
             : kept.ToList();
 
         HiddenByContentFilters = Math.Max(_fetched.Count - visible.Count, _pipelineHiddenCount);
-
-        var pinned = AdminGamesFor(visible);
-        if (pinned.Count > 0) visible = [.. pinned, .. visible];
 
         SyncCollection(Results, visible);
     }

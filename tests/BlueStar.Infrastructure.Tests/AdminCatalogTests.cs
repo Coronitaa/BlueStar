@@ -31,6 +31,11 @@ public sealed class AdminCatalogTests : IDisposable
         {
           "appId": 4465480,
           "name": "Counter-Strike: Global Offensive",
+          "headerImageUrl": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/4465480/a7ec/header.jpg",
+          "heroImageUrl": "https://evil.example/hero.jpg",
+          "tagIds": [19, 1663, 19, -4, "x"],
+          "releaseDateUtc": 1345568400,
+          "developer": "Valve",
           "presets": [
             {
               "id": "csgo-final",
@@ -38,7 +43,7 @@ public sealed class AdminCatalogTests : IDisposable
               "branch": "public",
               "buildId": "17592934",
               "manifests": { "4465481": "9007199254740993123" },
-              "emulator": { "type": "refix" },
+              "emulator": { "type": "refix_online_legacy" },
               "mods": [ { "name": "Pack", "url": "https://github.com/Coronitaa/packs/releases/download/v1/pack.zip" } ],
               "note": "Works offline.\nLAN tested."
             },
@@ -67,9 +72,15 @@ public sealed class AdminCatalogTests : IDisposable
     {
         var result = AdminCatalogParser.Parse(ValidCatalog);
 
-        result.Errors.Should().BeEmpty();
+        result.Errors.Should().ContainSingle(e => e.Contains("heroImageUrl"), "a non-image host is dropped and reported");
         result.Catalog.Games.Should().HaveCount(2);
         var csgo = result.Catalog.Games[0];
+        csgo.TagIds.Should().Equal(19, 1663);
+        csgo.HeroImageUrl.Should().BeNull();
+        csgo.HeaderImageUrl.Should().Contain("/a7ec/header.jpg");
+        csgo.Developer.Should().Be("Valve");
+        csgo.ToCatalogItem().TagIds.Should().Equal(19, 1663);
+        csgo.ToCatalogItem().ReleaseDateUtc.Should().Be(1345568400);
         csgo.Presets.Should().HaveCount(2);
         csgo.Presets[0].Manifests[4465481].Should().Be(9007199254740993123UL);
         csgo.Presets[0].Note.Should().Contain("\n");
@@ -170,7 +181,7 @@ public sealed class AdminCatalogTests : IDisposable
         var presets = AdminCatalogParser.Parse(ValidCatalog).Catalog.Games[0].Presets;
 
         var refix = presets[0].ToRecommendation(4465480);
-        refix.RecommendedEmulator.Should().Be("ReFix");
+        refix.RecommendedEmulator.Should().Be("refix_valve");
         refix.RecommendedBuildId.Should().Be("17592934");
         refix.PinnedManifests.Should().ContainKey(4465481);
         refix.CompatibilityNotes.Should().Contain("LAN");

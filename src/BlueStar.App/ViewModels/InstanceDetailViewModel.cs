@@ -5252,7 +5252,9 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
     {
         var emulator = rec.RecommendedEmulator ?? "none";
         _switchModalToFixWhenLoaded = false;
-        if (emulator.Contains("goldberg", StringComparison.OrdinalIgnoreCase))
+        if (ReFixEmulator.IsLanOfflineOption(emulator))
+            InstallModalSelectedEmulator = ReFixEmulator.LanOfflineOptionId;
+        else if (emulator.Contains("goldberg", StringComparison.OrdinalIgnoreCase))
             InstallModalSelectedEmulator = "refix_goldberg";
         else if (string.Equals(emulator, "none", StringComparison.OrdinalIgnoreCase))
             InstallModalSelectedEmulator = "none";

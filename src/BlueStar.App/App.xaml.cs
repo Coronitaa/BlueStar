@@ -554,6 +554,23 @@ public partial class App : Application
             {
                 Log.Debug(ex, "Background catalog snapshot check skipped or failed");
             }
+
+            // After the snapshot, which may replace the local catalog: the admin's games join Explore's feed.
+            try
+            {
+                var admin = Services.GetService<IAdminCatalogService>();
+                var repo = Services.GetService<ILocalCatalogRepository>();
+                if (admin != null && repo != null)
+                {
+                    var catalog = await admin.GetAsync().ConfigureAwait(false);
+                    var rows = catalog.Games.Where(g => !g.Hidden && !string.IsNullOrWhiteSpace(g.Name)).Select(g => g.ToCatalogItem()).ToList();
+                    if (rows.Count > 0) await repo.UpsertAppsAsync(rows).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Could not add the admin catalog's games to Explore");
+            }
         });
     }
 
