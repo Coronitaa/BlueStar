@@ -757,7 +757,7 @@
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                     <Path Data="{StaticResource IconExplore}" Fill="{StaticResource AccentBrush}"
                                           Stretch="Uniform" Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Searching DepotBox catalog &amp; manifests..." Style="{StaticResource BodyMedium}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{DynamicResource String_UiSearchingDepotBox}" Style="{StaticResource BodyMedium}" FontWeight="SemiBold" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Border>
 
@@ -820,7 +820,7 @@
                                     </StackPanel>
 
                                     <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                        <Button Content="View all in Explore ➔"
+                                        <Button Content="{DynamicResource String_UiViewAllInExplore}"
                                                 Style="{StaticResource GhostButton}"
                                                 Foreground="{StaticResource AccentBrush}"
                                                 Padding="8,4"
@@ -914,7 +914,7 @@
                                                                 Padding="7,2" Margin="0,0,6,4"
                                                                 Background="#25EF4444" BorderBrush="#60EF4444" BorderThickness="1"
                                                                 Visibility="{Binding IsNsfw, Converter={StaticResource BoolToVisibilityConverter}}"
-                                                                ToolTip="NSFW / Mature Content (18+)">
+                                                                ToolTip="{DynamicResource String_UiNsfwTooltip}">
                                                             <TextBlock Text="🔞 NSFW" FontSize="11" FontWeight="Normal" Foreground="#EF4444"/>
                                                         </Border>
 
@@ -1082,15 +1082,15 @@
                         <wv2:WebView2 x:Name="StorePageView"/>
                         <Border x:Name="WebViewFallbackOverlay" Visibility="Collapsed" Background="#1B2838" Padding="32">
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="480">
-                                <TextBlock Text="⚠️ WebView2 Runtime Required" FontSize="18" FontWeight="SemiBold" Foreground="#FFFFFF" HorizontalAlignment="Center" Margin="0,0,0,12"/>
-                                <TextBlock Text="BlueStar uses the Microsoft Edge WebView2 runtime to display embedded Steam Store pages. The runtime is currently missing or could not be initialized on this machine."
+                                <TextBlock Text="{DynamicResource String_UiWebView2Required}" FontSize="18" FontWeight="SemiBold" Foreground="#FFFFFF" HorizontalAlignment="Center" Margin="0,0,0,12"/>
+                                <TextBlock Text="{DynamicResource String_UiWebView2Missing}"
                                            TextWrapping="Wrap" TextAlignment="Center" FontSize="13" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,20"/>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                     <Button x:Name="BtnInstallWebView2" Click="OnInstallWebView2Clicked" Style="{StaticResource PrimaryButton}" Padding="16,8" Margin="0,0,10,0">
-                                        <TextBlock Text="Install WebView2" FontSize="12" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{DynamicResource String_UiInstallWebView2}" FontSize="12" FontWeight="SemiBold"/>
                                     </Button>
                                     <Button x:Name="BtnOpenInBrowser" Click="OnOpenInBrowserClicked" Style="{StaticResource SecondaryButton}" Padding="16,8">
-                                        <TextBlock Text="Open in Browser" FontSize="12"/>
+                                        <TextBlock Text="{DynamicResource String_UiOpenInBrowser}" FontSize="12"/>
                                     </Button>
                                 </StackPanel>
                             </StackPanel>

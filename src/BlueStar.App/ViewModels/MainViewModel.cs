@@ -583,11 +583,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (status.IsRunning)
         {
             var idText = status.SteamId64.HasValue ? $" (ID: {status.SteamId64})" : "";
-            SteamTooltipText = $"Steam conectado ({status.DisplayName}{idText})\nHaz clic para traer Steam al frente.";
+            SteamTooltipText = string.Format(L("String_SteamTooltipConnectedFormat", "Steam connected ({0}{1})\nClick to bring Steam to the front."), status.DisplayName, idText);
         }
         else
         {
-            SteamTooltipText = "Steam no está conectado\nHaz clic para iniciar Steam en iconos ocultos.";
+            SteamTooltipText = L("String_SteamTooltipDisconnected", "Steam is not connected\nClick to start Steam in the system tray.");
         }
     }
 

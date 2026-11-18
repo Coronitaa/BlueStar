@@ -155,7 +155,7 @@
                         <TextBlock Text="{DynamicResource String_NexusWebView2Title}" Style="{StaticResource H2}" Margin="0,0,0,8" HorizontalAlignment="Center"/>
                         <TextBlock Text="{DynamicResource String_NexusWebView2Desc}"
                                    Style="{StaticResource BodySmall}" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,16"/>
-                        <Button Style="{StaticResource PrimaryButton}" Content="Descargar WebView2" Click="OnInstallWebViewClicked" HorizontalAlignment="Center"/>
+                        <Button Style="{StaticResource PrimaryButton}" Content="{DynamicResource String_UiDownloadWebView2}" Click="OnInstallWebViewClicked" HorizontalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 

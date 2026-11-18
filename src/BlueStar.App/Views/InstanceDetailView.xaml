@@ -1769,7 +1769,7 @@
                                                     <!-- Installed Status Badge -->
                                                     <Border Background="{StaticResource SuccessBgBrush}" BorderBrush="{StaticResource SuccessBorderBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,2" Margin="0,0,8,0"
                                                             Visibility="{Binding IsDownloaded, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                        <TextBlock Text="✓ Installed" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource SuccessBrush}"/>
+                                                        <TextBlock Text="{DynamicResource String_UiInstalledCheck}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource SuccessBrush}"/>
                                                     </Border>
                                                     <!-- Unlocked Status Badge -->
                                                     <Border Background="{StaticResource AccentBgBrush}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="8,2" Margin="0,0,10,0"
@@ -1796,7 +1796,7 @@
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                     <TextBlock Style="{StaticResource BodyMedium}">
                                         <Run Text="{Binding SelectedDlcsCount, Mode=OneWay}"/>
-                                        <Run Text=" DLC(s) selected — "/>
+                                        <Run Text="{DynamicResource String_UiDlcsSelectedSuffix}"/>
                                         <Run Text="{Binding SelectedDlcsSize, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
                                     </TextBlock>
                                     <TextBlock Text="{DynamicResource String_DlcsBottomNotice}" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
@@ -3015,11 +3015,11 @@
                                                Foreground="{StaticResource WarningBrush}"/>
                                 </StackPanel>
                                 <TextBlock Style="{StaticResource BodySmall}" Foreground="{StaticResource PrimaryTextBrush}">
-                                    <Run Text="The launcher's ReFix suite has been updated to v"/>
+                                    <Run Text="{DynamicResource String_UiReFixUpdatePart1}"/>
                                     <Run Text="{Binding CurrentGlobalReFixVersion}" FontWeight="Bold" Foreground="{StaticResource WarningBrush}"/>
-                                    <Run Text=". This instance has version v"/>
+                                    <Run Text="{DynamicResource String_UiReFixUpdatePart2}"/>
                                     <Run Text="{Binding InstanceReFixVersion}" FontWeight="Bold"/>
-                                    <Run Text=" installed. Click the button to apply the update with 1 click."/>
+                                    <Run Text="{DynamicResource String_UiReFixUpdatePart3}"/>
                                 </TextBlock>
                             </StackPanel>
 
@@ -3618,7 +3618,7 @@
                                             Padding="14,8"
                                             Command="{Binding RedownloadSteamArtworksCommand}"
                                             IsEnabled="{Binding IsDownloadingArtworks, Converter={StaticResource InverseBoolConverter}}"
-                                            ToolTip="Restaurar artworks oficiales desde Steam">
+                                            ToolTip="{DynamicResource String_UiRestoreArtworks}">
                                         <StackPanel Orientation="Horizontal">
                                             <Path Data="{StaticResource IconRefresh}" Fill="{StaticResource PrimaryTextBrush}" Width="13" Height="13" Stretch="Uniform" Margin="0,0,8,0"/>
                                             <TextBlock Text="{DynamicResource String_ArtworkRedownloadBtn}"/>
@@ -3628,7 +3628,7 @@
                                     <Button Style="{StaticResource SecondaryButton}"
                                             Padding="14,8"
                                             Command="{Binding OpenArtworksFolderCommand}"
-                                            ToolTip="Abrir carpeta local de artworks en el explorador">
+                                            ToolTip="{DynamicResource String_UiOpenArtworkFolder}">
                                         <StackPanel Orientation="Horizontal">
                                             <Path Data="{StaticResource IconFolder}" Fill="{StaticResource PrimaryTextBrush}" Width="13" Height="13" Stretch="Uniform" Margin="0,0,8,0"/>
                                             <TextBlock Text="{DynamicResource String_ArtworkOpenFolderBtn}"/>
@@ -5001,7 +5001,7 @@
                                             <TextBlock Text="{DynamicResource String_InstallModalVersionRecommended}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"
                                                        TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
                                             <Border Background="{StaticResource AccentTranslucentBrush}" CornerRadius="{StaticResource RadiusXs}" Padding="4,1" Margin="6,0,0,0">
-                                                <TextBlock Text="Verified" FontSize="8" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
+                                                <TextBlock Text="{DynamicResource String_UiVerified}" FontSize="8" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
                                             </Border>
                                         </StackPanel>
                                         <TextBlock Text="{DynamicResource String_InstallModalVersionRecommendedDesc}"
@@ -5626,7 +5626,7 @@
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                             <TextBlock Text="CreamAPI" FontWeight="Bold" FontSize="12" Foreground="{StaticResource PrimaryTextBrush}"/>
                                             <Border Background="{StaticResource AccentTranslucentBrush}" CornerRadius="{StaticResource RadiusXs}" Padding="5,1" Margin="6,0,0,0">
-                                                <TextBlock Text="Default" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
+                                                <TextBlock Text="{DynamicResource String_UiDefault}" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}"/>
                                             </Border>
                                         </StackPanel>
                                         <TextBlock Text="{DynamicResource String_InstallModalCreamApiDesc}"
@@ -5819,7 +5819,7 @@
                         <Button Grid.Column="1" Content="{DynamicResource String_BrowseBtn}" Style="{StaticResource SecondaryButton}" Command="{Binding BrowseExportDestinationCommand}"/>
                     </Grid>
 
-                    <TextBlock Text="INI Settings" Style="{StaticResource CaptionBold}" Margin="0,0,0,4" Visibility="{Binding HasExportIniVariables, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    <TextBlock Text="{DynamicResource String_UiIniSettings}" Style="{StaticResource CaptionBold}" Margin="0,0,0,4" Visibility="{Binding HasExportIniVariables, Converter={StaticResource BoolToVisibilityConverter}}"/>
                     <Border Background="{StaticResource SurfaceInputBrush}" CornerRadius="{StaticResource RadiusMd}" Padding="12,8" Margin="0,0,0,16"
                             BorderThickness="1" BorderBrush="{StaticResource SubtleBorderBrush}" MaxHeight="150"
                             Visibility="{Binding HasExportIniVariables, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -5931,15 +5931,15 @@
                         <wv2:WebView2 x:Name="StorePageView"/>
                         <Border x:Name="WebViewFallbackOverlay" Visibility="Collapsed" Background="#1B2838" Padding="32">
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="480">
-                                <TextBlock Text="⚠️ WebView2 Runtime Required" FontSize="18" FontWeight="SemiBold" Foreground="#FFFFFF" HorizontalAlignment="Center" Margin="0,0,0,12"/>
-                                <TextBlock Text="BlueStar uses the Microsoft Edge WebView2 runtime to display embedded Steam Store pages. The runtime is currently missing or could not be initialized on this machine."
+                                <TextBlock Text="{DynamicResource String_UiWebView2Required}" FontSize="18" FontWeight="SemiBold" Foreground="#FFFFFF" HorizontalAlignment="Center" Margin="0,0,0,12"/>
+                                <TextBlock Text="{DynamicResource String_UiWebView2Missing}"
                                            TextWrapping="Wrap" TextAlignment="Center" FontSize="13" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,0,0,20"/>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                     <Button x:Name="BtnInstallWebView2" Click="OnInstallWebView2Clicked" Style="{StaticResource PrimaryButton}" Padding="16,8" Margin="0,0,10,0">
-                                        <TextBlock Text="Install WebView2" FontSize="12" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{DynamicResource String_UiInstallWebView2}" FontSize="12" FontWeight="SemiBold"/>
                                     </Button>
                                     <Button x:Name="BtnOpenInBrowser" Click="OnOpenInBrowserClicked" Style="{StaticResource SecondaryButton}" Padding="16,8">
-                                        <TextBlock Text="Open in Browser" FontSize="12"/>
+                                        <TextBlock Text="{DynamicResource String_UiOpenInBrowser}" FontSize="12"/>
                                     </Button>
                                 </StackPanel>
                             </StackPanel>

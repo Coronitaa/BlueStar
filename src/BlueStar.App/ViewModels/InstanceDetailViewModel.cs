@@ -5970,7 +5970,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
         }
         else
         {
-            StatusMessage = "❌ Steam no terminó de cargar a tiempo. Ejecución cancelada.";
+            StatusMessage = GetResourceString("String_StatusSteamNotReadyCancelled", "❌ Steam did not finish loading in time. Launch cancelled.");
             _notificationService?.ShowWarning(
                 GetResourceString("String_SteamRequiredModalTitle", "Steam Required"),
                 GetResourceString("String_SteamNotReadyRetry", "Steam did not finish loading or signing in in time. Make sure Steam is open and try again."));
@@ -7451,7 +7451,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
         };
 
         await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
-        StatusMessage = $"✅ Configuración y alias guardados correctamente: '{customName}'";
+        StatusMessage = string.Format(GetResourceString("String_StatusAliasSavedFormat", "✅ Settings and alias saved: '{0}'"), customName);
     }
 
     [RelayCommand]
@@ -7465,15 +7465,15 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
             var baseName = !string.IsNullOrWhiteSpace(InstanceAlias) ? InstanceAlias.Trim() : Instance.Name;
             var cloneName = await GenerateUniqueInstanceNameAsync(baseName).ConfigureAwait(true);
 
-            StatusMessage = $"⏳ Duplicando instancia '{baseName}' con enlace NTFS Zero-Copy...";
+            StatusMessage = string.Format(GetResourceString("String_StatusDuplicatingFormat", "⏳ Duplicating instance '{0}'..."), baseName);
             var cloned = await _instanceManager.CloneInstanceAsync(Instance.Id, cloneName, CancellationToken.None).ConfigureAwait(true);
 
-            StatusMessage = $"✅ Instancia duplicada con éxito: '{cloned.Name}'";
+            StatusMessage = string.Format(GetResourceString("String_StatusDuplicatedFormat", "✅ Instance duplicated: '{0}'"), cloned.Name);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error al duplicar la instancia {Id}", Instance.Id);
-            StatusMessage = $"❌ Error al duplicar instancia: {ex.Message}";
+            StatusMessage = string.Format(GetResourceString("String_StatusDuplicateFailedFormat", "❌ Could not duplicate the instance: {0}"), ex.Message);
         }
         finally
         {
@@ -7492,7 +7492,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
             var baseName = !string.IsNullOrWhiteSpace(InstanceAlias) ? InstanceAlias.Trim() : Instance.Name;
             var cleanName = await GenerateUniqueInstanceNameAsync($"{baseName} - Limpia").ConfigureAwait(true);
 
-            StatusMessage = $"⏳ Creando instancia limpia para '{baseName}'...";
+            StatusMessage = string.Format(GetResourceString("String_StatusCreatingCleanFormat", "⏳ Creating a clean instance for '{0}'..."), baseName);
 
             var baseDepot = _instanceManager.GetBaseDepotPath(Instance.AppId);
             if (Directory.Exists(baseDepot) && Directory.EnumerateFileSystemEntries(baseDepot).Any())
@@ -7515,7 +7515,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
                 };
                 await _instanceManager.UpdateAsync(cleanedFromDepot, CancellationToken.None).ConfigureAwait(true);
 
-                StatusMessage = $"✨ Instancia limpia creada desde base depot: '{cleanInstance.Name}'";
+                StatusMessage = string.Format(GetResourceString("String_StatusCleanFromDepotFormat", "✨ Clean instance created: '{0}'"), cleanInstance.Name);
             }
             else
             {
@@ -7581,13 +7581,13 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
                 };
                 await _instanceManager.UpdateAsync(cleanedInstance, CancellationToken.None).ConfigureAwait(true);
 
-                StatusMessage = $"✨ Instancia limpia creada con éxito: '{cloned.Name}'";
+                StatusMessage = string.Format(GetResourceString("String_StatusCleanCreatedFormat", "✨ Clean instance created: '{0}'"), cloned.Name);
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error al crear instancia limpia para {Id}", Instance.Id);
-            StatusMessage = $"❌ Error al crear instancia limpia: {ex.Message}";
+            StatusMessage = string.Format(GetResourceString("String_StatusCleanFailedFormat", "❌ Could not create the clean instance: {0}"), ex.Message);
         }
         finally
         {
@@ -9976,22 +9976,22 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
     {
         CapsuleArtwork = new ArtworkSlotViewModel(
             SteamArtworkType.Capsule,
-            "Portada Vertical (Capsule)",
+            GetResourceString("String_ArtworkLabelCapsule", "Vertical Cover (Capsule)"),
             "600 × 900 px (2:3)",
             OnArtworkReplaceRequested,
             OnArtworkClearRequested);
 
         HeroArtwork = new ArtworkSlotViewModel(
             SteamArtworkType.Hero,
-            "Fondo / Banner Hero",
+            GetResourceString("String_ArtworkLabelHero", "Background / Hero Banner"),
             "1920 × 620 px (~3.1:1)",
             OnArtworkReplaceRequested,
             OnArtworkClearRequested);
 
         LogoArtwork = new ArtworkSlotViewModel(
             SteamArtworkType.Logo,
-            "Logotipo (Logo)",
-            "PNG Transparente",
+            GetResourceString("String_ArtworkLabelLogo", "Logo"),
+            GetResourceString("String_ArtworkHintTransparentPng", "Transparent PNG"),
             OnArtworkReplaceRequested,
             OnArtworkClearRequested);
 
@@ -10004,21 +10004,21 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
 
         IconArtwork = new ArtworkSlotViewModel(
             SteamArtworkType.Icon,
-            "Ícono del Juego / Shortcut",
+            GetResourceString("String_ArtworkLabelIcon", "Game Icon / Shortcut"),
             "256 × 256 px (.ico / .png)",
             OnArtworkReplaceRequested,
             OnArtworkClearRequested);
 
         InstanceBannerArtwork = new ArtworkSlotViewModel(
             SteamArtworkType.InstanceBanner,
-            "Banner de la Instancia",
+            GetResourceString("String_ArtworkLabelInstanceBanner", "Instance Banner"),
             "460 × 215 px (~2.14:1)",
             OnArtworkReplaceRequested,
             OnArtworkClearRequested);
 
         InstanceLogoArtwork = new ArtworkSlotViewModel(
             SteamArtworkType.InstanceLogo,
-            "Logo de la Instancia (Nav)",
+            GetResourceString("String_ArtworkLabelInstanceLogo", "Instance Logo (Nav)"),
             "256 × 256 px (1:1)",
             OnArtworkReplaceRequested,
             OnArtworkClearRequested);
@@ -10248,13 +10248,13 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
                 CancellationToken.None).ConfigureAwait(true);
 
             await LoadArtworksAsync().ConfigureAwait(true);
-            ArtworkStatusMessage = "✅ Artworks descargados y sincronizados con éxito.";
+            ArtworkStatusMessage = GetResourceString("String_ArtworkStatusSynced", "✅ Artwork downloaded and synced.");
             _notificationService?.ShowSuccess(GetResourceString("String_ArtworkUpdatedTitle", "Artwork Updated"), GetResourceString("String_ArtworkUpdatedMessage", "Steam artwork was downloaded and synced."));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to redownload artworks for instance {Id}", Instance.Id);
-            ArtworkStatusMessage = $"❌ Error al descargar: {ex.Message}";
+            ArtworkStatusMessage = string.Format(GetResourceString("String_ArtworkStatusDownloadFailedFormat", "❌ Download failed: {0}"), ex.Message);
             _notificationService?.ShowError(GetResourceString("String_ArtworkDownloadFailedTitle", "Could not download artwork"), ex.Message);
         }
         finally
@@ -10285,13 +10285,13 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
     private void OnArtworkReplaceRequested(SteamArtworkType type)
     {
         var filter = type == SteamArtworkType.Icon
-            ? "Iconos e Imágenes (*.ico;*.png;*.jpg;*.jpeg;*.webp)|*.ico;*.png;*.jpg;*.jpeg;*.webp|Todos los archivos (*.*)|*.*"
-            : "Imágenes (*.png;*.jpg;*.jpeg;*.webp)|*.png;*.jpg;*.jpeg;*.webp|Todos los archivos (*.*)|*.*";
+            ? $"{GetResourceString("String_FileFilterIconsImages", "Icons and images")} (*.ico;*.png;*.jpg;*.jpeg;*.webp)|*.ico;*.png;*.jpg;*.jpeg;*.webp|{GetResourceString("String_FileFilterAllFiles", "All files")} (*.*)|*.*"
+            : $"{GetResourceString("String_FileFilterImages", "Images")} (*.png;*.jpg;*.jpeg;*.webp)|*.png;*.jpg;*.jpeg;*.webp|{GetResourceString("String_FileFilterAllFiles", "All files")} (*.*)|*.*";
 
         var (recW, recH, _) = InstanceArtworkService.GetRecommendedDimensions(type);
         var dlg = new OpenFileDialog
         {
-            Title = $"Seleccionar imagen para {GetArtworkSlotName(type)} ({recW} × {recH} px)",
+            Title = string.Format(GetResourceString("String_ArtworkPickerTitleFormat", "Choose an image for {0} ({1} × {2} px)"), GetArtworkSlotName(type), recW, recH),
             Filter = filter
         };
 

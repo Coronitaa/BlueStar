@@ -332,7 +332,7 @@
                                             <DropShadowEffect Color="#000000" BlurRadius="16" ShadowDepth="4" Opacity="0.6"/>
                                         </Border.Effect>
                                         <StackPanel>
-                                            <TextBlock Text="Import instance from"
+                                            <TextBlock Text="{DynamicResource String_UiImportFrom}"
                                                        Style="{StaticResource CaptionBold}"
                                                        Foreground="{StaticResource SecondaryTextBrush}"
                                                        Margin="8,4,8,8"/>
@@ -352,7 +352,7 @@
                                                           Stretch="Uniform" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                     <StackPanel Grid.Column="1" Margin="8,0,0,0">
                                                         <TextBlock Text="Steam" FontWeight="SemiBold" FontSize="13"/>
-                                                        <TextBlock Text="Import installed Steam game" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                        <TextBlock Text="{DynamicResource String_UiImportSteamGame}" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
                                                     </StackPanel>
                                                 </Grid>
                                             </Button>
@@ -371,8 +371,8 @@
                                                     <Path Grid.Column="0" Data="{StaticResource IconDownload}" Fill="{StaticResource WarningBrush}"
                                                           Stretch="Uniform" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                     <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                                                        <TextBlock Text="Depot ZIP" FontWeight="SemiBold" FontSize="13"/>
-                                                        <TextBlock Text="Import DepotBox archive" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                        <TextBlock Text="{DynamicResource String_UiDepotZip}" FontWeight="SemiBold" FontSize="13"/>
+                                                        <TextBlock Text="{DynamicResource String_UiImportDepotBox}" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
                                                     </StackPanel>
                                                 </Grid>
                                             </Button>
@@ -390,8 +390,8 @@
                                                     <Path Grid.Column="0" Data="{StaticResource IconFolder}" Fill="{StaticResource SuccessBrush}"
                                                           Stretch="Uniform" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                     <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                                                        <TextBlock Text="Folder" FontWeight="SemiBold" FontSize="13"/>
-                                                        <TextBlock Text="Import existing game folder" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                        <TextBlock Text="{DynamicResource String_UiFolder}" FontWeight="SemiBold" FontSize="13"/>
+                                                        <TextBlock Text="{DynamicResource String_UiImportFolder}" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
                                                     </StackPanel>
                                                 </Grid>
                                             </Button>
@@ -427,7 +427,7 @@
 
                 <!-- Left Corner Downloads Button with Active Animations & Realtime Status -->
                 <Button Grid.Column="0"
-                        ToolTip="Downloads Queue &amp; Speed"
+                        ToolTip="{DynamicResource String_UiDownloadsQueueSpeed}"
                         Command="{Binding OpenDownloadsCommand}"
                         VerticalAlignment="Center"
                         Cursor="Hand"

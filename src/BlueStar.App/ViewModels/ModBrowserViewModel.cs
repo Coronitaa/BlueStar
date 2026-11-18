@@ -306,6 +306,8 @@ public sealed partial class ModBrowserViewModel : ObservableObject
             return msg.Contains("✅") ||
                    msg.Contains("instalado", StringComparison.OrdinalIgnoreCase) ||
                    msg.Contains("éxito", StringComparison.OrdinalIgnoreCase) ||
+                   msg.Contains("installed", StringComparison.OrdinalIgnoreCase) ||
+                   msg.Contains("success", StringComparison.OrdinalIgnoreCase) ||
                    msg.Contains("completad", StringComparison.OrdinalIgnoreCase);
         }
     }

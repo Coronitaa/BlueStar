@@ -33,6 +33,7 @@ public sealed partial class CurseForgeBrowserViewModel : ObservableObject
         _curseForgeService = curseForgeService ?? throw new ArgumentNullException(nameof(curseForgeService));
         _installPackage = installPackage ?? throw new ArgumentNullException(nameof(installPackage));
         _localization = localization;
+        _selectedSort = SortOptions[0];
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -54,7 +55,14 @@ public sealed partial class CurseForgeBrowserViewModel : ObservableObject
     [ObservableProperty]
     private string _selectedSort = "Popularidad";
 
-    public IReadOnlyList<string> SortOptions { get; } = ["Popularidad", "Descargas", "Actualizado", "Nombre"];
+    public IReadOnlyList<string> SortOptions => _sortOptions ??=
+    [
+        T("String_SortPopularity", "Popularity"),
+        T("String_SortDownloads", "Downloads"),
+        T("String_SortUpdated", "Updated"),
+        T("String_SortName", "Name")
+    ];
+    private IReadOnlyList<string>? _sortOptions;
 
     public ObservableCollection<CurseForgeModItem> Mods { get; } = [];
     public ObservableCollection<CurseForgeCategory> Categories { get; } = [];
@@ -153,7 +161,7 @@ public sealed partial class CurseForgeBrowserViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to load CurseForge mods for game {GameId}", GameId);
-            ReportStatus("Error al cargar mods de CurseForge.", isError: true);
+            ReportStatus(T("String_CurseForgeLoadFailed", "Could not load CurseForge mods."), isError: true);
         }
         finally
         {
@@ -245,7 +253,7 @@ public sealed partial class CurseForgeBrowserViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogError(ex, "Search failed for CurseForge game {GameId}", GameId);
-            ReportStatus("Error en la búsqueda de CurseForge.", isError: true);
+            ReportStatus(T("String_CurseForgeSearchFailed", "CurseForge search failed."), isError: true);
         }
         finally
         {

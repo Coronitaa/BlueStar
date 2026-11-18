@@ -977,7 +977,7 @@
                                 Command="{Binding OpenUrlCommand}"
                                 CommandParameter="https://github.com/Coronitaa/BlueStar"/>
 
-                        <Button Content="🐞 Issues"
+                        <Button Content="{DynamicResource String_UiIssues}"
                                 Style="{StaticResource SecondaryButton}"
                                 Padding="12,8"
                                 FontSize="12"
@@ -1024,10 +1024,10 @@
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                         <TextBlock Text="ReFix" FontWeight="Bold" FontSize="13" Foreground="{StaticResource AccentBrush}" Margin="0,0,8,0"/>
                                         <Border Background="{StaticResource SurfaceCardBrush}" CornerRadius="4" Padding="5,1">
-                                            <TextBlock Text="Mod &amp; Emulator Bridge" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
+                                            <TextBlock Text="{DynamicResource String_UiModEmulatorBridge}" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
                                         </Border>
                                     </StackPanel>
-                                    <TextBlock Text="Modern lightweight mod bridge, automatic DLL proxy injection and engine translation layer."
+                                    <TextBlock Text="{DynamicResource String_UiCreditModBridge}"
                                                Style="{StaticResource Caption}" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <Button Grid.Column="1" Content="GitHub ↗" Style="{StaticResource GhostButton}"
@@ -1050,10 +1050,10 @@
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                         <TextBlock Text="DepotDownloader" FontWeight="Bold" FontSize="13" Foreground="{StaticResource AccentBrush}" Margin="0,0,8,0"/>
                                         <Border Background="{StaticResource SurfaceCardBrush}" CornerRadius="4" Padding="5,1">
-                                            <TextBlock Text="by SteamRE" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
+                                            <TextBlock Text="{DynamicResource String_UiBySteamRe}" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
                                         </Border>
                                     </StackPanel>
-                                    <TextBlock Text="High-performance Steam depot download client, manifest deserialization, and CDN chunk manager."
+                                    <TextBlock Text="{DynamicResource String_UiCreditDepotDownloader}"
                                                Style="{StaticResource Caption}" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <Button Grid.Column="1" Content="GitHub ↗" Style="{StaticResource GhostButton}"
@@ -1076,10 +1076,10 @@
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                         <TextBlock Text="SmokeAPI" FontWeight="Bold" FontSize="13" Foreground="{StaticResource AccentBrush}" Margin="0,0,8,0"/>
                                         <Border Background="{StaticResource SurfaceCardBrush}" CornerRadius="4" Padding="5,1">
-                                            <TextBlock Text="by acidicoala" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
+                                            <TextBlock Text="{DynamicResource String_UiByAcidicoala}" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
                                         </Border>
                                     </StackPanel>
-                                    <TextBlock Text="Universal Steam API emulator for DLC unlocking, ticket generation, and overlay support."
+                                    <TextBlock Text="{DynamicResource String_UiCreditSmokeApi}"
                                                Style="{StaticResource Caption}" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <Button Grid.Column="1" Content="GitHub ↗" Style="{StaticResource GhostButton}"
@@ -1102,10 +1102,10 @@
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                         <TextBlock Text="CreamInstaller" FontWeight="Bold" FontSize="13" Foreground="{StaticResource AccentBrush}" Margin="0,0,8,0"/>
                                         <Border Background="{StaticResource SurfaceCardBrush}" CornerRadius="4" Padding="5,1">
-                                            <TextBlock Text="by pointfeev" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
+                                            <TextBlock Text="{DynamicResource String_UiByPointfeev}" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
                                         </Border>
                                     </StackPanel>
-                                    <TextBlock Text="Automated DLC unlocker, parser and multi-platform emulator deployment utility."
+                                    <TextBlock Text="{DynamicResource String_UiCreditCreamInstaller}"
                                                Style="{StaticResource Caption}" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <Button Grid.Column="1" Content="GitHub ↗" Style="{StaticResource GhostButton}"
@@ -1128,10 +1128,10 @@
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                         <TextBlock Text="Goldberg Emulator" FontWeight="Bold" FontSize="13" Foreground="{StaticResource AccentBrush}" Margin="0,0,8,0"/>
                                         <Border Background="{StaticResource SurfaceCardBrush}" CornerRadius="4" Padding="5,1">
-                                            <TextBlock Text="by Mr_Goldberg" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
+                                            <TextBlock Text="{DynamicResource String_UiByMrGoldberg}" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
                                         </Border>
                                     </StackPanel>
-                                    <TextBlock Text="Open-source Steam client emulator designed for LAN co-op and offline standalone gameplay."
+                                    <TextBlock Text="{DynamicResource String_UiCreditGoldberg}"
                                                Style="{StaticResource Caption}" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <Button Grid.Column="1" Content="GitLab ↗" Style="{StaticResource GhostButton}"
@@ -1154,10 +1154,10 @@
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                         <TextBlock Text="SteamKit2" FontWeight="Bold" FontSize="13" Foreground="{StaticResource AccentBrush}" Margin="0,0,8,0"/>
                                         <Border Background="{StaticResource SurfaceCardBrush}" CornerRadius="4" Padding="5,1">
-                                            <TextBlock Text="by SteamRE" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
+                                            <TextBlock Text="{DynamicResource String_UiBySteamRe}" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
                                         </Border>
                                     </StackPanel>
-                                    <TextBlock Text=".NET library providing core client protocols to the Steam network and protobuf services."
+                                    <TextBlock Text="{DynamicResource String_UiCreditSteamKit}"
                                                Style="{StaticResource Caption}" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <Button Grid.Column="1" Content="GitHub ↗" Style="{StaticResource GhostButton}"
@@ -1183,7 +1183,7 @@
                                             <TextBlock Text=".NET Foundation" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
                                         </Border>
                                     </StackPanel>
-                                    <TextBlock Text="Modern, ultra-fast MVVM framework leveraging source generators for clean decoupled architecture."
+                                    <TextBlock Text="{DynamicResource String_UiCreditMvvm}"
                                                Style="{StaticResource Caption}" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <Button Grid.Column="1" Content="GitHub ↗" Style="{StaticResource GhostButton}"
@@ -1209,7 +1209,7 @@
                                             <TextBlock Text=".NET Foundation" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
                                         </Border>
                                     </StackPanel>
-                                    <TextBlock Text="Resilience and transient fault-handling policies for robust DepotBox CDN requests."
+                                    <TextBlock Text="{DynamicResource String_UiCreditPolly}"
                                                Style="{StaticResource Caption}" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <Button Grid.Column="1" Content="GitHub ↗" Style="{StaticResource GhostButton}"
@@ -1232,10 +1232,10 @@
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                         <TextBlock Text="ManifestHub2" FontWeight="Bold" FontSize="13" Foreground="{StaticResource AccentBrush}" Margin="0,0,8,0"/>
                                         <Border Background="{StaticResource SurfaceCardBrush}" CornerRadius="4" Padding="5,1">
-                                            <TextBlock Text="by SSMGAlt" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
+                                            <TextBlock Text="{DynamicResource String_UiBySsmgAlt}" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
                                         </Border>
                                     </StackPanel>
-                                    <TextBlock Text="Community Steam manifest repository, branch manifest GIDs, and depot AES decryption keys provider."
+                                    <TextBlock Text="{DynamicResource String_UiCreditManifestHub}"
                                                Style="{StaticResource Caption}" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <Button Grid.Column="1" Content="GitHub ↗" Style="{StaticResource GhostButton}"
@@ -1258,10 +1258,10 @@
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                         <TextBlock Text="OnlineFix" FontWeight="Bold" FontSize="13" Foreground="{StaticResource AccentBrush}" Margin="0,0,8,0"/>
                                         <Border Background="{StaticResource SurfaceCardBrush}" CornerRadius="4" Padding="5,1">
-                                            <TextBlock Text="Community Service" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
+                                            <TextBlock Text="{DynamicResource String_UiCommunityService}" FontSize="10" Foreground="{StaticResource MutedTextBrush}"/>
                                         </Border>
                                     </StackPanel>
-                                    <TextBlock Text="Multiplayer and Steamworks online emulation fixes for cross-client co-op lobbies."
+                                    <TextBlock Text="{DynamicResource String_UiCreditOnlineFix}"
                                                Style="{StaticResource Caption}" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <Button Grid.Column="1" Content="Web ↗" Style="{StaticResource GhostButton}"
@@ -1281,7 +1281,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="⚙" FontSize="14" Foreground="{StaticResource AccentBrush}" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="1" Text="Built with .NET 8.0 LTS • Windows Presentation Foundation (WPF) • High-Performance System.Text.Json • MIT License"
+                            <TextBlock Grid.Column="1" Text="{DynamicResource String_UiBuiltWith}"
                                        Style="{StaticResource BodySmall}" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
                         </Grid>
                     </Border>

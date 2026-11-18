@@ -1,7 +1,7 @@
 <Window x:Class="BlueStar.App.Views.SplashWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Starting BlueStar"
+        Title="{DynamicResource String_UiStartingBlueStar}"
         Width="420" Height="250"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
@@ -45,7 +45,7 @@
 
             <StackPanel Grid.Row="2">
                 <TextBlock x:Name="StatusText"
-                           Text="Starting up…"
+                           Text="{DynamicResource String_UiStartingUp}"
                            FontSize="12" Foreground="#A1A1AA"
                            HorizontalAlignment="Center" Margin="0,0,0,12"
                            TextTrimming="CharacterEllipsis"

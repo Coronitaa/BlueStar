@@ -114,15 +114,15 @@ public sealed partial class ThunderstoreBrowserViewModel : ObservableObject
 
     {
 
-        "Downloads" or "Descargas" => "Descargas",
+        "Downloads" or "Descargas" => T("String_SortDownloads", "Descargas"),
 
-        "Rating" or "Calificación" => "Calificación",
+        "Rating" or "Calificación" => T("String_SortRating", "Calificación"),
 
-        "Updated" or "Actualizado" => "Actualizado",
+        "Updated" or "Actualizado" => T("String_SortUpdated", "Actualizado"),
 
-        "Name" or "Nombre" => "Nombre",
+        "Name" or "Nombre" => T("String_SortName", "Nombre"),
 
-        _ => "Ordenar"
+        _ => T("String_SortPlaceholder", "Ordenar")
 
     };
 
@@ -296,7 +296,8 @@ public sealed partial class ThunderstoreBrowserViewModel : ObservableObject
 
     public ObservableCollection<string> AvailableCategories { get; } = ["All"];
 
-    public ObservableCollection<string> SortOptions { get; } = ["Descargas", "Calificación", "Actualizado", "Nombre"];
+    public ObservableCollection<string> SortOptions => _sortOptions ??= [T("String_SortDownloads", "Descargas"), T("String_SortRating", "Calificación"), T("String_SortUpdated", "Actualizado"), T("String_SortName", "Nombre")];
+    private ObservableCollection<string>? _sortOptions;
 
 
 

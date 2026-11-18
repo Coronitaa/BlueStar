@@ -7,7 +7,7 @@
         xmlns:models="clr-namespace:BlueStar.Core.Models;assembly=BlueStar.Core"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance vm:DebugConsoleViewModel}"
-        Title="BlueStar — Live Debug &amp; Diagnostic Console"
+        Title="{DynamicResource String_UiDebugConsoleTitle}"
         Icon="pack://application:,,,/BlueStar;component/Assets/bluestar.ico"
         Width="1050" Height="680"
         MinWidth="600" MinHeight="400"
@@ -32,7 +32,7 @@
                     <!-- Total Logs -->
                     <Border Background="#1E232E" CornerRadius="6" Padding="10,4" Margin="0,2,8,2">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Logs: " FontSize="12" Foreground="{StaticResource MutedTextBrush}"/>
+                            <TextBlock Text="{DynamicResource String_UiLogsLabel}" FontSize="12" Foreground="{StaticResource MutedTextBrush}"/>
                             <TextBlock Text="{Binding TotalCount}" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}"/>
                         </StackPanel>
                     </Border>
@@ -64,7 +64,7 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="{DynamicResource String_DebugConsoleTitle}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}"/>
                             <TextBlock Text="•" Foreground="{StaticResource MutedTextBrush}" Margin="6,0"/>
-                            <TextBlock Text="Live Stream" FontSize="11.5" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{DynamicResource String_UiLiveStream}" FontSize="11.5" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
                         </StackPanel>
                         <TextBlock Text="{DynamicResource String_DebugConsoleSubtitle}" Style="{StaticResource Muted}" FontSize="11"/>
                     </StackPanel>
@@ -95,7 +95,7 @@
 
                 <!-- Auto-Scroll Checkbox -->
                 <CheckBox IsChecked="{Binding IsAutoScrollEnabled, Mode=TwoWay}"
-                          Content="Auto-scroll"
+                          Content="{DynamicResource String_UiAutoScroll}"
                           Style="{StaticResource DarkCheckBox}"
                           VerticalAlignment="Center"
                           FontSize="12"
@@ -274,7 +274,7 @@
             <DockPanel LastChildFill="True">
                 <!-- Right: Status Badge -->
                 <Border DockPanel.Dock="Right" Background="#1E293B" CornerRadius="4" Padding="6,2" Margin="10,0,0,0">
-                    <TextBlock Text="GitHub &amp; Bug Report Ready" FontSize="10.5" Foreground="#94A3B8"/>
+                    <TextBlock Text="{DynamicResource String_UiGitHubReady}" FontSize="10.5" Foreground="#94A3B8"/>
                 </Border>
 
                 <!-- Left: Status Message -->

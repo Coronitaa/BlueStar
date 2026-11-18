@@ -918,7 +918,7 @@ public partial class SettingsViewModel : ObservableObject, ISharedViewModel
         if (IsGeneratingReport) return;
 
         IsGeneratingReport = true;
-        DiagnosticStatusMessage = "Generando log de diagnóstico estructurado...";
+        DiagnosticStatusMessage = L("String_DiagnosticGenerating", "Generating the diagnostic log...");
 
         try
         {
@@ -926,7 +926,7 @@ public partial class SettingsViewModel : ObservableObject, ISharedViewModel
             var fileName = System.IO.Path.GetFileName(filePath);
 
             LastDiagnosticFilePath = filePath;
-            DiagnosticStatusMessage = $"✅ Log de diagnóstico generado: {fileName}";
+            DiagnosticStatusMessage = string.Format(L("String_DiagnosticGeneratedStatusFormat", "✅ Diagnostic log generated: {0}"), fileName);
 
             try
             {
@@ -986,7 +986,7 @@ public partial class SettingsViewModel : ObservableObject, ISharedViewModel
         try
         {
             System.Windows.Clipboard.SetDataObject(LastDiagnosticFilePath, true);
-            _notificationService.ShowInfo("Ruta Copiada", "Ruta del archivo copiada al portapapeles.");
+            _notificationService.ShowInfo(L("String_PathCopiedTitle", "Path Copied"), L("String_PathCopiedMessage", "File path copied to the clipboard."));
         }
         catch { }
     }
@@ -1094,7 +1094,7 @@ public partial class SettingsViewModel : ObservableObject, ISharedViewModel
                 });
             }
 
-            ClearCacheResult = "✅ Caché limpiada con éxito.";
+            ClearCacheResult = L("String_CacheClearedStatus", "✅ Cache cleared.");
             _notificationService.ShowSuccess(
                 L("String_CacheClearedTitle", "Cache Cleared"),
                 L("String_CacheClearedMessage", "The app cache was cleared. The banners of your installed games were kept."));

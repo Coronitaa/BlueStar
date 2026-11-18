@@ -695,7 +695,7 @@ public sealed partial class ModsTabViewModel : ObservableObject
         var dlg = new OpenFileDialog
         {
             Title = T("String_SelectModpackIconDialogTitle", "Seleccionar imagen de perfil para el modpack"),
-            Filter = "Imágenes (*.png;*.jpg;*.jpeg;*.webp;*.ico)|*.png;*.jpg;*.jpeg;*.webp;*.ico|Todos los archivos (*.*)|*.*"
+            Filter = $"{T("String_FileFilterImages", "Images")} (*.png;*.jpg;*.jpeg;*.webp;*.ico)|*.png;*.jpg;*.jpeg;*.webp;*.ico|{T("String_FileFilterAllFiles", "All files")} (*.*)|*.*"
         };
         if (dlg.ShowDialog() == true)
         {
@@ -734,7 +734,7 @@ public sealed partial class ModsTabViewModel : ObservableObject
             var ofd = new OpenFileDialog
             {
                 Title = T("String_ImportModpackDialogTitle", "Seleccionar archivo de modpack"),
-                Filter = "BlueStar Modpack (*.zip;*.json)|*.zip;*.json|BlueStar Modpack Package (*.zip)|*.zip|BlueStar Modpack Legacy (*.json)|*.json|Todos los archivos (*.*)|*.*"
+                Filter = $"BlueStar Modpack (*.zip;*.json)|*.zip;*.json|BlueStar Modpack Package (*.zip)|*.zip|BlueStar Modpack Legacy (*.json)|*.json|{T("String_FileFilterAllFiles", "All files")} (*.*)|*.*"
             };
             if (ofd.ShowDialog() != true) return;
             selectedFilePath = ofd.FileName;
@@ -868,7 +868,7 @@ public sealed partial class ModsTabViewModel : ObservableObject
         var dlg = new OpenFileDialog
         {
             Title = T("String_SelectModpackIconDialogTitle", "Seleccionar imagen de perfil para el modpack"),
-            Filter = "Imágenes (*.png;*.jpg;*.jpeg;*.webp;*.ico)|*.png;*.jpg;*.jpeg;*.webp;*.ico|Todos los archivos (*.*)|*.*"
+            Filter = $"{T("String_FileFilterImages", "Images")} (*.png;*.jpg;*.jpeg;*.webp;*.ico)|*.png;*.jpg;*.jpeg;*.webp;*.ico|{T("String_FileFilterAllFiles", "All files")} (*.*)|*.*"
         };
         if (dlg.ShowDialog() == true)
         {
@@ -1387,7 +1387,7 @@ public sealed partial class ModsTabViewModel : ObservableObject
             var sfd = new SaveFileDialog
             {
                 Title = T("String_ExportModpackDialogTitle", "Exportar modpack"),
-                Filter = "BlueStar Modpack Package (*.zip)|*.zip|BlueStar Modpack Legacy (*.json)|*.json|Todos los archivos (*.*)|*.*",
+                Filter = $"BlueStar Modpack Package (*.zip)|*.zip|BlueStar Modpack Legacy (*.json)|*.json|{T("String_FileFilterAllFiles", "All files")} (*.*)|*.*",
                 FileName = $"{pack.Name}.zip",
                 DefaultExt = ".zip"
             };
@@ -1593,7 +1593,7 @@ public sealed partial class ModsTabViewModel : ObservableObject
             var ofd = new OpenFileDialog
             {
                 Title = T("String_ImportModpackDialogTitle", "Seleccionar archivo de modpack"),
-                Filter = "BlueStar Modpack (*.zip;*.json)|*.zip;*.json|BlueStar Modpack Package (*.zip)|*.zip|BlueStar Modpack Legacy (*.json)|*.json|Todos los archivos (*.*)|*.*"
+                Filter = $"BlueStar Modpack (*.zip;*.json)|*.zip;*.json|BlueStar Modpack Package (*.zip)|*.zip|BlueStar Modpack Legacy (*.json)|*.json|{T("String_FileFilterAllFiles", "All files")} (*.*)|*.*"
             };
             if (ofd.ShowDialog() != true) return;
             importPath = ofd.FileName;
