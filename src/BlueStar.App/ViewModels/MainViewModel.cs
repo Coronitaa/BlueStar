@@ -1069,14 +1069,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (string.IsNullOrWhiteSpace(nxmUrl)) return;
         if (_nexusModsService == null || !_nexusModsService.CanHandleNxmUrl(nxmUrl))
         {
-            _notificationService.ShowWarning("Nexus Mods", "El enlace recibido no es un enlace nxm:// válido de Nexus Mods.");
+            _notificationService.ShowWarning("Nexus Mods", L("String_NexusInvalidLink", "The link is not a valid Nexus Mods nxm:// link."));
             return;
         }
 
         var link = _nexusModsService.ParseNxmUrl(nxmUrl);
         if (link == null)
         {
-            _notificationService.ShowWarning("Nexus Mods", "No se pudo interpretar el enlace nxm:// de Nexus Mods.");
+            _notificationService.ShowWarning("Nexus Mods", L("String_NexusUnreadableLink", "Could not read the Nexus Mods nxm:// link."));
             return;
         }
 
@@ -1108,7 +1108,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         if (targetInstance == null)
         {
-            _notificationService.ShowWarning("Nexus Mods", $"Se recibió una descarga de Nexus Mods para '{link.GameDomain}', pero no se encontró ninguna instancia instalada para este juego.");
+            _notificationService.ShowWarning("Nexus Mods", string.Format(L("String_NexusNoInstanceFormat", "Got a Nexus Mods download for '{0}', but no installed instance of that game was found."), link.GameDomain));
             return;
         }
 

@@ -5972,8 +5972,8 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
         {
             StatusMessage = "❌ Steam no terminó de cargar a tiempo. Ejecución cancelada.";
             _notificationService?.ShowWarning(
-                GetResourceString("String_SteamRequiredModalTitle", "Steam Necesario"),
-                "Steam no completó su carga o inicio de sesión a tiempo. Asegúrate de que Steam esté abierto y vuelve a intentar.");
+                GetResourceString("String_SteamRequiredModalTitle", "Steam Required"),
+                GetResourceString("String_SteamNotReadyRetry", "Steam did not finish loading or signing in in time. Make sure Steam is open and try again."));
         }
     }
 
@@ -10065,13 +10065,13 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
 
     private string GetArtworkSlotName(SteamArtworkType type) => type switch
     {
-        SteamArtworkType.Capsule => "Portada Vertical",
-        SteamArtworkType.Hero => "Fondo Hero",
-        SteamArtworkType.Logo => "Logotipo",
-        SteamArtworkType.Header => "Grid Banner",
-        SteamArtworkType.Icon => "Ícono del Juego",
-        SteamArtworkType.InstanceBanner => "Banner de la Instancia",
-        SteamArtworkType.InstanceLogo => "Logo de la Instancia",
+        SteamArtworkType.Capsule => GetResourceString("String_ArtworkSlotCapsule", "Vertical Cover"),
+        SteamArtworkType.Hero => GetResourceString("String_ArtworkSlotHero", "Hero Background"),
+        SteamArtworkType.Logo => GetResourceString("String_ArtworkSlotLogo", "Logo"),
+        SteamArtworkType.Header => GetResourceString("String_ArtworkSlotHeader", "Grid Banner"),
+        SteamArtworkType.Icon => GetResourceString("String_ArtworkSlotIcon", "Game Icon"),
+        SteamArtworkType.InstanceBanner => GetResourceString("String_ArtworkSlotInstanceBanner", "Instance Banner"),
+        SteamArtworkType.InstanceLogo => GetResourceString("String_ArtworkSlotInstanceLogo", "Instance Logo"),
         _ => "Artwork"
     };
 
@@ -10226,7 +10226,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
     {
         if (Instance == null || Instance.AppId == 0)
         {
-            _notificationService?.ShowWarning("Sin AppID de Steam", "Esta instancia no está vinculada a un juego de Steam.");
+            _notificationService?.ShowWarning(GetResourceString("String_ArtworkNoAppIdTitle", "No Steam AppID"), GetResourceString("String_ArtworkNoAppIdMessage", "This instance is not linked to a Steam game."));
             return;
         }
 
@@ -10249,13 +10249,13 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
 
             await LoadArtworksAsync().ConfigureAwait(true);
             ArtworkStatusMessage = "✅ Artworks descargados y sincronizados con éxito.";
-            _notificationService?.ShowSuccess("Artworks Actualizados", "Se descargaron y sincronizaron los artworks de Steam.");
+            _notificationService?.ShowSuccess(GetResourceString("String_ArtworkUpdatedTitle", "Artwork Updated"), GetResourceString("String_ArtworkUpdatedMessage", "Steam artwork was downloaded and synced."));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to redownload artworks for instance {Id}", Instance.Id);
             ArtworkStatusMessage = $"❌ Error al descargar: {ex.Message}";
-            _notificationService?.ShowError("Error al descargar artworks", ex.Message);
+            _notificationService?.ShowError(GetResourceString("String_ArtworkDownloadFailedTitle", "Could not download artwork"), ex.Message);
         }
         finally
         {
@@ -10318,7 +10318,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
         }
         catch (Exception ex)
         {
-            _notificationService?.ShowError("Error de lectura", $"No se pudo leer el archivo: {ex.Message}");
+            _notificationService?.ShowError(GetResourceString("String_ArtworkReadErrorTitle", "Read Error"), string.Format(GetResourceString("String_ArtworkReadErrorFormat", "Could not read the file: {0}"), ex.Message));
             return;
         }
 
@@ -10505,7 +10505,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
         {
             _logger.LogError(ex, "Failed to apply custom artwork");
             ArtworkStatusMessage = $"❌ Error: {ex.Message}";
-            _notificationService?.ShowError("Error al guardar", ex.Message);
+            _notificationService?.ShowError(GetResourceString("String_ArtworkSaveFailedTitle", "Could not save"), ex.Message);
         }
     }
 
@@ -10577,12 +10577,12 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
                 updateSlots();
 
             ArtworkStatusMessage = $"🗑 {GetArtworkSlotName(type)} eliminado.";
-            _notificationService?.ShowInfo("Artwork Quitado", $"Se quitó el artwork de {GetArtworkSlotName(type)}.");
+            _notificationService?.ShowInfo(GetResourceString("String_ArtworkRemovedTitle", "Artwork Removed"), string.Format(GetResourceString("String_ArtworkRemovedFormat", "Removed the {0} artwork."), GetArtworkSlotName(type)));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to clear artwork");
-            _notificationService?.ShowError("Error al quitar", ex.Message);
+            _notificationService?.ShowError(GetResourceString("String_ArtworkRemoveFailedTitle", "Could not remove"), ex.Message);
         }
     }
 

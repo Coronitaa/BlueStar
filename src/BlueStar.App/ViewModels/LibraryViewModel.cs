@@ -1733,8 +1733,8 @@ public partial class LibraryViewModel : ObservableObject, ISharedViewModel, IDis
         else
         {
             _notificationService?.ShowWarning(
-                GetResourceString("String_SteamRequiredModalTitle", "Steam Necesario"),
-                "Steam no completó su carga a tiempo. Asegúrate de que Steam esté iniciado antes de ejecutar el juego.");
+                GetResourceString("String_SteamRequiredModalTitle", "Steam Required"),
+                GetResourceString("String_SteamNotReadyLaunch", "Steam did not finish loading in time. Make sure Steam is running before starting the game."));
         }
     }
 

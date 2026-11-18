@@ -37,6 +37,7 @@ public partial class SettingsViewModel : ObservableObject, ISharedViewModel
     private readonly INotificationService _notificationService;
     private readonly AppSettingsService _appSettings;
     private readonly ILocalizationService _localizationService;
+    private string L(string key, string fallback) => _localizationService?.GetString(key, fallback) ?? fallback;
     private readonly ILogger<SettingsViewModel> _logger;
     private readonly IDebugLogService _debugLogService;
     private readonly IInstanceManager? _instanceManager;
@@ -934,13 +935,13 @@ public partial class SettingsViewModel : ObservableObject, ISharedViewModel
             catch { }
 
             _notificationService.ShowSuccess(
-                "Diagnóstico Generado",
-                $"Archivo de diagnóstico listo para GitHub:\n{fileName}\n(Ruta copiada al portapapeles)");
+                L("String_DiagnosticGeneratedTitle", "Diagnostic Generated"),
+                string.Format(L("String_DiagnosticGeneratedFormat", "Diagnostic file ready for GitHub:\n{0}\n(Path copied to the clipboard)"), fileName));
         }
         catch (Exception ex)
         {
             DiagnosticStatusMessage = $"❌ Error: {ex.Message}";
-            _notificationService.ShowError("Error al generar diagnóstico", ex.Message);
+            _notificationService.ShowError(L("String_DiagnosticFailedTitle", "Could not generate the diagnostic"), ex.Message);
             _logger.LogError(ex, "Failed to generate diagnostic report");
         }
         finally
@@ -1095,8 +1096,8 @@ public partial class SettingsViewModel : ObservableObject, ISharedViewModel
 
             ClearCacheResult = "✅ Caché limpiada con éxito.";
             _notificationService.ShowSuccess(
-                "Caché Limpiada",
-                "La caché de la aplicación se ha limpiado correctamente. Los banners de tus juegos instalados se conservaron intactos.");
+                L("String_CacheClearedTitle", "Cache Cleared"),
+                L("String_CacheClearedMessage", "The app cache was cleared. The banners of your installed games were kept."));
         }
         catch (Exception ex)
         {
