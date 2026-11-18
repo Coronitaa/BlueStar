@@ -110,6 +110,8 @@ public sealed class LocalizationService : ILocalizationService, INotifyPropertyC
             var culture = normalized == "es" ? new CultureInfo("es-419") : new CultureInfo("en-US");
             CultureInfo.CurrentCulture = culture;
             CultureInfo.CurrentUICulture = culture;
+            CultureInfo.DefaultThreadCurrentCulture = culture;
+            CultureInfo.DefaultThreadCurrentUICulture = culture;
 
             CurrentLanguage = normalized;
 

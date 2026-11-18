@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 setlocal disabledelayedexpansion
-title ReFix - Universal AutoDeploy Tool v2.5.3
+title ReFix - Universal AutoDeploy Tool v2.5.4
 
 set "SCRIPT_DIR=%~dp0"
 if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
@@ -14,7 +14,7 @@ echo:
 
 if not exist "%BIN_DIR%\online\steam_api64.dll" if not exist "%BIN_DIR%\lan\steam_api64.dll" if not exist "%BIN_DIR%\lan_offline\steam_api64.dll" if not exist "%BIN_DIR%\steam_api64.dll" (
     echo [ERROR] Required binaries not found in "%BIN_DIR%"!
-    echo Please make sure 'bin\lan' ^(ReFix Online + LAN^), 'bin\lan_offline' ^(ReFix Offline LAN^) and/or 'bin\online' ^(ReFix Online Legacy^) contain steam_api64.dll.
+    echo Please make sure 'bin\lan' ^(ReFix Mixed, LAN + Online^), 'bin\lan_offline' ^(ReFix Offline LAN^) and/or 'bin\online' ^(ReFix Online Legacy^) contain steam_api64.dll.
     goto ERROR_EXIT
 )
 
@@ -201,7 +201,7 @@ echo ====================================================================
 echo                  Select Connectivity Mode
 echo ====================================================================
 echo:
-echo  [1] ReFix Online + LAN  (recommended)
+echo  [1] ReFix Mixed - LAN + Online  (recommended)
 echo      - Plays on the local network: Steam does not need to be installed or running.
 echo      - Optional: the Steam button in the ReFix overlay (Shift+Tab) adds your Steam friends
 echo        to the same rooms over the Internet.
@@ -216,7 +216,7 @@ echo      - The Online version of the previous release: uses the Steam client an
 echo      - Enables online multiplayer matchmaking via Steam servers.
 echo:
 set "ONLINE_MODE_CHOICE=1"
-:: Unattended deploys pick the product with REFIX_DEPLOY_MODE=1 (Online + LAN), 2 (Offline LAN) or 3 (Online Legacy)
+:: Unattended deploys pick the product with REFIX_DEPLOY_MODE=1 (Mixed: LAN + Online), 2 (Offline LAN) or 3 (Online Legacy)
 if not "%REFIX_DEPLOY_MODE%"=="" set "ONLINE_MODE_CHOICE=%REFIX_DEPLOY_MODE%"
 if not "%REFIX_NON_INTERACTIVE%"=="1" set /p "ONLINE_MODE_CHOICE=Select Option [1-3] (Default: 1): "
 if "%ONLINE_MODE_CHOICE%"=="" set "ONLINE_MODE_CHOICE=1"
@@ -225,7 +225,7 @@ if "%ONLINE_MODE_CHOICE%"=="" set "ONLINE_MODE_CHOICE=1"
 :: deploy_helper.ps1 which product folder to deploy (bin\lan, bin\lan_offline or bin\online).
 set "ONLINE_MODE_NAME=goldberg"
 set "HELPER_MODE=goldberg"
-set "PRODUCT_LABEL=ReFix Online + LAN"
+set "PRODUCT_LABEL=ReFix Mixed - LAN + Online"
 if "%ONLINE_MODE_CHOICE%"=="2" (
     set "HELPER_MODE=lanoffline"
     set "PRODUCT_LABEL=ReFix Offline LAN"

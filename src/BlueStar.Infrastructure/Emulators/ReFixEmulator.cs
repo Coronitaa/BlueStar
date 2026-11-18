@@ -24,7 +24,7 @@ public sealed partial class ReFixEmulator : IEmulator
 
     public string Id => "refix";
     public string DisplayName => "ReFix Emulator";
-    public string Description => "Universal game emulation backend: ReFix LAN + Online, ReFix LAN Offline and ReFix Online Legacy (Steam Spacewar 480).";
+    public string Description => "Universal game emulation backend: ReFix Mixed (LAN + Online), ReFix LAN Offline and ReFix Online Legacy (Steam Spacewar 480).";
 
     /// <summary>Option id of ReFix LAN Offline (bin\lan_offline). Contains "goldberg" so every LAN check still applies to it.</summary>
     public const string LanOfflineOptionId = "refix_goldberg_offline";
@@ -60,7 +60,7 @@ public sealed partial class ReFixEmulator : IEmulator
     /// <summary>User-facing name of a ReFix option id (refix_goldberg, refix_goldberg_offline, refix_valve).</summary>
     public static string GetOptionDisplayName(string? optionId) =>
         IsLanOfflineOption(optionId) ? "ReFix LAN Offline"
-        : optionId?.Contains("goldberg", StringComparison.OrdinalIgnoreCase) == true ? "ReFix LAN + Online"
+        : optionId?.Contains("goldberg", StringComparison.OrdinalIgnoreCase) == true ? "ReFix Mixed (LAN + Online)"
         : "ReFix Online Legacy (Steam)";
 
     public ReFixEmulator(ILogger<ReFixEmulator> logger)

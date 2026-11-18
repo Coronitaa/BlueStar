@@ -73,7 +73,7 @@ if ($ExeDir)    { $ExeDir    = $ExeDir.Trim().Trim('"').TrimEnd('\').TrimEnd('/'
 if (-not $ExeDir) { $ExeDir  = $TargetDir }
 
 # ReFix products, each with its own binaries:
-#   bin\lan\          ReFix Online + LAN: the LAN emulator (no Steam client needed) with optional Steam online services
+#   bin\lan\          ReFix Mixed (LAN + Online): the LAN emulator (no Steam client needed) with optional Steam online services
 #   bin\lan_offline\  ReFix Offline LAN: the LAN build of the previous release, LAN only (OnlineMode "lanoffline")
 #   bin\online\       ReFix Online Legacy: steam_api64.dll / winmm.dll / EOSSDK / x86\steam_api.dll via the Steam client
 # No fallback to bin\ itself: deploying one product's DLL for the other would silently break the game.

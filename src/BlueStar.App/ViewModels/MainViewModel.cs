@@ -268,6 +268,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 _uiContext.Post(_ =>
                 {
                     OnPropertyChanged(nameof(MissingRequirementsSummaryText));
+                    RefreshAppUpdateTexts();
                     _ = ScanSystemRequirementsAsync(autoPromptModal: false);
                 }, null);
             };
@@ -383,6 +384,22 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    private bool _appUpdateDownloaded;
+
+    private string L(string key, string fallback) => _localizationService?.GetString(key, fallback) ?? fallback;
+
+    /// <summary>Update button and tooltip in the current UI language (also re-run when the language changes).</summary>
+    private void RefreshAppUpdateTexts()
+    {
+        if (string.IsNullOrEmpty(AppUpdateVersion) && !_appUpdateDownloaded) return;
+        AppUpdateButtonText = string.IsNullOrEmpty(AppUpdateVersion)
+            ? L("String_AppUpdateButton", "Update")
+            : string.Format(L("String_AppUpdateButtonFormat", "Update to {0}"), AppUpdateVersion);
+        AppUpdateTooltipText = _appUpdateDownloaded
+            ? L("String_AppUpdateReadyTooltip", "Update ready to install. Click to restart and update.")
+            : string.Format(L("String_AppUpdateAvailableTooltipFormat", "BlueStar {0} is available. Click to update."), AppUpdateVersion);
+    }
+
     private async Task CheckAppUpdatesOnStartupAsync()
     {
         // 1. Check if a downloaded update from a previous session is pending
@@ -391,18 +408,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             var fileName = Path.GetFileNameWithoutExtension(pendingPath);
             var match = Regex.Match(fileName, @"\d+(\.\d+)+");
-            var pendingVer = match.Success ? match.Value : "nueva";
+            var pendingVer = match.Success ? match.Value : string.Empty;
 
             IsAppUpdateAvailable = true;
             AppUpdateVersion = pendingVer;
-            AppUpdateButtonText = $"Actualizar a {pendingVer}";
-            AppUpdateTooltipText = "Actualización lista para instalar. Haz clic para reiniciar y actualizar.";
+            _appUpdateDownloaded = true;
+            RefreshAppUpdateTexts();
 
             _notificationService.ShowInfo(
-                "Update Ready",
-                "A newer version of BlueStar was downloaded and is ready to install.",
+                L("String_AppUpdateReadyTitle", "Update Ready"),
+                L("String_AppUpdateReadyMessage", "A newer version of BlueStar was downloaded and is ready to install."),
                 duration: TimeSpan.FromSeconds(30),
-                actionText: "Update Now",
+                actionText: L("String_AppUpdateNow", "Update Now"),
                 action: () =>
                 {
                     _ = _updateService.ApplyUpdateAsync(pendingPath, CancellationToken.None);
@@ -419,17 +436,17 @@ public partial class MainViewModel : ObservableObject, IDisposable
             {
                 AvailableAppUpdate = update;
                 AppUpdateVersion = update.Version;
-                AppUpdateButtonText = $"Actualizar a {update.Version}";
-                AppUpdateTooltipText = $"BlueStar {update.Version} disponible. Haz clic para actualizar.";
+                _appUpdateDownloaded = false;
+                RefreshAppUpdateTexts();
                 IsAppUpdateAvailable = true;
 
                 if (_updateService.IsPackaged)
                 {
                     _notificationService.ShowInfo(
-                        "New BlueStar Version",
-                        $"BlueStar v{update.Version} is available on the Microsoft Store.",
+                        L("String_AppUpdateNewTitle", "New BlueStar Version"),
+                        string.Format(L("String_AppUpdateStoreMessageFormat", "BlueStar v{0} is available on the Microsoft Store."), update.Version),
                         duration: TimeSpan.FromSeconds(30),
-                        actionText: "Update in Store",
+                        actionText: L("String_AppUpdateInStore", "Update in Store"),
                         action: () =>
                         {
                             _updateService.OpenStoreForUpdates();
@@ -438,10 +455,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 else
                 {
                     _notificationService.ShowInfo(
-                        "New BlueStar Version",
-                        $"BlueStar v{update.Version} is available.",
+                        L("String_AppUpdateNewTitle", "New BlueStar Version"),
+                        string.Format(L("String_AppUpdateAvailableMessageFormat", "BlueStar v{0} is available."), update.Version),
                         duration: TimeSpan.FromSeconds(25),
-                        actionText: "Download",
+                        actionText: L("String_AppUpdateDownload", "Download"),
                         action: () =>
                         {
                             _ = DownloadAndPromptUpdateAsync(update);
@@ -454,15 +471,17 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private async Task DownloadAndPromptUpdateAsync(UpdateInfo update)
     {
-        _notificationService.ShowInfo("Downloading Update", $"Downloading BlueStar v{update.Version} in the background...");
+        _notificationService.ShowInfo(
+            L("String_AppUpdateDownloadingTitle", "Downloading Update"),
+            string.Format(L("String_AppUpdateDownloadingMessageFormat", "Downloading BlueStar v{0} in the background..."), update.Version));
         try
         {
             var installerPath = await _updateService.DownloadUpdateAsync(update, null, CancellationToken.None).ConfigureAwait(true);
             _notificationService.ShowSuccess(
-                "Update Ready",
-                $"BlueStar v{update.Version} downloaded successfully. Click to restart and update.",
+                L("String_AppUpdateReadyTitle", "Update Ready"),
+                string.Format(L("String_AppUpdateDownloadedMessageFormat", "BlueStar v{0} downloaded successfully. Click to restart and update."), update.Version),
                 duration: TimeSpan.FromSeconds(40),
-                actionText: "Update",
+                actionText: L("String_AppUpdateButton", "Update"),
                 action: () =>
                 {
                     _ = _updateService.ApplyUpdateAsync(installerPath, CancellationToken.None);
@@ -470,7 +489,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            _notificationService.ShowError("Failed to Download Update", ex.Message);
+            _notificationService.ShowError(L("String_AppUpdateDownloadFailedTitle", "Failed to Download Update"), ex.Message);
         }
     }
 

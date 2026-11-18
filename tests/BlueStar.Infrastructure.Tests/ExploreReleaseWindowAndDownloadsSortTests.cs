@@ -126,7 +126,7 @@ public sealed class ExploreReleaseWindowAndDownloadsSortTests : IDisposable
 
     [Theory]
     [InlineData("refix_goldberg_offline", "ReFix LAN Offline")]
-    [InlineData("refix_goldberg", "ReFix LAN + Online")]
+    [InlineData("refix_goldberg", "ReFix Mixed (LAN + Online)")]
     [InlineData("refix_valve", "ReFix Online Legacy (Steam)")]
     public void ReFixOptionNames_CoverTheThreeProducts(string optionId, string expected)
     {

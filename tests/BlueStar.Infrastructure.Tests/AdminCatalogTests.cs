@@ -254,6 +254,32 @@ public sealed class AdminCatalogTests : IDisposable
     }
 
     [Fact]
+    public void Parse_Translations_PickTheUiLanguageAndFallBack()
+    {
+        var preset = AdminCatalogParser.Parse(WithPreset("""
+            { "id": "p", "name": "Antes de Panorama", "note": "Nota",
+              "translations": { "en": { "name": "Before Panorama", "note": "Note" }, "EN!": { "name": "x" }, "fr": { "note": "Remarque" } } }
+            """)).Catalog.Games.Single().Presets.Single();
+        var previous = System.Globalization.CultureInfo.CurrentUICulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentUICulture = new System.Globalization.CultureInfo("en-US");
+            preset.DisplayName.Should().Be("Before Panorama");
+            preset.ToRecommendation(10).CompatibilityNotes.Should().Be("Note");
+            System.Globalization.CultureInfo.CurrentUICulture = new System.Globalization.CultureInfo("es-419");
+            preset.DisplayName.Should().Be("Antes de Panorama", "no Spanish entry: the default text");
+            System.Globalization.CultureInfo.CurrentUICulture = new System.Globalization.CultureInfo("fr-FR");
+            preset.DisplayName.Should().Be("Antes de Panorama", "a translation with only a note keeps the default name");
+            preset.DisplayNote.Should().Be("Remarque");
+            preset.Translations.Should().NotContainKey("EN!");
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentUICulture = previous;
+        }
+    }
+
+    [Fact]
     public void ResolveInside_RefusesEscapes()
     {
         AdminPresetDeployer.ResolveInside(_dir, "steam_settings/a.ini").Should().StartWith(_dir);

@@ -5241,9 +5241,15 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
         ?? GetString("String_VersionCuratedNoSummary", "A build the community verified as stable for this game.");
     public string CuratedNotesText => CuratedRecommendation?.CompatibilityNotes ?? string.Empty;
     public bool HasCuratedNotes => !string.IsNullOrWhiteSpace(CuratedRecommendation?.CompatibilityNotes);
-    public string CuratedEmulatorText => string.IsNullOrWhiteSpace(CuratedRecommendation?.RecommendedEmulator)
-        ? GetString("String_VersionCuratedNoEmulator", "none required")
-        : CuratedRecommendation!.RecommendedEmulator!;
+    public string CuratedEmulatorText => CuratedRecommendation?.RecommendedEmulator switch
+    {
+        null or "" or "none" => GetString("String_VersionCuratedNoEmulator", "none required"),
+        "refix_goldberg" => GetString("String_InstallModalEmulatorGoldberg", "ReFix Mixed (LAN + Online)"),
+        "refix_goldberg_offline" => GetString("String_InstallModalEmulatorLanOffline", "ReFix LAN Offline"),
+        "refix_valve" => GetString("String_InstallModalEmulatorValve", "ReFix Online Legacy"),
+        "onlinefix" => "OnlineFix",
+        var other => other
+    };
     public string CuratedSourceText => CuratedRecommendation == null
         ? string.Empty
         : $"{CuratedRecommendation.Source} · {CuratedRecommendation.CuratedAt.LocalDateTime:d MMM yyyy}";

@@ -298,6 +298,22 @@ public static partial class AdminCatalogParser
             }
         }
 
+        var translations = new Dictionary<string, AdminPresetText>();
+        if (p.TryGetProperty("translations", out var tr) && tr.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var kv in tr.EnumerateObject().Take(10))
+            {
+                // Unknown or malformed languages are skipped: the preset still has its default name and note.
+                if (kv.Name.Length != 2 || !kv.Name.All(char.IsAsciiLetterLower) || kv.Value.ValueKind != JsonValueKind.Object) continue;
+                var text = new AdminPresetText
+                {
+                    Name = CleanText(GetString(kv.Value, "name"), 120),
+                    Note = CleanText(GetString(kv.Value, "note"), 2000, allowNewlines: true)
+                };
+                if (!string.IsNullOrEmpty(text.Name) || !string.IsNullOrEmpty(text.Note)) translations[kv.Name] = text;
+            }
+        }
+
         return new AdminInstallPreset
         {
             Id = id,
@@ -308,6 +324,7 @@ public static partial class AdminCatalogParser
             Emulator = emulator,
             Mods = mods,
             ReFixMods = refixMods,
+            Translations = translations,
             Note = CleanText(GetString(p, "note"), 2000, allowNewlines: true)
         };
     }

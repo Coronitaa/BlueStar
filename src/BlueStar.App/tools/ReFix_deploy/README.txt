@@ -1,10 +1,10 @@
-﻿ReFix 2.5.3 - LAN / Online
+﻿ReFix 2.5.4 - LAN / Online
 ========================
 
 1. Run AutoDeploy.bat.
 2. Pick the game folder.
 3. Choose the mode:
-   [1] ReFix Online + LAN            - plays on the local network, Steam not needed. With Steam installed,
+   [1] ReFix Mixed (LAN + Online)    - plays on the local network, Steam not needed. With Steam installed,
        the Steam button in the overlay's top bar adds your Steam friends to the same rooms (optional).
    [2] ReFix Offline LAN             - the LAN version of the previous release (2.3.2): local network only.
    [3] ReFix Online Legacy via Steam - the Online version of the previous release (2.3.2): uses the Steam client.

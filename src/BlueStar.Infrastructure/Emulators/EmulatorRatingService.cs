@@ -151,10 +151,10 @@ public sealed class EmulatorRatingService : IEmulatorRatingService
         {
             Id = "refix_goldberg",
             EmulatorId = "refix",
-            Name = "ReFix LAN + Online",
+            Name = "ReFix Mixed (LAN + Online)",
             Mode = "goldberg",
             Description = "ReFix's own Steam emulator, no Steam client needed. Players on the same network find each other automatically and the game reaches the Internet when it needs it; with Steam installed, the overlay's Steam button adds your Steam friends to the same rooms.",
-            BadgeText = "LAN + Online",
+            BadgeText = "Mixed",
             PositiveVotes = goldbergStats.Positive,
             NegativeVotes = goldbergStats.Negative,
             IsActive = isGoldbergActive

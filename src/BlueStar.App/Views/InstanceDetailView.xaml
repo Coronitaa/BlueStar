@@ -5064,7 +5064,7 @@
                                                   AutomationProperties.Name="{DynamicResource String_InstallModalPresetPicker}"
                                                   ItemsSource="{Binding InstallModalPresets}"
                                                   SelectedItem="{Binding SelectedInstallModalPreset, Mode=TwoWay}"
-                                                  DisplayMemberPath="Name"
+                                                  DisplayMemberPath="DisplayName"
                                                   Visibility="{Binding HasMultipleInstallModalPresets, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                             <TextBlock Text="{Binding CuratedBuildIdText, StringFormat='Build {0}'}" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource PrimaryTextBrush}"/>

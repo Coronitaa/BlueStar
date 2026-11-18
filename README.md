@@ -3,7 +3,7 @@
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20(x64)-brightgreen.svg)]()
 [![.NET 10.0](https://img.shields.io/badge/.NET-10.0%20WPF-purple.svg)]()
-[![Release: v1.6.0](https://img.shields.io/badge/Release-v1.6.1-orange.svg)](https://github.com/Coronitaa/BlueStar/releases/latest)
+[![Release: v1.6.2](https://img.shields.io/badge/Release-v1.6.2-orange.svg)](https://github.com/Coronitaa/BlueStar/releases/latest)
 
 BlueStar is a Windows launcher for Steam games. It finds a game in its catalog, downloads it from Steam depots, installs what the game needs to run, sets up multiplayer with [ReFix](https://github.com/Coronitaa/ReFix), unlocks DLCs and manages mods, all from one app.
 
@@ -13,9 +13,9 @@ Get the latest version from [Releases](https://github.com/Coronitaa/BlueStar/rel
 
 | Package | File | Notes |
 | :--- | :--- | :--- |
-| Setup (recommended) | `BlueStar-v1.6.1-Setup-win-x64.exe` | Installs for your user without asking for administrator rights. Installs the Visual C++ runtimes if they are missing, and WebView2 only if the PC doesn't have it. |
-| Portable | `BlueStar-v1.6.1-Portable-win-x64.zip` | Extract and run `BlueStar.exe`. Includes WebView2 and the Visual C++ runtime DLLs. |
-| MSIX | `BlueStar-v1.6.1-win-x64.msix` | Windows app package. |
+| Setup (recommended) | `BlueStar-v1.6.2-Setup-win-x64.exe` | Installs for your user without asking for administrator rights. Installs the Visual C++ runtimes if they are missing, and WebView2 only if the PC doesn't have it. |
+| Portable | `BlueStar-v1.6.2-Portable-win-x64.zip` | Extract and run `BlueStar.exe`. Includes WebView2 and the Visual C++ runtime DLLs. |
+| MSIX | `BlueStar-v1.6.2-win-x64.msix` | Windows app package. |
 
 Every package includes .NET 10, so there is nothing else to install.
 
@@ -72,7 +72,7 @@ API keys for DepotBox and the mod providers are not in the repository. For local
 To build the release packages (Setup, Portable and MSIX):
 
 ```powershell
-.\build-release.ps1 -Version 1.6.1
+.\build-release.ps1 -Version 1.6.2
 ```
 
 Run it without `-Version` and it asks for the version. Release builds store the keys encrypted inside `bluestar.dat`.

@@ -76,13 +76,28 @@ public sealed record AdminInstallPreset
 
     public string? Note { get; init; }
 
+    /// <summary>Name and note in other languages, keyed by two-letter code ("en", "es").</summary>
+    public IReadOnlyDictionary<string, AdminPresetText> Translations { get; init; } = new Dictionary<string, AdminPresetText>();
+
+    /// <summary>Name in the UI language when the catalog has it, else <see cref="Name"/>.</summary>
+    public string DisplayName => Translated()?.Name ?? Name;
+
+    /// <summary>Note in the UI language when the catalog has it, else <see cref="Note"/>.</summary>
+    public string? DisplayNote => Translated()?.Note ?? Note;
+
+    private AdminPresetText? Translated()
+    {
+        var lang = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+        return Translations.TryGetValue(lang, out var t) ? t : null;
+    }
+
     /// <summary>Maps the preset onto the recommendation the install modal already knows how to apply.</summary>
     public CurationRecommendation ToRecommendation(uint appId) => new()
     {
         AppId = appId,
         RecommendedBuildId = BuildId ?? string.Empty,
         RecommendedBranch = Branch,
-        Summary = Name,
+        Summary = DisplayName,
         PinnedManifests = Manifests,
         RecommendedEmulator = Emulator.Type switch
         {
@@ -94,7 +109,7 @@ public sealed record AdminInstallPreset
             // A custom emulator is laid down by the preset deployer, not by BlueStar's own emulator.
             _ => "none"
         },
-        CompatibilityNotes = Note,
+        CompatibilityNotes = DisplayNote,
         Source = "BlueStar",
         PresetId = Id,
         ReFixModIds = ReFixMods,
@@ -102,12 +117,19 @@ public sealed record AdminInstallPreset
     };
 }
 
+/// <summary>A preset's name and note in one language.</summary>
+public sealed record AdminPresetText
+{
+    public string? Name { get; init; }
+    public string? Note { get; init; }
+}
+
 public enum AdminEmulatorType
 {
     None,
     /// <summary>ReFix LAN (offline).</summary>
     ReFixLan,
-    /// <summary>ReFix LAN + Online.</summary>
+    /// <summary>ReFix Mixed (LAN + Online).</summary>
     ReFixLanOnline,
     /// <summary>ReFix Online Legacy (Steam Spacewar 480).</summary>
     ReFixOnlineLegacy,

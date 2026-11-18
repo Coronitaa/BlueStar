@@ -14,7 +14,7 @@ public sealed partial class ReFixEmulator
     private static readonly string[] ScriptConfigFiles = ["ReFix.ini", "steam_appid.txt"];
     private const string FusionFolder = "ReFix";
 
-    /// <summary>AutoDeploy.sh mode for a BlueStar option: lan = ReFix Online + LAN, offline = Offline LAN, online = Online Legacy.</summary>
+    /// <summary>AutoDeploy.sh mode for a BlueStar option: lan = ReFix Mixed (LAN + Online), offline = Offline LAN, online = Online Legacy.</summary>
     internal static string ShellMode(string optionId) =>
         IsLanOfflineOption(optionId) ? "offline"
         : optionId.Contains("goldberg", StringComparison.OrdinalIgnoreCase) ? "lan"

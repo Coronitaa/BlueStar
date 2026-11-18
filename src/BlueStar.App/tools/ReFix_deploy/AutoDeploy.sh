@@ -6,7 +6,7 @@
 #
 #   bash AutoDeploy.sh                         interactive
 #   bash AutoDeploy.sh <game folder|game.exe> [lan|offline|online] [appid] [refix|steam|none]
-#     lan = ReFix Online + LAN, offline = ReFix Offline LAN (previous release), online = ReFix Online Legacy
+#     lan = ReFix Mixed (LAN + Online), offline = ReFix Offline LAN (previous release), online = ReFix Online Legacy
 #   bash AutoDeploy.sh --uninstall <game folder>
 #
 # The last argument (or REFIX_OVERLAY_MODE) picks the in-game overlay of ReFix LAN: the ReFix overlay
@@ -496,7 +496,7 @@ if [ "$UNINSTALL" = 1 ]; then uninstall; exit 0; fi
 MODE="${2:-}"
 if [ -z "$MODE" ]; then
     echo
-    echo "  [1] ReFix Online + LAN          - local network; Steam friends optional from the overlay (recommended)"
+    echo "  [1] ReFix Mixed (LAN + Online)  - local network; Steam friends optional from the overlay (recommended)"
     echo "  [2] ReFix Offline LAN           - the LAN version of the previous release, local network only"
     echo "  [3] ReFix Online Legacy via Steam - uses the Steam client (start the game from Steam)"
     read -r -p "Mode [1/2/3] (default 1): " choice
