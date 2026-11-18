@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using BlueStar.Core.Helpers;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
+using BlueStar.Infrastructure.Compat;
 using Microsoft.Extensions.Logging;
 
 namespace BlueStar.Infrastructure.Launcher;
@@ -21,6 +22,8 @@ public sealed class GameLauncherService : IGameLauncher, IDisposable
     private readonly ICommunityStatsService? _statsService;
     private readonly ILogger<GameLauncherService> _logger;
     private readonly ConcurrentDictionary<Guid, Process> _runningProcesses = new();
+    private readonly ConcurrentDictionary<Guid, CompatCommand> _compatCommands = new();
+    private readonly CompatLauncher? _compat;
 
     public event EventHandler<(Guid InstanceId, bool IsRunning)>? RunningStateChanged;
     public event EventHandler<(Guid InstanceId, string LogLine)>? LogReceived;
@@ -29,8 +32,10 @@ public sealed class GameLauncherService : IGameLauncher, IDisposable
         ILogger<GameLauncherService> logger,
         IInstanceManager? instanceManager = null,
         IEngineDetector? engineDetector = null,
-        ICommunityStatsService? statsService = null)
+        ICommunityStatsService? statsService = null,
+        CompatLauncher? compat = null)
     {
+        _compat = compat;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _instanceManager = instanceManager;
         _engineDetector = engineDetector;
@@ -49,6 +54,10 @@ public sealed class GameLauncherService : IGameLauncher, IDisposable
                                      !Directory.Exists(instance.InstallPath) ||
                                      string.IsNullOrWhiteSpace(instance.ExecutablePath) ||
                                      !File.Exists(instance.ExecutablePath);
+
+            // On Linux a Steam game only bypasses Steam when ReFix or another emulator replaced its steam_api.
+            if (OperatingSystem.IsLinux() && !instance.EmulatorEnabled)
+                needsSteamProtocol = true;
 
             if (needsSteamProtocol && instance.AppId > 0)
             {
@@ -101,20 +110,47 @@ public sealed class GameLauncherService : IGameLauncher, IDisposable
 
         var workingDir = Path.GetDirectoryName(exePath) ?? instance.InstallPath;
 
-        var psi = new ProcessStartInfo
+        ProcessStartInfo psi;
+        if (_compat != null && OperatingSystem.IsLinux())
         {
-            FileName = exePath,
-            WorkingDirectory = workingDir,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = false
-        };
+            CompatCommand command;
+            try
+            {
+                command = _compat.Plan(instance, exePath);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return new GameLaunchResult(false, ex.Message);
+            }
 
-        // Add custom launch arguments
-        if (!string.IsNullOrWhiteSpace(instance.LaunchArguments))
+            if (command.SteamUrl != null)
+            {
+                Process.Start(new ProcessStartInfo("xdg-open", command.SteamUrl) { UseShellExecute = false });
+                return new GameLaunchResult(true, "Launched through Steam");
+            }
+
+            psi = _compat.ToStartInfo(command, workingDir);
+            _compatCommands[instance.Id] = command;
+            if (command.Notice != null)
+                onLog?.Invoke(command.Notice);
+        }
+        else
         {
-            psi.Arguments = instance.LaunchArguments;
+            psi = new ProcessStartInfo
+            {
+                FileName = exePath,
+                WorkingDirectory = workingDir,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = false
+            };
+
+            // Add custom launch arguments
+            if (!string.IsNullOrWhiteSpace(instance.LaunchArguments))
+            {
+                psi.Arguments = instance.LaunchArguments;
+            }
         }
 
         // Set fix environment variables for Unreal & older clients if needed
@@ -163,6 +199,7 @@ public sealed class GameLauncherService : IGameLauncher, IDisposable
                 _logger.LogInformation("Game {GameName} exited. Session duration: {Duration}", instance.Name, duration);
 
                 _runningProcesses.TryRemove(instance.Id, out _);
+                _compatCommands.TryRemove(instance.Id, out _);
 
                 // Update instance in manager with playtime and status Ready
                 if (_instanceManager != null)
@@ -238,8 +275,12 @@ public sealed class GameLauncherService : IGameLauncher, IDisposable
         }
     }
 
-    public Task<bool> KillAsync(Guid instanceId)
+    public async Task<bool> KillAsync(Guid instanceId)
     {
+        // Wine games spawn processes outside our tree (wineserver, launchers): stop the whole prefix first.
+        if (_compat != null && _compatCommands.TryRemove(instanceId, out var command))
+            await _compat.StopAsync(command).ConfigureAwait(false);
+
         if (_runningProcesses.TryRemove(instanceId, out var process))
         {
             try
@@ -248,7 +289,7 @@ public sealed class GameLauncherService : IGameLauncher, IDisposable
                 {
                     process.Kill(entireProcessTree: true);
                 }
-                return Task.FromResult(true);
+                return true;
             }
             catch (Exception ex)
             {
@@ -263,7 +304,7 @@ public sealed class GameLauncherService : IGameLauncher, IDisposable
                 catch { }
             }
         }
-        return Task.FromResult(false);
+        return false;
     }
 
     public void Dispose()

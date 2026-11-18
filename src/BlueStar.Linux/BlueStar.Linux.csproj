@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Avalonia head for Linux (beta). Shares Core + Infrastructure with the WPF app; WPF stays the Windows UI. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>BlueStar</AssemblyName>
+    <RootNamespace>BlueStar.Linux</RootNamespace>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.6" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.6" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.6" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.15" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="8.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\BlueStar.Core\BlueStar.Core.csproj" />
+    <ProjectReference Include="..\BlueStar.Infrastructure\BlueStar.Infrastructure.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <AvaloniaResource Include="..\BlueStar.App\Assets\bluestar.png" Link="Assets\bluestar.png" />
+    <!-- ReFix scripts and binaries ship next to the app, same layout as the Windows build. -->
+    <None Include="..\BlueStar.App\tools\**\*" Link="tools\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+</Project>

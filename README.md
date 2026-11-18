@@ -2,8 +2,8 @@
 
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011%20(x64)-brightgreen.svg)]()
-[![.NET 8.0](https://img.shields.io/badge/.NET-8.0%20WPF-purple.svg)]()
-[![Release: v1.5.8](https://img.shields.io/badge/Release-v1.5.8-orange.svg)](https://github.com/Coronitaa/BlueStar/releases/latest)
+[![.NET 10.0](https://img.shields.io/badge/.NET-10.0%20WPF-purple.svg)]()
+[![Release: v1.6.0](https://img.shields.io/badge/Release-v1.6.0-orange.svg)](https://github.com/Coronitaa/BlueStar/releases/latest)
 
 BlueStar is a Windows launcher for Steam games. It finds a game in its catalog, downloads it from Steam depots, installs what the game needs to run, sets up multiplayer with [ReFix](https://github.com/Coronitaa/ReFix), unlocks DLCs and manages mods, all from one app.
 
@@ -13,11 +13,11 @@ Get the latest version from [Releases](https://github.com/Coronitaa/BlueStar/rel
 
 | Package | File | Notes |
 | :--- | :--- | :--- |
-| Setup (recommended) | `BlueStar-v1.5.8-Setup-win-x64.exe` | Installs for your user without asking for administrator rights. Installs the Visual C++ runtimes if they are missing, and WebView2 only if the PC doesn't have it. |
-| Portable | `BlueStar-v1.5.8-Portable-win-x64.zip` | Extract and run `BlueStar.exe`. Includes WebView2 and the Visual C++ runtime DLLs. |
-| MSIX | `BlueStar-v1.5.8-win-x64.msix` | Windows app package. |
+| Setup (recommended) | `BlueStar-v1.6.0-Setup-win-x64.exe` | Installs for your user without asking for administrator rights. Installs the Visual C++ runtimes if they are missing, and WebView2 only if the PC doesn't have it. |
+| Portable | `BlueStar-v1.6.0-Portable-win-x64.zip` | Extract and run `BlueStar.exe`. Includes WebView2 and the Visual C++ runtime DLLs. |
+| MSIX | `BlueStar-v1.6.0-win-x64.msix` | Windows app package. |
 
-Every package includes .NET 8, so there is nothing else to install.
+Every package includes .NET 10, so there is nothing else to install.
 
 <img width="1432" height="875" alt="BlueStar screenshot" src="https://github.com/user-attachments/assets/839d778f-39fd-4d7e-aa96-2e43800623d6" />
 <img width="1429" height="872" alt="BlueStar screenshot" src="https://github.com/user-attachments/assets/c6465f14-2a4c-4c63-8809-3c4c304fa144" />
@@ -58,7 +58,7 @@ BlueStar never asks for administrator rights while deploying ReFix. Each game pa
 
 ## Building from source
 
-You need the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0). [Inno Setup 6](https://jrsoftware.org/isinfo.php) is only needed to build the Setup.
+You need the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0). [Inno Setup 6](https://jrsoftware.org/isinfo.php) is only needed to build the Setup.
 
 ```bash
 git clone https://github.com/Coronitaa/BlueStar.git
@@ -72,7 +72,7 @@ API keys for DepotBox and the mod providers are not in the repository. For local
 To build the release packages (Setup, Portable and MSIX):
 
 ```powershell
-.\build-release.ps1 -Version 1.5.8
+.\build-release.ps1 -Version 1.6.0
 ```
 
 Run it without `-Version` and it asks for the version. Release builds store the keys encrypted inside `bluestar.dat`.

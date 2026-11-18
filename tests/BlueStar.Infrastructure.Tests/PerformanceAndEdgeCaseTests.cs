@@ -21,7 +21,7 @@ namespace BlueStar.Infrastructure.Tests;
 public class PerformanceAndEdgeCaseTests : IDisposable
 {
     private readonly string _testDir;
-    private readonly Win32Linker _linker;
+    private readonly IWin32Linker _linker;
     private readonly InstanceStorageManager _storageManager;
     private readonly InstanceManager _instanceManager;
     private readonly ReFixManager _refixManager;
@@ -32,7 +32,7 @@ public class PerformanceAndEdgeCaseTests : IDisposable
         _testDir = Path.Combine(Path.GetTempPath(), "BlueStar_PerfEdgeTests_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_testDir);
 
-        _linker = new Win32Linker(NullLogger<Win32Linker>.Instance);
+        _linker = UnixLinker.ForCurrentOs(NullLoggerFactory.Instance);
         _storageManager = new InstanceStorageManager(_linker, NullLogger<InstanceStorageManager>.Instance);
         _refixManager = new ReFixManager(NullLogger<ReFixManager>.Instance);
         _ugcBridge = new UgcBridge(_linker, NullLogger<UgcBridge>.Instance);

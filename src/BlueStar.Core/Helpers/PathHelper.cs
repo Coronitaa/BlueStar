@@ -10,14 +10,16 @@ namespace BlueStar.Core.Helpers;
 /// </summary>
 public static class PathHelper
 {
+    // Windows rules on every OS: the games run under Wine on Linux, where ':' '?' '*' break DOS path mapping.
+    private const string WindowsInvalidNameChars = "\"<>|:*?\\/";
+
     /// <summary>
     /// Sanitizes a string for use as a folder name by replacing invalid path characters.
     /// </summary>
     public static string SanitizeFolderName(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return "Game";
-        var invalid = Path.GetInvalidFileNameChars();
-        var sanitized = new string(name.Select(c => invalid.Contains(c) ? '_' : c).ToArray()).Trim();
+        var sanitized = new string(name.Select(c => c < 32 || WindowsInvalidNameChars.Contains(c) ? '_' : c).ToArray()).Trim();
         return string.IsNullOrWhiteSpace(sanitized) ? "Game" : sanitized;
     }
 

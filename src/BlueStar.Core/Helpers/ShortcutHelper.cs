@@ -205,11 +205,39 @@ public static class ShortcutHelper
         return File.Exists(Path.Combine(dir, "steam.exe")) || File.Exists(Path.Combine(dir, "Steam.exe"));
     }
 
+    private static readonly string[] LinuxSteamCandidates =
+    [
+        ".steam/steam",
+        ".steam/root",
+        ".local/share/Steam",
+        ".var/app/com.valvesoftware.Steam/.local/share/Steam",
+        ".var/app/com.valvesoftware.Steam/data/Steam",
+    ];
+
+    /// <summary>
+    /// Native Steam first, then Flatpak. Snap Steam is left out on purpose: its confinement cannot run Proton
+    /// launched from outside, so BlueStar reports it as unsupported instead of half-working.
+    /// </summary>
+    public static string? FindLinuxSteamPath(string home)
+    {
+        foreach (var candidate in LinuxSteamCandidates)
+        {
+            var dir = Path.Combine(home, candidate);
+            if (Directory.Exists(Path.Combine(dir, "steamapps")) || File.Exists(Path.Combine(dir, "steam.sh")))
+                return dir;
+        }
+
+        return null;
+    }
+
     /// <summary>
     /// Gets the Steam installation directory from the running process, Windows registry, or common directory locations.
     /// </summary>
     public static string? GetSteamPath()
     {
+        if (OperatingSystem.IsLinux())
+            return FindLinuxSteamPath(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+
         if (OperatingSystem.IsWindows())
         {
             // 1. Live running Steam process is 100% authoritative

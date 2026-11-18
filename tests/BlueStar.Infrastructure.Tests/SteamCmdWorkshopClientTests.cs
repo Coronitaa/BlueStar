@@ -43,6 +43,7 @@ public sealed class SteamCmdWorkshopClientTests
     }
 
     [Fact]
+    [Trait("OS", "Windows")]
     public void WinTrust_AcceptsSignedBinaries_AndRejectsUnsignedFiles()
     {
         // Arrange: the .NET core library is Authenticode-signed by Microsoft

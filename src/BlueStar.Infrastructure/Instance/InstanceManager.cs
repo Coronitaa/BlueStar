@@ -68,7 +68,7 @@ public sealed class InstanceManager : IInstanceManager
         Directory.CreateDirectory(_rootPath);
         Directory.CreateDirectory(_depotsRootPath);
 
-        var defaultLinker = new Win32Linker(NullLogger<Win32Linker>.Instance);
+        var defaultLinker = UnixLinker.ForCurrentOs(NullLoggerFactory.Instance);
         _storageManager = storageManager ?? new InstanceStorageManager(defaultLinker, NullLogger<InstanceStorageManager>.Instance);
         _engineDetector = engineDetector ?? new EngineDetector(NullLogger<EngineDetector>.Instance);
         _refixManager = refixManager ?? new ReFixManager(NullLogger<ReFixManager>.Instance);
@@ -502,14 +502,9 @@ public sealed class InstanceManager : IInstanceManager
                     var instance = JsonSerializer.Deserialize<GameInstance>(json, JsonOptions);
                     if (instance != null)
                     {
-                        // Clean up shortcuts from Desktop and Start Menu
+                        // Clean up shortcuts from Desktop and Start Menu. Game files stay: callers delete them only when
+                        // the user asked (an imported Steam game's folder is the user's own Steam install).
                         ShortcutHelper.RemoveGameShortcuts(instance.Name, instance.ExecutablePath, instance.InstallPath);
-
-                        if (!string.IsNullOrWhiteSpace(instance.InstallPath))
-                        {
-                            // Clean up hardlinks & junctions safely
-                            await _storageManager.DeleteInstanceAsync(instance.InstallPath, ct).ConfigureAwait(false);
-                        }
                     }
                 }
                 catch { }

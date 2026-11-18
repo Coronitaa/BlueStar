@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
@@ -12,9 +12,9 @@
     <ApplicationIcon>Assets\bluestar.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Description>BlueStar — Universal Steam Game Instance Manager, Depot Staging, Manifest Resolver, and Multi-Engine Launcher</Description>
-    <Version>1.5.8</Version>
-    <AssemblyVersion>1.5.8.0</AssemblyVersion>
-    <FileVersion>1.5.8.0</FileVersion>
+    <Version>1.6.1</Version>
+    <AssemblyVersion>1.6.1.0</AssemblyVersion>
+    <FileVersion>1.6.1.0</FileVersion>
     <SatelliteResourceLanguages>en-US;en</SatelliteResourceLanguages>
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
@@ -28,9 +28,9 @@
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.15" />
     <PackageReference Include="Serilog.Extensions.Logging" Version="8.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />

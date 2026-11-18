@@ -12,6 +12,20 @@ namespace BlueStar.Infrastructure.Tests;
 
 public class BackgroundTaskServiceTests
 {
+    // Generous deadline: the full suite runs in parallel and a busy CI machine delays the task's own Task.Delay calls.
+    private static async Task WaitUntilAsync(Func<bool> done)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!done() && DateTime.UtcNow < deadline)
+            await Task.Delay(20);
+    }
+
+    private static bool IsDone(BackgroundTaskService service, Guid id, double progress = 0)
+    {
+        var task = service.Tasks.FirstOrDefault(t => t.Id == id);
+        return task?.Status == BackgroundTaskStatus.Completed && task.ProgressPercentage >= progress;
+    }
+
     [Fact]
     public async Task QueueTask_ExecutesWorkAndCompletes()
     {
@@ -29,10 +43,7 @@ public class BackgroundTaskServiceTests
         taskId.Should().NotBeEmpty();
 
         // Wait for task completion
-        for (int i = 0; i < 100 && (!executed || service.Tasks.FirstOrDefault(t => t.Id == taskId)?.Status != BackgroundTaskStatus.Completed || service.Tasks.FirstOrDefault(t => t.Id == taskId)?.ProgressPercentage < 100); i++)
-        {
-            await Task.Delay(20);
-        }
+        await WaitUntilAsync(() => executed && IsDone(service, taskId, 100));
 
         executed.Should().BeTrue();
         var task = service.Tasks.FirstOrDefault(t => t.Id == taskId);
@@ -57,10 +68,7 @@ public class BackgroundTaskServiceTests
         service.CancelTask(taskId);
 
         // Wait for background cancellation to take effect
-        for (int i = 0; i < 30 && service.Tasks.FirstOrDefault(t => t.Id == taskId)?.Status != BackgroundTaskStatus.Cancelled; i++)
-        {
-            await Task.Delay(50);
-        }
+        await WaitUntilAsync(() => service.Tasks.FirstOrDefault(t => t.Id == taskId)?.Status == BackgroundTaskStatus.Cancelled);
 
         var task = service.Tasks.FirstOrDefault(t => t.Id == taskId);
         task.Should().NotBeNull();
@@ -78,10 +86,7 @@ public class BackgroundTaskServiceTests
             return Task.CompletedTask;
         });
 
-        for (int i = 0; i < 30 && service.Tasks.FirstOrDefault(t => t.Id == taskId)?.Status != BackgroundTaskStatus.Completed; i++)
-        {
-            await Task.Delay(50);
-        }
+        await WaitUntilAsync(() => IsDone(service, taskId));
         service.Tasks.Should().Contain(t => t.Id == taskId);
 
         service.ClearCompleted();
@@ -123,10 +128,7 @@ public class BackgroundTaskServiceTests
             }
         };
 
-        for (int i = 0; i < 50 && service.Tasks.FirstOrDefault(t => t.Id == taskId)?.Status != BackgroundTaskStatus.Completed; i++)
-        {
-            await Task.Delay(20);
-        }
+        await WaitUntilAsync(() => IsDone(service, taskId, 100));
 
         var task = service.Tasks.FirstOrDefault(t => t.Id == taskId);
         task.Should().NotBeNull();
@@ -153,10 +155,7 @@ public class BackgroundTaskServiceTests
                 reporter.Report(new BackgroundTaskProgress(100, "Found 2 updated depot(s).", "Complete"));
             });
 
-        for (int i = 0; i < 50 && service.Tasks.FirstOrDefault(t => t.Id == taskId)?.Status != BackgroundTaskStatus.Completed; i++)
-        {
-            await Task.Delay(20);
-        }
+        await WaitUntilAsync(() => IsDone(service, taskId));
 
         var task = service.Tasks.FirstOrDefault(t => t.Id == taskId);
         task.Should().NotBeNull();

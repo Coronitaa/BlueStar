@@ -1,5 +1,12 @@
+using System.IO;
+using System.IO.Pipes;
 using System.Reflection;
+using BlueStar.Core.Interfaces;
+using BlueStar.Infrastructure;
+using BlueStar.Infrastructure.Launcher;
 using BlueStar.Infrastructure.Workshop;
+using Microsoft.Extensions.DependencyInjection;
+using Serilog;
 
 namespace BlueStar.App;
 
@@ -18,9 +25,57 @@ public static class Program
             return RunDepotDownloader(args[1..]);
         }
 
+        if (args.Length > 1 && args[0] == HeadlessLaunch.Switch)
+        {
+            return RunHeadlessLaunch(args[1]);
+        }
+
         var app = new App();
         app.InitializeComponent();
         return app.Run();
+    }
+
+    /// <summary>No UI and no single-instance mutex: a running BlueStar window must not block a Steam shortcut.</summary>
+    private static int RunHeadlessLaunch(string instanceId)
+    {
+        DepotDownloaderHost.HostExecutablePath = Environment.ProcessPath;
+        var logger = new LoggerConfiguration()
+            .MinimumLevel.Information()
+            .WriteTo.File(
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BlueStar", "logs", "bluestar-launch-.log"),
+                rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: 7)
+            .WriteTo.Console()
+            .CreateLogger();
+
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.AddSerilog(logger, dispose: true));
+        services.AddSingleton<IDebugLogService>(new BlueStar.Infrastructure.Services.DebugLogService());
+        services.AddBlueStar();
+        using var provider = services.BuildServiceProvider();
+
+        return HeadlessLaunch.RunAsync(
+                provider.GetRequiredService<IInstanceManager>(),
+                provider.GetRequiredService<IGameLauncher>(),
+                instanceId,
+                Console.Out,
+                NotifyRunningUi)
+            .GetAwaiter().GetResult();
+    }
+
+    private static void NotifyRunningUi(Guid instanceId)
+    {
+        try
+        {
+            using var client = new NamedPipeClientStream(".", App.IpcPipeName, PipeDirection.Out);
+            client.Connect(500);
+            using var writer = new StreamWriter(client) { AutoFlush = true };
+            writer.WriteLine(HeadlessLaunch.InstanceChangedMessage + instanceId);
+        }
+        catch (Exception e) when (e is TimeoutException or IOException)
+        {
+            // No BlueStar window open: nothing to refresh.
+        }
     }
 
     private static int RunDepotDownloader(string[] args)

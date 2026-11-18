@@ -443,6 +443,15 @@ public sealed class AppSettingsService
         await SaveAsync().ConfigureAwait(false);
     }
 
+    /// <summary>Linux Wine/Proton settings (Settings, "Compatibilidad (Wine/Proton)").</summary>
+    public BlueStar.Core.Models.CompatSettings Compat => _current.Compat ?? new BlueStar.Core.Models.CompatSettings();
+
+    public async Task SetCompatAsync(BlueStar.Core.Models.CompatSettings compat)
+    {
+        _current = _current with { Compat = compat };
+        await SaveAsync().ConfigureAwait(false);
+    }
+
     public DateTimeOffset? LastCommunitySyncUtc => _current.LastCommunitySyncUtc;
 
     public async Task SetLastCommunitySyncUtcAsync(DateTimeOffset timestamp)
@@ -466,6 +475,7 @@ public sealed class AppSettingsService
         public bool EnableDebugSystem { get; init; } = false;
         public string? CatalogManifestUrl { get; init; }
         public DateTimeOffset? LastCommunitySyncUtc { get; init; }
+        public BlueStar.Core.Models.CompatSettings? Compat { get; init; }
 
         public string? DefaultExploreSort { get; init; } = "Reviews";
         public bool DefaultExploreSortDescending { get; init; } = true;

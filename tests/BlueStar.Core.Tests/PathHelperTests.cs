@@ -7,6 +7,7 @@ namespace BlueStar.Core.Tests;
 public class PathHelperTests
 {
     [Theory]
+    [Trait("OS", "Windows")]
     [InlineData(@"D:\Games", "Big Walk", @"D:\Games\Big Walk")]
     [InlineData(@"D:\Games\Big Walk", "Big Walk", @"D:\Games\Big Walk")]
     [InlineData(@"D:\Games\big walk", "Big Walk", @"D:\Games\big walk")]
@@ -42,6 +43,7 @@ public class PathHelperTests
     }
 
     [Fact]
+    [Trait("OS", "Windows")]
     public void GenerateUniqueInstallPath_WhenPathCollides_ReturnsUniqueNumberedPath()
     {
         var baseDir = @"D:\Games";
@@ -49,5 +51,14 @@ public class PathHelperTests
 
         var uniquePath = PathHelper.GenerateUniqueInstallPath(baseDir, "Cyberpunk 2077", existingPaths);
         uniquePath.Should().Be(@"D:\Games\Cyberpunk 2077 (2)");
+    }
+
+    [Theory]
+    [InlineData("Cyberpunk: 2077", "Cyberpunk_ 2077")]
+    [InlineData("What? *Now*", "What_ _Now_")]
+    [InlineData("A/B\\C", "A_B_C")]
+    public void SanitizeFolderName_UsesWindowsRulesOnEveryOs(string name, string expected)
+    {
+        PathHelper.SanitizeFolderName(name).Should().Be(expected);
     }
 }

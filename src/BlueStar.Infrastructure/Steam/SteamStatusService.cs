@@ -90,6 +90,12 @@ public sealed class SteamStatusService : ISteamStatusService
                 }
                 catch { }
             }
+            else if (OperatingSystem.IsLinux() && LinuxSteamRegistry.Read(LinuxSteamRegistry.DefaultPath) is { } reg)
+            {
+                if (reg.ActiveUser is uint user)
+                    steamId64 = 76561197960265728UL + user;
+                accountName = reg.AutoLoginUser;
+            }
 
             // 3. Inspect loginusers.vdf for exact Persona Name matching the active SteamId64
             var steamPath = ShortcutHelper.GetSteamPath();
@@ -129,25 +135,16 @@ public sealed class SteamStatusService : ISteamStatusService
     /// </summary>
     private static bool IsSteamRunning()
     {
+        if (OperatingSystem.IsLinux() && LinuxSteamRegistry.Read(LinuxSteamRegistry.DefaultPath)?.Pid is int linuxPid)
+            return IsSteamPid(linuxPid);
+
         if (OperatingSystem.IsWindows())
         {
             try
             {
                 using var activeKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam\ActiveProcess");
                 if (activeKey?.GetValue("pid") is int pid)
-                {
-                    if (pid <= 0) return false;
-                    try
-                    {
-                        using var process = Process.GetProcessById(pid);
-                        return !process.HasExited &&
-                               process.ProcessName.StartsWith("steam", StringComparison.OrdinalIgnoreCase);
-                    }
-                    catch (ArgumentException)
-                    {
-                        return false; // no process with that id: Steam is closed
-                    }
-                }
+                    return IsSteamPid(pid);
             }
             catch { }
         }
@@ -161,6 +158,21 @@ public sealed class SteamStatusService : ISteamStatusService
         catch
         {
             return false;
+        }
+    }
+
+    private static bool IsSteamPid(int pid)
+    {
+        if (pid <= 0) return false;
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            return !process.HasExited &&
+                   process.ProcessName.StartsWith("steam", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (ArgumentException)
+        {
+            return false; // no process with that id: Steam is closed
         }
     }
 

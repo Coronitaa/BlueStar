@@ -233,8 +233,8 @@ public class NewFeaturesTests
         // Arrange
         var jsonResponse = """
         {
-          "tag_name": "v99.0",
-          "name": "ReFix Release v99.0",
+          "tag_name": "v99.5",
+          "name": "ReFix Release v99.5",
           "body": "Fixes and performance improvements",
           "published_at": "2026-08-19T20:00:00Z",
           "assets": [
@@ -268,9 +268,9 @@ public class NewFeaturesTests
 
         // Assert
         release.Should().NotBeNull();
-        release!.TagName.Should().Be("v99.0");
+        release!.TagName.Should().Be("v99.5"); // always newer than whatever ReFix copy this machine has
         release.DownloadUrl.Should().Be("https://github.com/Coronitaa/ReFix/releases/download/v99.0/ReFix_Release_v99.0.zip");
-        release.Version.Should().Be("99.0");
+        release.Version.Should().Be("99.5");
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -354,13 +354,24 @@ public class NewFeaturesTests
     }
 
     [Fact]
-    public void ReFixEmulator_GetCurrentVersion_ReturnsBundledSemver()
+    public void ReFixEmulator_CurrentVersion_ReadsRefixVersionJson()
     {
-        var version = ReFixEmulator.GetCurrentVersion();
-        version.Should().MatchRegex(@"^\d+\.\d+\.\d+$"); // bundled ReFix changes every release
+        // Reads a temp deploy folder, not the machine's ReFix copy (AppData updates itself to newer versions).
+        var dir = Directory.CreateTempSubdirectory("bs-refixver-").FullName;
+        try
+        {
+            ReFixEmulator.GetCurrentVersionInternal(dir).Should().Be("1.3", "no refix_version.json means the legacy default");
+            File.WriteAllText(Path.Combine(dir, "refix_version.json"), """{ "version": "v2.4.3", "tag": "v2.4.3" }""");
+            ReFixEmulator.GetCurrentVersionInternal(dir).Should().Be("2.4.3");
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 
     [Fact]
+    [Trait("OS", "Windows")] // asserts deploy_helper.ps1 / Uninstall_ReFix.bat output; Linux runs AutoDeploy.sh
     public async Task ReFixEmulator_UninstallAsync_RemovesArtifactsAndRestoresOrigFiles()
     {
         var tempFolder = Path.Combine(Path.GetTempPath(), "BlueStar_UninstallTest_" + Guid.NewGuid().ToString("N"));
@@ -421,6 +432,7 @@ public class NewFeaturesTests
     }
 
     [Fact]
+    [Trait("OS", "Windows")] // asserts deploy_helper.ps1 / Uninstall_ReFix.bat output; Linux runs AutoDeploy.sh
     public async Task ReFixEmulator_DeployOptionAsync_GoldbergMode_DeploysSteamSettingsAndProgress()
     {
         // Arrange
@@ -473,6 +485,7 @@ public class NewFeaturesTests
     }
 
     [Fact]
+    [Trait("OS", "Windows")] // asserts deploy_helper.ps1 / Uninstall_ReFix.bat output; Linux runs AutoDeploy.sh
     public async Task ReFixEmulator_DeployOptionAsync_UnityStructure_PrioritizesPluginsFolder()
     {
         // Arrange

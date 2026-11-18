@@ -81,7 +81,7 @@ public static class ReFixCertificateHelper
         try
         {
             var rawBytes = Convert.FromBase64String(EmbeddedCertBase64);
-            using var cert = new X509Certificate2(rawBytes);
+            using var cert = X509CertificateLoader.LoadCertificate(rawBytes);
 
             // 1. Try installing into CurrentUser stores via .NET X509Store
             foreach (var storeName in new[] { StoreName.Root, StoreName.TrustedPublisher })
