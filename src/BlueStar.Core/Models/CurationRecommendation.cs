@@ -66,6 +66,9 @@ public record CurationRecommendation
     /// </summary>
     public bool HasPresetExtras { get; init; }
 
+    /// <summary>ReFix catalog mods the preset picks (null = ReFix decides, empty = none).</summary>
+    public IReadOnlyList<string>? ReFixModIds { get; init; }
+
     /// <summary>
     /// The depots to download for this recommendation, pinned to its manifests. An admin preset is a whole
     /// build: base-game depots it does not pin are left out, so an old build is not mixed with current

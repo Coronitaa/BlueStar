@@ -260,6 +260,12 @@ public record GameInstance
     public string? PendingAdminPresetId { get; init; }
 
     /// <summary>
+    /// ReFix catalog mods every ReFix deploy of this game installs, from the admin preset it was installed with.
+    /// Null lets ReFix pick (the first catalog mod that matches the game); empty installs none.
+    /// </summary>
+    public IReadOnlyList<string>? ReFixModIds { get; init; }
+
+    /// <summary>
     /// Gets or sets the specific game fix ID to download and deploy automatically after download completes.
     /// </summary>
     public string? PendingRedeployGameFixId { get; init; }

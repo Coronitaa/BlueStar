@@ -67,6 +67,13 @@ public sealed record AdminInstallPreset
     public IReadOnlyDictionary<uint, ulong> Manifests { get; init; } = new Dictionary<uint, ulong>();
     public AdminEmulator Emulator { get; init; } = new();
     public IReadOnlyList<AdminDownload> Mods { get; init; } = [];
+
+    /// <summary>
+    /// ReFix catalog mod ids (refix_mods/catalog.tsv) the ReFix deploy installs. Null leaves it to ReFix
+    /// (the first catalog mod that matches the game); empty installs none.
+    /// </summary>
+    public IReadOnlyList<string>? ReFixMods { get; init; }
+
     public string? Note { get; init; }
 
     /// <summary>Maps the preset onto the recommendation the install modal already knows how to apply.</summary>
@@ -90,6 +97,7 @@ public sealed record AdminInstallPreset
         CompatibilityNotes = Note,
         Source = "BlueStar",
         PresetId = Id,
+        ReFixModIds = ReFixMods,
         HasPresetExtras = Emulator.Type == AdminEmulatorType.Custom || Mods.Count > 0
     };
 }

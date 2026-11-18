@@ -46,6 +46,10 @@ public static partial class AdminCatalogParser
     [GeneratedRegex("^[A-Za-z0-9_.-]{1,64}$")]
     private static partial Regex BranchRegex();
 
+    // ReFix mod ids (refixmod.json "id"); no commas, they travel as a comma-separated list.
+    [GeneratedRegex("^[a-z0-9][a-z0-9._-]{0,63}$")]
+    private static partial Regex ReFixModIdRegex();
+
     [GeneratedRegex("^[0-9]{1,20}$")]
     private static partial Regex DigitsRegex();
 
@@ -273,6 +277,27 @@ public static partial class AdminCatalogParser
             }
         }
 
+        List<string>? refixMods = null;
+        if (p.TryGetProperty("refixMods", out var rm) && rm.ValueKind != JsonValueKind.Null)
+        {
+            if (rm.ValueKind != JsonValueKind.Array)
+            {
+                errors.Add($"{where}: refixMods is not a list");
+                return null;
+            }
+            refixMods = [];
+            foreach (var r in rm.EnumerateArray().Take(MaxMods))
+            {
+                var modId = r.ValueKind == JsonValueKind.String ? r.GetString() : null;
+                if (modId == null || !ReFixModIdRegex().IsMatch(modId))
+                {
+                    errors.Add($"{where}: invalid ReFix mod id");
+                    return null;
+                }
+                if (!refixMods.Contains(modId)) refixMods.Add(modId);
+            }
+        }
+
         return new AdminInstallPreset
         {
             Id = id,
@@ -282,6 +307,7 @@ public static partial class AdminCatalogParser
             Manifests = manifests,
             Emulator = emulator,
             Mods = mods,
+            ReFixMods = refixMods,
             Note = CleanText(GetString(p, "note"), 2000, allowNewlines: true)
         };
     }

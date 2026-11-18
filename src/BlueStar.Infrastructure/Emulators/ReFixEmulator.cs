@@ -41,6 +41,19 @@ public sealed class ReFixEmulator : IEmulator
         return detectedMode;
     }
 
+    /// <summary>
+    /// The answers AutoDeploy would ask for, passed as environment variables (older deploy_helper.ps1 versions
+    /// ignore unknown variables, unlike unknown parameters): portable runtime libraries always on, and the
+    /// ReFix catalog mods the game's admin preset picked.
+    /// </summary>
+    public static Dictionary<string, string> BuildDeployEnvironment(GameInstance instance)
+    {
+        var env = new Dictionary<string, string> { ["REFIX_PORTABLE_RUNTIME"] = "Y" };
+        if (instance.ReFixModIds != null)
+            env["REFIX_GAME_MODS"] = instance.ReFixModIds.Count == 0 ? "none" : string.Join(",", instance.ReFixModIds);
+        return env;
+    }
+
     public static bool IsLanOfflineOption(string? optionId) =>
         string.Equals(optionId, LanOfflineOptionId, StringComparison.OrdinalIgnoreCase);
 
@@ -514,15 +527,13 @@ public sealed class ReFixEmulator : IEmulator
             helperArgs.Append($"-ListenPort \"{EscapePsArg(lanPort)}\" ");
             helperArgs.Append("-CustomBroadcasts \"\"");
 
-            var envVars = new Dictionary<string, string>
-            {
-                ["BLUESTAR_TARGET_DIR"] = targetDir,
-                ["BLUESTAR_BIN_DIR"] = binDir,
-                ["BLUESTAR_EXE_DIR"] = exeDir,
-                ["BLUESTAR_GAME_NAME"] = gameName,
-                ["BLUESTAR_USER_NAME"] = userName,
-                ["BLUESTAR_APP_ID"] = realAppIdStr
-            };
+            var envVars = BuildDeployEnvironment(instance);
+            envVars["BLUESTAR_TARGET_DIR"] = targetDir;
+            envVars["BLUESTAR_BIN_DIR"] = binDir;
+            envVars["BLUESTAR_EXE_DIR"] = exeDir;
+            envVars["BLUESTAR_GAME_NAME"] = gameName;
+            envVars["BLUESTAR_USER_NAME"] = userName;
+            envVars["BLUESTAR_APP_ID"] = realAppIdStr;
 
             var (helperExitCode, helperOutput, helperError) = await RunProcessAsync(
                 "powershell.exe",

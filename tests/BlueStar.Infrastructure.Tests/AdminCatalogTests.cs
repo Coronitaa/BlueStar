@@ -215,6 +215,45 @@ public sealed class AdminCatalogTests : IDisposable
     }
 
     [Fact]
+    public void Parse_ReFixMods_KeepsIdsAndTellsAutoFromNone()
+    {
+        var picked = AdminCatalogParser.Parse(WithPreset("""{ "id": "p", "name": "P", "refixMods": ["refix.csgo.lan_overhaul", "refix.csgo.lan_overhaul"] }"""));
+        var none = AdminCatalogParser.Parse(WithPreset("""{ "id": "p", "name": "P", "refixMods": [] }"""));
+        var auto = AdminCatalogParser.Parse(WithPreset("""{ "id": "p", "name": "P" }"""));
+
+        picked.Catalog.Games.Single().Presets.Single().ReFixMods.Should().Equal("refix.csgo.lan_overhaul");
+        picked.Catalog.Games.Single().Presets.Single().ToRecommendation(10).ReFixModIds.Should().Equal("refix.csgo.lan_overhaul");
+        none.Catalog.Games.Single().Presets.Single().ReFixMods.Should().BeEmpty("an empty list means no ReFix mods");
+        auto.Catalog.Games.Single().Presets.Single().ReFixMods.Should().BeNull("no list leaves the choice to ReFix's catalog");
+    }
+
+    [Theory]
+    [InlineData("""{ "id": "p", "name": "P", "refixMods": ["Bad Id"] }""")]
+    [InlineData("""{ "id": "p", "name": "P", "refixMods": ["a,b"] }""")]
+    [InlineData("""{ "id": "p", "name": "P", "refixMods": [1] }""")]
+    [InlineData("""{ "id": "p", "name": "P", "refixMods": "refix.csgo.lan_overhaul" }""")]
+    public void Parse_InvalidReFixMods_DropsThePreset(string preset)
+    {
+        var result = AdminCatalogParser.Parse(WithPreset(preset));
+
+        result.Catalog.Games.Single().Presets.Should().BeEmpty();
+        result.Errors.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void ReFixDeployEnvironment_PassesPortableRuntimeAndModChoice()
+    {
+        var auto = BlueStar.Infrastructure.Emulators.ReFixEmulator.BuildDeployEnvironment(new GameInstance { Name = "G", InstallPath = "G" });
+        var none = BlueStar.Infrastructure.Emulators.ReFixEmulator.BuildDeployEnvironment(new GameInstance { Name = "G", InstallPath = "G", ReFixModIds = [] });
+        var two = BlueStar.Infrastructure.Emulators.ReFixEmulator.BuildDeployEnvironment(new GameInstance { Name = "G", InstallPath = "G", ReFixModIds = ["a.b", "c"] });
+
+        auto["REFIX_PORTABLE_RUNTIME"].Should().Be("Y");
+        auto.Should().NotContainKey("REFIX_GAME_MODS");
+        none["REFIX_GAME_MODS"].Should().Be("none");
+        two["REFIX_GAME_MODS"].Should().Be("a.b,c");
+    }
+
+    [Fact]
     public void ResolveInside_RefusesEscapes()
     {
         AdminPresetDeployer.ResolveInside(_dir, "steam_settings/a.ini").Should().StartWith(_dir);

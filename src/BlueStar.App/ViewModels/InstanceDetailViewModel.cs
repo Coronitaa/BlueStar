@@ -2548,6 +2548,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
         bool isBuildPinned = false;
         bool disableUpdates = false;
         string? pendingPresetId = null;
+        var refixModIds = Instance.ReFixModIds;
         var manifestMap = new Dictionary<uint, ulong>(Instance.InstalledManifestMap ?? new Dictionary<uint, ulong>());
 
         if (IsInstallModalVersionRecommended && CuratedRecommendation != null)
@@ -2556,6 +2557,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
             targetBranch = rec.RecommendedBranch ?? "public";
             targetBuildId = string.IsNullOrWhiteSpace(rec.RecommendedBuildId) ? null : rec.RecommendedBuildId;
             pendingPresetId = rec.HasPresetExtras ? rec.PresetId : null;
+            refixModIds = rec.PresetId != null ? rec.ReFixModIds : refixModIds;
             isBuildPinned = true;
             disableUpdates = true;
 
@@ -2702,6 +2704,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
             PendingRedeployGameFixId = fixLayerIds.Count > 0 ? fixLayerIds[0] : null,
             PendingRedeployFixLayerIds = fixLayerIds,
             PendingAdminPresetId = pendingPresetId,
+            ReFixModIds = refixModIds,
             EmulatorEnabled = enableEmulator,
             EmulatorId = emulatorId,
             InstalledEmulatorVersion = installedEmulatorVersion,
@@ -2857,6 +2860,8 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
             var parts = new List<string>();
             if (p.Emulator.Type == AdminEmulatorType.Custom) parts.Add(p.Emulator.Name ?? "Custom emulator");
             if (p.Mods.Count > 0) parts.Add(string.Join(", ", p.Mods.Select(m => m.Name)));
+            if (p.ReFixMods is { Count: > 0 } && p.Emulator.Type is AdminEmulatorType.ReFixLan or AdminEmulatorType.ReFixLanOnline or AdminEmulatorType.ReFixOnlineLegacy)
+                parts.Add(string.Join(", ", p.ReFixMods));
             return parts.Count == 0
                 ? string.Empty
                 : string.Format(GetString("String_InstallModalPresetIncludesFormat", "Includes: {0}"), string.Join(" · ", parts));
