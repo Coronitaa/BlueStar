@@ -735,6 +735,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _forwardStack.Clear();
             OnPropertyChanged(nameof(CanGoBack));
             OnPropertyChanged(nameof(CanGoForward));
+            GoBackCommand.NotifyCanExecuteChanged();
+            GoForwardCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -833,6 +835,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _isNavigatingHistory = false;
             OnPropertyChanged(nameof(CanGoBack));
             OnPropertyChanged(nameof(CanGoForward));
+            GoBackCommand.NotifyCanExecuteChanged();
+            GoForwardCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -858,30 +862,47 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _isNavigatingHistory = false;
             OnPropertyChanged(nameof(CanGoBack));
             OnPropertyChanged(nameof(CanGoForward));
+            GoBackCommand.NotifyCanExecuteChanged();
+            GoForwardCommand.NotifyCanExecuteChanged();
         }
     }
 
     private void ApplyNavigationEntry(NavigationEntry entry)
     {
-        if (entry.Page == "InstanceDetail" && entry.Parameter is GameInstance inst)
+        if (entry.Page == "InstanceDetail")
         {
-            SelectedRecentInstanceId = inst.Id;
-            SelectedNavigation = null;
-            CurrentInstanceTitle = inst.Name;
-            _currentlyLoadedPage = "InstanceDetail";
-            var (view, vm) = GetInstanceDetailView();
-            _ = vm.LoadInstanceAsync(inst, autoCheckDepotUpdates: false);
-            if (!string.IsNullOrWhiteSpace(entry.Tab))
+            var inst = entry.Parameter as GameInstance;
+            if (inst == null && SelectedRecentInstanceId.HasValue)
             {
-                vm.SelectedTab = entry.Tab;
+                try
+                {
+                    inst = _instanceManager.GetByIdAsync(SelectedRecentInstanceId.Value, CancellationToken.None).GetAwaiter().GetResult();
+                }
+                catch { }
             }
-            CurrentView = view;
+
+            if (inst != null)
+            {
+                SelectedRecentInstanceId = inst.Id;
+                SelectedNavigation = null;
+                CurrentInstanceTitle = inst.Name;
+                _currentlyLoadedPage = "InstanceDetail";
+                var (view, vm) = GetInstanceDetailView();
+                vm.ResetForNewInstance(inst);
+                _ = vm.LoadInstanceAsync(inst, autoCheckDepotUpdates: false);
+                if (!string.IsNullOrWhiteSpace(entry.Tab))
+                {
+                    vm.SelectedTab = entry.Tab;
+                }
+                CurrentView = view;
+            }
         }
         else if (entry.Page == "ExploreCategory" && !string.IsNullOrWhiteSpace(entry.CategoryId))
         {
             SelectedRecentInstanceId = null;
             CurrentInstanceTitle = null;
             SelectedNavigation = "Explore";
+            _currentlyLoadedPage = "Explore";
             var (view, vm) = GetExploreView();
             CurrentView = view;
             vm.ExpandCategory(entry.CategoryId);
@@ -890,7 +911,33 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             SelectedRecentInstanceId = null;
             CurrentInstanceTitle = null;
-            Navigate(entry.Page);
+            SelectedNavigation = entry.Page;
+            _currentlyLoadedPage = entry.Page;
+
+            UserControl? targetView = entry.Page switch
+            {
+                "Home" => GetHomeView(),
+                "Library" or "Instances" => GetLibraryView().View,
+                "Browse" or "Explore" => GetExploreView().View,
+                "Downloads" => GetDownloadsView().View,
+                "Settings" => GetSettingsView(),
+                "About" => GetAboutView(),
+                _ => null
+            };
+
+            if (targetView != null)
+            {
+                CurrentView = targetView;
+
+                if (entry.Page == "Home")
+                {
+                    _ = HomeViewModel.LoadDashboardDataAsync();
+                }
+                else if (entry.Page is "Library" or "Instances")
+                {
+                    _ = GetLibraryView().ViewModel.LoadInstancesAsync();
+                }
+            }
         }
 
         if (entry.ScrollOffset > 0)
@@ -1134,6 +1181,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         SelectedNavigation = null;
         _currentlyLoadedPage = "InstanceDetail";
         var (view, vm) = GetInstanceDetailView();
+        vm.ResetForNewInstance(instance);
         _ = vm.LoadInstanceAsync(instance, autoCheckDepotUpdates: autoCheckUpdates);
         CurrentView = view;
     }

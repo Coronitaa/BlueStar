@@ -648,6 +648,39 @@
             </Grid>
         </DataTemplate>
 
+        <DataTemplate x:Key="RowCardActionsTemplate">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="7"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" Style="{StaticResource PrimaryButton}" Padding="10,0" Height="34"
+                        VerticalAlignment="Stretch" VerticalContentAlignment="Center"
+                        Command="{Binding DataContext.AddToLibraryCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        CommandParameter="{Binding}"
+                        IsEnabled="{Binding IsCreating, Converter={StaticResource InverseBoolConverter}}">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Path Data="{StaticResource IconPlus}" Fill="{StaticResource InverseTextBrush}"
+                              Stretch="Uniform" Width="11" Height="11" Margin="0,0,6,0" VerticalAlignment="Center"
+                              Visibility="{Binding IsCreating, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                        <TextBlock Text="{DynamicResource String_AddToInstancesShort}" FontSize="12"
+                                   Visibility="{Binding IsCreating, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                        <TextBlock Text="{Binding CreationStatus}" FontSize="12"
+                                   Visibility="{Binding IsCreating, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    </StackPanel>
+                </Button>
+                <Button Grid.Column="2" Style="{StaticResource SecondaryButton}" Padding="10,0" Height="34"
+                        VerticalAlignment="Stretch" VerticalContentAlignment="Center"
+                        ToolTip="{DynamicResource String_ViewOnSteamDb}"
+                        Command="{Binding DataContext.OpenSteamDbCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        CommandParameter="{Binding}">
+                    <Path Data="{StaticResource IconSteamDb}" Fill="{StaticResource SecondaryTextBrush}"
+                          Stretch="Uniform" Width="13" Height="13"/>
+                </Button>
+            </Grid>
+        </DataTemplate>
+
         <!-- ═══ SKELETON CARD — GRID ═══ -->
         <DataTemplate x:Key="SkeletonCardTemplate">
             <Border Style="{StaticResource SkeletonCard}" Width="288" Height="330" Margin="0,0,12,12">
@@ -681,9 +714,9 @@
             <Border Style="{StaticResource SkeletonCard}" Padding="0" Margin="0,0,12,8" Height="128">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="220"/>
+                        <ColumnDefinition Width="274"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="190"/>
+                        <ColumnDefinition Width="140"/>
                     </Grid.ColumnDefinitions>
                     <Border Grid.Column="0" Style="{StaticResource SkeletonBlock}" CornerRadius="8,0,0,8"/>
                     <StackPanel Grid.Column="1" Margin="16,10,16,10" VerticalAlignment="Center">
@@ -696,7 +729,7 @@
                         </WrapPanel>
                     </StackPanel>
                     <StackPanel Grid.Column="2" Margin="0,0,16,0" VerticalAlignment="Center" HorizontalAlignment="Right">
-                        <Border Style="{StaticResource SkeletonBlock}" Height="34" Width="100" CornerRadius="6"/>
+                        <Border Style="{StaticResource SkeletonBlock}" Height="34" Width="85" CornerRadius="6"/>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -718,7 +751,7 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <ContentControl Grid.Row="0" Height="130" Content="{Binding}"
+                    <ContentControl Grid.Row="0" Height="134" Content="{Binding}"
                                     Template="{StaticResource CardArtworkTemplate}"/>
 
                     <StackPanel Grid.Row="1" Margin="12,10,12,0" VerticalAlignment="Top">
@@ -758,7 +791,7 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <ContentControl Grid.Column="0" Width="220" Content="{Binding}"
+                    <ContentControl Grid.Column="0" Width="274" Content="{Binding}"
                                     Template="{StaticResource RowCardArtworkTemplate}"/>
 
                     <StackPanel Grid.Column="1" Margin="16,8,16,8" VerticalAlignment="Center">
@@ -766,19 +799,17 @@
                                    TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
                         <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource CardMetaTemplate}"
                                           Margin="0,3,0,0"/>
-                        <ItemsControl ItemsSource="{Binding StoreTags}" Margin="0,5,0,0"
-                                      ItemTemplate="{StaticResource CardTagTemplate}"
-                                      MaxHeight="26" ClipToBounds="True">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                        </ItemsControl>
+                        <ctrl:OverflowTagBar TagStyle="{StaticResource CardTagBubble}"
+                                             ItemsSource="{Binding StoreTags}"
+                                             TagCommand="{Binding DataContext.FilterByTagCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                             MoreTextFormat="{DynamicResource String_MoreTagsFormat}"
+                                             Margin="0,5,0,0"/>
                         <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource CardBadgesTemplate}"
                                           Margin="0,3,0,0"/>
                     </StackPanel>
 
-                    <StackPanel Grid.Column="2" Margin="0,0,16,0" VerticalAlignment="Center" MinWidth="190">
-                        <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource CardActionsTemplate}"/>
+                    <StackPanel Grid.Column="2" Margin="0,0,16,0" VerticalAlignment="Center" MinWidth="140">
+                        <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource RowCardActionsTemplate}"/>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -972,6 +1003,7 @@
 
             <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Center">
                 <RadioButton GroupName="ViewMode" Style="{StaticResource FilterChipRadioButton}"
+                             AutomationProperties.AutomationId="ViewGridButton"
                              AutomationProperties.Name="{DynamicResource String_ViewGrid}"
                              IsChecked="{Binding IsGridView, Mode=OneWay}"
                              Command="{Binding SetViewCommand}" CommandParameter="grid"
@@ -980,6 +1012,7 @@
                           Stretch="Uniform" Width="13" Height="13"/>
                 </RadioButton>
                 <RadioButton GroupName="ViewMode" Style="{StaticResource FilterChipRadioButton}"
+                             AutomationProperties.AutomationId="ViewListButton"
                              AutomationProperties.Name="{DynamicResource String_ViewList}"
                              IsChecked="{Binding IsGridView, Mode=OneWay, Converter={StaticResource InverseBoolConverter}}"
                              Command="{Binding SetViewCommand}" CommandParameter="list"
@@ -1176,7 +1209,7 @@
                             </ItemsControl.Style>
                         </ItemsControl>
 
-                        <!-- Cards. The view toggle swaps both the panel and the item template. -->
+                        <!-- Cards. Single VirtualizingWrapPanel avoiding recreation on view toggle -->
                         <ItemsControl ItemsSource="{Binding Results}"
                                       VirtualizingPanel.IsVirtualizing="True"
                                       VirtualizingPanel.VirtualizationMode="Recycling"
@@ -1184,27 +1217,18 @@
                             <ItemsControl.RenderTransform>
                                 <TranslateTransform Y="0"/>
                             </ItemsControl.RenderTransform>
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <ctrl:VirtualizingWrapPanel IsGridView="{Binding DataContext.IsGridView, RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
                             <ItemsControl.Style>
                                 <Style TargetType="ItemsControl">
                                     <Setter Property="ItemTemplate" Value="{StaticResource ResultCardTemplate}"/>
-                                    <Setter Property="ItemsPanel">
-                                        <Setter.Value>
-                                            <ItemsPanelTemplate>
-                                                <ctrl:VirtualizingWrapPanel ItemWidth="300" ItemHeight="350"/>
-                                            </ItemsPanelTemplate>
-                                        </Setter.Value>
-                                    </Setter>
                                     <Setter Property="Opacity" Value="1.0"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsGridView}" Value="False">
                                             <Setter Property="ItemTemplate" Value="{StaticResource ResultRowTemplate}"/>
-                                            <Setter Property="ItemsPanel">
-                                                <Setter.Value>
-                                                    <ItemsPanelTemplate>
-                                                        <ctrl:VirtualizingWrapPanel ItemWidth="0" ItemHeight="136"/>
-                                                    </ItemsPanelTemplate>
-                                                </Setter.Value>
-                                            </Setter>
                                         </DataTrigger>
                                         <!-- Dim subtly on Refreshing to preserve existing results without jarring blanks -->
                                         <DataTrigger Binding="{Binding SearchState}" Value="Refreshing">

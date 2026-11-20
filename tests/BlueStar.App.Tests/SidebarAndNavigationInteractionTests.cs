@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Threading;
@@ -307,5 +308,85 @@ public class SidebarAndNavigationInteractionTests
             // Delta must be small (under 15 MB) after 50 intense tab switches and back/forward navigations
             Assert.True(deltaMb < 15, $"Memory increased by {deltaMb} MB across 50 tab switches and back/forward navigations.");
         });
+    }
+
+    [Fact]
+    public void SwitchingInstances_SynchronouslyResetsInstanceDetailState_AndPreventsModalAndBannerDesync()
+    {
+        RunOnStaThread(() =>
+        {
+            var (mainVm, _) = CreateTestViewModels();
+            var instanceA = new GameInstance
+            {
+                Id = Guid.NewGuid(),
+                Name = "Game Alpha",
+                AppId = 100,
+                InstallPath = @"C:\Games\GameAlpha"
+            };
+            var instanceB = new GameInstance
+            {
+                Id = Guid.NewGuid(),
+                Name = "Game Beta",
+                AppId = 200,
+                InstallPath = @"C:\Games\GameBeta"
+            };
+
+            // 1. Open Game A
+            mainVm.OpenInstanceDetail(instanceA);
+            Assert.Equal(instanceA.Id, mainVm.SelectedRecentInstanceId);
+            Assert.Equal("Game Alpha", mainVm.CurrentInstanceTitle);
+            Assert.NotNull(mainVm.CurrentView);
+
+            // Access ViewModel and simulate opening install modal
+            var idvm = mainVm.CurrentView.DataContext as InstanceDetailViewModel;
+            Assert.NotNull(idvm);
+            Assert.Equal("Game Alpha", idvm.InstallModalGameTitle);
+            idvm.IsInstallModalOpen = true;
+
+            // 2. Open Game B -> must reset modal state synchronously
+            mainVm.OpenInstanceDetail(instanceB);
+            Assert.Equal(instanceB.Id, mainVm.SelectedRecentInstanceId);
+            Assert.Equal("Game Beta", mainVm.CurrentInstanceTitle);
+            Assert.Equal("Game Beta", idvm.InstallModalGameTitle);
+            Assert.False(idvm.IsInstallModalOpen);
+
+            // 3. Navigate back to Game A
+            Assert.True(mainVm.CanGoBack);
+            mainVm.GoBackCommand.Execute(null);
+            Assert.Equal(instanceA.Id, mainVm.SelectedRecentInstanceId);
+            Assert.Equal("Game Alpha", mainVm.CurrentInstanceTitle);
+            Assert.Equal("Game Alpha", idvm.InstallModalGameTitle);
+            Assert.False(idvm.IsInstallModalOpen);
+
+            // 4. Navigate forward to Game B
+            Assert.True(mainVm.CanGoForward);
+            mainVm.GoForwardCommand.Execute(null);
+            Assert.Equal(instanceB.Id, mainVm.SelectedRecentInstanceId);
+            Assert.Equal("Game Beta", mainVm.CurrentInstanceTitle);
+            Assert.Equal("Game Beta", idvm.InstallModalGameTitle);
+        });
+    }
+
+    [Fact]
+    public async Task DepotBoxMigration_AppSettingsService_AutomaticallyMigratesLegacyDomain()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"settings_test_{Guid.NewGuid():N}.json");
+        try
+        {
+            await File.WriteAllTextAsync(tempFile, "{\"defaultApiUrl\": \"https://depotbox.org\"}");
+            var settings = new BlueStar.Infrastructure.Storage.AppSettingsService(
+                NullLogger<BlueStar.Infrastructure.Storage.AppSettingsService>.Instance,
+                settingsPath: tempFile);
+
+            Assert.Equal("https://depotbox.lol", settings.DefaultApiUrl);
+
+            var savedJson = await File.ReadAllTextAsync(tempFile);
+            Assert.Contains("https://depotbox.lol", savedJson);
+            Assert.DoesNotContain("https://depotbox.org", savedJson);
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
     }
 }

@@ -139,7 +139,22 @@ public sealed class InstanceManager : IInstanceManager
                     var json = await File.ReadAllTextAsync(instanceFile, ct).ConfigureAwait(false);
                     var instance = JsonSerializer.Deserialize<GameInstance>(json, JsonOptions);
                     if (instance is not null)
+                    {
+                        // Self-healing: detect and repair metadata contaminated by race conditions with other games
+                        if (instance.Metadata != null && instance.Metadata.AppId > 0 && instance.AppId > 0 && instance.Metadata.AppId != instance.AppId)
+                        {
+                            _logger.LogWarning("Detected metadata AppId mismatch for instance {Id} ({Name}, AppId={AppId}, MetaAppId={MetaAppId}). Resetting contaminated metadata.",
+                                instance.Id, instance.Name, instance.AppId, instance.Metadata.AppId);
+                            instance = instance with { Metadata = null };
+                            try
+                            {
+                                var healedJson = JsonSerializer.Serialize(instance, JsonOptions);
+                                await File.WriteAllTextAsync(instanceFile, healedJson, ct).ConfigureAwait(false);
+                            }
+                            catch { }
+                        }
                         instances.Add(instance);
+                    }
                 }
                 catch (Exception ex) when (ex is JsonException or IOException)
                 {

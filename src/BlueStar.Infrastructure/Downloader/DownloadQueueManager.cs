@@ -1666,9 +1666,16 @@ public class DownloadQueueManager
         }
         catch (Exception ex)
         {
+            var userErrorMessage = ex switch
+            {
+                SteamKit2.AsyncJobFailedException => "Steam CDN connection timed out or failed. Please check your network connection and try again.",
+                _ when ex.InnerException is SteamKit2.AsyncJobFailedException => "Steam CDN connection timed out or failed. Please check your network connection and try again.",
+                _ => ex.Message
+            };
+
             job.JobStatus = DownloadJobStatus.Failed;
             job.StatusMessage = "Failed ❌";
-            job.ErrorDetail = ex.Message;
+            job.ErrorDetail = userErrorMessage;
             job.CompletedAt = DateTimeOffset.Now;
             NotifyQueueChanged();
 
@@ -1676,12 +1683,12 @@ public class DownloadQueueManager
             {
                 GameName = instance.Name,
                 Status = DownloadJobStatus.Failed,
-                Message = $"Error: {ex.Message}",
+                Message = $"Error: {userErrorMessage}",
                 Instance = instance
             });
 
-            _logger.LogError(ex, "Download failed for {Game}", instance.Name);
-            _notificationService?.ShowError("Download Error", $"Failed to download {instance.Name}: {ex.Message}");
+            _logger.LogError(ex, "Download failed for {Game}: {Error}", instance.Name, userErrorMessage);
+            _notificationService?.ShowError("Download Error", $"Failed to download {instance.Name}: {userErrorMessage}");
         }
         finally
         {

@@ -100,10 +100,16 @@ public sealed class AppSettingsService
                          ?? Environment.GetEnvironmentVariable("DEPOTBOX_API_URL");
             if (!string.IsNullOrWhiteSpace(envUrl))
             {
-                return envUrl.Trim().TrimEnd('/');
+                var trimmed = envUrl.Trim().TrimEnd('/');
+                return trimmed.Contains("depotbox.org", StringComparison.OrdinalIgnoreCase)
+                    ? trimmed.Replace("depotbox.org", "depotbox.lol", StringComparison.OrdinalIgnoreCase)
+                    : trimmed;
             }
 
-            return string.IsNullOrWhiteSpace(_current.DefaultApiUrl) ? "https://depotbox.lol" : _current.DefaultApiUrl;
+            var url = string.IsNullOrWhiteSpace(_current.DefaultApiUrl) ? "https://depotbox.lol" : _current.DefaultApiUrl.Trim().TrimEnd('/');
+            return url.Contains("depotbox.org", StringComparison.OrdinalIgnoreCase)
+                ? url.Replace("depotbox.org", "depotbox.lol", StringComparison.OrdinalIgnoreCase)
+                : url;
         }
     }
 
@@ -329,14 +335,29 @@ public sealed class AppSettingsService
                 _logger.LogDebug("Loaded app settings from {Path}", _settingsPath);
             }
 
+            var dirty = false;
+
+            // Automatically migrate legacy depotbox.org domain to depotbox.lol
+            if (!string.IsNullOrWhiteSpace(_current.DefaultApiUrl) && _current.DefaultApiUrl.Contains("depotbox.org", StringComparison.OrdinalIgnoreCase))
+            {
+                _current = _current with { DefaultApiUrl = _current.DefaultApiUrl.Replace("depotbox.org", "depotbox.lol", StringComparison.OrdinalIgnoreCase) };
+                dirty = true;
+                _logger.LogInformation("Migrated legacy DepotBox URL in settings from depotbox.org to depotbox.lol");
+            }
+
             // Releases up to 1.4.8 copied the built-in key into the user's settings.json in plain text. Remove it:
             // BlueStar now reads it from the encrypted bundle, so it no longer has to live there.
             var bundledKey = _bundledSecrets.Value?.DefaultApiKey;
             if (IsRealApiKey(bundledKey) && string.Equals(_current.DefaultApiKey?.Trim(), bundledKey!.Trim(), StringComparison.Ordinal))
             {
                 _current = _current with { DefaultApiKey = null };
-                File.WriteAllText(_settingsPath, JsonSerializer.Serialize(_current, JsonOptions));
+                dirty = true;
                 _logger.LogInformation("Removed the built-in DepotBox API key from the user's settings file");
+            }
+
+            if (dirty)
+            {
+                File.WriteAllText(_settingsPath, JsonSerializer.Serialize(_current, JsonOptions));
             }
         }
         catch (Exception ex)

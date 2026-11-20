@@ -123,6 +123,17 @@ public class TransitioningContentControl : ContentControl
         {
             if (currentToken != _transitionToken || _contentPresenter == null)
             {
+                // Ensure opacity and translation are safely restored if transition was superseded or cancelled
+                if (_contentPresenter != null && _contentPresenter.Opacity < 1.0)
+                {
+                    _contentPresenter.BeginAnimation(OpacityProperty, null);
+                    _contentPresenter.Opacity = 1.0;
+                    if (_translateTransform != null)
+                    {
+                        _translateTransform.BeginAnimation(TranslateTransform.YProperty, null);
+                        _translateTransform.Y = 0.0;
+                    }
+                }
                 return;
             }
 

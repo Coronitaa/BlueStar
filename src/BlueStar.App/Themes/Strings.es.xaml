@@ -53,6 +53,8 @@
     <sys:String x:Key="String_ViewOnSteamDb">Ver en SteamDB</sys:String>
     <sys:String x:Key="String_AddToLibrary">Añadir a Biblioteca</sys:String>
     <sys:String x:Key="String_AddToInstances">Añadir a Mis Juegos</sys:String>
+    <sys:String x:Key="String_AddToInstancesShort">Mis Juegos</sys:String>
+    <sys:String x:Key="String_MoreTagsFormat">+{0} más</sys:String>
     <sys:String x:Key="String_CreateInstance">Crear Instancia</sys:String>
     <sys:String x:Key="String_Creating">Creando...</sys:String>
     <sys:String x:Key="String_CreatingShortcuts">Crear Accesos Directos</sys:String>

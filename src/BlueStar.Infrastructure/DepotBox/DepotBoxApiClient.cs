@@ -1701,11 +1701,26 @@ public sealed class DepotBoxApiClient : IDepotBoxApiClient
         var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         var statusCode = (int)response.StatusCode;
 
-        _logger.LogError("DepotBox API error: {StatusCode} {Body}", statusCode, body);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            _logger.LogDebug("DepotBox API returned 404 Not Found: {Body}", body);
+        }
+        else if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
+        {
+            _logger.LogWarning("DepotBox API authentication failed: {StatusCode} {Body}", statusCode, body);
+        }
+        else if (response.StatusCode == (System.Net.HttpStatusCode)429)
+        {
+            _logger.LogWarning("DepotBox API rate limit exceeded: {Body}", body);
+        }
+        else
+        {
+            _logger.LogError("DepotBox API error: {StatusCode} {Body}", statusCode, body);
+        }
 
         throw statusCode switch
         {
-            401 => new UnauthorizedAccessException($"DepotBox API: Invalid or missing API key. {body}"),
+            401 or 403 => new UnauthorizedAccessException($"DepotBox API: Invalid or missing API key ({statusCode}). {body}"),
             429 => new HttpRequestException($"DepotBox API: Rate limit exceeded. {body}", null, response.StatusCode),
             _ => new HttpRequestException($"DepotBox API error {statusCode}: {SummarizeBody(body)}", null, response.StatusCode)
         };

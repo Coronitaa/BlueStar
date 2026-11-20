@@ -54,7 +54,17 @@ if ($Interactive -or [string]::IsNullOrWhiteSpace($ApiKey)) {
     # Descubrir claves API grabadas / configuradas en el sistema
     $recordedKeys = [System.Collections.Generic.List[PSCustomObject]]::new()
     
-    # 1. depotbox.key en la raiz
+    # 1. depotkey.json o depotbox.key en la raiz
+    $depotJsonFile = Join-Path $rootDir "depotkey.json"
+    if (Test-Path $depotJsonFile) {
+        try {
+            $parsed = Get-Content $depotJsonFile -Raw | ConvertFrom-Json
+            $k = if ($parsed.DepotBox) { $parsed.DepotBox } else { $parsed.defaultApiKey }
+            if ($k -and $k.Trim() -and $k.Trim() -ne "YOUR-API-KEY" -and -not ($recordedKeys | Where-Object { $_.Key -eq $k.Trim() })) {
+                $recordedKeys.Add([PSCustomObject]@{ Key = $k.Trim(); Source = "depotkey.json (Archivo local)" })
+            }
+        } catch { }
+    }
     $keyFile = Join-Path $rootDir "depotbox.key"
     if (Test-Path $keyFile) {
         Get-Content $keyFile | ForEach-Object {
@@ -254,6 +264,13 @@ if (Test-Path $debugLog) {
     [System.IO.File]::WriteAllText($debugLog, $content)
 }
 
+$prereqService = Join-Path $rootDir "src\BlueStar.Infrastructure\Services\PrerequisiteService.cs"
+if (Test-Path $prereqService) {
+    $content = [System.IO.File]::ReadAllText($prereqService)
+    $content = [regex]::Replace($content, 'BlueStar/[0-9]+\.[0-9]+\.[0-9]+', "BlueStar/$threePartVersion")
+    [System.IO.File]::WriteAllText($prereqService, $content)
+}
+
 # ============================================================================
 # 2. Limpieza de salida previa
 # ============================================================================
@@ -299,7 +316,17 @@ Start-Sleep -Milliseconds 500
 Get-ChildItem -Path $publishDir -Filter "*.pdb" -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
 
 # Inyectar configuracion de backend con la DepotBox API Key
-$resolvedApiKey = if (![string]::IsNullOrWhiteSpace($ApiKey)) { $ApiKey.Trim() } else { $null }
+if ([string]::IsNullOrWhiteSpace($ApiKey) -or $ApiKey -eq "none") {
+    $depotJsonFile = Join-Path $rootDir "depotkey.json"
+    if (Test-Path $depotJsonFile) {
+        try {
+            $parsed = Get-Content $depotJsonFile -Raw | ConvertFrom-Json
+            $k = if ($parsed.DepotBox) { $parsed.DepotBox } else { $parsed.defaultApiKey }
+            if ($k -and $k.Trim() -and $k.Trim() -ne "YOUR-API-KEY") { $ApiKey = $k.Trim() }
+        } catch { }
+    }
+}
+$resolvedApiKey = if (![string]::IsNullOrWhiteSpace($ApiKey) -and $ApiKey -ne "none") { $ApiKey.Trim() } else { $null }
 
 if ($resolvedApiKey) {
     $maskedKey = if ($resolvedApiKey.Length -gt 8) {
@@ -488,13 +515,16 @@ if (Test-Path $vswhereExe) {
     $vsInstall = & $vswhereExe -latest -products * -property installationPath
     if ($vsInstall) {
         $vcRedistRoot = Get-ChildItem (Join-Path $vsInstall "VC\Redist\MSVC") -Directory -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -match '^\d+\.\d+\.\d+$' -and (Test-Path (Join-Path $_.FullName "x64\Microsoft.VC143.CRT\vcruntime140.dll")) } |
+            Where-Object {
+                $_.Name -match '^\d+\.\d+\.\d+$' -and
+                (Get-ChildItem (Join-Path $_.FullName "x64") -Directory -Filter "Microsoft.VC*.CRT" -ErrorAction SilentlyContinue | Where-Object { Test-Path (Join-Path $_.FullName "vcruntime140.dll") })
+            } |
             Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
     }
 }
 if (-not $vcRedistRoot) { throw "No se encontraron las DLLs de Visual C++ (VC\Redist\MSVC) de Visual Studio / Build Tools" }
-$vcCrtX64Dir = Join-Path $vcRedistRoot.FullName "x64\Microsoft.VC143.CRT"
-$vcCrtX86Dir = Join-Path $vcRedistRoot.FullName "x86\Microsoft.VC143.CRT"
+$vcCrtX64Dir = (Get-ChildItem (Join-Path $vcRedistRoot.FullName "x64") -Directory -Filter "Microsoft.VC*.CRT" | Select-Object -First 1).FullName
+$vcCrtX86Dir = (Get-ChildItem (Join-Path $vcRedistRoot.FullName "x86") -Directory -Filter "Microsoft.VC*.CRT" | Select-Object -First 1).FullName
 foreach ($dll in Get-ChildItem -Path $vcCrtX64Dir, $vcCrtX86Dir -Filter "*.dll") {
     $sig = Get-AuthenticodeSignature -LiteralPath $dll.FullName
     # Las DLLs del CRT las firma "Microsoft Windows" / "Microsoft Windows Software Compatibility Publisher"

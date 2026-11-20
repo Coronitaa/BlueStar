@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -518,6 +519,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
     private readonly ILogger<InstanceDetailViewModel> _logger;
     private readonly SynchronizationContext _uiContext;
     private readonly CancellationTokenSource _cts = new();
+    private CancellationTokenSource? _instanceLoadCts;
     private bool _isDisposed;
     private readonly EventHandler _settingsChangedHandler;
     private readonly ILocalizationService? _localizationService;
@@ -542,6 +544,19 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
     [NotifyPropertyChangedFor(nameof(DownloadButtonText))]
     [NotifyPropertyChangedFor(nameof(AreAllSelectedDepotsDownloaded))]
     [NotifyPropertyChangedFor(nameof(CanStartDownload))]
+    [NotifyPropertyChangedFor(nameof(InstallModalGameTitle))]
+    [NotifyPropertyChangedFor(nameof(InstallModalSubtitle))]
+    [NotifyPropertyChangedFor(nameof(InstallModalShortDescription))]
+    [NotifyPropertyChangedFor(nameof(InstallModalHeaderImage))]
+    [NotifyPropertyChangedFor(nameof(HeroTags))]
+    [NotifyPropertyChangedFor(nameof(IsDepotBoxInstance))]
+    [NotifyPropertyChangedFor(nameof(IsSteamInstance))]
+    [NotifyPropertyChangedFor(nameof(IsImportedUnassociatedInstance))]
+    [NotifyPropertyChangedFor(nameof(IsFolderWithoutSteamAssociation))]
+    [NotifyPropertyChangedFor(nameof(IsVersionsTabVisible))]
+    [NotifyPropertyChangedFor(nameof(IsDepotBoxTabsVisible))]
+    [NotifyPropertyChangedFor(nameof(IsPrerequisitesTabVisible))]
+    [NotifyPropertyChangedFor(nameof(IsDetectedVersionVisible))]
     private GameInstance _instance = null!;
 
     public IReadOnlyList<GameTag> HeroTags => _tagsService?.GetInstanceDetailHeroTags(Instance, HasGameUpdateAvailable) ?? [];
@@ -2155,6 +2170,11 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
     {
         if (Instance == null) return;
 
+        OnPropertyChanged(nameof(InstallModalGameTitle));
+        OnPropertyChanged(nameof(InstallModalSubtitle));
+        OnPropertyChanged(nameof(InstallModalShortDescription));
+        OnPropertyChanged(nameof(InstallModalHeaderImage));
+
         var cleanGameName = CleanName(Instance.Name) ?? Instance.Name ?? "Game";
         var defaultFolder = !string.IsNullOrWhiteSpace(_appSettings.LastInstallDirectory)
             ? _appSettings.LastInstallDirectory
@@ -3076,21 +3096,21 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
     private void OnInstanceManagerInstancesChanged(object? sender, EventArgs e)
     {
         if (_isDisposed || Instance is null) return;
+        var targetId = Instance.Id;
         Action updateAction = async () =>
         {
-            if (_isDisposed || Instance is null) return;
-            var refreshed = await _instanceManager.GetByIdAsync(Instance.Id, CancellationToken.None).ConfigureAwait(true);
-            if (refreshed != null)
+            if (_isDisposed || Instance is null || Instance.Id != targetId) return;
+            var refreshed = await _instanceManager.GetByIdAsync(targetId, CancellationToken.None).ConfigureAwait(true);
+            if (_isDisposed || Instance is null || Instance.Id != targetId || refreshed == null) return;
+
+            HasGameUpdateAvailable = refreshed.HasUpdateAvailable;
+            if (refreshed.Status != Instance.Status || refreshed.Depots.Any(d => d.IsDownloaded != Instance.Depots.FirstOrDefault(x => x.DepotId == d.DepotId)?.IsDownloaded))
             {
-                HasGameUpdateAvailable = refreshed.HasUpdateAvailable;
-                if (refreshed.Status != Instance.Status || refreshed.Depots.Any(d => d.IsDownloaded != Instance.Depots.FirstOrDefault(x => x.DepotId == d.DepotId)?.IsDownloaded))
-                {
-                    await LoadInstanceAsync(refreshed).ConfigureAwait(true);
-                }
-                else
-                {
-                    Instance = refreshed;
-                }
+                await LoadInstanceAsync(refreshed).ConfigureAwait(true);
+            }
+            else
+            {
+                Instance = refreshed;
             }
             ActiveJob = _downloadQueueManager.Queue.FirstOrDefault(j => j.Instance.Id == Instance.Id);
             NotifyDownloadProps();
@@ -3232,10 +3252,98 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
 
 
     /// <summary>
+    /// Synchronously resets all view model state (artwork, modal state, depots, dlcs, and background operations)
+    /// for a target game instance so that switching between instances never leaks stale data or visual artifacts.
+    /// </summary>
+    public void ResetForNewInstance(GameInstance newInstance)
+    {
+        if (newInstance == null) return;
+
+        try
+        {
+            _instanceLoadCts?.Cancel();
+            _instanceLoadCts?.Dispose();
+        }
+        catch { }
+        _instanceLoadCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+
+        // Immediate synchronous assignment so all dependent properties read the new instance immediately
+        Instance = newInstance;
+
+        // Synchronously clear artwork slots
+        CapsuleArtwork?.LoadFromFile(null);
+        HeroArtwork?.LoadFromFile(null);
+        LogoArtwork?.LoadFromFile(null);
+        HeaderArtwork?.LoadFromFile(null);
+        IconArtwork?.LoadFromFile(null);
+        InstanceBannerArtwork?.LoadFromFile(null);
+        InstanceLogoArtwork?.LoadFromFile(null);
+        OnPropertyChanged(nameof(CoverBannerImage));
+
+        // Synchronously close all modals & reset install modal state
+        IsInstallModalOpen = false;
+        IsUninstallModalOpen = false;
+        IsStorePageModalOpen = false;
+        IsDeletingInstance = false;
+        IsUninstallingGameFiles = false;
+        _switchModalToFixWhenLoaded = false;
+        SelectedModalSpecificGameFix = null;
+        InstallModalPath = string.Empty;
+        InstallModalCustomUsername = null;
+        InstallModalCustomSteamId = null;
+        InstallModalDepots.Clear();
+        InstallModalDlcs.Clear();
+        InstallModalAvailableBranches.Clear();
+        InstallModalExtraFixes.Clear();
+        InstallModalRequiredSpaceText = string.Empty;
+        InstallModalFreeSpaceText = string.Empty;
+        InstallModalHasEnoughSpace = true;
+        IsInstallModalAdvancedOptionsExpanded = false;
+
+        // Synchronously clear collections
+        OnlineGameFixes.Clear();
+        HasOnlineGameFixes = false;
+        BypassGameFixes.Clear();
+        HasBypassGameFixes = false;
+        HypervisorGameFixes.Clear();
+        HasHypervisorGameFixes = false;
+        AvailableBuilds.Clear();
+        CuratedRecommendation = null;
+        Depots.Clear();
+        Dlcs.Clear();
+        Screenshots.Clear();
+        ThumbScreenshots.Clear();
+        LeadScreenshot = null;
+        SelectedTab = "Overview";
+        InstalledVersionText = string.Empty;
+        LatestVersionText = string.Empty;
+        InstalledVersionDate = null;
+        LatestVersionDate = null;
+        HasGameUpdateAvailable = false;
+        StatusMessage = null;
+        NewsItems.Clear();
+
+        ConfiguredExecutablePath = newInstance.ExecutablePath ?? string.Empty;
+        InstanceAlias = newInstance.Name ?? string.Empty;
+        CustomLaunchArgs = newInstance.LaunchArguments ?? string.Empty;
+        IsUnityEngine = newInstance.Engine?.Type == EngineType.Unity;
+        DisableUpdateChecks = newInstance.DisableUpdateChecks;
+        IsGameRunning = _gameLauncher.IsRunning(newInstance.Id);
+        ActiveJob = _downloadQueueManager.Queue.FirstOrDefault(j => j.Instance.Id == newInstance.Id);
+        NotifyDownloadProps();
+        NotifyOverviewProps();
+        OnPropertyChanged(nameof(InstallModalGameTitle));
+        OnPropertyChanged(nameof(InstallModalSubtitle));
+        OnPropertyChanged(nameof(InstallModalShortDescription));
+        OnPropertyChanged(nameof(InstallModalHeaderImage));
+    }
+
+    /// <summary>
     /// Loads details for the target game instance.
     /// </summary>
     public async Task LoadInstanceAsync(GameInstance instance, bool autoCheckDepotUpdates = false)
     {
+        ResetForNewInstance(instance);
         try
         {
             var cleanGameName = CleanName(instance.Name) ?? instance.Name;
@@ -3340,6 +3448,9 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
                 ExecutablePath = exe,
                 Status = status
             };
+
+            // Preload artworks immediately for the loaded instance so cover banner and slots are populated
+            _ = LoadArtworksAsync();
 
             if (instance.HasUpdateAvailable || HasPendingDepotUpdate)
             {
@@ -3599,10 +3710,13 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
         if (Instance == null || Instance.AppId == 0 || Instance.AppId == 480 || _metadataProvider == null) return;
         if (Dlcs.Count > 0) return;
 
+        var targetId = Instance.Id;
+        var token = _instanceLoadCts?.Token ?? _cts.Token;
+
         try
         {
-            var fetchedDlcs = await _metadataProvider.GetDlcListAsync(Instance.AppId, _cts.Token).ConfigureAwait(true);
-            if (fetchedDlcs != null && fetchedDlcs.Count > 0)
+            var fetchedDlcs = await _metadataProvider.GetDlcListAsync(Instance.AppId, token).ConfigureAwait(true);
+            if (fetchedDlcs != null && fetchedDlcs.Count > 0 && Instance?.Id == targetId)
             {
                 var selectableDlcs = fetchedDlcs.Select(d => new SelectableDlcItem
                 {
@@ -3613,6 +3727,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
 
                 _uiContext.Post(async _ =>
                 {
+                    if (_isDisposed || Instance?.Id != targetId) return;
                     Dlcs = new ObservableCollection<SelectableDlcItem>(selectableDlcs);
                     Instance = Instance with { Dlcs = fetchedDlcs };
                     OnPropertyChanged(nameof(HeroTags));
@@ -3621,7 +3736,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
                     if (Dlcs.Count > 0)
                     {
                         IsDlcUnlocked = Instance.DlcUnlockerInstalled ||
-                            await _dlcInstaller.IsDlcInstalledAsync(Instance, Dlcs[0].Dlc, _cts.Token).ConfigureAwait(true);
+                            await _dlcInstaller.IsDlcInstalledAsync(Instance, Dlcs[0].Dlc, token).ConfigureAwait(true);
                     }
                     else
                     {
@@ -3662,16 +3777,19 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
     private async Task EnrichDepotsFromSteamDbAsync()
     {
         if (Instance is null || Instance.AppId == 0 || Depots.Count == 0) return;
+        var targetId = Instance.Id;
+        var targetAppId = Instance.AppId;
+        var token = _instanceLoadCts?.Token ?? _cts.Token;
 
         // Only SteamStoreApiClient exposes GetDepotEnrichmentAsync
         if (_metadataProvider is not BlueStar.Infrastructure.Metadata.SteamStoreApiClient steamClient) return;
 
         try
         {
-            var enrichment = await steamClient.GetDepotEnrichmentAsync(Instance.AppId, _cts.Token)
+            var enrichment = await steamClient.GetDepotEnrichmentAsync(targetAppId, token)
                                               .ConfigureAwait(false);
 
-            if (enrichment.Count == 0) return;
+            if (token.IsCancellationRequested || enrichment.Count == 0 || _isDisposed || Instance == null || Instance.Id != targetId) return;
 
             // Determine current OS for recommended-flag logic (Windows is always current for this app)
             const string currentOsKey = "windows";
@@ -3679,6 +3797,8 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
             // Switch back to UI thread for collection mutations
             _uiContext.Post(_ =>
             {
+                if (token.IsCancellationRequested || _isDisposed || Instance == null || Instance.Id != targetId) return;
+
                 bool anyChange = false;
 
                 for (int i = 0; i < Depots.Count; i++)
@@ -3741,7 +3861,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
 
                     // Persist the corrected depot metadata, otherwise the wrong platform comes
                     // back from storage on the next launch.
-                    if (Instance != null)
+                    if (Instance != null && Instance.Id == targetId)
                     {
                         var corrected = Instance.Depots
                             .Select(d => Depots.FirstOrDefault(x => x.Depot.DepotId == d.DepotId)?.Depot ?? d)
@@ -3756,7 +3876,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Failed to enrich depots from SteamDB for AppId={AppId}", Instance?.AppId);
+            _logger.LogDebug(ex, "Failed to enrich depots from SteamDB for AppId={AppId}", targetAppId);
         }
     }
 
@@ -3770,6 +3890,9 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
     private async Task CheckSteamVersionDateAsync(bool userInitiated = false, bool allowClearingUpdateFlag = false)
     {
         if (_isDisposed || Instance == null || Instance.AppId == 0) return;
+        var targetId = Instance.Id;
+        var targetAppId = Instance.AppId;
+        var token = _instanceLoadCts?.Token ?? _cts.Token;
 
         // Per-instance opt-out: never poll providers automatically for this game.
         if (Instance.DisableUpdateChecks && !userInitiated)
@@ -3784,9 +3907,9 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
             if (_metadataProvider is BlueStar.Infrastructure.Metadata.SteamStoreApiClient steamClient)
             {
                 var (status, _, latestDate, latestDateText, installedDate, installedDateText) =
-                    await BlueStar.Infrastructure.Services.GameUpdateDetectionHelper.CheckInstanceUpdateDetailsAsync(Instance, steamClient, _cts.Token).ConfigureAwait(true);
+                    await BlueStar.Infrastructure.Services.GameUpdateDetectionHelper.CheckInstanceUpdateDetailsAsync(Instance, steamClient, token).ConfigureAwait(true);
 
-                if (_isDisposed) return;
+                if (token.IsCancellationRequested || _isDisposed || Instance == null || Instance.Id != targetId || Instance.AppId != targetAppId) return;
 
                 if (latestDate.HasValue)
                 {
@@ -3810,6 +3933,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
 
                 if (installedDate.HasValue && Instance.InstalledVersionDate != installedDate.Value)
                 {
+                    if (token.IsCancellationRequested || _isDisposed || Instance == null || Instance.Id != targetId) return;
                     Instance = Instance with { InstalledVersionDate = installedDate.Value };
                     await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
                 }
@@ -3819,6 +3943,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
                     HasGameUpdateAvailable = true;
                     if (!Instance.HasUpdateAvailable)
                     {
+                        if (token.IsCancellationRequested || _isDisposed || Instance == null || Instance.Id != targetId) return;
                         Instance = Instance with { HasUpdateAvailable = true };
                         await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
                     }
@@ -3850,24 +3975,24 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
                     installedDate,
                     InstalledVersionText);
 
-                if (worthCaching)
+                if (worthCaching && Instance?.Id == targetId)
                 {
-                    _verifiedInstancesThisSession[Instance.Id] = state;
+                    _verifiedInstancesThisSession[targetId] = state;
 
                     if (_cacheService != null)
                     {
-                        _ = _cacheService.SetAsync($"instance_update_state_{Instance.Id}", state, TimeSpan.FromDays(30), CancellationToken.None);
+                        _ = _cacheService.SetAsync($"instance_update_state_{targetId}", state, TimeSpan.FromDays(30), CancellationToken.None);
                     }
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Steam version lookup failed for AppId {AppId}", Instance?.AppId);
+            _logger.LogDebug(ex, "Steam version lookup failed for AppId {AppId}", targetAppId);
         }
         finally
         {
-            if (!_isDisposed) SettleVersionTexts();
+            if (!_isDisposed && Instance?.Id == targetId) SettleVersionTexts();
         }
     }
 
@@ -4806,6 +4931,10 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
         if (_isDisposed || Instance == null || Instance.AppId == 0) return;
         if (_metadataProvider is not BlueStar.Infrastructure.Metadata.SteamStoreApiClient steamClient) return;
 
+        var targetId = Instance.Id;
+        var targetAppId = Instance.AppId;
+        var token = _instanceLoadCts?.Token ?? _cts.Token;
+
         IsLoadingSteamShowcase = true;
         try
         {
@@ -4815,23 +4944,23 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
             {
                 try
                 {
-                    var fetched = await steamClient.GetMetadataAsync(Instance.AppId, _cts.Token).ConfigureAwait(true);
+                    var fetched = await steamClient.GetMetadataAsync(targetAppId, token).ConfigureAwait(true);
+                    if (token.IsCancellationRequested || _isDisposed || Instance == null || Instance.Id != targetId || Instance.AppId != targetAppId) return;
+
                     if (fetched != null)
                     {
                         meta = fetched;
-                        if (_isDisposed) return;
-
                         Instance = Instance with { Metadata = fetched };
                         await _instanceManager.UpdateAsync(Instance, CancellationToken.None).ConfigureAwait(true);
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogDebug(ex, "Could not refresh Steam metadata for AppId {AppId}", Instance.AppId);
+                    _logger.LogDebug(ex, "Could not refresh Steam metadata for AppId {AppId}", targetAppId);
                 }
             }
 
-            if (_isDisposed) return;
+            if (token.IsCancellationRequested || _isDisposed || Instance == null || Instance.Id != targetId || Instance.AppId != targetAppId) return;
 
             IReadOnlyList<string> shots = meta?.Screenshots ?? [];
             Screenshots = new ObservableCollection<string>(shots.Take(12));
@@ -4851,8 +4980,8 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
             {
                 try
                 {
-                    community = await steamClient.GetStoreTagsAsync(Instance.AppId, _cts.Token).ConfigureAwait(true);
-                    if (_isDisposed) return;
+                    community = await steamClient.GetStoreTagsAsync(targetAppId, token).ConfigureAwait(true);
+                    if (token.IsCancellationRequested || _isDisposed || Instance == null || Instance.Id != targetId || Instance.AppId != targetAppId) return;
 
                     if (community.Count > 0 && meta != null)
                     {
@@ -4863,9 +4992,11 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogDebug(ex, "Could not read store tags for AppId {AppId}", Instance.AppId);
+                    _logger.LogDebug(ex, "Could not read store tags for AppId {AppId}", targetAppId);
                 }
             }
+
+            if (token.IsCancellationRequested || _isDisposed || Instance == null || Instance.Id != targetId) return;
 
             GenreTags = new ObservableCollection<string>(genres);
             FeatureTags = new ObservableCollection<string>(features);
@@ -4880,19 +5011,22 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
 
             try
             {
-                var news = await steamClient.GetNewsAsync(Instance.AppId, 8, _cts.Token).ConfigureAwait(true);
-                if (_isDisposed) return;
+                var news = await steamClient.GetNewsAsync(targetAppId, 8, token).ConfigureAwait(true);
+                if (token.IsCancellationRequested || _isDisposed || Instance == null || Instance.Id != targetId) return;
                 NewsItems = new ObservableCollection<SteamNewsItem>(news.Take(6));
                 OnPropertyChanged(nameof(HasNewsItems));
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Could not fetch Steam news for AppId {AppId}", Instance.AppId);
+                _logger.LogDebug(ex, "Could not fetch Steam news for AppId {AppId}", targetAppId);
             }
         }
         finally
         {
-            IsLoadingSteamShowcase = false;
+            if (Instance?.Id == targetId)
+            {
+                IsLoadingSteamShowcase = false;
+            }
         }
     }
 
@@ -7835,10 +7969,10 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
                     : $"Local cache and ManifestHub have no data for depot(s) {depotList}, and DepotBox could not be reached: {depotBoxError} ") +
                 "Starting the download would install nothing.";
 
-            _logger.LogError("Refusing to queue {Game} (AppId {AppId}): no usable depots. Missing: {Depots}",
+            _logger.LogWarning("Cannot queue {Game} (AppId {AppId}): no usable depots. Missing: {Depots}",
                 Instance.Name, Instance.AppId, depotList);
 
-            StatusMessage = "⚠ No depots available for this game.";
+            StatusMessage = "⚠ No depots or decryption keys available for this game.";
             _notificationService?.ShowError("Cannot Download", detail);
             return;
         }
@@ -7893,6 +8027,16 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
 
             archive = await _archiveParser.ParseAsync(archivePath, CancellationToken.None).ConfigureAwait(true);
             ExtractManifestsToInstanceStorage(archivePath, Instance.Id);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            _logger.LogDebug("No DepotBox archive available for {Game} (AppId {AppId})", Instance.Name, Instance.AppId);
+            return "No DepotBox archive exists for this AppId.";
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning("DepotBox authentication failed for {Game} (AppId {AppId}): {Message}", Instance.Name, Instance.AppId, ex.Message);
+            return ex.Message;
         }
         catch (Exception ex)
         {
@@ -10183,6 +10327,8 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
 
             Action updateSlots = () =>
             {
+                if (_isDisposed || Instance == null || Instance.Id != id) return;
+
                 CapsuleArtwork?.LoadFromFile(capsulePath);
                 HeroArtwork?.LoadFromFile(heroPath);
                 LogoArtwork?.LoadFromFile(logoPath);
@@ -10210,6 +10356,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
         var id = Instance.Id;
 
         var path = await Task.Run(() => InstanceArtworkService.GetArtworkFilePath(id, type)).ConfigureAwait(true);
+        if (_isDisposed || Instance == null || Instance.Id != id) return;
         var slot = GetSlotViewModel(type);
         if (slot != null)
         {
@@ -10690,6 +10837,13 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
     {
         if (_isDisposed) return;
         _isDisposed = true;
+
+        try
+        {
+            _instanceLoadCts?.Cancel();
+            _instanceLoadCts?.Dispose();
+        }
+        catch { }
 
         try
         {

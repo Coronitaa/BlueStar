@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using BlueStar.App.ViewModels;
 
 namespace BlueStar.App.Controls;
 
@@ -11,6 +13,7 @@ namespace BlueStar.App.Controls;
 /// High-performance virtualizing wrap panel for catalog item displays.
 /// Derives from VirtualizingPanel and implements IScrollInfo to support smooth,
 /// on-demand container realization for large collections of game cards.
+/// Automatically synchronizes view mode (Grid vs List/Horizontal) from its parent ItemsControl.
 /// </summary>
 public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
 {
@@ -37,6 +40,13 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
             typeof(VirtualizingWrapPanel),
             new FrameworkPropertyMetadata(Orientation.Horizontal, FrameworkPropertyMetadataOptions.AffectsMeasure));
 
+    public static readonly DependencyProperty IsGridViewProperty =
+        DependencyProperty.Register(
+            nameof(IsGridView),
+            typeof(bool),
+            typeof(VirtualizingWrapPanel),
+            new FrameworkPropertyMetadata(true, OnIsGridViewChanged));
+
     public double ItemWidth
     {
         get => (double)GetValue(ItemWidthProperty);
@@ -55,6 +65,39 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         set => SetValue(OrientationProperty, value);
     }
 
+    public bool IsGridView
+    {
+        get => (bool)GetValue(IsGridViewProperty);
+        set => SetValue(IsGridViewProperty, value);
+    }
+
+    private static void OnIsGridViewChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is VirtualizingWrapPanel panel && e.NewValue is bool isGrid)
+        {
+            panel.ItemWidth = isGrid ? 300.0 : 0.0;
+            panel.ItemHeight = isGrid ? 350.0 : 136.0;
+            panel.ResetContainers();
+        }
+    }
+
+    public void ResetContainers()
+    {
+        try
+        {
+            ItemContainerGenerator?.RemoveAll();
+        }
+        catch { }
+
+        if (InternalChildren.Count > 0)
+        {
+            RemoveInternalChildRange(0, InternalChildren.Count);
+        }
+        InvalidateMeasure();
+        InvalidateArrange();
+        _scrollOwner?.InvalidateScrollInfo();
+    }
+
     private ScrollViewer? _ancestorScroller;
     private ScrollViewer? _scrollOwner;
     private bool _canVerticallyScroll;
@@ -64,25 +107,36 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
     private Point _offset = new(0, 0);
 
     private ItemContainerGenerator? _generator;
+    private INotifyPropertyChanged? _observedDataContext;
+    private ItemsControl? _hookedItemsOwner;
 
     public VirtualizingWrapPanel()
     {
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+        DataContextChanged += OnPanelDataContextChanged;
         IsVisibleChanged += (s, e) =>
         {
             if (IsVisible)
             {
-                InvalidateMeasure();
-                InvalidateArrange();
+                UpdateFromDataContext(DataContext ?? ItemsControl.GetItemsOwner(this)?.DataContext);
+                ResetContainers();
             }
         };
     }
 
+    private void OnPanelDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        UpdateFromDataContext(e.NewValue ?? ItemsControl.GetItemsOwner(this)?.DataContext);
+    }
+
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        SyncViewModeFromItemsOwner();
         HookAncestorScroller();
         HookGenerator();
+        InvalidateMeasure();
+        InvalidateArrange();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -92,6 +146,91 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         {
             _generator.StatusChanged -= OnGeneratorStatusChanged;
             _generator = null;
+        }
+        if (_observedDataContext != null)
+        {
+            _observedDataContext.PropertyChanged -= OnObservedDataContextPropertyChanged;
+            _observedDataContext = null;
+        }
+        if (_hookedItemsOwner != null)
+        {
+            _hookedItemsOwner.DataContextChanged -= OnItemsOwnerDataContextChanged;
+            _hookedItemsOwner = null;
+        }
+        ResetContainers();
+    }
+
+    private void SyncViewModeFromItemsOwner()
+    {
+        var itemsOwner = ItemsControl.GetItemsOwner(this);
+        if (itemsOwner == null) return;
+
+        if (!ReferenceEquals(_hookedItemsOwner, itemsOwner))
+        {
+            if (_hookedItemsOwner != null)
+            {
+                _hookedItemsOwner.DataContextChanged -= OnItemsOwnerDataContextChanged;
+            }
+            _hookedItemsOwner = itemsOwner;
+            _hookedItemsOwner.DataContextChanged += OnItemsOwnerDataContextChanged;
+        }
+
+        UpdateFromDataContext(itemsOwner.DataContext);
+    }
+
+    private void OnItemsOwnerDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        UpdateFromDataContext(e.NewValue);
+    }
+
+    private void UpdateFromDataContext(object? dataContext)
+    {
+        if (!ReferenceEquals(_observedDataContext, dataContext))
+        {
+            if (_observedDataContext != null)
+            {
+                _observedDataContext.PropertyChanged -= OnObservedDataContextPropertyChanged;
+            }
+            _observedDataContext = dataContext as INotifyPropertyChanged;
+            if (_observedDataContext != null)
+            {
+                _observedDataContext.PropertyChanged += OnObservedDataContextPropertyChanged;
+            }
+        }
+
+        if (dataContext is BrowseViewModel bvm)
+        {
+            ApplyIsGridView(bvm.IsGridView);
+        }
+        else if (dataContext != null)
+        {
+            var prop = dataContext.GetType().GetProperty("IsGridView");
+            if (prop != null && prop.PropertyType == typeof(bool))
+            {
+                bool val = (bool)prop.GetValue(dataContext)!;
+                ApplyIsGridView(val);
+            }
+        }
+    }
+
+    private void OnObservedDataContextPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == "IsGridView" && sender != null)
+        {
+            var prop = sender.GetType().GetProperty("IsGridView");
+            if (prop != null && prop.PropertyType == typeof(bool))
+            {
+                bool val = (bool)prop.GetValue(sender)!;
+                ApplyIsGridView(val);
+            }
+        }
+    }
+
+    private void ApplyIsGridView(bool isGrid)
+    {
+        if (IsGridView != isGrid)
+        {
+            IsGridView = isGrid;
         }
     }
 
@@ -160,38 +299,39 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
             case NotifyCollectionChangedAction.Remove:
             case NotifyCollectionChangedAction.Replace:
             case NotifyCollectionChangedAction.Move:
-                RemoveInternalChildRange(0, InternalChildren.Count);
+                ResetContainers();
                 break;
             case NotifyCollectionChangedAction.Add:
-                if (args.Position.Index >= 0 && args.Position.Index < InternalChildren.Count)
-                {
-                    RemoveInternalChildRange(0, InternalChildren.Count);
-                }
                 break;
         }
 
         HookGenerator();
         InvalidateMeasure();
         InvalidateArrange();
-        Dispatcher.InvokeAsync(InvalidateMeasure, System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
     protected override void OnClearChildren()
     {
         base.OnClearChildren();
-        RemoveInternalChildRange(0, InternalChildren.Count);
+        ResetContainers();
     }
 
     protected override Size MeasureOverride(Size availableSize)
     {
         try
         {
+            if (_observedDataContext == null)
+            {
+                var dc = DataContext ?? ItemsControl.GetItemsOwner(this)?.DataContext;
+                if (dc != null) UpdateFromDataContext(dc);
+            }
+
             var itemsOwner = ItemsControl.GetItemsOwner(this);
             var itemCount = itemsOwner?.Items.Count ?? InternalChildren.Count;
 
             if (itemCount == 0)
             {
-                RemoveInternalChildRange(0, InternalChildren.Count);
+                ResetContainers();
                 UpdateScrollDimensions(0, 0, availableSize.Width, availableSize.Height);
                 return new Size(0, 0);
             }
@@ -201,9 +341,20 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
                 HookAncestorScroller();
             }
 
-            double availableWidth = double.IsInfinity(availableSize.Width)
-                ? (_viewport.Width > 0 ? _viewport.Width : 1200)
-                : availableSize.Width;
+            if (_generator == null)
+            {
+                HookGenerator();
+            }
+
+            double availableWidth = availableSize.Width;
+            if (double.IsInfinity(availableWidth) || double.IsNaN(availableWidth) || availableWidth <= 0)
+            {
+                availableWidth = _ancestorScroller?.ViewportWidth > 0
+                    ? _ancestorScroller.ViewportWidth
+                    : (_ancestorScroller?.ActualWidth > 0
+                        ? _ancestorScroller.ActualWidth
+                        : (_viewport.Width > 0 ? _viewport.Width : 1200));
+            }
 
             if (availableWidth <= 0) availableWidth = 1200;
 
@@ -223,7 +374,9 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
 
             if (_ancestorScroller != null)
             {
-                viewHeight = _ancestorScroller.ViewportHeight;
+                viewHeight = _ancestorScroller.ViewportHeight > 0
+                    ? _ancestorScroller.ViewportHeight
+                    : (_ancestorScroller?.ActualHeight > 0 ? _ancestorScroller.ActualHeight : 800);
                 try
                 {
                     var transform = TransformToAncestor(_ancestorScroller);
@@ -232,7 +385,7 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
                 }
                 catch
                 {
-                    relativeScrollY = _ancestorScroller.VerticalOffset;
+                    relativeScrollY = _ancestorScroller?.VerticalOffset ?? 0;
                 }
             }
 
@@ -245,6 +398,9 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
             int lastItemIndex = Math.Min(itemCount - 1, (lastRow + 1) * columns - 1);
 
             var generator = ItemContainerGenerator;
+            var realGen = generator as ItemContainerGenerator;
+            var recyclingGen = generator as IRecyclingItemContainerGenerator;
+
             if (generator != null && firstItemIndex <= lastItemIndex)
             {
                 var startPos = generator.GeneratorPositionFromIndex(firstItemIndex);
@@ -272,6 +428,7 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
                         }
                         else
                         {
+                            // Container is already realized and in InternalChildren
                             if (childIndex >= InternalChildren.Count || !ReferenceEquals(InternalChildren[childIndex], child))
                             {
                                 int existingIndex = InternalChildren.IndexOf(child);
@@ -290,36 +447,40 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
                             }
                         }
 
-                        child.Measure(new Size(itemWidth, itemHeight));
+                        // Measure child only if newly realized or measure invalid or size changed
+                        if (isNewlyRealized || !child.IsMeasureValid || Math.Abs(child.DesiredSize.Width - itemWidth) > 1.0)
+                        {
+                            child.Measure(new Size(itemWidth, itemHeight));
+                        }
+
                         childIndex++;
                     }
                 }
 
                 // Clean up containers that have scrolled out of view (above or below)
-                var recyclingGen = generator as IRecyclingItemContainerGenerator;
                 for (int i = InternalChildren.Count - 1; i >= 0; i--)
                 {
-                    var genPos = new GeneratorPosition(i, 0);
-                    int itemIndex = generator.IndexFromGeneratorPosition(genPos);
-                    if (itemIndex < firstItemIndex || itemIndex > lastItemIndex || itemIndex < 0)
+                    var child = InternalChildren[i];
+                    int itemIndex = realGen != null ? realGen.IndexFromContainer(child) : -1;
+                    if (itemIndex < 0 || itemIndex < firstItemIndex || itemIndex > lastItemIndex)
                     {
-                        if (recyclingGen != null)
+                        if (itemIndex >= 0)
                         {
-                            recyclingGen.Recycle(genPos, 1);
-                        }
-                        else
-                        {
-                            generator.Remove(genPos, 1);
+                            var genPos = generator.GeneratorPositionFromIndex(itemIndex);
+                            if (genPos.Index >= 0)
+                            {
+                                if (recyclingGen != null)
+                                {
+                                    recyclingGen.Recycle(genPos, 1);
+                                }
+                                else
+                                {
+                                    generator.Remove(genPos, 1);
+                                }
+                            }
                         }
                         RemoveInternalChildRange(i, 1);
                     }
-                }
-            }
-            else
-            {
-                foreach (UIElement child in InternalChildren)
-                {
-                    child.Measure(new Size(itemWidth, itemHeight));
                 }
             }
 
@@ -328,16 +489,9 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
 
             return new Size(resultWidth, resultHeight);
         }
-        catch (Exception)
+        catch
         {
-            try
-            {
-                RemoveInternalChildRange(0, InternalChildren.Count);
-            }
-            catch
-            {
-                // Ignore
-            }
+            ResetContainers();
             return new Size(0, 0);
         }
     }
@@ -350,14 +504,14 @@ public class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
             double itemWidth = columns == 1 && ItemWidth <= 0 ? finalSize.Width : (ItemWidth > 0 ? ItemWidth : 300);
             double itemHeight = ItemHeight > 0 ? ItemHeight : 350;
 
-            var generator = ItemContainerGenerator;
+            var realGen = ItemContainerGenerator as ItemContainerGenerator;
+
             for (int i = 0; i < InternalChildren.Count; i++)
             {
                 var child = InternalChildren[i];
                 if (child == null) continue;
 
-                var genPos = new GeneratorPosition(i, 0);
-                int itemIndex = generator != null ? generator.IndexFromGeneratorPosition(genPos) : i;
+                int itemIndex = realGen != null ? realGen.IndexFromContainer(child) : -1;
                 if (itemIndex < 0) itemIndex = i;
 
                 int row = itemIndex / columns;

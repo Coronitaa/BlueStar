@@ -755,8 +755,18 @@ public static class InstanceArtworkService
             ArtworkChanged?.Invoke(null, (instanceId, SteamArtworkType.Logo));
         }
 
-        // 5. Download and save Header & Instance Banner (main_capsule 616x353 / 1232x706, fallback to header)
+        // 5. Download and save Header & Instance Banner (prioritize 460x215 / 920x430 header, fallback to main_capsule)
         var headerUrls = new List<string?>();
+        if (!string.IsNullOrWhiteSpace(cmdHeaderImageRel))
+        {
+            foreach (var cdn in cdns) headerUrls.Add($"{cdn}/{cmdHeaderImageRel}");
+        }
+        foreach (var cdn in cdns)
+        {
+            headerUrls.Add($"{cdn}/header_2x.jpg");
+            headerUrls.Add($"{cdn}/header.jpg");
+        }
+        if (!string.IsNullOrWhiteSpace(customHeaderUrl)) headerUrls.Add(customHeaderUrl);
         if (!string.IsNullOrWhiteSpace(cmdMainCapsuleRel))
         {
             foreach (var cdn in cdns) headerUrls.Add($"{cdn}/{cmdMainCapsuleRel}");
@@ -768,16 +778,6 @@ public static class InstanceArtworkService
             headerUrls.Add($"{cdn}/main_capsule_2x.jpg");
             headerUrls.Add($"{cdn}/main_capsule.jpg");
         }
-        if (!string.IsNullOrWhiteSpace(cmdHeaderImageRel))
-        {
-            foreach (var cdn in cdns) headerUrls.Add($"{cdn}/{cmdHeaderImageRel}");
-        }
-        foreach (var cdn in cdns)
-        {
-            headerUrls.Add($"{cdn}/header_2x.jpg");
-            headerUrls.Add($"{cdn}/header.jpg");
-        }
-        if (!string.IsNullOrWhiteSpace(customHeaderUrl)) headerUrls.Add(customHeaderUrl);
 
         var headerData = await DownloadFirstAvailable(headerUrls).ConfigureAwait(false);
         if (headerData != null && headerData.Length > 100)

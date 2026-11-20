@@ -56,6 +56,28 @@ public partial class BrowseView : UserControl
         Attach(DataContext as BrowseViewModel);
 
         UpdateLoadingOverlay(_viewModel?.IsFirstLoad ?? false, immediate: false);
+
+        Dispatcher.InvokeAsync(() =>
+        {
+            var panel = FindVisualChild<BlueStar.App.Controls.VirtualizingWrapPanel>(ResultsScroller);
+            panel?.ResetContainers();
+            ResultsScroller?.InvalidateScrollInfo();
+            ResultsScroller?.InvalidateMeasure();
+        }, System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject? parent) where T : DependencyObject
+    {
+        if (parent == null) return null;
+        int count = VisualTreeHelper.GetChildrenCount(parent);
+        for (int i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T typed) return typed;
+            var sub = FindVisualChild<T>(child);
+            if (sub != null) return sub;
+        }
+        return null;
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -133,6 +155,15 @@ public partial class BrowseView : UserControl
         }
 
         if (e.PropertyName == nameof(BrowseViewModel.SearchState) && _viewModel?.SearchState == SearchState.ShowingResults)
+        {
+            Dispatcher.InvokeAsync(() =>
+            {
+                ResultsScroller?.InvalidateScrollInfo();
+                ResultsScroller?.UpdateLayout();
+            }, System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+
+        if (e.PropertyName == nameof(BrowseViewModel.IsGridView))
         {
             Dispatcher.InvokeAsync(() =>
             {

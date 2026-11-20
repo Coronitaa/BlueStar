@@ -52,22 +52,23 @@
                         Margin="0,0,0,20">
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="235"/>
+                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="20"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- Game Cover Image (Standard 460x215 aspect ratio: 235x110) -->
+                        <!-- Game Cover Image (Supports both 460x215 ~2.14:1 and 616x353 ~1.75:1 without crop or zoom) -->
                         <Border Grid.Column="0" CornerRadius="8"
                                 Background="{StaticResource SurfaceInputBrush}"
-                                Width="235" Height="110" ClipToBounds="True">
+                                Height="110" MinWidth="192" MaxWidth="245" ClipToBounds="True">
                             <Grid>
                                 <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource MutedTextBrush}"
                                       Stretch="Uniform" Width="32" Height="32"
                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 <Image Source="{Binding CoverBannerImage}"
-                                       Stretch="UniformToFill"
+                                       Height="110"
+                                       Stretch="Uniform"
                                        RenderOptions.BitmapScalingMode="HighQuality"/>
                             </Grid>
                         </Border>

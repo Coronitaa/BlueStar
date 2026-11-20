@@ -97,10 +97,31 @@ public sealed record BundledSecrets
 
                 if (string.IsNullOrWhiteSpace(depotKey))
                 {
-                    var depotKeyCandidate = Path.Combine(dir, "depotbox.key");
-                    if (File.Exists(depotKeyCandidate))
+                    var depotJsonCandidate = Path.Combine(dir, "depotkey.json");
+                    if (File.Exists(depotJsonCandidate))
                     {
-                        depotKey = File.ReadAllText(depotKeyCandidate).Trim();
+                        try
+                        {
+                            using var doc = JsonDocument.Parse(File.ReadAllText(depotJsonCandidate));
+                            if (doc.RootElement.TryGetProperty("DepotBox", out var prop) || doc.RootElement.TryGetProperty("defaultApiKey", out prop))
+                            {
+                                var val = prop.GetString()?.Trim();
+                                if (!string.IsNullOrWhiteSpace(val) && val != "YOUR-API-KEY")
+                                {
+                                    depotKey = val;
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+
+                    if (string.IsNullOrWhiteSpace(depotKey))
+                    {
+                        var depotKeyCandidate = Path.Combine(dir, "depotbox.key");
+                        if (File.Exists(depotKeyCandidate))
+                        {
+                            depotKey = File.ReadAllText(depotKeyCandidate).Trim();
+                        }
                     }
                 }
 

@@ -3027,12 +3027,13 @@ public partial class BrowseViewModel : ObservableObject, ISharedViewModel, IDisp
         var existingNames = allExisting.Select(i => i.Name).ToList();
         var existingPaths = allExisting.Select(i => i.InstallPath).Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
 
-        var rawName = result.Name;
-        if (archive != null && archive.Games.Count > 0)
+        var rawName = !string.IsNullOrWhiteSpace(result.Name) ? result.Name : null;
+        if (string.IsNullOrWhiteSpace(rawName) && archive != null && archive.Games.Count > 0)
         {
             var mainGame = archive.Games.FirstOrDefault(g => !g.IsDlc) ?? archive.Games[0];
-            rawName = CleanName(mainGame.Name) ?? result.Name;
+            rawName = CleanName(mainGame.Name);
         }
+        rawName = CleanName(rawName) ?? result.Name;
 
         var uniqueName = PathHelper.GenerateUniqueInstanceName(existingNames, rawName);
         var uniqueInstallPath = PathHelper.GenerateUniqueInstallPath(defaultRoot, uniqueName, existingPaths);

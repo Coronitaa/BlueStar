@@ -335,6 +335,49 @@ public partial class App : Application
             });
         }
 
+        var captureIndex = Array.IndexOf(e.Args, "--capture-explore");
+        if (captureIndex >= 0 && captureIndex < e.Args.Length - 1)
+        {
+            var capturePath = e.Args[captureIndex + 1];
+            _ = Dispatcher.InvokeAsync(async () =>
+            {
+                try
+                {
+                    await Task.Delay(2000);
+                    if (MainWindow?.DataContext is ViewModels.MainViewModel mainVm)
+                    {
+                        mainVm.Navigate("Explore");
+                    }
+                    await Task.Delay(4000);
+                    if (MainWindow != null)
+                    {
+                        MainWindow.UpdateLayout();
+                        int w = (int)MainWindow.ActualWidth;
+                        int h = (int)MainWindow.ActualHeight;
+                        if (w <= 0) w = 1280;
+                        if (h <= 0) h = 800;
+
+                        var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap(
+                            w, h, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+                        rtb.Render(MainWindow);
+
+                        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+                        using var fileStream = System.IO.File.Create(capturePath);
+                        encoder.Save(fileStream);
+                        Log.Information("Saved capture screenshot to {Path}", capturePath);
+                    }
+                    await Task.Delay(500);
+                    Shutdown(0);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Failed to capture screenshot to {Path}", capturePath);
+                    Shutdown(1);
+                }
+            });
+        }
+
         // Trigger background ReFix update check
         _ = Task.Run(async () =>
         {
