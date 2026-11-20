@@ -16,6 +16,9 @@ fi
 
 cd /mnt/c/Users/andre/.gemini/antigravity/scratch/BlueStar_repo/BlueStar-main
 
+# Generar tar.gz
+tar -C dist/linux/BlueStar.AppDir/usr/lib -czf dist/linux/BlueStar-v1.6.4-linux-x64.tar.gz bluestar
+
 cp packaging/linux/AppRun dist/linux/BlueStar.AppDir/AppRun
 chmod +x dist/linux/BlueStar.AppDir/AppRun
 cp packaging/linux/bluestar.desktop dist/linux/BlueStar.AppDir/bluestar.desktop
@@ -26,4 +29,6 @@ export ARCH=x86_64
 
 cd dist/linux
 sha256sum BlueStar-v1.6.4-linux-x64.tar.gz BlueStar-v1.6.4-linux-x64.AppImage > SHA256SUMS
+gpg --batch --yes --detach-sign --armor SHA256SUMS
+gpg --armor --export "BlueStar" > BlueStar-Signing-Key.asc
 cat SHA256SUMS

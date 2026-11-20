@@ -286,6 +286,10 @@ New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
 Write-Host "[3/7] Compilando y publicando binarios (win-x64 self-contained)..." -ForegroundColor Yellow
 $projectPath = Join-Path $rootDir "src\BlueStar.App\BlueStar.App.csproj"
 
+# Limpiar bin y obj para garantizar regeneracion de AssemblyMetadata con la clave de build
+Write-Host "  Limpiando bin y obj de proyectos para regenerar AssemblyMetadata..." -ForegroundColor Cyan
+Get-ChildItem -Path (Join-Path $rootDir "src") -Include "bin", "obj" -Recurse -Directory -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notlike "*\tools\*" } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
 # Clave aleatoria de esta build para cifrar las API keys (bluestar.dat). Solo vive dentro de
 # BlueStar.Infrastructure.dll (AssemblyMetadata); no se guarda en disco ni en el repositorio.
 $secretsKeyBytes = New-Object byte[] 64
@@ -424,6 +428,57 @@ foreach ($file in $textFiles) {
     }
 }
 Write-Host "  [Claves] Verificado: ninguna clave en texto plano en la publicacion" -ForegroundColor Green
+
+# Verificacion de clave en AssemblyInfo
+$infraAssemblyInfo = Get-ChildItem -Path (Join-Path $rootDir "src\BlueStar.Infrastructure\obj") -Recurse -Filter "*AssemblyInfo.cs" | Select-Object -First 1
+if ($infraAssemblyInfo) {
+    $infoContent = Get-Content $infraAssemblyInfo.FullName -Raw
+    $pattern = 'AssemblyMetadata\("BundledSecretsKey",\s*\(?([^);]+)\)?\)'
+    if ($infoContent -match $pattern) {
+        $rawGroup = $matches[1]
+        $parts = [regex]::Matches($rawGroup, '"([^"]*)"') | ForEach-Object { $_.Groups[1].Value }
+        $extractedKey = -join $parts
+        if ($extractedKey -ne $secretsKey) {
+            throw "ERROR CRITICO: La clave de build no coincide con AssemblyInfo ($extractedKey vs $secretsKey)!"
+        }
+    } else {
+        throw "ERROR CRITICO: No se encontro AssemblyMetadata para BundledSecretsKey en $($infraAssemblyInfo.FullName)!"
+    }
+}
+
+# Verificacion de descifrado: comprobar que bluestar.dat se descifra correctamente con la clave
+function Test-BundledSecretsDecryption([string]$DatPath, [byte[]]$Key) {
+    $data = [Convert]::FromBase64String([System.IO.File]::ReadAllText($DatPath).Trim())
+    if ($data.Length -lt 64) { throw "bluestar.dat truncado" }
+    $iv = [byte[]]$data[0..15]
+    $cipher = [byte[]]$data[16..($data.Length - 33)]
+    $signed = [byte[]]$data[0..($data.Length - 33)]
+    $mac = [byte[]]$data[($data.Length - 32)..($data.Length - 1)]
+
+    $hmac = New-Object System.Security.Cryptography.HMACSHA256 -ArgumentList (,[byte[]]$Key[32..63])
+    try {
+        $computedMac = $hmac.ComputeHash($signed)
+        if (![System.Linq.Enumerable]::SequenceEqual([byte[]]$mac, [byte[]]$computedMac)) {
+            throw "El HMAC de bluestar.dat no coincide con la clave de compilacion!"
+        }
+    } finally { $hmac.Dispose() }
+
+    $aes = [System.Security.Cryptography.Aes]::Create()
+    try {
+        $aes.Mode = [System.Security.Cryptography.CipherMode]::CBC
+        $aes.Padding = [System.Security.Cryptography.PaddingMode]::PKCS7
+        $aes.Key = [byte[]]$Key[0..31]
+        $plain = $aes.CreateDecryptor($aes.Key, $iv).TransformFinalBlock($cipher, 0, $cipher.Length)
+        $json = [System.Text.Encoding]::UTF8.GetString($plain)
+        return $json | ConvertFrom-Json
+    } finally { $aes.Dispose() }
+}
+
+$testDecrypted = Test-BundledSecretsDecryption $secretsPath $secretsKeyBytes
+if ($resolvedApiKey -and $testDecrypted.defaultApiKey -ne $resolvedApiKey) {
+    throw "Verificacion fallida: la clave descifrada ($($testDecrypted.defaultApiKey)) no coincide con `$resolvedApiKey ($resolvedApiKey)!"
+}
+Write-Host "  [Claves] Verificado: descifrado correcto de bluestar.dat y coincidencia en AssemblyMetadata" -ForegroundColor Green
 
 # ============================================================================
 # 4. Firma de codigo de los binarios

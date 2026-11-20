@@ -191,7 +191,19 @@ public sealed record BundledSecrets
     {
         var value = typeof(BundledSecrets).Assembly
             .GetCustomAttributes<AssemblyMetadataAttribute>()
-            .FirstOrDefault(a => a.Key == KeyMetadataName)?.Value;
+            .FirstOrDefault(a => a.Key == KeyMetadataName)?.Value
+            ?? Assembly.GetEntryAssembly()?
+            .GetCustomAttributes<AssemblyMetadataAttribute>()
+            .FirstOrDefault(a => a.Key == KeyMetadataName)?.Value
+            ?? AppDomain.CurrentDomain.GetAssemblies()
+            .SelectMany(a =>
+            {
+                try { return a.GetCustomAttributes<AssemblyMetadataAttribute>(); }
+                catch { return []; }
+            })
+            .FirstOrDefault(a => a.Key == KeyMetadataName)?.Value
+            ?? Environment.GetEnvironmentVariable("BLUESTAR_SECRETS_KEY");
+
         if (string.IsNullOrWhiteSpace(value)) return null;
 
         try

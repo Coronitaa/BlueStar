@@ -9,4 +9,9 @@
     <Copyright>Copyright (C) 2026 Corøna</Copyright>
     <Authors>Corøna &amp; BlueStar Developers</Authors>
   </PropertyGroup>
+
+  <!-- Per-build key for the encrypted API keys file (bluestar.dat). Passed by build scripts; never committed. -->
+  <ItemGroup Condition="'$(BundledSecretsKey)' != ''">
+    <AssemblyMetadata Include="BundledSecretsKey" Value="$(BundledSecretsKey)" />
+  </ItemGroup>
 </Project>

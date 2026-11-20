@@ -1,6 +1,6 @@
 ﻿param(
     [string]$Version = "1.6.4",
-    [string]$ApiKey = "5d5e7161-0368-439a-8bc6-764b9a254c07"
+    [string]$ApiKey = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,6 +11,21 @@ $linuxOutDir = Join-Path $distDir "linux"
 $appDir = Join-Path $linuxOutDir "BlueStar.AppDir"
 $libDir = Join-Path $appDir "usr\lib\bluestar"
 
+# Resolver clave API de DepotBox desde parametro o depotkey.json
+$resolvedApiKey = $ApiKey
+$depotKeyFile = Join-Path $rootDir "depotkey.json"
+if (Test-Path $depotKeyFile) {
+    try {
+        $depotJson = Get-Content $depotKeyFile -Raw | ConvertFrom-Json
+        if ($depotJson.DepotBox -and $depotJson.DepotBox.Trim()) {
+            $resolvedApiKey = $depotJson.DepotBox.Trim()
+        }
+    } catch { }
+}
+if (-not $resolvedApiKey) {
+    $resolvedApiKey = "5d5e7161-0368-439a-8bc6-764b9a254c07"
+}
+
 Write-Host "================================================" -ForegroundColor Cyan
 Write-Host "  BlueStar Linux Package Builder (v$Version)   " -ForegroundColor Cyan
 Write-Host "================================================" -ForegroundColor Cyan
@@ -19,6 +34,10 @@ if (Test-Path $linuxOutDir) {
     Remove-Item $linuxOutDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 New-Item -ItemType Directory -Path $libDir -Force | Out-Null
+
+# Limpiar bin y obj para garantizar regeneracion de AssemblyMetadata con la clave de build
+Write-Host "  Limpiando bin y obj de proyectos para regenerar AssemblyMetadata..." -ForegroundColor Cyan
+Get-ChildItem -Path (Join-Path $rootDir "src") -Include "bin", "obj" -Recurse -Directory -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notlike "*\tools\*" } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
 # 1. Random key for bluestar.dat
 $secretsKeyBytes = New-Object byte[] 64
@@ -79,7 +98,7 @@ if (Test-Path $modKeysFile) {
 }
 
 $bundledSecrets = [ordered]@{
-    defaultApiKey = $ApiKey
+    defaultApiKey = $resolvedApiKey
     curseForge = $modKeys["curseForge"]
     nexusMods = $modKeys["nexusMods"]
     modIo = $modKeys["modIo"]
@@ -90,49 +109,65 @@ $secretsPath = Join-Path $libDir "bluestar.dat"
 $encryptedSecrets = Protect-BundledSecrets ($bundledSecrets | ConvertTo-Json -Compress) $secretsKeyBytes
 [System.IO.File]::WriteAllText($secretsPath, $encryptedSecrets, [System.Text.UTF8Encoding]::new($false))
 
+# Verificacion de clave en AssemblyInfo
+$infraAssemblyInfo = Get-ChildItem -Path (Join-Path $rootDir "src\BlueStar.Infrastructure\obj") -Recurse -Filter "*AssemblyInfo.cs" | Select-Object -First 1
+if ($infraAssemblyInfo) {
+    $infoContent = Get-Content $infraAssemblyInfo.FullName -Raw
+    $pattern = 'AssemblyMetadata\("BundledSecretsKey",\s*\(?([^);]+)\)?\)'
+    if ($infoContent -match $pattern) {
+        $rawGroup = $matches[1]
+        $parts = [regex]::Matches($rawGroup, '"([^"]*)"') | ForEach-Object { $_.Groups[1].Value }
+        $extractedKey = -join $parts
+        if ($extractedKey -ne $secretsKey) {
+            throw "ERROR CRITICO: La clave de build no coincide con AssemblyInfo ($extractedKey vs $secretsKey)!"
+        }
+    } else {
+        throw "ERROR CRITICO: No se encontro AssemblyMetadata para BundledSecretsKey en $($infraAssemblyInfo.FullName)!"
+    }
+}
+
+# Verificacion de descifrado
+function Test-BundledSecretsDecryption([string]$DatPath, [byte[]]$Key) {
+    $data = [Convert]::FromBase64String([System.IO.File]::ReadAllText($DatPath).Trim())
+    if ($data.Length -lt 64) { throw "bluestar.dat truncado" }
+    $iv = [byte[]]$data[0..15]
+    $cipher = [byte[]]$data[16..($data.Length - 33)]
+    $signed = [byte[]]$data[0..($data.Length - 33)]
+    $mac = [byte[]]$data[($data.Length - 32)..($data.Length - 1)]
+
+    $hmac = New-Object System.Security.Cryptography.HMACSHA256 -ArgumentList (,[byte[]]$Key[32..63])
+    try {
+        $computedMac = $hmac.ComputeHash($signed)
+        if (![System.Linq.Enumerable]::SequenceEqual([byte[]]$mac, [byte[]]$computedMac)) {
+            throw "El HMAC de bluestar.dat no coincide con la clave de compilacion!"
+        }
+    } finally { $hmac.Dispose() }
+
+    $aes = [System.Security.Cryptography.Aes]::Create()
+    try {
+        $aes.Mode = [System.Security.Cryptography.CipherMode]::CBC
+        $aes.Padding = [System.Security.Cryptography.PaddingMode]::PKCS7
+        $aes.Key = [byte[]]$Key[0..31]
+        $plain = $aes.CreateDecryptor($aes.Key, $iv).TransformFinalBlock($cipher, 0, $cipher.Length)
+        $json = [System.Text.Encoding]::UTF8.GetString($plain)
+        return $json | ConvertFrom-Json
+    } finally { $aes.Dispose() }
+}
+
+$testDecrypted = Test-BundledSecretsDecryption $secretsPath $secretsKeyBytes
+if ($resolvedApiKey -and $testDecrypted.defaultApiKey -ne $resolvedApiKey) {
+    throw "Verificacion fallida: la clave descifrada ($($testDecrypted.defaultApiKey)) no coincide con `$resolvedApiKey ($resolvedApiKey)!"
+}
+Write-Host "  [Claves] Verificado: descifrado correcto de bluestar.dat y coincidencia de clave" -ForegroundColor Green
+
 # 4. Packaging in WSL (tar.gz + AppImage)
 Write-Host "[3/4] Empaquetando tar.gz y AppImage con WSL..." -ForegroundColor Yellow
 $wslRoot = "/mnt/c" + ($rootDir.Substring(2) -replace '\\', '/')
-
-$wslScript = @"
-set -e
-cd "$wslRoot"
-chmod +x "dist/linux/BlueStar.AppDir/usr/lib/bluestar/BlueStar" || true
-find "dist/linux/BlueStar.AppDir/usr/lib/bluestar/tools" -name "*.sh" -exec chmod +x {} + 2>/dev/null || true
-
-# Generar tar.gz
-tar -C "dist/linux/BlueStar.AppDir/usr/lib" -czf "dist/linux/BlueStar-v${Version}-linux-x64.tar.gz" bluestar
-
-# Preparar AppDir
-cp packaging/linux/AppRun dist/linux/BlueStar.AppDir/AppRun
-chmod +x dist/linux/BlueStar.AppDir/AppRun
-cp packaging/linux/bluestar.desktop dist/linux/BlueStar.AppDir/bluestar.desktop
-cp src/BlueStar.App/Assets/bluestar.png dist/linux/BlueStar.AppDir/bluestar.png
-
-# Descargar appimagetool si no existe
-TMP_WORK=`$(mktemp -d)
-TOOL="`$TMP_WORK/appimagetool"
-curl -fsSL -o "`$TOOL" "https://github.com/AppImage/appimagetool/releases/download/1.9.0/appimagetool-x86_64.AppImage"
-chmod +x "`$TOOL"
-
-ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "`$TOOL" --no-appstream dist/linux/BlueStar.AppDir "dist/linux/BlueStar-v${Version}-linux-x64.AppImage"
-rm -rf "`$TMP_WORK"
-
-cd dist/linux
-sha256sum BlueStar-v${Version}-linux-x64.tar.gz BlueStar-v${Version}-linux-x64.AppImage > SHA256SUMS
-"@
-
-$wslScriptUtf8 = [System.Text.Encoding]::UTF8.GetBytes($wslScript)
-$tempScript = Join-Path $linuxOutDir "pack.sh"
-[System.IO.File]::WriteAllBytes($tempScript, $wslScriptUtf8)
-
-$wslTempScript = "$wslRoot/dist/linux/pack.sh"
-& wsl bash -c "tr -d '\r' < '$wslTempScript' | bash"
-
-if (Test-Path $tempScript) { Remove-Item $tempScript -Force }
+$packWslPath = "$wslRoot/packaging/linux/pack_wsl.sh"
+& wsl bash -c "tr -d '\r' < '$packWslPath' | bash"
 
 Write-Host "[4/4] Verificando artefactos Linux generados..." -ForegroundColor Green
-Get-ChildItem -Path $linuxOutDir -File | Where-Object { $_.Extension -in @(".gz", ".AppImage") -or $_.Name -eq "SHA256SUMS" } | ForEach-Object {
+Get-ChildItem -Path $linuxOutDir -File | Where-Object { $_.Extension -in @(".gz", ".AppImage", ".asc") -or $_.Name -eq "SHA256SUMS" } | ForEach-Object {
     $sizeMb = [math]::Round($_.Length / 1MB, 2)
     Write-Host "  $($_.Name) ($sizeMb MB)" -ForegroundColor Green
 }
