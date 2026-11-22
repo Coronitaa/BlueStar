@@ -142,7 +142,12 @@ public record EngineInfo
             if (Type == EngineType.Unity && UnityFlavor != UnityFlavor.None)
             {
                 var flavorStr = UnityFlavor == UnityFlavor.IL2CPP ? "IL2CPP" : "Mono";
-                var archStr = Architecture == TargetArchitecture.X86 ? "x86" : "x64";
+                var archStr = Architecture switch
+                {
+                    TargetArchitecture.X86 => "x86",
+                    TargetArchitecture.Arm64 => "arm64",
+                    _ => "x64"
+                };
                 return !string.IsNullOrWhiteSpace(Version)
                     ? $"{Name} {Version} ({flavorStr} {archStr})"
                     : $"{Name} ({flavorStr} {archStr})";

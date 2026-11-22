@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using BlueStar.Core.Models;
 
@@ -8,16 +9,21 @@ namespace BlueStar.Core.Helpers;
 
 /// <summary>
 /// Helper methods for classifying, normalizing, and filtering depots and DLCs
-/// by target processor architecture (x64, x32, and x32/x64).
+/// by target processor architecture (arm64, x64, x32, and x32/x64).
 /// </summary>
 public static partial class DepotArchitectureHelper
 {
+    public const string Arm64 = "arm64";
     public const string X64 = "x64";
     public const string X32 = "x32";
     public const string Both = "x32/x64";
 
     private static readonly Regex BothRegex = new(
         @"(?<![a-zA-Z0-9])(?:both|ambos|universal|all[\s-]arch(?:itectures)?|x86[+/&/\\]\s*(?:x?64)|32[+/&/\\]\s*64|win32[+/&/\\]\s*win64|x32[+/&/\\]\s*x?64|x64[+/&/\\]\s*x?32)(?![a-zA-Z0-9])",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex Arm64Regex = new(
+        @"(?<![a-zA-Z0-9])(?:arm64|aarch64|win[_-]?arm64)(?![a-zA-Z0-9])",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex X64Regex = new(
@@ -34,7 +40,7 @@ public static partial class DepotArchitectureHelper
 
     /// <summary>
     /// Detects target architecture from comment or depot name.
-    /// Returns "x64", "x32", or "x32/x64" if both or neither are found.
+    /// Returns "arm64", "x64", "x32", or "x32/x64" if both or neither are found.
     /// </summary>
     public static string DetectArchitecture(string? text)
     {
@@ -42,10 +48,12 @@ public static partial class DepotArchitectureHelper
 
         if (BothRegex.IsMatch(text)) return Both;
 
-        bool has64 = X64Regex.IsMatch(text);
+        bool hasArm64 = Arm64Regex.IsMatch(text);
+        bool has64 = X64Regex.IsMatch(text) && !hasArm64;
         bool has32 = X32Regex.IsMatch(text) && !X8664ExcludeRegex.IsMatch(text);
 
-        if (has64 && has32) return Both;
+        if ((has64 && has32) || (hasArm64 && (has64 || has32))) return Both;
+        if (hasArm64) return Arm64;
         if (has64) return X64;
         if (has32) return X32;
 
@@ -53,8 +61,8 @@ public static partial class DepotArchitectureHelper
     }
 
     /// <summary>
-    /// Normalizes any architecture string (e.g. "64-bit", "x86", "32", "Universal", "Ambos")
-    /// to standard values: "x64", "x32", or "x32/x64".
+    /// Normalizes any architecture string (e.g. "64-bit", "arm64", "x86", "32", "Universal", "Ambos")
+    /// to standard values: "arm64", "x64", "x32", or "x32/x64".
     /// If <paramref name="arch"/> is empty or null, checks <paramref name="name"/>.
     /// If both are empty or neutral, returns "x32/x64".
     /// </summary>
@@ -63,6 +71,14 @@ public static partial class DepotArchitectureHelper
         if (!string.IsNullOrWhiteSpace(arch))
         {
             var trimmed = arch.Trim();
+            if (trimmed.Equals("arm64", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.Equals("aarch64", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.Equals("win-arm64", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.Equals("win_arm64", StringComparison.OrdinalIgnoreCase))
+            {
+                return Arm64;
+            }
+
             if (trimmed.Equals("x64", StringComparison.OrdinalIgnoreCase) ||
                 trimmed.Equals("64", StringComparison.OrdinalIgnoreCase) ||
                 trimmed.Equals("64-bit", StringComparison.OrdinalIgnoreCase) ||
@@ -174,7 +190,13 @@ public static partial class DepotArchitectureHelper
     /// <summary>
     /// Determines the best default architecture preference for a game based on its depots
     /// and the host operating system architecture.
-    /// On a 64-bit OS:
+    /// On an ARM64 OS:
+    ///   - If arm64 depots exist -> "arm64"
+    ///   - Else if x64 depots exist -> "x64" (via Prism emulation on Windows 11)
+    ///   - Else if x32 depots exist -> "x32"
+    ///   - Else if x32/x64 depots exist -> "x32/x64"
+    ///   - Else -> "x64"
+    /// On a 64-bit OS (x64):
     ///   - If x64 depots exist -> "x64"
     ///   - Else if x32 depots exist -> "x32"
     ///   - Else if x32/x64 depots exist -> "x32/x64"
@@ -184,13 +206,22 @@ public static partial class DepotArchitectureHelper
     ///   - Else if x32/x64 depots exist -> "x32/x64"
     ///   - Else -> "x32"
     /// </summary>
-    public static string GetDefaultArchitecturePreference(IEnumerable<DepotInfo>? depots, bool? is64BitOperatingSystem = null)
+    public static string GetDefaultArchitecturePreference(
+        IEnumerable<DepotInfo>? depots,
+        bool? is64BitOperatingSystem = null,
+        Architecture? targetHostArch = null)
     {
-        bool is64 = is64BitOperatingSystem ?? Environment.Is64BitOperatingSystem;
-        if (depots == null) return is64 ? X64 : X32;
+        var hostArch = targetHostArch ?? RuntimeInformation.OSArchitecture;
+        bool isArm64Host = hostArch == Architecture.Arm64;
+        bool is64 = is64BitOperatingSystem ?? (isArm64Host || Environment.Is64BitOperatingSystem);
+
+        if (depots == null) return isArm64Host ? Arm64 : (is64 ? X64 : X32);
 
         var depotList = depots as IList<DepotInfo> ?? depots.ToList();
-        if (depotList.Count == 0) return is64 ? X64 : X32;
+        if (depotList.Count == 0) return isArm64Host ? Arm64 : (is64 ? X64 : X32);
+
+        bool hasArm64 = depotList.Any(d => GetDepotArchitecture(d) == Arm64);
+        if (isArm64Host && hasArm64) return Arm64;
 
         bool has64 = depotList.Any(d => GetDepotArchitecture(d) == X64);
         bool has32 = depotList.Any(d => GetDepotArchitecture(d) == X32);
@@ -213,17 +244,19 @@ public static partial class DepotArchitectureHelper
 
     /// <summary>
     /// Returns true if a depot is compatible with the target operating system (Windows)
-    /// and the specified architecture preference ("x64", "x32", or "x32/x64").
+    /// and the specified architecture preference ("arm64", "x64", "x32", or "x32/x64").
     /// </summary>
     /// <param name="depot">The depot to inspect.</param>
-    /// <param name="archPreference">Target architecture preference ("x64", "x32", "x32/x64", or null for system default).</param>
+    /// <param name="archPreference">Target architecture preference ("arm64", "x64", "x32", "x32/x64", or null for system default).</param>
     /// <param name="has64Depots">Whether the game title has any 64-bit depots available.</param>
     /// <param name="is64BitOperatingSystem">Optional OS bitness override (defaults to current system).</param>
+    /// <param name="targetHostArch">Optional host processor architecture override (defaults to RuntimeInformation.OSArchitecture).</param>
     public static bool IsDepotCompatible(
         DepotInfo depot,
         string? archPreference = null,
         bool has64Depots = true,
-        bool? is64BitOperatingSystem = null)
+        bool? is64BitOperatingSystem = null,
+        Architecture? targetHostArch = null)
     {
         if (depot == null) return false;
 
@@ -252,9 +285,25 @@ public static partial class DepotArchitectureHelper
             }
         }
 
-        bool is64 = is64BitOperatingSystem ?? Environment.Is64BitOperatingSystem;
-        var pref = archPreference ?? (is64 ? (has64Depots ? X64 : X32) : X32);
+        var hostArch = targetHostArch ?? RuntimeInformation.OSArchitecture;
+        bool isArm64Host = hostArch == Architecture.Arm64;
+        bool is64 = is64BitOperatingSystem ?? (isArm64Host || Environment.Is64BitOperatingSystem);
         var depotArch = GetDepotArchitecture(depot);
+
+        // An x86 or x64 PC can never execute an arm64 depot
+        if (depotArch == Arm64 && !isArm64Host)
+        {
+            return false;
+        }
+
+        var pref = archPreference ?? (isArm64Host
+            ? (depotArch == Arm64 ? Arm64 : (has64Depots ? X64 : X32))
+            : (is64 ? (has64Depots ? X64 : X32) : X32));
+
+        if (pref.Equals(Arm64, StringComparison.OrdinalIgnoreCase))
+        {
+            return isArm64Host && (depotArch == Arm64 || depotArch == Both);
+        }
 
         if (pref.Equals(Both, StringComparison.OrdinalIgnoreCase) ||
             pref.Equals("Ambos", StringComparison.OrdinalIgnoreCase) ||
@@ -276,6 +325,11 @@ public static partial class DepotArchitectureHelper
                 return false;
             }
 
+            if (depotArch == Arm64)
+            {
+                return false;
+            }
+
             if (depotArch == X64 || depotArch == Both)
             {
                 return true;
@@ -287,6 +341,10 @@ public static partial class DepotArchitectureHelper
 
         if (pref.Equals(X32, StringComparison.OrdinalIgnoreCase))
         {
+            if (depotArch == Arm64)
+            {
+                return false;
+            }
             return depotArch == X32 || depotArch == Both;
         }
 
@@ -300,13 +358,35 @@ public static partial class DepotArchitectureHelper
         DlcInfo dlc,
         string? archPreference = null,
         bool has64Depots = true,
-        bool? is64BitOperatingSystem = null)
+        bool? is64BitOperatingSystem = null,
+        Architecture? targetHostArch = null)
     {
         if (dlc == null) return false;
 
-        bool is64 = is64BitOperatingSystem ?? Environment.Is64BitOperatingSystem;
-        var pref = archPreference ?? (is64 ? (has64Depots ? X64 : X32) : X32);
+        var hostArch = targetHostArch ?? RuntimeInformation.OSArchitecture;
+        bool isArm64Host = hostArch == Architecture.Arm64;
+        bool is64 = is64BitOperatingSystem ?? (isArm64Host || Environment.Is64BitOperatingSystem);
         var dlcArch = GetDlcArchitecture(dlc);
+
+        if (dlcArch == Arm64 && !isArm64Host)
+        {
+            return false;
+        }
+
+        var pref = archPreference ?? (isArm64Host
+            ? (dlcArch == Arm64 ? Arm64 : (has64Depots ? X64 : X32))
+            : (is64 ? (has64Depots ? X64 : X32) : X32));
+
+        if (pref.Equals(Arm64, StringComparison.OrdinalIgnoreCase))
+        {
+            if (!isArm64Host) return false;
+            if (dlcArch == Arm64 || dlcArch == Both) return true;
+            if (dlc.Depots != null && dlc.Depots.Count > 0)
+            {
+                return dlc.Depots.Any(d => IsDepotCompatible(d, pref, has64Depots, is64, hostArch));
+            }
+            return false;
+        }
 
         if (pref.Equals(Both, StringComparison.OrdinalIgnoreCase) ||
             pref.Equals("Ambos", StringComparison.OrdinalIgnoreCase) ||
@@ -326,15 +406,19 @@ public static partial class DepotArchitectureHelper
                 return false;
             }
 
+            if (dlcArch == Arm64)
+            {
+                return false;
+            }
+
             if (dlcArch == X64 || dlcArch == Both)
             {
                 return true;
             }
 
-            // If DLC has specific depots, check if any depot matches
             if (dlc.Depots != null && dlc.Depots.Count > 0)
             {
-                return dlc.Depots.Any(d => IsDepotCompatible(d, pref, has64Depots, is64));
+                return dlc.Depots.Any(d => IsDepotCompatible(d, pref, has64Depots, is64, hostArch));
             }
 
             return !has64Depots;
@@ -342,6 +426,11 @@ public static partial class DepotArchitectureHelper
 
         if (pref.Equals(X32, StringComparison.OrdinalIgnoreCase))
         {
+            if (dlcArch == Arm64)
+            {
+                return false;
+            }
+
             if (dlcArch == X32 || dlcArch == Both)
             {
                 return true;
@@ -349,7 +438,7 @@ public static partial class DepotArchitectureHelper
 
             if (dlc.Depots != null && dlc.Depots.Count > 0)
             {
-                return dlc.Depots.Any(d => IsDepotCompatible(d, pref, has64Depots, is64));
+                return dlc.Depots.Any(d => IsDepotCompatible(d, pref, has64Depots, is64, hostArch));
             }
 
             return false;

@@ -1,6 +1,8 @@
 ﻿param(
     [string]$Version = "1.6.4",
-    [string]$ApiKey = ""
+    [string]$ApiKey = "",
+    [ValidateSet("linux-x64", "linux-arm64")]
+    [string]$Rid = "linux-x64"
 )
 
 $ErrorActionPreference = "Stop"
@@ -44,12 +46,12 @@ $secretsKeyBytes = New-Object byte[] 64
 [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($secretsKeyBytes)
 $secretsKey = [Convert]::ToBase64String($secretsKeyBytes)
 
-# 2. Publish .NET self-contained linux-x64
-Write-Host "[1/4] Publicando binarios Linux (linux-x64 self-contained)..." -ForegroundColor Yellow
+# 2. Publish .NET self-contained
+Write-Host "[1/4] Publicando binarios Linux ($Rid self-contained)..." -ForegroundColor Yellow
 $projectPath = Join-Path $rootDir "src\BlueStar.Linux\BlueStar.Linux.csproj"
 & dotnet publish $projectPath `
     -c Release `
-    -r linux-x64 `
+    -r $Rid `
     --self-contained true `
     -p:PublishSingleFile=false `
     -p:Version=$Version `
@@ -58,7 +60,7 @@ $projectPath = Join-Path $rootDir "src\BlueStar.Linux\BlueStar.Linux.csproj"
     -o $libDir
 
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "dotnet publish linux-x64 falló!"
+    Write-Error "dotnet publish $Rid falló!"
     exit 1
 }
 
@@ -164,7 +166,8 @@ Write-Host "  [Claves] Verificado: descifrado correcto de bluestar.dat y coincid
 Write-Host "[3/4] Empaquetando tar.gz y AppImage con WSL..." -ForegroundColor Yellow
 $wslRoot = "/mnt/c" + ($rootDir.Substring(2) -replace '\\', '/')
 $packWslPath = "$wslRoot/packaging/linux/pack_wsl.sh"
-& wsl bash -c "tr -d '\r' < '$packWslPath' | bash"
+$arch = if ($Rid -eq "linux-arm64") { "arm64" } else { "x86_64" }
+& wsl bash -c "RID='$Rid' ARCH='$arch' VERSION='$Version' tr -d '\r' < '$packWslPath' | bash"
 
 Write-Host "[4/4] Verificando artefactos Linux generados..." -ForegroundColor Green
 Get-ChildItem -Path $linuxOutDir -File | Where-Object { $_.Extension -in @(".gz", ".AppImage", ".asc") -or $_.Name -eq "SHA256SUMS" } | ForEach-Object {

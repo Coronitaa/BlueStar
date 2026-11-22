@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
@@ -42,7 +43,7 @@ public sealed class PrerequisiteService : IPrerequisiteService
         {
             if (_http.DefaultRequestHeaders.UserAgent.Count == 0)
             {
-                _http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 BlueStar/1.6.4");
+                _http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 BlueStar/1.6.5");
             }
             if (_http.Timeout < TimeSpan.FromMinutes(10))
             {
@@ -57,7 +58,26 @@ public sealed class PrerequisiteService : IPrerequisiteService
     {
         var isSpanish = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("es", StringComparison.OrdinalIgnoreCase);
 
-        var items = new List<PrerequisiteItem>
+        var items = new List<PrerequisiteItem>();
+
+        if (RuntimeInformation.OSArchitecture == Architecture.Arm64)
+        {
+            items.Add(new()
+            {
+                Id = "vcredist_2015_2022_arm64",
+                Name = "Visual C++ 2015-2022 Redistributable (ARM64)",
+                Category = "Visual C++",
+                Description = isSpanish
+                    ? "Requerido por BlueStar nativo y aplicaciones ARM64 (librerías estándar C++ y MSVCP140.dll)."
+                    : "Required by native BlueStar and ARM64 applications (C++ standard libraries & MSVCP140.dll).",
+                DownloadUrl = "https://aka.ms/vs/17/release/vc_redist.arm64.exe",
+                SilentArguments = "/install /quiet /norestart",
+                IsEssential = true,
+                IsRecognized = true
+            });
+        }
+
+        items.AddRange(new PrerequisiteItem[]
         {
             new()
             {
@@ -127,7 +147,7 @@ public sealed class PrerequisiteService : IPrerequisiteService
                 IsEssential = true,
                 IsRecognized = true
             }
-        };
+        });
 
         foreach (var item in items)
         {
@@ -145,6 +165,7 @@ public sealed class PrerequisiteService : IPrerequisiteService
         var systemItems = await DetectSystemPrerequisitesAsync(ct).ConfigureAwait(false);
         var items = new List<PrerequisiteItem>(systemItems);
 
+        var vc2015_2022_arm64 = items.FirstOrDefault(i => i.Id == "vcredist_2015_2022_arm64");
         var vc2015_2022_x64 = items.FirstOrDefault(i => i.Id == "vcredist_2015_2022_x64");
         var vc2015_2022_x86 = items.FirstOrDefault(i => i.Id == "vcredist_2015_2022_x86");
         var directx = items.FirstOrDefault(i => i.Id == "directx_enduser");
@@ -183,7 +204,22 @@ public sealed class PrerequisiteService : IPrerequisiteService
 
                     if (fileName.Contains("vcredist") || fileName.Contains("vc_redist"))
                     {
-                        if (fileName.Contains("x64") || fileName.Contains("64"))
+                        if (fileName.Contains("arm64"))
+                        {
+                            if (vc2015_2022_arm64 != null)
+                            {
+                                vc2015_2022_arm64.LocalInstallerPath = file;
+                                if (vc2015_2022_arm64.Status != PrerequisiteStatus.InstalledInSystem)
+                                    vc2015_2022_arm64.Status = PrerequisiteStatus.AvailableInGame;
+                            }
+                            else
+                            {
+                                AddDiscovered(items, file, PrettyInstallerName(file), "Visual C++",
+                                    "Visual C++ Redistributable ARM64 runtime.",
+                                    silentArgs: "/install /quiet /norestart", essential: true, isRecognized: true);
+                            }
+                        }
+                        else if (fileName.Contains("x64") || fileName.Contains("64"))
                         {
                             if (vc2015_2022_x64 != null)
                             {
@@ -400,7 +436,16 @@ public sealed class PrerequisiteService : IPrerequisiteService
     {
         try
         {
-            if (item.Id == "vcredist_2015_2022_x64")
+            if (item.Id == "vcredist_2015_2022_arm64")
+            {
+                return VcRuntimeRegistered(
+                           @"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\ARM64",
+                           @"SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\ARM64")
+                       || AllFilesExist(Environment.GetFolderPath(Environment.SpecialFolder.System),
+                           "vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll")
+                       || AllFilesExist(AppContext.BaseDirectory, "vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll");
+            }
+            else if (item.Id == "vcredist_2015_2022_x64")
             {
                 return VcRuntimeRegistered(
                            @"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64",
@@ -543,6 +588,7 @@ public sealed class PrerequisiteService : IPrerequisiteService
     /// </summary>
     private static readonly Dictionary<string, string> BundledInstallers = new(StringComparer.OrdinalIgnoreCase)
     {
+        ["vcredist_2015_2022_arm64"] = "vc_redist.arm64.exe",
         ["vcredist_2015_2022_x64"] = "vc_redist.x64.exe",
         ["vcredist_2015_2022_x86"] = "vc_redist.x86.exe",
         ["webview2_runtime"] = "MicrosoftEdgeWebview2Setup.exe"
@@ -553,6 +599,7 @@ public sealed class PrerequisiteService : IPrerequisiteService
     /// </summary>
     public static readonly Dictionary<string, string> PrerequisiteFileNames = new(StringComparer.OrdinalIgnoreCase)
     {
+        ["vcredist_2015_2022_arm64"] = "vc_redist.arm64.exe",
         ["vcredist_2015_2022_x64"] = "vc_redist.x64.exe",
         ["vcredist_2015_2022_x86"] = "vc_redist.x86.exe",
         ["directx_enduser"] = "dxwebsetup.exe",

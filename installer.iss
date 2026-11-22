@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "BlueStar"
-#define MyAppVersion "1.6.4"
+#define MyAppVersion "1.6.5"
 #define MyAppPublisher "BlueStar Devs"
 #define MyAppURL "https://github.com/Coronitaa/BlueStar"
 #define MyAppExeName "BlueStar.exe"
@@ -22,12 +22,26 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 DisableProgramGroupPage=yes
 ; Language selection dialog
 ShowLanguageDialog=yes
+
+#ifndef AppArch
+#define AppArch "x64"
+#endif
+
+#if AppArch == "arm64"
+; Architecture
+ArchitecturesAllowed=arm64
+ArchitecturesInstallIn64BitMode=arm64
+; Output
+OutputDir=dist
+OutputBaseFilename=BlueStar-v{#MyAppVersion}-Setup-win-arm64
+#else
 ; Architecture
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 ; Output
 OutputDir=dist
 OutputBaseFilename=BlueStar-v{#MyAppVersion}-Setup-win-x64
+#endif
 SetupIconFile=src\BlueStar.App\Assets\bluestar.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
@@ -105,6 +119,12 @@ begin
     else
       Result := True;
   end;
+end;
+
+function NeedVcArm64(): Boolean;
+begin
+  Result := not VcRuntimeInstalled('SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\ARM64');
+  Log(Format('Prerequisite Check: VC++ 2015-2022 ARM64 Needed = %d', [Integer(Result)]));
 end;
 
 function NeedVc64(): Boolean;
@@ -200,6 +220,15 @@ begin
   if CurStep = ssPostInstall then
   begin
     WizardForm.StatusLabel.Caption := CustomMessage('PrereqInstalling');
+
+    #if AppArch == "arm64"
+    if NeedVcArm64() then
+    begin
+      InstallPrerequisite('vc_redist.arm64.exe', 'Visual C++ 2015-2022 (ARM64)', '/install /quiet /norestart', True);
+      if NeedVcArm64() and IsAdminInstallMode then
+        RaiseException(FmtMessage(CustomMessage('PrereqVerifyFailed'), ['Visual C++ 2015-2022 (ARM64)']));
+    end;
+    #endif
 
     if NeedVc64() then
     begin

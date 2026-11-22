@@ -7,6 +7,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -5324,7 +5325,13 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
         AutoSelectedDepotCount = selected;
         AutoSkippedDepotCount = skipped;
 
-        var osLabel = Environment.Is64BitOperatingSystem ? "Windows x64" : "Windows x86";
+        var osLabel = RuntimeInformation.OSArchitecture switch
+        {
+            Architecture.Arm64 => "Windows ARM64",
+            Architecture.X64 => "Windows x64",
+            Architecture.X86 => "Windows x86",
+            _ => Environment.Is64BitOperatingSystem ? "Windows x64" : "Windows x86"
+        };
         AutoSelectionSummary = string.Format(
             GetString("String_VersionAutoSelectedFormat", "{0} depot(s) selected for {1}"),
             selected, osLabel);

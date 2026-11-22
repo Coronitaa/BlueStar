@@ -163,15 +163,20 @@ public sealed class UnixLinker : IWin32Linker
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
             return 0;
 
-        // shortcut: st_nlink offset 16 is the x86-64 glibc struct stat layout; other architectures report 1
-        // until BlueStar ships for them.
-        if (RuntimeInformation.ProcessArchitecture != Architecture.X64)
-            return 1;
-
         var buf = new byte[256];
         try
         {
-            return Stat(filePath, buf) == 0 ? (int)BitConverter.ToUInt64(buf, 16) : 1;
+            if (RuntimeInformation.ProcessArchitecture == Architecture.X64)
+            {
+                return Stat(filePath, buf) == 0 ? (int)BitConverter.ToUInt64(buf, 16) : 1;
+            }
+
+            if (RuntimeInformation.ProcessArchitecture == Architecture.Arm64)
+            {
+                return Stat(filePath, buf) == 0 ? (int)BitConverter.ToUInt32(buf, 20) : 1;
+            }
+
+            return 1;
         }
         catch (EntryPointNotFoundException)
         {

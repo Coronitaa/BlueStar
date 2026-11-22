@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using BlueStar.Core.Helpers;
 using BlueStar.Core.Models;
 using FluentAssertions;
@@ -227,5 +228,89 @@ public class DepotArchitectureHelperTests
         DepotArchitectureHelper.IsDlcCompatible(dlc64, "x32/x64", has64Depots: true, is64BitOperatingSystem: false).Should().BeFalse();
         DepotArchitectureHelper.IsDlcCompatible(dlc32, "x32/x64", has64Depots: true, is64BitOperatingSystem: false).Should().BeTrue();
         DepotArchitectureHelper.IsDlcCompatible(dlcBoth, "x32/x64", has64Depots: true, is64BitOperatingSystem: false).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("Game Win-Arm64 Content", "arm64")]
+    [InlineData("Depot aarch64 binaries", "arm64")]
+    [InlineData("Depot arm64", "arm64")]
+    [InlineData("client win_arm64", "arm64")]
+    public void DetectArchitecture_RecognizesArm64(string input, string expected)
+    {
+        DepotArchitectureHelper.DetectArchitecture(input).Should().Be(expected);
+    }
+
+    [Fact]
+    public void NormalizeArchitecture_ConvertsArm64Values()
+    {
+        DepotArchitectureHelper.NormalizeArchitecture("arm64").Should().Be("arm64");
+        DepotArchitectureHelper.NormalizeArchitecture("aarch64").Should().Be("arm64");
+        DepotArchitectureHelper.NormalizeArchitecture("win-arm64").Should().Be("arm64");
+        DepotArchitectureHelper.NormalizeArchitecture("win_arm64").Should().Be("arm64");
+    }
+
+    [Fact]
+    public void GetDefaultArchitecturePreference_HandlesArm64Host()
+    {
+        var depotsWithArm64 = new List<DepotInfo>
+        {
+            new() { DepotId = 1, Architecture = "arm64" },
+            new() { DepotId = 2, Architecture = "x64" }
+        };
+
+        var depotsWithoutArm64 = new List<DepotInfo>
+        {
+            new() { DepotId = 1, Architecture = "x64" },
+            new() { DepotId = 2, Architecture = "x32" }
+        };
+
+        // ARM64 host with native arm64 depots selects arm64
+        DepotArchitectureHelper.GetDefaultArchitecturePreference(depotsWithArm64, targetHostArch: Architecture.Arm64)
+            .Should().Be("arm64");
+
+        // ARM64 host without native arm64 depots falls back to x64 (Prism)
+        DepotArchitectureHelper.GetDefaultArchitecturePreference(depotsWithoutArm64, targetHostArch: Architecture.Arm64)
+            .Should().Be("x64");
+
+        // x64 host ignores arm64 depots and selects x64
+        DepotArchitectureHelper.GetDefaultArchitecturePreference(depotsWithArm64, targetHostArch: Architecture.X64)
+            .Should().Be("x64");
+    }
+
+    [Fact]
+    public void IsDepotCompatible_RejectsArm64OnNonArm64Host()
+    {
+        var arm64Depot = new DepotInfo { DepotId = 1, Architecture = "arm64", Platform = "Windows" };
+        var x64Depot = new DepotInfo { DepotId = 2, Architecture = "x64", Platform = "Windows" };
+
+        // An x64 host must reject arm64 depots
+        DepotArchitectureHelper.IsDepotCompatible(arm64Depot, "arm64", targetHostArch: Architecture.X64)
+            .Should().BeFalse();
+        DepotArchitectureHelper.IsDepotCompatible(arm64Depot, "x32/x64", targetHostArch: Architecture.X64)
+            .Should().BeFalse();
+
+        // An ARM64 host accepts native arm64 depots
+        DepotArchitectureHelper.IsDepotCompatible(arm64Depot, "arm64", targetHostArch: Architecture.Arm64)
+            .Should().BeTrue();
+
+        // An ARM64 host accepts x64 depots via Prism
+        DepotArchitectureHelper.IsDepotCompatible(x64Depot, "x64", targetHostArch: Architecture.Arm64)
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void EngineInfo_DisplayText_FormatsArm64Properly()
+    {
+        var engine = new EngineInfo
+        {
+            Id = "unity",
+            Name = "Unity",
+            Version = "2022.3.10f1",
+            Type = EngineType.Unity,
+            UnityFlavor = UnityFlavor.IL2CPP,
+            Architecture = TargetArchitecture.Arm64
+        };
+
+        engine.DisplayText.Should().Be("Unity 2022.3.10f1 (IL2CPP arm64)");
     }
 }

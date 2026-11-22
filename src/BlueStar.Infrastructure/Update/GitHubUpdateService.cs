@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -177,7 +178,7 @@ public class GitHubUpdateService : IUpdateService
             catch { }
         }
 
-        rawCurrent ??= new Version(1, 6, 4);
+        rawCurrent ??= new Version(1, 6, 5);
 
         return new Version(
             Math.Max(0, rawCurrent.Major),
@@ -263,7 +264,7 @@ public class GitHubUpdateService : IUpdateService
                 _metrics?.OnProviderRequest("GitHub", GitHubReleasesUrl);
 
                 GitHubRelease? release = null;
-                const string updaterUserAgent = "BlueStar-Updater/1.6.4";
+                const string updaterUserAgent = "BlueStar-Updater/1.6.5";
                 try
                 {
                     var request = new HttpRequestMessage(HttpMethod.Get, GitHubReleasesUrl);
@@ -321,16 +322,32 @@ public class GitHubUpdateService : IUpdateService
                 if (normalizedLatest > currentVersion)
                 {
                     var isInstalled = File.Exists(Path.Combine(AppContext.BaseDirectory, "unins000.exe"));
+                    var isArm64 = RuntimeInformation.ProcessArchitecture == Architecture.Arm64;
                     GitHubAsset? asset = null;
+
                     if (isInstalled)
                     {
-                        asset = release.Assets?.FirstOrDefault(a => a.Name.EndsWith("-Setup-win-x64.exe", StringComparison.OrdinalIgnoreCase) || a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-                             ?? release.Assets?.FirstOrDefault(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+                        if (isArm64)
+                        {
+                            asset = release.Assets?.FirstOrDefault(a => a.Name.EndsWith("-Setup-win-arm64.exe", StringComparison.OrdinalIgnoreCase))
+                                 ?? release.Assets?.FirstOrDefault(a => a.Name.EndsWith("-Setup-win-x64.exe", StringComparison.OrdinalIgnoreCase));
+                        }
+                        else
+                        {
+                            asset = release.Assets?.FirstOrDefault(a => a.Name.EndsWith("-Setup-win-x64.exe", StringComparison.OrdinalIgnoreCase));
+                        }
                     }
                     else
                     {
-                        asset = release.Assets?.FirstOrDefault(a => a.Name.EndsWith("-Portable-win-x64.zip", StringComparison.OrdinalIgnoreCase) || a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-                             ?? release.Assets?.FirstOrDefault(a => a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
+                        if (isArm64)
+                        {
+                            asset = release.Assets?.FirstOrDefault(a => a.Name.EndsWith("-Portable-win-arm64.zip", StringComparison.OrdinalIgnoreCase))
+                                 ?? release.Assets?.FirstOrDefault(a => a.Name.EndsWith("-Portable-win-x64.zip", StringComparison.OrdinalIgnoreCase));
+                        }
+                        else
+                        {
+                            asset = release.Assets?.FirstOrDefault(a => a.Name.EndsWith("-Portable-win-x64.zip", StringComparison.OrdinalIgnoreCase));
+                        }
                     }
 
                     _logger.LogInformation("[BlueStar Updater] New update available: v{Version} (Current: v{CurrentVersion})", normalizedLatest, currentVersion);

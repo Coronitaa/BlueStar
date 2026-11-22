@@ -30,6 +30,8 @@ param(
     [string]$Target = "Store",
     [string]$Version = "1.4.6.0",
     [string]$Configuration = "Release",
+    [ValidateSet("x64", "arm64")]
+    [string]$Architecture = "x64",
     [switch]$SkipPublish
 )
 
@@ -80,10 +82,10 @@ if (-not (Test-Path $msixOutputDir)) {
 
 $appPublishDir = Join-Path $rootDir "dist\publish"
 if (-not $SkipPublish) {
-    Write-Host "[3/4] Publishing application binaries (self-contained win-x64)..." -ForegroundColor Yellow
+    Write-Host "[3/4] Publishing application binaries (self-contained win-$Architecture)..." -ForegroundColor Yellow
     & dotnet publish $appProject `
         -c $Configuration `
-        -r win-x64 `
+        -r "win-$Architecture" `
         --self-contained true `
         -p:PublishReadyToRun=true `
         -p:PublishSingleFile=false `
@@ -194,7 +196,16 @@ if ($Target -in @("LocalTest", "All")) {
 
         $mappingFile = Join-Path $localOutputDir "mapping.txt"
         $mappingContent = @("[Files]")
-        $mappingContent += "`"$manifestPath`" `"AppxManifest.xml`""
+
+        $targetManifest = $manifestPath
+        if ($Architecture -eq "arm64") {
+            $arm64Manifest = Join-Path $localOutputDir "AppxManifest.xml"
+            $manifestXml = [System.IO.File]::ReadAllText($manifestPath, [System.Text.Encoding]::UTF8)
+            $manifestXml = [regex]::Replace($manifestXml, 'ProcessorArchitecture="x64"', 'ProcessorArchitecture="arm64"')
+            [System.IO.File]::WriteAllText($arm64Manifest, $manifestXml, [System.Text.UTF8Encoding]::new($false))
+            $targetManifest = $arm64Manifest
+        }
+        $mappingContent += "`"$targetManifest`" `"AppxManifest.xml`""
 
         Get-ChildItem -Path $imagesDir -Filter "*.png" | ForEach-Object {
             $mappingContent += "`"$($_.FullName)`" `"Images\$($_.Name)`""
@@ -215,7 +226,7 @@ if ($Target -in @("LocalTest", "All")) {
 
         $mappingContent | Set-Content -Path $mappingFile -Encoding UTF8
 
-        $localMsix = Join-Path $localOutputDir "BlueStar-v${Version}-win-x64-LocalTest.msix"
+        $localMsix = Join-Path $localOutputDir "BlueStar-v${Version}-win-${Architecture}-LocalTest.msix"
         & $makeappx pack /f $mappingFile /p $localMsix /o
 
         if ($LASTEXITCODE -eq 0) {

@@ -8,6 +8,16 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root"
 version="${VERSION:-$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props | head -1)}"
+target_rid="${TARGET_RID:-linux-x64}"
+appimage_arch="x86_64"
+appimage_tool_arch="x86_64"
+
+if [ "$target_rid" = "linux-arm64" ] || [ "$target_rid" = "arm64" ]; then
+  target_rid="linux-arm64"
+  appimage_arch="arm64"
+  appimage_tool_arch="aarch64"
+fi
+
 out="$root/dist/linux"
 appdir="$out/BlueStar.AppDir"
 lib="$appdir/usr/lib/bluestar"
@@ -22,7 +32,7 @@ if [ -n "${BLUESTAR_DEPOTBOX_API_KEY:-}" ] || [ -n "${BLUESTAR_MODKEYS_JSON:-}" 
   secrets_key="$(base64 -w0 < "$work/key.bin")"
 fi
 
-dotnet publish src/BlueStar.Linux -c Release -r linux-x64 --self-contained true \
+dotnet publish src/BlueStar.Linux -c Release -r "$target_rid" --self-contained true \
   -p:PublishSingleFile=false -p:Version="$version" -p:InformationalVersion="$version" \
   ${secrets_key:+"-p:BundledSecretsKey=$secrets_key"} -o "$lib"
 find "$lib" -name '*.pdb' -delete
@@ -55,14 +65,14 @@ print(f"keys: {sum(1 for v in data.values() if v)} encrypted into bluestar.dat")
 PY
 fi
 
-tar -C "$appdir/usr/lib" -czf "$out/BlueStar-v$version-linux-x64.tar.gz" bluestar
+tar -C "$appdir/usr/lib" -czf "$out/BlueStar-v$version-$target_rid.tar.gz" bluestar
 
 install -m 755 packaging/linux/AppRun "$appdir/AppRun"
 install -m 644 packaging/linux/bluestar.desktop "$appdir/bluestar.desktop"
 install -m 644 src/BlueStar.App/Assets/bluestar.png "$appdir/bluestar.png"
 tool="$work/appimagetool"
-curl -fsSL -o "$tool" "https://github.com/AppImage/appimagetool/releases/download/${APPIMAGETOOL_VERSION:-1.9.0}/appimagetool-x86_64.AppImage"
+curl -fsSL -o "$tool" "https://github.com/AppImage/appimagetool/releases/download/${APPIMAGETOOL_VERSION:-1.9.0}/appimagetool-$appimage_tool_arch.AppImage"
 chmod +x "$tool"
-ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$tool" --no-appstream "$appdir" "$out/BlueStar-v$version-linux-x64.AppImage"
+ARCH="$appimage_arch" APPIMAGE_EXTRACT_AND_RUN=1 "$tool" --no-appstream "$appdir" "$out/BlueStar-v$version-$target_rid.AppImage"
 
 (cd "$out" && sha256sum ./*.tar.gz ./*.AppImage | tee SHA256SUMS)

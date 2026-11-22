@@ -1,6 +1,8 @@
 param(
     [string]$Version = "",
     [string]$ApiKey = "",
+    [ValidateSet("x64", "arm64")]
+    [string]$Architecture = "x64",
     [switch]$Interactive = $false
 )
 
@@ -149,9 +151,10 @@ if ($Interactive -or [string]::IsNullOrWhiteSpace($ApiKey)) {
 }
 
 # Definicion de nombres de artefactos exportados
-$portableZip = Join-Path $distDir ('BlueStar-v' + $threePartVersion + '-Portable-win-x64.zip')
-$setupExe    = Join-Path $distDir ('BlueStar-v' + $threePartVersion + '-Setup-win-x64.exe')
-$msixFile    = Join-Path $distDir ('BlueStar-v' + $threePartVersion + '-win-x64.msix')
+$targetRid = if ($Architecture -eq "arm64") { "win-arm64" } else { "win-x64" }
+$portableZip = Join-Path $distDir ('BlueStar-v' + $threePartVersion + '-Portable-' + $targetRid + '.zip')
+$setupExe    = Join-Path $distDir ('BlueStar-v' + $threePartVersion + '-Setup-' + $targetRid + '.exe')
+$msixFile    = Join-Path $distDir ('BlueStar-v' + $threePartVersion + '-' + $targetRid + '.msix')
 
 Write-Host "========================================================================" -ForegroundColor Cyan
 Write-Host "  Iniciando proceso de compilacion para v$threePartVersion" -ForegroundColor Cyan
@@ -274,16 +277,20 @@ if (Test-Path $prereqService) {
 # ============================================================================
 # 2. Limpieza de salida previa
 # ============================================================================
-Write-Host "[2/7] Limpiando carpeta de salida 'dist'..." -ForegroundColor Yellow
+Write-Host "[2/7] Limpiando carpeta de salida para $targetRid..." -ForegroundColor Yellow
+if (Test-Path $publishDir) {
+    Remove-Item -Path $publishDir -Recurse -Force -ErrorAction SilentlyContinue
+}
 if (Test-Path $distDir) {
-    Get-ChildItem -Path $distDir | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path (Join-Path $distDir "*$targetRid*") -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path (Join-Path $distDir "msix") -Recurse -Force -ErrorAction SilentlyContinue
 }
 New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
 
 # ============================================================================
 # 3. Compilacion y publicacion .NET Self-Contained Win-x64
 # ============================================================================
-Write-Host "[3/7] Compilando y publicando binarios (win-x64 self-contained)..." -ForegroundColor Yellow
+Write-Host "[3/7] Compilando y publicando binarios ($targetRid self-contained)..." -ForegroundColor Yellow
 $projectPath = Join-Path $rootDir "src\BlueStar.App\BlueStar.App.csproj"
 
 # Limpiar bin y obj para garantizar regeneracion de AssemblyMetadata con la clave de build
@@ -298,7 +305,7 @@ $secretsKey = [Convert]::ToBase64String($secretsKeyBytes)
 
 & dotnet publish $projectPath `
     -c Release `
-    -r win-x64 `
+    -r $targetRid `
     --self-contained true `
     -p:PublishReadyToRun=true `
     -p:PublishSingleFile=false `
@@ -526,6 +533,10 @@ $prerequisites = [ordered]@{
     "dxwebsetup.exe" = "https://download.microsoft.com/download/1/7/1/1718CCC4-6315-4D8E-9543-8E28A4E18C4C/dxwebsetup.exe"
     "MicrosoftEdgeWebview2Setup.exe" = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
 }
+$isArm64 = ($Architecture -eq "arm64")
+if ($isArm64) {
+    $prerequisites["vc_redist.arm64.exe"] = "https://aka.ms/vs/17/release/vc_redist.arm64.exe"
+}
 
 function Get-MicrosoftFile([string]$Url, [string]$Destination) {
     if (-not (Test-Path -LiteralPath $Destination)) {
@@ -553,17 +564,22 @@ Write-Host "  [OK] Instaladores copiados a prerequisites\ ($($prerequisites.Coun
 $fixedCacheDir = Join-Path $cacheDir "webview2-fixed"
 $fixedCab = Join-Path $fixedCacheDir "Microsoft.WebView2.FixedVersionRuntime.$webView2FixedVersion.x64.cab"
 $fixedRuntimeDir = Join-Path $fixedCacheDir "x64\Microsoft.WebView2.FixedVersionRuntime.$webView2FixedVersion.x64"
-New-Item -ItemType Directory -Force -Path $fixedCacheDir | Out-Null
-Get-MicrosoftFile $webView2FixedUrl $fixedCab
-if (-not (Test-Path -LiteralPath (Join-Path $fixedRuntimeDir "msedgewebview2.exe"))) {
-    New-Item -ItemType Directory -Force -Path (Join-Path $fixedCacheDir "x64") | Out-Null
-    & "$env:SystemRoot\System32\expand.exe" -F:* $fixedCab (Join-Path $fixedCacheDir "x64") | Out-Null
-    if (-not (Test-Path -LiteralPath (Join-Path $fixedRuntimeDir "msedgewebview2.exe"))) { throw "No se pudo extraer WebView2 Fixed Version" }
+
+if (-not $isArm64) {
+    New-Item -ItemType Directory -Force -Path $fixedCacheDir | Out-Null
+    Get-MicrosoftFile $webView2FixedUrl $fixedCab
+    if (-not (Test-Path -LiteralPath (Join-Path $fixedRuntimeDir "msedgewebview2.exe"))) {
+        New-Item -ItemType Directory -Force -Path (Join-Path $fixedCacheDir "x64") | Out-Null
+        & "$env:SystemRoot\System32\expand.exe" -F:* $fixedCab (Join-Path $fixedCacheDir "x64") | Out-Null
+        if (-not (Test-Path -LiteralPath (Join-Path $fixedRuntimeDir "msedgewebview2.exe"))) { throw "No se pudo extraer WebView2 Fixed Version" }
+    }
+    Write-Host "  [OK] WebView2 Fixed Version $webView2FixedVersion listo para el Portable" -ForegroundColor Gray
+} else {
+    Write-Host "  [OK] WebView2: en ARM64 se utiliza el runtime Evergreen preinstalado en Windows 11 ARM64" -ForegroundColor Gray
 }
-Write-Host "  [OK] WebView2 Fixed Version $webView2FixedVersion listo para el Portable" -ForegroundColor Gray
 
 # DLLs del runtime de Visual C++ 2015-2022 para el Portable (despliegue app-local, sin instalar nada):
-# x64 junto a BlueStar.exe y x86 en vcruntime\x86. Salen de la carpeta Redist oficial de Visual Studio / Build Tools.
+# Nativo junto a BlueStar.exe y x86 en vcruntime\x86. Salen de la carpeta Redist oficial de Visual Studio / Build Tools.
 $vswhereExe = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 $vcRedistRoot = $null
 if (Test-Path $vswhereExe) {
@@ -578,14 +594,27 @@ if (Test-Path $vswhereExe) {
     }
 }
 if (-not $vcRedistRoot) { throw "No se encontraron las DLLs de Visual C++ (VC\Redist\MSVC) de Visual Studio / Build Tools" }
-$vcCrtX64Dir = (Get-ChildItem (Join-Path $vcRedistRoot.FullName "x64") -Directory -Filter "Microsoft.VC*.CRT" | Select-Object -First 1).FullName
 $vcCrtX86Dir = (Get-ChildItem (Join-Path $vcRedistRoot.FullName "x86") -Directory -Filter "Microsoft.VC*.CRT" | Select-Object -First 1).FullName
-foreach ($dll in Get-ChildItem -Path $vcCrtX64Dir, $vcCrtX86Dir -Filter "*.dll") {
+$vcCrtNativeDir = if ($isArm64) {
+    $arm64Candidate = Get-ChildItem (Join-Path $vcRedistRoot.FullName "arm64") -Directory -Filter "Microsoft.VC*.CRT" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($arm64Candidate) {
+        $arm64Candidate.FullName
+    } else {
+        Write-Warning "No se encontro el componente VC++ CRT ARM64 en Visual Studio (instalar 'MSVC v143 - VS 2022 C++ ARM64 build tools')."
+        $null
+    }
+} else {
+    (Get-ChildItem (Join-Path $vcRedistRoot.FullName "x64") -Directory -Filter "Microsoft.VC*.CRT" | Select-Object -First 1).FullName
+}
+
+$dirsToVerify = @($vcCrtX86Dir)
+if ($vcCrtNativeDir) { $dirsToVerify += $vcCrtNativeDir }
+foreach ($dll in Get-ChildItem -Path $dirsToVerify -Filter "*.dll") {
     $sig = Get-AuthenticodeSignature -LiteralPath $dll.FullName
     # Las DLLs del CRT las firma "Microsoft Windows" / "Microsoft Windows Software Compatibility Publisher"
     if ($sig.Status -ne "Valid" -or $sig.SignerCertificate.Subject -notmatch '^CN=Microsoft [^,]+, O=Microsoft Corporation,') { throw "Firma de Microsoft invalida en $($dll.FullName)" }
 }
-Write-Host "  [OK] Runtime Visual C++ $($vcRedistRoot.Name) (x64 + x86) listo para el Portable" -ForegroundColor Gray
+Write-Host "  [OK] Runtime Visual C++ $($vcRedistRoot.Name) listo para el Portable" -ForegroundColor Gray
 
 # ============================================================================
 # 5. Formato 1: Generar archivo Portable (.zip)
@@ -601,19 +630,23 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 Remove-Item -Path $portableMarkerPath -Force -ErrorAction SilentlyContinue
 
-# WebView2 Fixed Version solo en el Portable (el Setup lleva el bootstrapper, que el Portable no necesita)
+# WebView2 Fixed Version solo en el Portable x64
 $zipArchive = [System.IO.Compression.ZipFile]::Open($portableZip, [System.IO.Compression.ZipArchiveMode]::Update)
 try {
     # Windows PowerShell 5.1 escribe las entradas con '\'; usar el mismo separador que el resto del zip
     $sep = if ($zipArchive.Entries | Where-Object { $_.FullName.Contains('/') } | Select-Object -First 1) { '/' } else { '\' }
-    $webView2InstallerEntry = $zipArchive.GetEntry("prerequisites${sep}MicrosoftEdgeWebview2Setup.exe")
-    if ($webView2InstallerEntry) { $webView2InstallerEntry.Delete() }
-    Get-ChildItem -LiteralPath $fixedRuntimeDir -Recurse -File | ForEach-Object {
-        $entryName = "WebView2Runtime$sep" + $_.FullName.Substring($fixedRuntimeDir.Length + 1).Replace('\', $sep)
-        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zipArchive, $_.FullName, $entryName, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+    if (-not $isArm64 -and (Test-Path $fixedRuntimeDir)) {
+        $webView2InstallerEntry = $zipArchive.GetEntry("prerequisites${sep}MicrosoftEdgeWebview2Setup.exe")
+        if ($webView2InstallerEntry) { $webView2InstallerEntry.Delete() }
+        Get-ChildItem -LiteralPath $fixedRuntimeDir -Recurse -File | ForEach-Object {
+            $entryName = "WebView2Runtime$sep" + $_.FullName.Substring($fixedRuntimeDir.Length + 1).Replace('\', $sep)
+            [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zipArchive, $_.FullName, $entryName, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+        }
     }
-    Get-ChildItem -LiteralPath $vcCrtX64Dir -Filter "*.dll" | ForEach-Object {
-        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zipArchive, $_.FullName, $_.Name, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+    if ($vcCrtNativeDir) {
+        Get-ChildItem -LiteralPath $vcCrtNativeDir -Filter "*.dll" | ForEach-Object {
+            [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zipArchive, $_.FullName, $_.Name, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+        }
     }
     Get-ChildItem -LiteralPath $vcCrtX86Dir -Filter "*.dll" | ForEach-Object {
         $entryName = "vcruntime${sep}x86${sep}" + $_.Name
@@ -643,7 +676,7 @@ $isccExe = $isccPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $isccExe) {
     Write-Warning "No se encontro ISCC.exe. Por favor verifica la instalacion de Inno Setup 6."
 } else {
-    & $isccExe "/Qp" ('/DMyAppVersion=' + $threePartVersion) $issPath
+    & $isccExe "/Qp" ('/DMyAppVersion=' + $threePartVersion) ('/DAppArch=' + $Architecture) $issPath
 
     if ($LASTEXITCODE -ne 0) {
         Write-Error "La compilacion con Inno Setup fallo!"
@@ -667,7 +700,7 @@ if (-not $isccExe) {
 Write-Host "[7/7] Empaquetando distribucion MSIX (Windows App Package)..." -ForegroundColor Yellow
 $msixScript = Join-Path $rootDir "src\BlueStar.Package\build-msix.ps1"
 if (Test-Path $msixScript) {
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $msixScript -Target LocalTest -Version $threePartVersion -Configuration Release -SkipPublish
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $msixScript -Target LocalTest -Version $threePartVersion -Configuration Release -Architecture $Architecture -SkipPublish
     
     $generatedMsix = Get-ChildItem -Path (Join-Path $distDir "msix") -Filter "*.msix" -Recurse | Select-Object -First 1
     if ($generatedMsix) {
