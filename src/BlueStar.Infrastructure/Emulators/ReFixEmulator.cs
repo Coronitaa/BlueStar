@@ -647,6 +647,7 @@ public sealed partial class ReFixEmulator : IEmulator
                 var uninstallerBat = Path.Combine(deployPath, "Uninstall_ReFix.bat");
                 if (File.Exists(uninstallerBat))
                 {
+                    SanitizeUninstallerScript(uninstallerBat);
                     _logger.LogInformation("Executing Uninstall_ReFix.bat for {Path}", targetDir);
                     var uninstEnv = new Dictionary<string, string>
                     {
@@ -672,6 +673,33 @@ public sealed partial class ReFixEmulator : IEmulator
         {
             _logger.LogError(ex, "Failed to uninstall ReFix for {Game}", instance.Name);
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Replaces recursive <c>rd /s /q "%%~dpL"</c> in upstream uninstallers with non-recursive <c>rd</c>
+    /// so a <c>.refix_installed</c> marker inside the game folder cannot delete the game itself.
+    /// </summary>
+    internal static void SanitizeUninstallerScript(string uninstallerBatPath)
+    {
+        if (string.IsNullOrWhiteSpace(uninstallerBatPath) || !File.Exists(uninstallerBatPath))
+            return;
+
+        try
+        {
+            var content = File.ReadAllText(uninstallerBatPath, Encoding.UTF8);
+            var sanitized = content
+                .Replace("rd /s /q \"%%~dpL\"", "rd \"%%~dpL\"", StringComparison.OrdinalIgnoreCase)
+                .Replace("rmdir /s /q \"%%~dpL\"", "rd \"%%~dpL\"", StringComparison.OrdinalIgnoreCase);
+
+            if (!string.Equals(content, sanitized, StringComparison.Ordinal))
+            {
+                File.WriteAllText(uninstallerBatPath, sanitized, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            }
+        }
+        catch
+        {
+            // Best-effort guard; read-only bundled scripts are already patched in source.
         }
     }
 

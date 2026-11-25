@@ -65,7 +65,7 @@
     <!-- ── Typography Brushes ── -->
     <SolidColorBrush x:Key="PrimaryTextBrush" Color="#FAFAFA"/>
     <SolidColorBrush x:Key="SecondaryTextBrush" Color="#A1A1AA"/>
-    <SolidColorBrush x:Key="MutedTextBrush" Color="#5E5E6C"/>
+    <SolidColorBrush x:Key="MutedTextBrush" Color="#8E8E9E"/>
     <SolidColorBrush x:Key="InverseTextBrush" Color="#09090B"/>
     <SolidColorBrush x:Key="WhiteBrush" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="TitleBarCloseHoverBrush" Color="#C42B1C"/>

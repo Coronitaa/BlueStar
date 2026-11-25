@@ -311,7 +311,6 @@
                             </Border>
                             <Button Grid.Column="2" Width="28" Height="28" Cursor="Hand"
                                     Background="Transparent" BorderThickness="0"
-                                    FocusVisualStyle="{x:Null}"
                                     ToolTip="{DynamicResource String_FilterRandomTooltip}"
                                     Click="OnDiceButtonClick"
                                     MouseEnter="OnDiceButtonMouseEnter"

@@ -147,7 +147,7 @@
     <sys:String x:Key="String_DiagnosticFailedTitle">Error al generar diagnóstico</sys:String>
     <sys:String x:Key="String_CacheClearedTitle">Caché limpiada</sys:String>
     <sys:String x:Key="String_CacheClearedMessage">La caché de la aplicación se ha limpiado correctamente. Los banners de tus juegos instalados se conservaron intactos.</sys:String>
-    <sys:String x:Key="String_UiDlcsSelectedSuffix" xml:space="preserve"> DLC(s) seleccionados — </sys:String>
+    <sys:String x:Key="String_UiDlcsSelectedSuffix" xml:space="preserve"> DLC(s) seleccionados: </sys:String>
     <sys:String x:Key="String_UiReFixUpdatePart3" xml:space="preserve"> instalada. Haz clic en el botón para aplicar la actualización con 1 clic.</sys:String>
     <sys:String x:Key="String_UiCreateGroupPlus">+ Crear grupo</sys:String>
     <sys:String x:Key="String_UiImportPlus">+ Importar</sys:String>
@@ -161,7 +161,7 @@
     <sys:String x:Key="String_UiBack">Volver</sys:String>
     <sys:String x:Key="String_UiWebView2Missing">BlueStar usa el runtime Microsoft Edge WebView2 para mostrar las páginas de la tienda de Steam. Falta en este equipo o no se pudo iniciar.</sys:String>
     <sys:String x:Key="String_UiImportAutoDetect">BlueStar detectará el ejecutable, el motor y el AppID de Steam</sys:String>
-    <sys:String x:Key="String_UiDebugConsoleTitle">BlueStar — Consola de depuración y diagnóstico</sys:String>
+    <sys:String x:Key="String_UiDebugConsoleTitle">BlueStar: Consola de depuración y diagnóstico</sys:String>
     <sys:String x:Key="String_UiBrowseExe">Buscar .exe...</sys:String>
     <sys:String x:Key="String_UiBrowseZip">Buscar archivo ZIP...</sys:String>
     <sys:String x:Key="String_UiBrowse">Examinar...</sys:String>
@@ -260,8 +260,8 @@
     <sys:String x:Key="String_StatusDuplicatedFormat">✅ Instancia duplicada con éxito: '{0}'</sys:String>
     <sys:String x:Key="String_StatusDuplicateFailedFormat">❌ Error al duplicar instancia: {0}</sys:String>
     <sys:String x:Key="String_StatusCreatingCleanFormat">⏳ Creando instancia limpia para '{0}'...</sys:String>
-    <sys:String x:Key="String_StatusCleanFromDepotFormat">✨ Instancia limpia creada desde base depot: '{0}'</sys:String>
-    <sys:String x:Key="String_StatusCleanCreatedFormat">✨ Instancia limpia creada con éxito: '{0}'</sys:String>
+    <sys:String x:Key="String_StatusCleanFromDepotFormat">Instancia limpia creada desde base depot: '{0}'</sys:String>
+    <sys:String x:Key="String_StatusCleanCreatedFormat">Instancia limpia creada con éxito: '{0}'</sys:String>
     <sys:String x:Key="String_StatusCleanFailedFormat">❌ Error al crear instancia limpia: {0}</sys:String>
     <sys:String x:Key="String_ArtworkStatusSynced">✅ Artworks descargados y sincronizados con éxito.</sys:String>
     <sys:String x:Key="String_ArtworkStatusDownloadFailedFormat">❌ Error al descargar: {0}</sys:String>
@@ -531,7 +531,7 @@
     <sys:String x:Key="String_EditManifestTooltip">Editar ID de Manifiesto objetivo para este depot</sys:String>
     <sys:String x:Key="String_RequiresConnectionNotice">Requiere conexión a internet y sesión activa de Steam o acceso anónimo a depots.</sys:String>
     <sys:String x:Key="String_DownloadSelectedDepotsBtn">Descargar Depots Seleccionados</sys:String>
-    <sys:String x:Key="String_SelectedDepotsCountLabel">{0} depot(s) seleccionados — {1}</sys:String>
+    <sys:String x:Key="String_SelectedDepotsCountLabel">{0} depot(s) seleccionados ({1})</sys:String>
     <sys:String x:Key="String_GameBuildBranchTitle">Versión de Compilación y Rama (Avanzado)</sys:String>
     <sys:String x:Key="String_GameBuildBranchDesc">Selecciona la versión objetivo o arrastra un archivo ZIP de depots de cs.rin.ru / DepotBox. Los DLCs y parches mantienen total compatibilidad.</sys:String>
     <sys:String x:Key="String_ImportZipPackageBtn">Importar Paquete ZIP...</sys:String>
@@ -1114,7 +1114,7 @@
     <sys:String x:Key="String_VersionPresetApplyTooltip">Cargar este conjunto de manifiestos en la tabla</sys:String>
     <sys:String x:Key="String_VersionPresetDeleteTooltip">Quitar esta build guardada</sys:String>
     <sys:String x:Key="String_VersionCustomSavedFormat">✅ Build personalizada “{0}” guardada. Podés recuperarla cuando quieras desde las burbujas de arriba.</sys:String>
-    <sys:String x:Key="String_VersionCustomPresetAppliedFormat">📋 Cargada “{0}” — {1} depot(s) completados.</sys:String>
+    <sys:String x:Key="String_VersionCustomPresetAppliedFormat">📋 Cargada “{0}” ({1} depot(s) completados).</sys:String>
     <sys:String x:Key="String_VersionCustomPresetDeletedFormat">🗑 Se quitó la build guardada “{0}”.</sys:String>
 
 
@@ -1167,7 +1167,7 @@
     <sys:String x:Key="String_InstallModalInstallPrereqsCheck">Instalar automáticamente los requisitos que falten (Visual C++, DirectX, etc.)</sys:String>
     <sys:String x:Key="String_InstallModalPrereqsAllGood">Todos los componentes necesarios están instalados en tu sistema ✅</sys:String>
     <sys:String x:Key="String_InstallModalPrereqsMissingCountFormat">Se detectaron {0} componente(s) faltante(s) que se configurarán automáticamente.</sys:String>
-    <sys:String x:Key="String_InstallModalStartBtn">🚀 Iniciar Instalación</sys:String>
+    <sys:String x:Key="String_InstallModalStartBtn">Iniciar Instalación</sys:String>
     <sys:String x:Key="String_InstallModalInstallingPrereqs">⚙️ Instalando componentes previos...</sys:String>
     <sys:String x:Key="String_InstallModalReadyToDownload">Listo para descargar</sys:String>
     <sys:String x:Key="String_InstallModalNoDepotsTitle">No se encontraron depots para este juego</sys:String>
@@ -1229,7 +1229,7 @@
     <sys:String x:Key="String_FilterSearchPlaceholder">Buscar…</sys:String>
     <sys:String x:Key="String_FilterRandomTooltip">Elegir una al azar</sys:String>
     <sys:String x:Key="String_FilterBubbleTooltip">Clic: incluir · otra vez: excluir · otra vez: quitar</sys:String>
-    <sys:String x:Key="String_FilterMoreHint">más — busca arriba</sys:String>
+    <sys:String x:Key="String_FilterMoreHint">más, busca arriba</sys:String>
     <sys:String x:Key="String_FilterMoreTagsSuffix">más (Ver más)</sys:String>
     <sys:String x:Key="String_FilterLessTags">(Ver menos)</sys:String>
     <sys:String x:Key="String_ResultsSuffix">resultados</sys:String>

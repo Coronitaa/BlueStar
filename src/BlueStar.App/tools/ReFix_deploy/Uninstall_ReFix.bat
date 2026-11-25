@@ -154,14 +154,15 @@ for /f "delims=" %%S in ('dir /s /b "%TARGET_DIR%\*.steamstub.exe" "%TARGET_DIR%
 for /f "delims=" %%F in ('dir /s /b "%TARGET_DIR%\winmm.dll" "%TARGET_DIR%\winhttp.dll" 2^>nul') do (
     findstr /m /c:"ReFix" "%%F" >nul 2>&1 && del /f /q "%%F" && echo [OK] Removed ReFix file: %%F
 )
-for /f "delims=" %%F in ('dir /s /b "%TARGET_DIR%\doorstop_config.ini" "%TARGET_DIR%\Kirigiri.ini" "%TARGET_DIR%\ReFix.ini" "%TARGET_DIR%\ReFix.log" "%TARGET_DIR%\ReFixFusionShared.log" "%TARGET_DIR%\refix_steamlink64.dll" "%TARGET_DIR%\refix_steamlink.dll" "%TARGET_DIR%\refix_steamhost64.exe" "%TARGET_DIR%\refix_steamhost.exe" "%TARGET_DIR%\steam_appid.txt" "%TARGET_DIR%\local_save.txt" "%TARGET_DIR%\steam_interfaces.txt" "%TARGET_DIR%\add_steam_shortcut.ps1" "%TARGET_DIR%\add_steam_shortcut.py" "%TARGET_DIR%\Install_ReFix_Steam_Shortcut.bat" "%TARGET_DIR%\Configure_LAN_Firewall.bat" "%TARGET_DIR%\Configurar_Firewall_LAN.bat" "%TARGET_DIR%\cream_api.ini" "%TARGET_DIR%\SmokeAPI.config.json" "%TARGET_DIR%\SmokeAPI.json" "%TARGET_DIR%\SmokeAPI.log" "%TARGET_DIR%\SmokeAPI.cache.json" 2^>nul') do (
+for /f "delims=" %%F in ('dir /s /b "%TARGET_DIR%\doorstop_config.ini" "%TARGET_DIR%\Kirigiri.ini" "%TARGET_DIR%\ReFix.ini" "%TARGET_DIR%\ReFix.log" "%TARGET_DIR%\ReFixFusionShared.log" "%TARGET_DIR%\refix_steamlink64.dll" "%TARGET_DIR%\refix_steamlink.dll" "%TARGET_DIR%\refix_steamhost64.exe" "%TARGET_DIR%\refix_steamhost.exe" "%TARGET_DIR%\refixmod.exe" "%TARGET_DIR%\steam_appid.txt" "%TARGET_DIR%\local_save.txt" "%TARGET_DIR%\steam_interfaces.txt" "%TARGET_DIR%\add_steam_shortcut.ps1" "%TARGET_DIR%\add_steam_shortcut.py" "%TARGET_DIR%\Install_ReFix_Steam_Shortcut.bat" "%TARGET_DIR%\Configure_LAN_Firewall.bat" "%TARGET_DIR%\Configurar_Firewall_LAN.bat" "%TARGET_DIR%\cream_api.ini" "%TARGET_DIR%\SmokeAPI.config.json" "%TARGET_DIR%\SmokeAPI.json" "%TARGET_DIR%\SmokeAPI.log" "%TARGET_DIR%\SmokeAPI.cache.json" 2^>nul') do (
     del /f /q "%%F"
     echo [OK] Removed ReFix file: %%F
 )
 
 :: 7b. Game mods ReFix installed (listed in refix_mods\.refix_installed) and game files they changed (*.refix_orig)
-for /f "delims=" %%L in ('dir /s /b /a-d "%TARGET_DIR%\.refix_installed" 2^>nul') do (
+for /f "delims=" %%L in ('dir /s /b /a "%TARGET_DIR%\.refix_installed" 2^>nul') do (
     for /f "usebackq delims=" %%M in ("%%L") do if exist "%%~dpL%%M" del /f /q "%%~dpL%%M"
+    if exist "%%~dpLcatalog.tsv" del /f /q "%%~dpLcatalog.tsv"
     del /f /q "%%L"
     rd "%%~dpL" 2>nul
     echo [OK] Removed the game mods ReFix installed in %%~dpL
@@ -170,8 +171,8 @@ for /f "delims=" %%O in ('dir /s /b /a-d "%TARGET_DIR%\*.refix_orig" 2^>nul') do
     move /y "%%O" "%%~dpnO" >nul && echo [OK] Restored %%~dpnO
 )
 
-:: 7. Remove ReFix directories recursively (steam_settings, saves, BepInEx)
-for /d /r "%TARGET_DIR%" %%D in (steam_settings saves BepInEx) do (
+:: 7. Remove ReFix directories recursively (steam_settings, saves, BepInEx, refix_mods)
+for /d /r "%TARGET_DIR%" %%D in (steam_settings saves BepInEx refix_mods) do (
     if exist "%%D" (
         rmdir /s /q "%%D"
         echo [OK] Removed directory: %%D

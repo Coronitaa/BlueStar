@@ -787,10 +787,7 @@
                                                                 Command="{Binding GenerateDiagnosticReportCommand}"
                                                                 IsEnabled="{Binding IsGeneratingReport, Converter={StaticResource InverseBoolConverter}}"
                                                                 Margin="0,0,8,6">
-                                                            <StackPanel Orientation="Horizontal">
-                                                                <TextBlock Text="⚡ " Margin="0,0,4,0"/>
-                                                                <TextBlock Text="{DynamicResource String_GenerateDiagnosticReportBtn}"/>
-                                                            </StackPanel>
+                                                            <TextBlock Text="{DynamicResource String_GenerateDiagnosticReportBtn}"/>
                                                         </Button>
 
                                                         <Button Style="{StaticResource GhostButton}"

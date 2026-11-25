@@ -84,6 +84,7 @@ install_mods() {
             rm -f "$dest/$file.part"; warn "The $id package does not match the catalog; not installed"; continue
         fi
         mv -f "$dest/$file.part" "$dest/$file"
+        [ -f "$catalog" ] && cp -f "$catalog" "$dest/catalog.tsv"
         grep -qxF "$file" "$dest/.refix_installed" 2>/dev/null || printf '%s\n' "$file" >> "$dest/.refix_installed"
         ok "Installed the $id mod in $dest"
         break
@@ -98,9 +99,11 @@ uninstall_mods() {
         d="$(dirname "$list")"
         while IFS= read -r f; do f="${f%$'\r'}"; [ -n "$f" ] && rm -f "$d/$f"; done < "$list"
         rm -f "$list"
+        rm -f "$d/catalog.tsv"
         rmdir "$d" 2>/dev/null || true
         ok "Removed the game mods ReFix installed in $d"
     done < <(find "$GAME_DIR" -type f -name .refix_installed 2>/dev/null)
+    find "$GAME_DIR" -type d -name "refix_mods" -empty -delete 2>/dev/null || true
     # Game files a mod changed keep their original as <file>.refix_orig.
     while IFS= read -r f; do
         mv -f "$f" "${f%.refix_orig}" && ok "Restored ${f%.refix_orig}"
@@ -228,7 +231,8 @@ uninstall() {
     while IFS= read -r f; do
         is_refix "$f" && rm -f "$f" && ok "Removed ReFix $(basename "$f") from $(dirname "$f")"
     done < <(find "$GAME_DIR" -type f \( -iname winmm.dll -o -iname winhttp.dll \) 2>/dev/null)
-    find "$GAME_DIR" -type f \( -name "steam_appid.txt" -o -name "ReFix.ini" -o -name "ReFix.log" -o -name "local_save.txt" -o -name "refix_steamlink64.dll" -o -name "refix_steamlink.dll" -o -name "refix_steamhost64.exe" -o -name "refix_steamhost.exe" -o -name "ReFixFusionShared.log" -o -name ".refix_launch_options.txt" \) -delete 2>/dev/null || true
+    find "$GAME_DIR" -type f \( -name "steam_appid.txt" -o -name "ReFix.ini" -o -name "ReFix.log" -o -name "local_save.txt" -o -name "refix_steamlink64.dll" -o -name "refix_steamlink.dll" -o -name "refix_steamhost64.exe" -o -name "refix_steamhost.exe" -o -name "refixmod.exe" -o -name "ReFixFusionShared.log" -o -name ".refix_launch_options.txt" \) -delete 2>/dev/null || true
+    find "$GAME_DIR" -type d -name "refix_mods" -exec rm -rf {} + 2>/dev/null || true
     # ReFix support tools (Photon Fusion Shared server): only the folder holding ReFix's own server, then its
     # ReFix parent if nothing else is left in it.
     while IFS= read -r f; do
@@ -285,6 +289,12 @@ deploy_steam_x86() {
         backup_original "$d" steam_api.dll steam_api_original.dll
         cp -f "$src" "$d/steam_api.dll"
         ok "Deployed ReFix $MODE x86 steam_api.dll to $d"
+        if [ "$MODE" = lan ] && [ -f "$PRODUCT_BIN/x86/refix_steamhost.exe" ]; then
+            cp -f "$PRODUCT_BIN/x86/refix_steamhost.exe" "$d/refix_steamhost.exe"
+            if [ -f "$BIN/valve/steam_api.dll" ]; then
+                cp -f "$BIN/valve/steam_api.dll" "$d/refix_steamlink.dll"
+            fi
+        fi
     done < <({ dirs_with steam_api.dll; dirs_with steam_api_original.dll; } | sort -u)
 }
 
@@ -435,6 +445,14 @@ Sounds = true
 ; Each profile keeps its own Steam Cloud files and the game's known save folder (Unreal SaveGames, Unity LocalLow).
 IsolateSaves = true
 FirstRunDialog = false
+; OpenBehavior: 0 = Keep active, 1 = Mute audio while overlay is open, 2 = Pause game while overlay is open
+OpenBehavior = 0
+; Shortcut: 0 = Shift+Tab, 1 = Ctrl+Tab, 2 = Shift+F1, 3 = Shift+F2, 4 = F11, 5 = F12, 6 = Home, 7 = Insert
+Shortcut = 0
+; DisplayMode: 0 = Fullscreen, 1 = Windowed, 2 = Fullscreen Windowed (default)
+DisplayMode = 2
+WindowWidth = 1920
+WindowHeight = 1080
 
 [EOS]
 Mode = $eos

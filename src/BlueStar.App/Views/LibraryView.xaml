@@ -771,9 +771,6 @@
                                             Panel.ZIndex="52"
                                             IsHitTestVisible="False"
                                             Visibility="{Binding DataContext.IsSelectionModeActive, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BoolToVisibilityConverter}}">
-                                        <Border.Effect>
-                                            <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="2" Opacity="0.6"/>
-                                        </Border.Effect>
                                         <Border.Style>
                                             <Style TargetType="Border">
                                                 <Setter Property="Background" Value="#D9161822"/>
@@ -851,9 +848,6 @@
                                             Panel.ZIndex="52"
                                             IsHitTestVisible="False"
                                             Visibility="{Binding DataContext.IsSelectionModeActive, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BoolToVisibilityConverter}}">
-                                        <Border.Effect>
-                                            <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="2" Opacity="0.6"/>
-                                        </Border.Effect>
                                         <Border.Style>
                                             <Style TargetType="Border">
                                                 <Setter Property="Background" Value="#D9161822"/>
@@ -918,9 +912,6 @@
                                                     Padding="7,2"
                                                     Visibility="{Binding HasUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}"
                                                     ToolTip="{DynamicResource String_UpdateAvailableDownloadTooltip}">
-                                                <Border.Effect>
-                                                    <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="2" Opacity="0.6"/>
-                                                </Border.Effect>
                                                 <StackPanel Orientation="Horizontal">
                                                     <Path Data="{StaticResource IconRefresh}" Fill="#FFFFFF" Stretch="Uniform" Width="9" Height="9" Margin="0,0,4,0" VerticalAlignment="Center"/>
                                                     <TextBlock Text="{DynamicResource String_UiUpdate}" FontSize="10" FontWeight="Bold" Foreground="#FFFFFF"/>
@@ -1066,9 +1057,7 @@
                                                 Panel.ZIndex="52"
                                                 IsHitTestVisible="False"
                                                 Visibility="{Binding DataContext.IsSelectionModeActive, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource BoolToVisibilityConverter}}">
-                                            <Border.Effect>
-                                                <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="2" Opacity="0.6"/>
-                                            </Border.Effect>
+                                            <!-- Badge -->
                                             <Border.Style>
                                                 <Style TargetType="Border">
                                                     <Setter Property="Background" Value="#D9161822"/>
@@ -1180,9 +1169,7 @@
                                                             Padding="6,2"
                                                             Visibility="{Binding HasUpdateAvailable, Converter={StaticResource BoolToVisibilityConverter}}"
                                                             ToolTip="{DynamicResource String_UpdateAvailableDownloadTooltip}">
-                                                        <Border.Effect>
-                                                            <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="2" Opacity="0.6"/>
-                                                        </Border.Effect>
+                                                        <!-- Badge -->
                                                         <StackPanel Orientation="Horizontal">
                                                             <Path Data="{StaticResource IconRefresh}" Fill="#FFFFFF" Stretch="Uniform" Width="9" Height="9" Margin="0,0,3,0" VerticalAlignment="Center"/>
                                                             <TextBlock Text="{DynamicResource String_UiUpdate}" FontSize="9" FontWeight="Bold" Foreground="#FFFFFF"/>

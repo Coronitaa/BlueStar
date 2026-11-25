@@ -248,6 +248,7 @@ public sealed class ReFixUpdateService : IReFixUpdateService
                     _logger.LogInformation("Applying ReFix v{Version} update to directory: {Target}", update.Version, target);
                     CopyDirectoryRecursive(sourceDeployDir, target);
                     MakeScriptsExecutable(target);
+                    ReFixEmulator.SanitizeUninstallerScript(Path.Combine(target, "Uninstall_ReFix.bat"));
 
                     // Write refix_version.json
                     var versionInfoPath = Path.Combine(target, "refix_version.json");

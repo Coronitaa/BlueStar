@@ -106,10 +106,7 @@
                         Command="{Binding GenerateDiagnosticReportCommand}"
                         IsEnabled="{Binding IsGeneratingReport, Converter={StaticResource InverseBoolConverter}}"
                         Padding="11,5" FontSize="12" Margin="0,0,6,6">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="⚡ " FontSize="11"/>
-                        <TextBlock Text="{DynamicResource String_GenerateDiagnosticReportBtn}"/>
-                    </StackPanel>
+                    <TextBlock Text="{DynamicResource String_GenerateDiagnosticReportBtn}"/>
                 </Button>
 
                 <!-- Action: Copy All Logs -->

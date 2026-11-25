@@ -147,7 +147,7 @@
     <sys:String x:Key="String_DiagnosticFailedTitle">Could not generate the diagnostic</sys:String>
     <sys:String x:Key="String_CacheClearedTitle">Cache Cleared</sys:String>
     <sys:String x:Key="String_CacheClearedMessage">The app cache was cleared. The banners of your installed games were kept.</sys:String>
-    <sys:String x:Key="String_UiDlcsSelectedSuffix" xml:space="preserve"> DLC(s) selected — </sys:String>
+    <sys:String x:Key="String_UiDlcsSelectedSuffix" xml:space="preserve"> DLC(s) selected: </sys:String>
     <sys:String x:Key="String_UiReFixUpdatePart3" xml:space="preserve"> installed. Click the button to apply the update with 1 click.</sys:String>
     <sys:String x:Key="String_UiCreateGroupPlus">+ Create group</sys:String>
     <sys:String x:Key="String_UiImportPlus">+ Import</sys:String>
@@ -161,7 +161,7 @@
     <sys:String x:Key="String_UiBack">Back</sys:String>
     <sys:String x:Key="String_UiWebView2Missing">BlueStar uses the Microsoft Edge WebView2 runtime to display embedded Steam Store pages. The runtime is currently missing or could not be initialized on this machine.</sys:String>
     <sys:String x:Key="String_UiImportAutoDetect">BlueStar will auto-detect executable, engine and Steam AppID</sys:String>
-    <sys:String x:Key="String_UiDebugConsoleTitle">BlueStar — Live Debug &amp; Diagnostic Console</sys:String>
+    <sys:String x:Key="String_UiDebugConsoleTitle">BlueStar: Live Debug &amp; Diagnostic Console</sys:String>
     <sys:String x:Key="String_UiBrowseExe">Browse .exe...</sys:String>
     <sys:String x:Key="String_UiBrowseZip">Browse ZIP File...</sys:String>
     <sys:String x:Key="String_UiBrowse">Browse...</sys:String>
@@ -260,8 +260,8 @@
     <sys:String x:Key="String_StatusDuplicatedFormat">✅ Instance duplicated: '{0}'</sys:String>
     <sys:String x:Key="String_StatusDuplicateFailedFormat">❌ Could not duplicate the instance: {0}</sys:String>
     <sys:String x:Key="String_StatusCreatingCleanFormat">⏳ Creating a clean instance for '{0}'...</sys:String>
-    <sys:String x:Key="String_StatusCleanFromDepotFormat">✨ Clean instance created from the base depot: '{0}'</sys:String>
-    <sys:String x:Key="String_StatusCleanCreatedFormat">✨ Clean instance created: '{0}'</sys:String>
+    <sys:String x:Key="String_StatusCleanFromDepotFormat">Clean instance created from the base depot: '{0}'</sys:String>
+    <sys:String x:Key="String_StatusCleanCreatedFormat">Clean instance created: '{0}'</sys:String>
     <sys:String x:Key="String_StatusCleanFailedFormat">❌ Could not create the clean instance: {0}</sys:String>
     <sys:String x:Key="String_ArtworkStatusSynced">✅ Artwork downloaded and synced.</sys:String>
     <sys:String x:Key="String_ArtworkStatusDownloadFailedFormat">❌ Download failed: {0}</sys:String>
@@ -531,7 +531,7 @@
     <sys:String x:Key="String_EditManifestTooltip">Edit target Manifest ID for this depot</sys:String>
     <sys:String x:Key="String_RequiresConnectionNotice">Requires network connection and active Steam session or anonymous depot access.</sys:String>
     <sys:String x:Key="String_DownloadSelectedDepotsBtn">Download Selected Depots</sys:String>
-    <sys:String x:Key="String_SelectedDepotsCountLabel">{0} depot(s) selected — {1}</sys:String>
+    <sys:String x:Key="String_SelectedDepotsCountLabel">{0} depot(s) selected ({1})</sys:String>
     <sys:String x:Key="String_GameBuildBranchTitle">Game Build &amp; Branch Version (Advanced)</sys:String>
     <sys:String x:Key="String_GameBuildBranchDesc">Select target build or drag &amp; drop a Depots ZIP archive from cs.rin.ru / DepotBox. DLCs and fixes maintain full intercompatibility.</sys:String>
     <sys:String x:Key="String_ImportZipPackageBtn">Import ZIP Package...</sys:String>
@@ -981,7 +981,7 @@
     <sys:String x:Key="String_SysReqTitle">System Requirements &amp; Game Runtimes</sys:String>
     <sys:String x:Key="String_SysReqSubtitle">Essential runtime libraries for launching games, audio codecs, DirectX, and multiplayer proxy injection.</sys:String>
     <sys:String x:Key="String_AllReqsVerified">All system runtimes are installed and verified!</sys:String>
-    <sys:String x:Key="String_AllReqsVerifiedDesc">Your PC has all the necessary Visual C++, DirectX, and .NET desktop runtimes for seamless gaming.</sys:String>
+    <sys:String x:Key="String_AllReqsVerifiedDesc">Your PC has all the necessary Visual C++, DirectX, and .NET desktop runtimes to run your games.</sys:String>
     <sys:String x:Key="String_MissingReqsDesc">Install missing runtime components to prevent DLL errors (e.g. MSVCP140.dll, D3DX9) and launch crashes.</sys:String>
     <sys:String x:Key="String_MissingPrereqsCountFormat">Missing prerequisite components ({0})</sys:String>
     <sys:String x:Key="String_InstallMissing">Install Missing</sys:String>
@@ -1114,7 +1114,7 @@
     <sys:String x:Key="String_VersionPresetApplyTooltip">Load this manifest set into the table</sys:String>
     <sys:String x:Key="String_VersionPresetDeleteTooltip">Remove this saved build</sys:String>
     <sys:String x:Key="String_VersionCustomSavedFormat">✅ Saved custom build “{0}”. Recall it any time from the chips above.</sys:String>
-    <sys:String x:Key="String_VersionCustomPresetAppliedFormat">📋 Loaded “{0}” — {1} depot(s) filled in.</sys:String>
+    <sys:String x:Key="String_VersionCustomPresetAppliedFormat">📋 Loaded “{0}” ({1} depot(s) filled in).</sys:String>
     <sys:String x:Key="String_VersionCustomPresetDeletedFormat">🗑 Removed the saved build “{0}”.</sys:String>
 
 
@@ -1167,7 +1167,7 @@
     <sys:String x:Key="String_InstallModalInstallPrereqsCheck">Automatically install missing prerequisites (Visual C++, DirectX, etc.)</sys:String>
     <sys:String x:Key="String_InstallModalPrereqsAllGood">All required components are installed on your system ✅</sys:String>
     <sys:String x:Key="String_InstallModalPrereqsMissingCountFormat">{0} missing component(s) detected and will be configured automatically.</sys:String>
-    <sys:String x:Key="String_InstallModalStartBtn">🚀 Start Installation</sys:String>
+    <sys:String x:Key="String_InstallModalStartBtn">Start Installation</sys:String>
     <sys:String x:Key="String_InstallModalInstallingPrereqs">⚙️ Installing prerequisites...</sys:String>
     <sys:String x:Key="String_InstallModalReadyToDownload">Ready to download</sys:String>
     <sys:String x:Key="String_InstallModalNoDepotsTitle">No depots found for this game</sys:String>
@@ -1229,7 +1229,7 @@
     <sys:String x:Key="String_FilterSearchPlaceholder">Search…</sys:String>
     <sys:String x:Key="String_FilterRandomTooltip">Pick one at random</sys:String>
     <sys:String x:Key="String_FilterBubbleTooltip">Click to include, again to exclude, again to clear</sys:String>
-    <sys:String x:Key="String_FilterMoreHint">more — search above</sys:String>
+    <sys:String x:Key="String_FilterMoreHint">more, search above</sys:String>
     <sys:String x:Key="String_FilterMoreTagsSuffix">more (Show more)</sys:String>
     <sys:String x:Key="String_FilterLessTags">(Show less)</sys:String>
     <sys:String x:Key="String_ResultsSuffix">results</sys:String>

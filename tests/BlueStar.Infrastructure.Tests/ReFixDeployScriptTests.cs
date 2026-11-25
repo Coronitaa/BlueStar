@@ -86,4 +86,22 @@ public class ReFixDeployScriptTests : IDisposable
         var standard = Path.Combine(AppContext.BaseDirectory, "tools", "ReFix_StandardDeploy", "bin", "deploy_helper.ps1");
         script.Should().Be(File.Exists(standard) ? standard : Path.Combine(_binDir, "deploy_helper.ps1"));
     }
+
+    [Fact]
+    public void SanitizeUninstallerScript_ReplacesRecursiveMarkerDirDeleteWithNonRecursive()
+    {
+        var batPath = Path.Combine(_deployDir, "Uninstall_ReFix.bat");
+        File.WriteAllText(batPath, """
+            for /f "delims=" %%L in ('dir /s /b /a "%TARGET_DIR%\.refix_installed" 2^>nul') do (
+                del /f /q "%%L"
+                rd /s /q "%%~dpL" 2>nul
+            )
+            """);
+
+        ReFixEmulator.SanitizeUninstallerScript(batPath);
+
+        var result = File.ReadAllText(batPath);
+        result.Should().NotContain("rd /s /q \"%%~dpL\"");
+        result.Should().Contain("rd \"%%~dpL\" 2>nul");
+    }
 }

@@ -8,20 +8,34 @@ EOF
 chmod +x /tmp/bin/desktop-file-validate
 export PATH="/tmp/bin:$PATH"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# Resolve ROOT_DIR if not passed or empty
+if [ -z "$ROOT_DIR" ]; then
+    if [ -n "$SCRIPT_DIR" ] && [ -d "$SCRIPT_DIR/../.." ]; then
+        ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+    else
+        ROOT_DIR="/mnt/c/Users/andre/.gemini/antigravity/scratch/BlueStar_repo/BlueStar-main"
+    fi
+fi
 
 if [ ! -f /tmp/squashfs-root/AppRun ]; then
     cd /tmp
     rm -rf squashfs-root
-    "$ROOT_DIR/build-cache/appimagetool" --appimage-extract
+    if [ -f "$ROOT_DIR/build-cache/appimagetool" ]; then
+        "$ROOT_DIR/build-cache/appimagetool" --appimage-extract
+    elif [ -f /tmp/appimagetool ]; then
+        /tmp/appimagetool --appimage-extract
+    else
+        curl -L https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -o /tmp/appimagetool
+        chmod +x /tmp/appimagetool
+        /tmp/appimagetool --appimage-extract
+    fi
 fi
 
 cd "$ROOT_DIR"
 
 RID="${RID:-linux-x64}"
 ARCH="${ARCH:-x86_64}"
-VERSION="${VERSION:-1.6.4}"
+VERSION="${VERSION:-1.6.5}"
 
 # Generar tar.gz
 tar -C dist/linux/BlueStar.AppDir/usr/lib -czf "dist/linux/BlueStar-v${VERSION}-${RID}.tar.gz" bluestar
