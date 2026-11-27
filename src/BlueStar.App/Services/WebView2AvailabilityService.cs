@@ -96,29 +96,27 @@ public static class WebView2AvailabilityService
     }
 
     /// <summary>
-    /// Pre-warms the shared lightweight WebView2 environment in the background after startup so the first
-    /// embedded Store, Workshop, or Nexus browser opens without cold-start latency.
+    /// Pre-warms the shared lightweight WebView2 environment asynchronously on the caller's STA UI thread
+    /// after startup so the first embedded Store, Workshop, or Nexus browser opens without cold-start latency.
+    /// Must be invoked on an STA thread because CoreWebView2Environment.CreateAsync requires STA COM.
     /// </summary>
     public static void PrewarmInBackground()
     {
         if (Interlocked.Exchange(ref _prewarmStarted, 1) != 0)
             return;
 
-        _ = Task.Run(() =>
+        try
         {
-            try
-            {
-                if (!IsAvailable()) return;
-                Directory.CreateDirectory(ProfileFolder);
-                var envTask = CreateEnvironmentAsync(ProfileFolder);
-                _ = envTask.ContinueWith(
-                    t => { _ = t.Exception; },
-                    CancellationToken.None,
-                    TaskContinuationOptions.OnlyOnFaulted,
-                    TaskScheduler.Default);
-            }
-            catch { }
-        });
+            if (!IsAvailable()) return;
+            Directory.CreateDirectory(ProfileFolder);
+            var envTask = CreateEnvironmentAsync(ProfileFolder);
+            _ = envTask.ContinueWith(
+                t => { _ = t.Exception; },
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted,
+                TaskScheduler.Default);
+        }
+        catch { }
     }
 
     /// <summary>

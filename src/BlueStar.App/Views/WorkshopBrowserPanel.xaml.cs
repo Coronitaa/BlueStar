@@ -110,8 +110,9 @@ public partial class WorkshopBrowserPanel : UserControl
                 }
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Serilog.Log.Warning(ex, "[WorkshopBrowser] WebView2 initialization/navigation failed for {Url}", url);
             _webViewInit = null;
             ShowFallback();
         }

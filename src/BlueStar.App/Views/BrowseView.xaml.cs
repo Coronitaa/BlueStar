@@ -217,8 +217,9 @@ public partial class BrowseView : UserControl
                 StorePageView.CoreWebView2.Navigate(url);
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Serilog.Log.Warning(ex, "[BrowseView] WebView2 initialization/navigation failed for {Url}", url);
             ShowWebViewFallback();
         }
     }

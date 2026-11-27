@@ -252,7 +252,7 @@ if ($Target -in @("LocalTest", "All")) {
             Export-Certificate -Cert $cert -FilePath $cerPath -Force | Out-Null
 
             Write-Host "  Signing local test package with: $subject..." -ForegroundColor Gray
-            & $signtool sign /fd SHA256 /sha1 $cert.Thumbprint $localMsix
+            & $signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /sha1 $cert.Thumbprint $localMsix
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  Local test MSIX created and signed: $localMsix" -ForegroundColor Green
                 Write-Host "  NOTE: This package is signed with a private local certificate and is ONLY for local sideloading." -ForegroundColor Yellow

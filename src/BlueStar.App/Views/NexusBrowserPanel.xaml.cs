@@ -131,8 +131,9 @@ public partial class NexusBrowserPanel : UserControl
                 }
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Serilog.Log.Warning(ex, "[NexusBrowser] WebView2 initialization/navigation failed for {Url}", url);
             _webViewInit = null;
             ShowFallback();
         }
