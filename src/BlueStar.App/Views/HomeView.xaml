@@ -161,11 +161,51 @@
                                                         <ColumnDefinition Width="22"/>
                                                         <ColumnDefinition Width="*"/>
                                                     </Grid.ColumnDefinitions>
-                                                    <Path Grid.Column="0" Data="{StaticResource IconGamepad}" Fill="{StaticResource AccentBrush}"
+                                                    <Path Grid.Column="0" Data="{StaticResource IconSteam}" Fill="#66C0F4"
                                                           Stretch="Uniform" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                     <StackPanel Grid.Column="1" Margin="8,0,0,0">
                                                         <TextBlock Text="{DynamicResource String_ImportSteamTitle}" FontWeight="SemiBold" FontSize="13"/>
                                                         <TextBlock Text="{DynamicResource String_ImportSteamDesc}" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Button>
+
+                                            <!-- Option 1b: Epic Games -->
+                                            <Button Style="{StaticResource GhostButton}"
+                                                    HorizontalContentAlignment="Left"
+                                                    Padding="8,8"
+                                                    Margin="0,0,0,2"
+                                                    Command="{Binding OpenEpicImportModalCommand}">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="22"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Path Grid.Column="0" Data="{StaticResource IconEpicGames}" Fill="#E2E8F0"
+                                                          Stretch="Uniform" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                                        <TextBlock Text="{DynamicResource String_ImportEpicTitle}" FontWeight="SemiBold" FontSize="13"/>
+                                                        <TextBlock Text="{DynamicResource String_ImportEpicDesc}" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Button>
+
+                                            <!-- Option 1c: Microsoft Store -->
+                                            <Button Style="{StaticResource GhostButton}"
+                                                    HorizontalContentAlignment="Left"
+                                                    Padding="8,8"
+                                                    Margin="0,0,0,2"
+                                                    Command="{Binding OpenMicrosoftImportModalCommand}">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="22"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Path Grid.Column="0" Data="{StaticResource IconMicrosoftStore}" Fill="#00A4EF"
+                                                          Stretch="Uniform" Width="15" Height="15" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                                        <TextBlock Text="{DynamicResource String_ImportMicrosoftTitle}" FontWeight="SemiBold" FontSize="13"/>
+                                                        <TextBlock Text="{DynamicResource String_ImportMicrosoftDesc}" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}"/>
                                                     </StackPanel>
                                                 </Grid>
                                             </Button>
@@ -401,6 +441,20 @@
                                                                   VerticalAlignment="Center"
                                                                   Visibility="{Binding IsSteamGame, Converter={StaticResource BoolToVisibilityConverter}}"
                                                                   ToolTip="{DynamicResource String_SteamGameImportedTooltip}"/>
+                                                            <!-- Epic Games Icon -->
+                                                            <Path Data="{StaticResource IconEpicGames}" Fill="#E2E8F0"
+                                                                  Stretch="Uniform" Width="13" Height="13"
+                                                                  Margin="6,0,0,0"
+                                                                  VerticalAlignment="Center"
+                                                                  Visibility="{Binding IsEpicGame, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                                  ToolTip="{DynamicResource String_EpicGameImportedTooltip}"/>
+                                                            <!-- Microsoft Store Icon -->
+                                                            <Path Data="{StaticResource IconMicrosoftStore}" Fill="#00A4EF"
+                                                                  Stretch="Uniform" Width="12" Height="12"
+                                                                  Margin="6,0,0,0"
+                                                                  VerticalAlignment="Center"
+                                                                  Visibility="{Binding IsMicrosoftStoreGame, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                                  ToolTip="{DynamicResource String_MicrosoftGameImportedTooltip}"/>
                                                             <!-- Imported Folder Icon -->
                                                             <Path Data="{StaticResource IconFolder}" Fill="#10B981"
                                                                   Stretch="Uniform" Width="13" Height="13"

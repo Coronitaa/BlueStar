@@ -530,6 +530,10 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
     [NotifyPropertyChangedFor(nameof(HeroTags))]
     [NotifyPropertyChangedFor(nameof(IsDepotBoxInstance))]
     [NotifyPropertyChangedFor(nameof(IsSteamInstance))]
+    [NotifyPropertyChangedFor(nameof(IsEpicInstance))]
+    [NotifyPropertyChangedFor(nameof(IsMicrosoftStoreInstance))]
+    [NotifyPropertyChangedFor(nameof(IsExternalPlatformInstance))]
+    [NotifyPropertyChangedFor(nameof(IsPlatformInstallMissing))]
     [NotifyPropertyChangedFor(nameof(IsImportedUnassociatedInstance))]
     [NotifyPropertyChangedFor(nameof(IsFolderWithoutSteamAssociation))]
     [NotifyPropertyChangedFor(nameof(IsDepotBoxTabsVisible))]
@@ -552,6 +556,10 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
     [NotifyPropertyChangedFor(nameof(HeroTags))]
     [NotifyPropertyChangedFor(nameof(IsDepotBoxInstance))]
     [NotifyPropertyChangedFor(nameof(IsSteamInstance))]
+    [NotifyPropertyChangedFor(nameof(IsEpicInstance))]
+    [NotifyPropertyChangedFor(nameof(IsMicrosoftStoreInstance))]
+    [NotifyPropertyChangedFor(nameof(IsExternalPlatformInstance))]
+    [NotifyPropertyChangedFor(nameof(IsPlatformInstallMissing))]
     [NotifyPropertyChangedFor(nameof(IsImportedUnassociatedInstance))]
     [NotifyPropertyChangedFor(nameof(IsFolderWithoutSteamAssociation))]
     [NotifyPropertyChangedFor(nameof(IsVersionsTabVisible))]
@@ -563,6 +571,10 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
     public IReadOnlyList<GameTag> HeroTags => _tagsService?.GetInstanceDetailHeroTags(Instance, HasGameUpdateAvailable) ?? [];
     public bool IsDepotBoxInstance => Instance != null && (Instance.Origin == InstanceOrigin.DepotBox || Instance.IsDepotBoxAssociated);
     public bool IsSteamInstance => Instance != null && Instance.Origin == InstanceOrigin.Steam;
+    public bool IsEpicInstance => Instance != null && Instance.Origin == InstanceOrigin.EpicGames;
+    public bool IsMicrosoftStoreInstance => Instance != null && Instance.Origin == InstanceOrigin.MicrosoftStore;
+    public bool IsExternalPlatformInstance => Instance != null && Instance.IsExternalPlatformGame;
+    public bool IsPlatformInstallMissing => Instance != null && Instance.IsExternalPlatformGame && Instance.IsPlatformInstallMissing;
     public bool IsImportedUnassociatedInstance => Instance != null && Instance.Origin == InstanceOrigin.ImportedFolder && !Instance.IsDepotBoxAssociated;
     public bool IsFolderWithoutSteamAssociation => Instance != null &&
         (Instance.Origin == InstanceOrigin.ImportedFolder || Instance.IsImportedFolder) &&
@@ -2169,7 +2181,7 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
     [RelayCommand]
     public async Task OpenInstallModalAsync()
     {
-        if (Instance == null) return;
+        if (Instance == null || !Instance.CanManageDepots) return;
 
         OnPropertyChanged(nameof(InstallModalGameTitle));
         OnPropertyChanged(nameof(InstallModalSubtitle));
@@ -6023,6 +6035,14 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
 
         if (Instance.Status == InstanceStatus.NotInstalled)
         {
+            if (!Instance.CanManageDepots)
+            {
+                if (Instance.IsPlatformInstallMissing)
+                {
+                    await OpenDepotAssociationModalAsync().ConfigureAwait(true);
+                }
+                return;
+            }
             await OpenInstallModalAsync().ConfigureAwait(true);
             return;
         }
@@ -6318,14 +6338,18 @@ public partial class InstanceDetailViewModel : ObservableObject, ISharedViewMode
                 catch { }
             }
 
+            var wasExternalPlatform = Instance.IsExternalPlatformGame;
             var updatedInstance = Instance with
             {
+                Origin = wasExternalPlatform ? InstanceOrigin.DepotBox : Instance.Origin,
                 AppId = newAppId,
                 Metadata = meta,
                 SourceArchivePath = archivePath ?? Instance.SourceArchivePath,
                 Depots = updatedDepots.Count > 0 ? updatedDepots.AsReadOnly() : Instance.Depots,
                 Dlcs = updatedDlcs.Count > 0 ? updatedDlcs.AsReadOnly() : Instance.Dlcs,
-                IsDepotBoxAssociated = true
+                IsDepotBoxAssociated = true,
+                IsPlatformInstallMissing = false,
+                PlatformAppId = wasExternalPlatform ? null : Instance.PlatformAppId
             };
 
             await _instanceManager.UpdateAsync(updatedInstance, CancellationToken.None).ConfigureAwait(true);

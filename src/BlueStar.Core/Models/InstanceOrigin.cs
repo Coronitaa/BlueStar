@@ -20,5 +20,15 @@ public enum InstanceOrigin
     /// <summary>
     /// Imported from an arbitrary folder on disk.
     /// </summary>
-    ImportedFolder = 2
+    ImportedFolder = 2,
+
+    /// <summary>
+    /// Imported from a local Epic Games Launcher installation. Managed by Epic Games.
+    /// </summary>
+    EpicGames = 3,
+
+    /// <summary>
+    /// Imported from a local Microsoft Store / Xbox App installation. Managed by Microsoft Store.
+    /// </summary>
+    MicrosoftStore = 4
 }

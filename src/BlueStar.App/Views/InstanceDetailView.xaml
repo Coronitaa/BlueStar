@@ -149,6 +149,14 @@
                                                 <Setter Property="Content" Value="{DynamicResource String_InstallGame}"/>
                                                 <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
                                             </DataTrigger>
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding Instance.Status}" Value="NotInstalled"/>
+                                                    <Condition Binding="{Binding IsExternalPlatformInstance}" Value="True"/>
+                                                </MultiDataTrigger.Conditions>
+                                                <Setter Property="Content" Value="{DynamicResource String_PlatformGameNotInstalled}"/>
+                                                <Setter Property="Background" Value="{StaticResource SurfaceCardBrush}"/>
+                                            </MultiDataTrigger>
                                             <DataTrigger Binding="{Binding HasActiveJob}" Value="True">
                                                 <Setter Property="Content" Value="{Binding InstanceDownloadLabel, StringFormat='📥 Downloading {0}'}"/>
                                                 <Setter Property="IsEnabled" Value="False"/>
@@ -810,6 +818,18 @@
 
                         <!-- ═══════════════ RIGHT: this instance ═══════════════ -->
                         <StackPanel Grid.Column="2">
+
+                            <!-- Platform install missing warning + suggestion to convert to BlueStar community depots -->
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,18" BorderBrush="{StaticResource WarningBrush}" BorderThickness="1"
+                                    Visibility="{Binding IsPlatformInstallMissing, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <StackPanel>
+                                    <TextBlock Text="{DynamicResource String_PlatformMissingTitle}" Style="{StaticResource H3}" Foreground="{StaticResource WarningBrush}" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{DynamicResource String_PlatformMissingDesc}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,12"/>
+                                    <Button Style="{StaticResource PrimaryButton}" Padding="14,9" Command="{Binding OpenDepotAssociationModalCommand}">
+                                        <TextBlock Text="{DynamicResource String_ConvertToBlueStarBtn}"/>
+                                    </Button>
+                                </StackPanel>
+                            </Border>
 
                             <Border Style="{StaticResource Card}" Margin="0,0,0,18" BorderBrush="#38BDF8" BorderThickness="1"
                                     Visibility="{Binding IsImportedUnassociatedInstance, Converter={StaticResource BoolToVisibilityConverter}}">

@@ -13,6 +13,8 @@ using BlueStar.Core.Helpers;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
 using BlueStar.Infrastructure.Downloader;
+using BlueStar.Infrastructure.Instance;
+using BlueStar.Infrastructure.Platforms;
 using BlueStar.Infrastructure.Steam;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -125,6 +127,36 @@ public partial class HomeViewModel : ObservableObject, ISharedViewModel, IDispos
 
     [ObservableProperty]
     private ObservableCollection<uint> _importedSteamAppIds = [];
+
+    // ── 1b. Epic Games & Microsoft Store Platform Import Modal ──
+    [ObservableProperty]
+    private bool _isPlatformImportModalOpen;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsEpicPlatformImport))]
+    [NotifyPropertyChangedFor(nameof(IsMicrosoftPlatformImport))]
+    private InstanceOrigin _platformImportOrigin = InstanceOrigin.EpicGames;
+
+    public bool IsEpicPlatformImport => PlatformImportOrigin == InstanceOrigin.EpicGames;
+    public bool IsMicrosoftPlatformImport => PlatformImportOrigin == InstanceOrigin.MicrosoftStore;
+
+    [ObservableProperty]
+    private bool _isScanningPlatform;
+
+    [ObservableProperty]
+    private ObservableCollection<PlatformImportGameItem> _installedPlatformGames = [];
+
+    [ObservableProperty]
+    private string _platformSearchQuery = string.Empty;
+
+    [ObservableProperty]
+    private string? _platformScanError;
+
+    [ObservableProperty]
+    private bool _isDuplicatePlatformPromptOpen;
+
+    [ObservableProperty]
+    private PlatformImportGameItem? _duplicatePlatformGame;
 
     // ── 2. Depot ZIP Import Modal ──
     private DepotBoxArchive? _pendingArchive;
@@ -1353,6 +1385,163 @@ public partial class HomeViewModel : ObservableObject, ISharedViewModel, IDispos
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to import Steam game: {Name}", steamGame.Name);
+            _notificationService?.ShowError("Import Error", ex.Message);
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // MODAL 1b: EPIC GAMES & MICROSOFT STORE IMPORT
+    // ═══════════════════════════════════════════════════════════════
+
+    private readonly List<PlatformImportGameItem> _allDetectedPlatformGames = [];
+
+    partial void OnPlatformSearchQueryChanged(string value)
+    {
+        ApplyPlatformFilter();
+    }
+
+    private void ApplyPlatformFilter()
+    {
+        InstalledPlatformGames.Clear();
+        var q = PlatformSearchQuery?.Trim() ?? string.Empty;
+        var filtered = string.IsNullOrWhiteSpace(q)
+            ? _allDetectedPlatformGames
+            : _allDetectedPlatformGames.Where(g =>
+                g.DisplayName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                g.PlatformId.Contains(q, StringComparison.OrdinalIgnoreCase));
+
+        foreach (var g in filtered)
+            InstalledPlatformGames.Add(g);
+    }
+
+    [RelayCommand]
+    public Task OpenEpicImportModalAsync() => OpenPlatformImportModalAsync(InstanceOrigin.EpicGames);
+
+    [RelayCommand]
+    public Task OpenMicrosoftImportModalAsync() => OpenPlatformImportModalAsync(InstanceOrigin.MicrosoftStore);
+
+    private async Task OpenPlatformImportModalAsync(InstanceOrigin origin)
+    {
+        IsImportMenuOpen = false;
+        PlatformImportOrigin = origin;
+        IsPlatformImportModalOpen = true;
+        IsScanningPlatform = true;
+        PlatformScanError = null;
+        PlatformSearchQuery = string.Empty;
+        IsDuplicatePlatformPromptOpen = false;
+        DuplicatePlatformGame = null;
+        InstalledPlatformGames.Clear();
+        _allDetectedPlatformGames.Clear();
+
+        try
+        {
+            if (origin == InstanceOrigin.EpicGames)
+            {
+                var games = await EpicGamesLibraryScanner.ScanInstalledGamesAsync(CancellationToken.None).ConfigureAwait(true);
+                if (games.Count == 0)
+                {
+                    PlatformScanError = "No installed Epic Games titles detected on this PC.";
+                }
+                else
+                {
+                    _allDetectedPlatformGames.AddRange(games.Select(g => new PlatformImportGameItem(
+                        InstanceOrigin.EpicGames, g.AppName, g.DisplayName, g.InstallLocation, g.ExecutableFullPath, g.FormattedSize, null, EpicGame: g)));
+                    ApplyPlatformFilter();
+                }
+            }
+            else
+            {
+                var games = await MicrosoftStoreLibraryScanner.ScanInstalledGamesAsync(CancellationToken.None).ConfigureAwait(true);
+                if (games.Count == 0)
+                {
+                    PlatformScanError = "No installed Microsoft Store / Xbox games detected on this PC.";
+                }
+                else
+                {
+                    _allDetectedPlatformGames.AddRange(games.Select(g => new PlatformImportGameItem(
+                        InstanceOrigin.MicrosoftStore, g.PackageId, g.DisplayName, g.InstallLocation, g.ExecutablePath, g.FormattedSize, g.LogoPath, MicrosoftGame: g)));
+                    ApplyPlatformFilter();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to scan {Origin} games", origin);
+            PlatformScanError = $"Error scanning library: {ex.Message}";
+        }
+        finally
+        {
+            IsScanningPlatform = false;
+        }
+    }
+
+    [RelayCommand]
+    public void ClosePlatformImportModal()
+    {
+        IsPlatformImportModalOpen = false;
+    }
+
+    [RelayCommand]
+    public async Task ImportPlatformGameAsync(PlatformImportGameItem? game)
+    {
+        if (game == null) return;
+
+        var instances = await _instanceManager.GetAllAsync(CancellationToken.None).ConfigureAwait(true);
+        var trimmed = game.InstallLocation.TrimEnd('\\', '/');
+        if (instances.Any(i =>
+            (i.Origin == game.Origin && string.Equals(i.PlatformAppId, game.PlatformId, StringComparison.OrdinalIgnoreCase)) ||
+            string.Equals(i.InstallPath?.TrimEnd('\\', '/'), trimmed, StringComparison.OrdinalIgnoreCase)))
+        {
+            DuplicatePlatformGame = game;
+            IsDuplicatePlatformPromptOpen = true;
+            return;
+        }
+
+        await ExecuteImportPlatformGameInternalAsync(game);
+    }
+
+    [RelayCommand]
+    public async Task ConfirmDuplicatePlatformGameAsync()
+    {
+        var target = DuplicatePlatformGame;
+        IsDuplicatePlatformPromptOpen = false;
+        DuplicatePlatformGame = null;
+        if (target != null)
+        {
+            await ExecuteImportPlatformGameInternalAsync(target);
+        }
+    }
+
+    [RelayCommand]
+    public void CancelDuplicatePlatformGame()
+    {
+        IsDuplicatePlatformPromptOpen = false;
+        DuplicatePlatformGame = null;
+    }
+
+    private async Task ExecuteImportPlatformGameInternalAsync(PlatformImportGameItem game)
+    {
+        IsLoading = true;
+        try
+        {
+            var importer = new GameImportService(_instanceManager, _engineDetector, _metadataProvider);
+            GameInstance created = game.Origin == InstanceOrigin.EpicGames && game.EpicGame != null
+                ? await importer.ImportEpicGameAsync(game.EpicGame, CancellationToken.None).ConfigureAwait(true)
+                : await importer.ImportMicrosoftStoreGameAsync(game.MicrosoftGame!, CancellationToken.None).ConfigureAwait(true);
+
+            var platformLabel = game.Origin == InstanceOrigin.EpicGames ? "Epic Games" : "Microsoft Store";
+            _notificationService?.ShowSuccess($"{platformLabel} Game Imported", $"{created.Name} added to BlueStar instances.");
+            IsPlatformImportModalOpen = false;
+            await LoadDashboardDataAsync();
+            OnManageInstanceRequested?.Invoke(created);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to import {Origin} game: {Name}", game.Origin, game.DisplayName);
             _notificationService?.ShowError("Import Error", ex.Message);
         }
         finally

@@ -23,9 +23,12 @@ public partial class InstanceCardItem : ObservableObject
     public string InstallPath => Instance.InstallPath;
 
     public bool IsDepotBoxBacked => Instance.Origin == InstanceOrigin.DepotBox || Instance.IsDepotBoxAssociated;
-    public bool IsNotInstalled => Instance.Status == InstanceStatus.NotInstalled && Instance.Origin != InstanceOrigin.Steam;
+    public bool IsNotInstalled => Instance.Status == InstanceStatus.NotInstalled && !Instance.IsExternalPlatformGame;
     public bool IsSteamGame => Instance.IsSteamGame;
+    public bool IsEpicGame => Instance.IsEpicGame;
+    public bool IsMicrosoftStoreGame => Instance.IsMicrosoftStoreGame;
     public bool IsImportedFolder => Instance.IsImportedFolder;
+    public bool IsPlatformInstallMissing => Instance.IsPlatformInstallMissing;
     public bool HasUpdateAvailable => Instance.HasUpdateAvailable;
     public string? UpdateDescription => Instance.UpdateDescription;
 

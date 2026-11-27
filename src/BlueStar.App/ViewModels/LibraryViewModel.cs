@@ -13,6 +13,7 @@ using BlueStar.Core.Helpers;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
 using BlueStar.Infrastructure.Instance;
+using BlueStar.Infrastructure.Platforms;
 using BlueStar.Infrastructure.Steam;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -227,6 +228,35 @@ public partial class LibraryViewModel : ObservableObject, ISharedViewModel, IDis
 
     [ObservableProperty]
     private ObservableCollection<uint> _importedSteamAppIds = [];
+
+    // 1b. Epic Games & Microsoft Store Platform Sub-View
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsEpicPlatformImport))]
+    [NotifyPropertyChangedFor(nameof(IsMicrosoftPlatformImport))]
+    private InstanceOrigin _platformImportOrigin = InstanceOrigin.EpicGames;
+
+    public bool IsEpicPlatformImport => PlatformImportOrigin == InstanceOrigin.EpicGames;
+    public bool IsMicrosoftPlatformImport => PlatformImportOrigin == InstanceOrigin.MicrosoftStore;
+
+    [ObservableProperty]
+    private bool _isScanningPlatform;
+
+    [ObservableProperty]
+    private string _platformSearchQuery = string.Empty;
+
+    [ObservableProperty]
+    private string? _platformScanError;
+
+    [ObservableProperty]
+    private ObservableCollection<PlatformImportGameItem> _installedPlatformGames = [];
+
+    private readonly List<PlatformImportGameItem> _allDetectedPlatformGames = [];
+
+    [ObservableProperty]
+    private bool _isDuplicatePlatformPromptOpen;
+
+    [ObservableProperty]
+    private PlatformImportGameItem? _duplicatePlatformGame;
 
     // 2. Depot ZIP Sub-View
     [ObservableProperty]
@@ -1169,6 +1199,153 @@ public partial class LibraryViewModel : ObservableObject, ISharedViewModel, IDis
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to import Steam game: {Name}", steamGame.Name);
+            ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    // ── 1b. Epic Games & Microsoft Store Step ──
+
+    partial void OnPlatformSearchQueryChanged(string value)
+    {
+        ApplyPlatformFilter();
+    }
+
+    private void ApplyPlatformFilter()
+    {
+        InstalledPlatformGames.Clear();
+        var q = PlatformSearchQuery?.Trim() ?? string.Empty;
+        var filtered = string.IsNullOrWhiteSpace(q)
+            ? _allDetectedPlatformGames
+            : _allDetectedPlatformGames.Where(g =>
+                g.DisplayName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                g.PlatformId.Contains(q, StringComparison.OrdinalIgnoreCase));
+
+        foreach (var g in filtered)
+            InstalledPlatformGames.Add(g);
+    }
+
+    [RelayCommand]
+    public Task OpenEpicStepAsync() => OpenPlatformStepAsync(InstanceOrigin.EpicGames);
+
+    [RelayCommand]
+    public Task OpenMicrosoftStepAsync() => OpenPlatformStepAsync(InstanceOrigin.MicrosoftStore);
+
+    private async Task OpenPlatformStepAsync(InstanceOrigin origin)
+    {
+        PlatformImportOrigin = origin;
+        AddModalStep = "Platform";
+        IsScanningPlatform = true;
+        PlatformScanError = null;
+        PlatformSearchQuery = string.Empty;
+        IsDuplicatePlatformPromptOpen = false;
+        DuplicatePlatformGame = null;
+        InstalledPlatformGames.Clear();
+        _allDetectedPlatformGames.Clear();
+
+        try
+        {
+            if (origin == InstanceOrigin.EpicGames)
+            {
+                var games = await EpicGamesLibraryScanner.ScanInstalledGamesAsync(CancellationToken.None).ConfigureAwait(true);
+                if (games.Count == 0)
+                {
+                    PlatformScanError = "No installed Epic Games titles detected on this PC.";
+                }
+                else
+                {
+                    _allDetectedPlatformGames.AddRange(games.Select(g => new PlatformImportGameItem(
+                        InstanceOrigin.EpicGames, g.AppName, g.DisplayName, g.InstallLocation, g.ExecutableFullPath, g.FormattedSize, null, EpicGame: g)));
+                    ApplyPlatformFilter();
+                }
+            }
+            else
+            {
+                var games = await MicrosoftStoreLibraryScanner.ScanInstalledGamesAsync(CancellationToken.None).ConfigureAwait(true);
+                if (games.Count == 0)
+                {
+                    PlatformScanError = "No installed Microsoft Store / Xbox games detected on this PC.";
+                }
+                else
+                {
+                    _allDetectedPlatformGames.AddRange(games.Select(g => new PlatformImportGameItem(
+                        InstanceOrigin.MicrosoftStore, g.PackageId, g.DisplayName, g.InstallLocation, g.ExecutablePath, g.FormattedSize, g.LogoPath, MicrosoftGame: g)));
+                    ApplyPlatformFilter();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to scan {Origin} games", origin);
+            PlatformScanError = $"Error scanning library: {ex.Message}";
+        }
+        finally
+        {
+            IsScanningPlatform = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task ImportPlatformGameAsync(PlatformImportGameItem? game)
+    {
+        if (game == null) return;
+
+        var trimmed = game.InstallLocation.TrimEnd('\\', '/');
+        if (Instances.Any(i =>
+            (i.Origin == game.Origin && string.Equals(i.PlatformAppId, game.PlatformId, StringComparison.OrdinalIgnoreCase)) ||
+            string.Equals(i.InstallPath?.TrimEnd('\\', '/'), trimmed, StringComparison.OrdinalIgnoreCase)))
+        {
+            DuplicatePlatformGame = game;
+            IsDuplicatePlatformPromptOpen = true;
+            return;
+        }
+
+        await ExecuteImportPlatformGameInternalAsync(game);
+    }
+
+    [RelayCommand]
+    public async Task ConfirmDuplicatePlatformGameAsync()
+    {
+        var target = DuplicatePlatformGame;
+        IsDuplicatePlatformPromptOpen = false;
+        DuplicatePlatformGame = null;
+        if (target != null)
+        {
+            await ExecuteImportPlatformGameInternalAsync(target);
+        }
+    }
+
+    [RelayCommand]
+    public void CancelDuplicatePlatformGame()
+    {
+        IsDuplicatePlatformPromptOpen = false;
+        DuplicatePlatformGame = null;
+    }
+
+    private async Task ExecuteImportPlatformGameInternalAsync(PlatformImportGameItem game)
+    {
+        IsLoading = true;
+        try
+        {
+            GameInstance created = game.Origin == InstanceOrigin.EpicGames && game.EpicGame != null
+                ? await Importer.ImportEpicGameAsync(game.EpicGame, CancellationToken.None).ConfigureAwait(true)
+                : await Importer.ImportMicrosoftStoreGameAsync(game.MicrosoftGame!, CancellationToken.None).ConfigureAwait(true);
+
+            Instances.Add(created);
+            ApplyFilters();
+
+            var platformLabel = game.Origin == InstanceOrigin.EpicGames ? "Epic Games" : "Microsoft Store";
+            _notificationService?.ShowSuccess($"{platformLabel} Game Imported", $"{created.Name} is now ready in your library!");
+
+            IsAddInstanceModalOpen = false;
+            OnManageInstanceRequested?.Invoke(created);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to import {Origin} game: {Name}", game.Origin, game.DisplayName);
             ErrorMessage = ex.Message;
         }
         finally

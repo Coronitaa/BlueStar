@@ -176,6 +176,16 @@ public record GameInstance
     public bool IsDepotBoxAssociated { get; init; } = false;
 
     /// <summary>
+    /// Platform-specific identifier for external platform instances (e.g. Epic AppName or Microsoft Store PackageFamilyName/IdentityName).
+    /// </summary>
+    public string? PlatformAppId { get; init; }
+
+    /// <summary>
+    /// Gets or sets whether a background verification check detected that this external platform game is no longer installed on its platform.
+    /// </summary>
+    public bool IsPlatformInstallMissing { get; init; } = false;
+
+    /// <summary>
     /// Gets or sets whether a DLC unlocker (SmokeAPI/CreamAPI) is installed for this instance.
     /// </summary>
     public bool DlcUnlockerInstalled { get; init; } = false;
@@ -280,7 +290,23 @@ public record GameInstance
     /// Gets whether this instance was imported from a local Steam installation.
     /// </summary>
     public bool IsSteamGame => Origin == InstanceOrigin.Steam ||
-        (!string.IsNullOrEmpty(InstallPath) && (InstallPath.Contains(@"steamapps\common", StringComparison.OrdinalIgnoreCase) || InstallPath.Contains("steamapps/common", StringComparison.OrdinalIgnoreCase)));
+        (Origin == InstanceOrigin.DepotBox && !IsDepotBoxAssociated && !string.IsNullOrEmpty(InstallPath) &&
+         (InstallPath.Contains(@"steamapps\common", StringComparison.OrdinalIgnoreCase) || InstallPath.Contains("steamapps/common", StringComparison.OrdinalIgnoreCase)));
+
+    /// <summary>
+    /// Gets whether this instance was imported from a local Epic Games installation.
+    /// </summary>
+    public bool IsEpicGame => Origin == InstanceOrigin.EpicGames;
+
+    /// <summary>
+    /// Gets whether this instance was imported from a local Microsoft Store / Xbox installation.
+    /// </summary>
+    public bool IsMicrosoftStoreGame => Origin == InstanceOrigin.MicrosoftStore;
+
+    /// <summary>
+    /// Gets whether this instance is managed by an external platform (Steam, Epic Games, or Microsoft Store).
+    /// </summary>
+    public bool IsExternalPlatformGame => Origin is InstanceOrigin.Steam or InstanceOrigin.EpicGames or InstanceOrigin.MicrosoftStore;
 
     /// <summary>
     /// Gets whether this instance was imported from a folder.
@@ -291,7 +317,7 @@ public record GameInstance
     /// <summary>
     /// Gets whether depot files and manifest downloads can be managed for this instance.
     /// </summary>
-    public bool CanManageDepots => Origin != InstanceOrigin.Steam;
+    public bool CanManageDepots => !IsExternalPlatformGame;
 
     /// <summary>
     /// Gets or sets a custom banner image path or URL for this instance (displayed inside the instance detail view).

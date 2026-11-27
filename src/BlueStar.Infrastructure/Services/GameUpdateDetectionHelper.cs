@@ -123,7 +123,7 @@ public static class GameUpdateDetectionHelper
         SteamStoreApiClient steamClient,
         CancellationToken ct = default)
     {
-        if (instance == null || instance.AppId == 0 || steamClient == null || ct.IsCancellationRequested)
+        if (instance == null || !instance.CanManageDepots || instance.AppId == 0 || steamClient == null || ct.IsCancellationRequested)
         {
             return (UpdateCheckStatus.Unknown, null, null, null, null, null);
         }

@@ -1558,4 +1558,27 @@
     <sys:String x:Key="String_WorkshopHomeToolTip">Workshop home</sys:String>
     <sys:String x:Key="String_InstallModalPresetPicker">Recommended version</sys:String>
     <sys:String x:Key="String_InstallModalPresetIncludesFormat">Includes: {0}</sys:String>
+
+    <!-- ═══ EPIC GAMES & MICROSOFT STORE IMPORT + PLATFORM VERIFICATION ═══ -->
+    <sys:String x:Key="String_ImportEpicTitle">Epic Games</sys:String>
+    <sys:String x:Key="String_ImportEpicDesc">Import installed Epic Games title</sys:String>
+    <sys:String x:Key="String_ImportMicrosoftTitle">Microsoft Store</sys:String>
+    <sys:String x:Key="String_ImportMicrosoftDesc">Import installed Microsoft Store / Xbox game</sys:String>
+    <sys:String x:Key="String_EpicGameImportedTooltip">Epic Games (Imported from Epic Games)</sys:String>
+    <sys:String x:Key="String_MicrosoftGameImportedTooltip">Microsoft Store (Imported from Microsoft Store / Xbox)</sys:String>
+    <sys:String x:Key="String_AddModalEpicTitle">Import Installed Epic Games</sys:String>
+    <sys:String x:Key="String_AddModalEpicDesc">Scan your local Epic Games manifests and import games in one click</sys:String>
+    <sys:String x:Key="String_AddModalMicrosoftTitle">Import Installed Microsoft Store Games</sys:String>
+    <sys:String x:Key="String_AddModalMicrosoftDesc">Scan your local Xbox / Microsoft Store installations and import games in one click</sys:String>
+    <sys:String x:Key="String_ModalImportEpicTitle">Import from Epic Games Library</sys:String>
+    <sys:String x:Key="String_ModalImportEpicSubtitle">Select an installed game from your Epic Games library to manage in BlueStar.</sys:String>
+    <sys:String x:Key="String_ScanningEpic">Scanning local Epic Games library...</sys:String>
+    <sys:String x:Key="String_ModalImportMicrosoftTitle">Import from Microsoft Store / Xbox</sys:String>
+    <sys:String x:Key="String_ModalImportMicrosoftSubtitle">Select an installed game from Microsoft Store or Xbox App to manage in BlueStar.</sys:String>
+    <sys:String x:Key="String_ScanningMicrosoft">Scanning local Microsoft Store &amp; Xbox games...</sys:String>
+    <sys:String x:Key="String_PlatformGameAlreadyInLibrary">Game Already in Library</sys:String>
+    <sys:String x:Key="String_PlatformMissingTitle">Platform Installation Missing</sys:String>
+    <sys:String x:Key="String_PlatformMissingDesc">This game is no longer installed on its original platform. Would you like to convert it into a BlueStar instance managed with community depots?</sys:String>
+    <sys:String x:Key="String_ConvertToBlueStarBtn">Convert to BlueStar (Community Depots)</sys:String>
+    <sys:String x:Key="String_PlatformGameNotInstalled">Unavailable</sys:String>
 </ResourceDictionary>

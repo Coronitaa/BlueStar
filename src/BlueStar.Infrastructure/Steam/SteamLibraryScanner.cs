@@ -103,6 +103,31 @@ public static class SteamLibraryScanner
         }, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Verifies whether a Steam game is still installed in any local Steam library folder.
+    /// </summary>
+    public static bool IsGameInstalled(uint appId, string? installPath)
+    {
+        if (string.IsNullOrWhiteSpace(installPath) || !Directory.Exists(installPath))
+            return false;
+
+        if (appId == 0)
+            return true;
+
+        var steamPath = ShortcutHelper.GetSteamPath();
+        if (string.IsNullOrWhiteSpace(steamPath) || !Directory.Exists(steamPath))
+            return Directory.Exists(installPath);
+
+        foreach (var libraryFolder in GetLibraryFolders(steamPath))
+        {
+            var manifestPath = Path.Combine(libraryFolder, "steamapps", $"appmanifest_{appId}.acf");
+            if (File.Exists(manifestPath))
+                return true;
+        }
+
+        return false;
+    }
+
     private static List<string> GetLibraryFolders(string mainSteamPath)
     {
         var folders = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { mainSteamPath };

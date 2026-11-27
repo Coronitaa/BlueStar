@@ -1,13 +1,14 @@
 using BlueStar.Core.Helpers;
 using BlueStar.Core.Interfaces;
 using BlueStar.Core.Models;
+using BlueStar.Infrastructure.Platforms;
 using BlueStar.Infrastructure.Steam;
 
 namespace BlueStar.Infrastructure.Instance;
 
 /// <summary>
-/// Adds an installed game to the library, from any folder or from a local Steam library. UI-free, so every head
-/// (WPF, Avalonia) imports the same way: engine detection, main exe, unique name, optional Steam metadata.
+/// Adds an installed game to the library, from any folder or from a local platform library (Steam, Epic Games, Microsoft Store).
+/// UI-free, so every head (WPF, Avalonia) imports the same way: engine detection, main exe, unique name, optional metadata.
 /// </summary>
 public sealed class GameImportService
 {
@@ -26,13 +27,27 @@ public sealed class GameImportService
     public Task<GameInstance> ImportFolderAsync(string folder, string? name = null, uint appId = 0, string? exePath = null, CancellationToken ct = default)
     {
         var fallbackName = Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        return ImportAsync(folder, string.IsNullOrWhiteSpace(name) ? fallbackName : name.Trim(), appId, InstanceOrigin.ImportedFolder, exePath, ct);
+        return ImportAsync(folder, string.IsNullOrWhiteSpace(name) ? fallbackName : name.Trim(), appId, InstanceOrigin.ImportedFolder, exePath, null, null, ct);
     }
 
     public Task<GameInstance> ImportSteamGameAsync(InstalledSteamGame game, CancellationToken ct = default) =>
-        ImportAsync(game.FullPath, game.Name, game.AppId, InstanceOrigin.Steam, null, ct);
+        ImportAsync(game.FullPath, game.Name, game.AppId, InstanceOrigin.Steam, null, game.AppId > 0 ? game.AppId.ToString() : null, null, ct);
 
-    private async Task<GameInstance> ImportAsync(string folder, string name, uint appId, InstanceOrigin origin, string? exePath, CancellationToken ct)
+    public Task<GameInstance> ImportEpicGameAsync(InstalledEpicGame game, CancellationToken ct = default) =>
+        ImportAsync(game.InstallLocation, game.DisplayName, 0, InstanceOrigin.EpicGames, game.ExecutableFullPath, game.AppName, null, ct);
+
+    public Task<GameInstance> ImportMicrosoftStoreGameAsync(InstalledMicrosoftStoreGame game, CancellationToken ct = default) =>
+        ImportAsync(game.InstallLocation, game.DisplayName, 0, InstanceOrigin.MicrosoftStore, game.ExecutablePath, game.PackageId, game.LogoPath, ct);
+
+    private async Task<GameInstance> ImportAsync(
+        string folder,
+        string name,
+        uint appId,
+        InstanceOrigin origin,
+        string? exePath,
+        string? platformAppId,
+        string? customIconPath,
+        CancellationToken ct)
     {
         if (!Directory.Exists(folder))
             throw new DirectoryNotFoundException($"Folder not found: {folder}");
@@ -40,7 +55,7 @@ public sealed class GameImportService
         var existing = await _instances.GetAllAsync(ct).ConfigureAwait(false);
         var trimmed = folder.TrimEnd('\\', '/');
         var colliding = existing.FirstOrDefault(i => string.Equals(i.InstallPath?.TrimEnd('\\', '/'), trimmed, PathComparison));
-        // Steam imports may repeat on purpose (the WPF library asks first); a plain folder may not.
+        // Platform imports may repeat on purpose (the WPF library asks first); a plain folder may not.
         if (colliding != null && origin == InstanceOrigin.ImportedFolder)
             throw new InvalidOperationException($"This folder is already in the library as \"{colliding.Name}\".");
 
@@ -58,6 +73,8 @@ public sealed class GameImportService
             Metadata = meta,
             Dlcs = dlcs,
             Origin = origin,
+            PlatformAppId = platformAppId,
+            CustomIconPath = File.Exists(customIconPath) ? customIconPath : null,
             Status = File.Exists(exe) ? InstanceStatus.Ready : InstanceStatus.NotInstalled,
         };
         return await _instances.CreateAsync(instance, ct).ConfigureAwait(false);

@@ -56,4 +56,31 @@ public class InstanceOriginSerializationTests
         deserialized.DlcUnlockerInstalled.Should().BeFalse();
         deserialized.UnlockedDlcIds.Should().BeEmpty();
     }
+
+    [Theory]
+    [InlineData(InstanceOrigin.Steam, false, true)]
+    [InlineData(InstanceOrigin.EpicGames, false, true)]
+    [InlineData(InstanceOrigin.MicrosoftStore, false, true)]
+    [InlineData(InstanceOrigin.ImportedFolder, true, false)]
+    [InlineData(InstanceOrigin.DepotBox, true, false)]
+    public void GameInstance_PlatformCapabilities_MatchOrigin(
+        InstanceOrigin origin,
+        bool expectedCanManageDepots,
+        bool expectedIsExternalPlatform)
+    {
+        var instance = new GameInstance
+        {
+            Name = "Test Game",
+            InstallPath = @"C:\Games\TestGame",
+            Origin = origin,
+            PlatformAppId = "test-platform-id",
+            IsPlatformInstallMissing = true
+        };
+
+        instance.CanManageDepots.Should().Be(expectedCanManageDepots);
+        instance.IsExternalPlatformGame.Should().Be(expectedIsExternalPlatform);
+        instance.IsEpicGame.Should().Be(origin == InstanceOrigin.EpicGames);
+        instance.IsMicrosoftStoreGame.Should().Be(origin == InstanceOrigin.MicrosoftStore);
+        instance.IsPlatformInstallMissing.Should().BeTrue();
+    }
 }

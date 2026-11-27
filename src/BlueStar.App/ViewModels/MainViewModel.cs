@@ -324,6 +324,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
             // Queue background game updates check in bottom-right task bar
             QueueGameUpdatesCheckBackgroundTask();
+
+            // Queue background platform installation verification (Steam, Epic Games, Microsoft Store)
+            QueuePlatformInstallVerificationBackgroundTask();
         }
         catch
         {
@@ -565,6 +568,69 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 var finalMessage = updatesFound > 0
                     ? $"Scan complete: {updatesFound} update(s) detected across {checkedCount} games.{skippedNote}"
                     : $"Scan complete: All {checkedCount} games are up to date.{skippedNote}";
+                progress.Report(new BlueStar.Core.Models.BackgroundTaskProgress(100, finalMessage, "Complete"));
+            });
+    }
+
+    private void QueuePlatformInstallVerificationBackgroundTask()
+    {
+        _backgroundTaskService.QueueTask(
+            "Platform Install Verification",
+            "Steam / Epic / Microsoft Store",
+            async (progress, ct) =>
+            {
+                var instances = (await _instanceManager.GetAllAsync(ct).ConfigureAwait(false))
+                    .Where(i => i.IsExternalPlatformGame)
+                    .ToList();
+
+                if (instances.Count == 0)
+                {
+                    progress.Report(new BlueStar.Core.Models.BackgroundTaskProgress(100, "No external platform instances to verify.", "Complete"));
+                    return;
+                }
+
+                int missingCount = 0;
+                for (int i = 0; i < instances.Count; i++)
+                {
+                    if (ct.IsCancellationRequested) break;
+                    var inst = instances[i];
+                    var pct = (double)i / instances.Count * 100.0;
+                    progress.Report(new BlueStar.Core.Models.BackgroundTaskProgress(pct, $"Verifying {inst.Name} ({i + 1}/{instances.Count})...", "Verifying"));
+
+                    try
+                    {
+                        var isPresent = await BlueStar.Infrastructure.Platforms.PlatformInstallVerificationService
+                            .IsPlatformInstallPresentAsync(inst, ct)
+                            .ConfigureAwait(false);
+
+                        if (!isPresent)
+                            missingCount++;
+
+                        var targetMissing = !isPresent;
+                        var targetStatus = targetMissing
+                            ? BlueStar.Core.Models.InstanceStatus.NotInstalled
+                            : (inst.Status == BlueStar.Core.Models.InstanceStatus.NotInstalled &&
+                               !string.IsNullOrWhiteSpace(inst.ExecutablePath) &&
+                               File.Exists(inst.ExecutablePath)
+                                ? BlueStar.Core.Models.InstanceStatus.Ready
+                                : inst.Status);
+
+                        if (inst.IsPlatformInstallMissing != targetMissing || inst.Status != targetStatus)
+                        {
+                            var updated = inst with
+                            {
+                                IsPlatformInstallMissing = targetMissing,
+                                Status = targetStatus
+                            };
+                            await _instanceManager.UpdateAsync(updated, ct).ConfigureAwait(false);
+                        }
+                    }
+                    catch { }
+                }
+
+                var finalMessage = missingCount > 0
+                    ? $"Verification complete: {missingCount} platform game(s) no longer installed."
+                    : $"Verification complete: All {instances.Count} platform game(s) verified.";
                 progress.Report(new BlueStar.Core.Models.BackgroundTaskProgress(100, finalMessage, "Complete"));
             });
     }
