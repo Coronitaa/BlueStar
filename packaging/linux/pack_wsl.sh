@@ -35,7 +35,10 @@ cd "$ROOT_DIR"
 
 RID="${RID:-linux-x64}"
 ARCH="${ARCH:-x86_64}"
-VERSION="${VERSION:-1.6.5}"
+VERSION="${VERSION:-1.6.6}"
+
+chmod +x dist/linux/BlueStar.AppDir/usr/lib/bluestar/BlueStar || true
+find dist/linux/BlueStar.AppDir/usr/lib/bluestar/tools -name '*.sh' -exec chmod +x {} + 2>/dev/null || true
 
 # Generar tar.gz
 tar -C dist/linux/BlueStar.AppDir/usr/lib -czf "dist/linux/BlueStar-v${VERSION}-${RID}.tar.gz" bluestar
@@ -50,6 +53,8 @@ export ARCH
 
 cd dist/linux
 sha256sum "BlueStar-v${VERSION}-${RID}.tar.gz" "BlueStar-v${VERSION}-${RID}.AppImage" > SHA256SUMS
-gpg --batch --yes --detach-sign --armor SHA256SUMS
-gpg --armor --export "BlueStar" > BlueStar-Signing-Key.asc
+if gpg --list-secret-keys "BlueStar" >/dev/null 2>&1; then
+    gpg --batch --yes --detach-sign --armor SHA256SUMS
+    gpg --armor --export "BlueStar" > BlueStar-Signing-Key.asc
+fi
 cat SHA256SUMS

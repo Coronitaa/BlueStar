@@ -83,12 +83,28 @@ public sealed class ReFixLinuxDeployTests : IDisposable
     }
 
     [LinuxFact]
-    public async Task DeployOptionAsync_Fails_WhenGameHasNoSteamApi()
+    public async Task DeployOptionAsync_Fails_WhenGameHasNoExecutableOrStoreManifest()
     {
-        Write("Game.exe");
-        var instance = new GameInstance { Name = "No Steam", InstallPath = _root, AppId = 480 };
+        Write("readme.txt");
+        var instance = new GameInstance { Name = "Empty Game", InstallPath = _root, AppId = 480 };
         var emulator = new ReFixEmulator(NullLogger<ReFixEmulator>.Instance);
 
         (await emulator.DeployOptionAsync(instance, "refix_goldberg", null, CancellationToken.None)).Should().BeFalse();
+    }
+
+    [LinuxFact]
+    public async Task DeployOptionAsync_OnNonSteamExe_BootstrapsSteamApiAndWinhttp()
+    {
+        Write("Game.exe");
+        var instance = new GameInstance { Name = "Epic Game", InstallPath = _root, AppId = 480 };
+        var emulator = new ReFixEmulator(NullLogger<ReFixEmulator>.Instance);
+
+        (await emulator.DeployOptionAsync(instance, "refix_goldberg", null, CancellationToken.None)).Should().BeTrue();
+        File.Exists(Path.Combine(_root, "steam_api64.dll")).Should().BeTrue();
+        File.Exists(Path.Combine(_root, "winhttp.dll")).Should().BeTrue();
+
+        (await emulator.UninstallAsync(instance, CancellationToken.None)).Should().BeTrue();
+        File.Exists(Path.Combine(_root, "steam_api64.dll")).Should().BeFalse();
+        File.Exists(Path.Combine(_root, "winhttp.dll")).Should().BeFalse();
     }
 }

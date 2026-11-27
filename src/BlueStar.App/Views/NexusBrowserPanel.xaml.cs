@@ -53,6 +53,7 @@ public partial class NexusBrowserPanel : UserControl
         if (NexusWebView?.CoreWebView2 != null)
         {
             try { NexusWebView.CoreWebView2.Navigate("about:blank"); } catch { }
+            BlueStar.App.Services.WebView2AvailabilityService.SetLowMemoryMode(NexusWebView.CoreWebView2, lowMemory: true);
         }
     }
 
@@ -100,6 +101,10 @@ public partial class NexusBrowserPanel : UserControl
         {
             _ = NavigateAsync(_viewModel?.StartUrl);
         }
+        else if (NexusWebView?.CoreWebView2 != null)
+        {
+            BlueStar.App.Services.WebView2AvailabilityService.SetLowMemoryMode(NexusWebView.CoreWebView2, lowMemory: true);
+        }
     }
 
     private async Task NavigateAsync(string? url)
@@ -117,10 +122,13 @@ public partial class NexusBrowserPanel : UserControl
             _webViewInit ??= InitializeWebViewAsync();
             await _webViewInit.ConfigureAwait(true);
 
-            if (NexusWebView.CoreWebView2 != null &&
-                !string.Equals(NexusWebView.CoreWebView2.Source, url, StringComparison.OrdinalIgnoreCase))
+            if (NexusWebView.CoreWebView2 != null)
             {
-                NexusWebView.CoreWebView2.Navigate(url);
+                BlueStar.App.Services.WebView2AvailabilityService.SetLowMemoryMode(NexusWebView.CoreWebView2, lowMemory: false);
+                if (!string.Equals(NexusWebView.CoreWebView2.Source, url, StringComparison.OrdinalIgnoreCase))
+                {
+                    NexusWebView.CoreWebView2.Navigate(url);
+                }
             }
         }
         catch (Exception)
@@ -132,20 +140,14 @@ public partial class NexusBrowserPanel : UserControl
 
     private async Task InitializeWebViewAsync()
     {
-        var profileFolder = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "BlueStar", "webview");
-        Directory.CreateDirectory(profileFolder);
-
         var environment = await BlueStar.App.Services.WebView2AvailabilityService
-            .CreateEnvironmentAsync(profileFolder)
+            .CreateEnvironmentAsync(BlueStar.App.Services.WebView2AvailabilityService.ProfileFolder)
             .ConfigureAwait(true);
         await NexusWebView.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
 
         NexusWebView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 27, 40, 56);
         var core = NexusWebView.CoreWebView2;
-        core.Settings.AreDefaultContextMenusEnabled = false;
-        core.Settings.IsStatusBarEnabled = false;
+        BlueStar.App.Services.WebView2AvailabilityService.ConfigureLightweightBrowser(core);
 
         core.DownloadStarting += OnDownloadStarting;
 

@@ -15,11 +15,20 @@ valve_dll() { mkdir -p "$(dirname "$1")"; printf 'valve original' > "$1"; }
 
 deploy() { run bash "$SUITE/AutoDeploy.sh" "$GAME" "$@" </dev/null; }
 
-@test "dies without any steam_api dll" {
-    touch "$GAME/Game.exe"
+@test "dies without any game executable, steam_api dll, or store manifest" {
+    touch "$GAME/readme.txt"
     deploy lan 480 none
     [ "$status" -ne 0 ]
-    [[ "$output" == *"No steam_api64.dll or steam_api.dll"* ]]
+    [[ "$output" == *"No game executable, steam_api*.dll, EOSSDK, or Store manifest found"* ]]
+}
+
+@test "epic or non-steam exe without steam_api drops steam_api64 and winhttp bootstrapper" {
+    touch "$GAME/Game.exe"
+    deploy lan 480 none
+    [ "$status" -eq 0 ]
+    grep -qa ReFix "$GAME/steam_api64.dll"
+    grep -qa ReFix "$GAME/winhttp.dll"
+    grep -q "AutoLoadSteamApi = true" "$GAME/ReFix.ini"
 }
 
 @test "rejects an unknown mode and a non-numeric appid" {
@@ -42,13 +51,13 @@ deploy() { run bash "$SUITE/AutoDeploy.sh" "$GAME" "$@" </dev/null; }
     grep -q "Mode = goldberg" "$GAME/ReFix.ini"
 }
 
-@test "unreal: ini lands in the game root, not Binaries/Win64 (BlueStar moves it in C#)" {
+@test "unreal: ini lands in Binaries/Win64 next to the Shipping exe" {
     valve_dll "$GAME/Engine/Binaries/ThirdParty/Steamworks/Steamv157/Win64/steam_api64.dll"
     mkdir -p "$GAME/Game/Binaries/Win64" && touch "$GAME/Game/Binaries/Win64/Game-Win64-Shipping.exe"
     deploy lan 480 none
     [ "$status" -eq 0 ]
-    [ -f "$GAME/ReFix.ini" ]
-    [ ! -f "$GAME/Game/Binaries/Win64/ReFix.ini" ]
+    [ -f "$GAME/Game/Binaries/Win64/ReFix.ini" ]
+    [ ! -f "$GAME/ReFix.ini" ]
 }
 
 @test "x86: replaces steam_api.dll too" {

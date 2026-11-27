@@ -78,8 +78,8 @@ public class CreamInstallerService : IDlcInstaller
             return await InstallCreamApiAsync(instance, dlc, ct, progress).ConfigureAwait(false);
         }
 
-        // 1. Check if ReFix_deploy dlc_unlocker.ps1 script is available
-        var deployPath = Emulators.ReFixEmulator.GetReFixDeployPath(instance);
+        // 1. Check if ReFix_deploy dlc_unlocker.ps1 script is available (Windows PowerShell)
+        var deployPath = OperatingSystem.IsWindows() ? Emulators.ReFixEmulator.GetReFixDeployPath(instance) : null;
         if (!string.IsNullOrEmpty(deployPath))
         {
             var binDir = Directory.Exists(Path.Combine(deployPath, "bin")) ? Path.Combine(deployPath, "bin") : deployPath;
@@ -291,7 +291,7 @@ public class CreamInstallerService : IDlcInstaller
         ArgumentNullException.ThrowIfNull(instance);
         try
         {
-            var deployPath = Emulators.ReFixEmulator.GetReFixDeployPath(instance);
+            var deployPath = OperatingSystem.IsWindows() ? Emulators.ReFixEmulator.GetReFixDeployPath(instance) : null;
             if (!string.IsNullOrEmpty(deployPath))
             {
                 var binDir = Directory.Exists(Path.Combine(deployPath, "bin")) ? Path.Combine(deployPath, "bin") : deployPath;

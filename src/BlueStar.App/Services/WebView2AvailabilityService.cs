@@ -1,13 +1,18 @@
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Web.WebView2.Core;
 
 namespace BlueStar.App.Services;
 
 /// <summary>
-/// Verifies availability of the Microsoft Edge WebView2 Runtime and handles recovery workflows.
+/// Verifies availability of the Microsoft Edge WebView2 Runtime, manages a single shared
+/// lightweight Chromium environment across all embedded browsers, and handles recovery workflows.
 /// Uses the installed Evergreen Runtime when present; otherwise the Fixed Version runtime bundled
 /// with the portable build ({app}\WebView2Runtime), so BlueStar runs without installing anything.
 /// </summary>
@@ -17,7 +22,50 @@ public static class WebView2AvailabilityService
     private const string BundledInstallerName = "MicrosoftEdgeWebview2Setup.exe";
     private const string SandboxAclMarker = ".acl-granted";
 
+    private const string LightweightChromiumArgs =
+        "--disable-background-networking " +
+        "--disable-component-update " +
+        "--disable-domain-reliability " +
+        "--disable-sync " +
+        "--no-first-run " +
+        "--no-default-browser-check " +
+        "--enable-quic " +
+        "--disk-cache-size=104857600 " +
+        "--disable-features=msEdgeSmartScreen,OptimizationHints,MediaRouter,CalculateNativeWinOcclusion,Translate,InterestFeedContentSuggestions,msEdgeAccountConsistency";
+
+    private static readonly string[] TrackerFilterPatterns =
+    [
+        "*://*.google-analytics.com/*",
+        "*://*.googletagmanager.com/*",
+        "*://*.doubleclick.net/*",
+        "*://*.googlesyndication.com/*",
+        "*://*.googleadservices.com/*",
+        "*://*.scorecardresearch.com/*",
+        "*://*.quantserve.com/*",
+        "*://*.clarity.ms/*",
+        "*://*.hotjar.com/*",
+        "*://*.criteo.com/*",
+        "*://*.adnxs.com/*",
+        "*://*.pubmatic.com/*",
+        "*://*.rubiconproject.com/*",
+        "*://*.amazon-adsystem.com/*",
+        "*://connect.facebook.net/*"
+    ];
+
+    private static readonly ConcurrentDictionary<string, Task<CoreWebView2Environment>> EnvironmentCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private static readonly ConditionalWeakTable<CoreWebView2, object> ConfiguredCores = new();
+
     private static bool? _isCachedAvailable;
+    private static bool _hasResolvedExecutableFolder;
+    private static string? _cachedExecutableFolder;
+    private static int _prewarmStarted;
+
+    /// <summary>Shared WebView2 user-data profile directory across internal store and mod browsers.</summary>
+    public static string ProfileFolder => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "BlueStar", "webview");
 
     /// <summary>
     /// Checks whether a WebView2 Runtime (installed or bundled) is usable on this system.
@@ -48,11 +96,112 @@ public static class WebView2AvailabilityService
     }
 
     /// <summary>
-    /// Creates a WebView2 environment on the installed runtime, or on the bundled Fixed Version runtime when none is installed.
+    /// Pre-warms the shared lightweight WebView2 environment in the background after startup so the first
+    /// embedded Store, Workshop, or Nexus browser opens without cold-start latency.
+    /// </summary>
+    public static void PrewarmInBackground()
+    {
+        if (Interlocked.Exchange(ref _prewarmStarted, 1) != 0)
+            return;
+
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                if (!IsAvailable()) return;
+                Directory.CreateDirectory(ProfileFolder);
+                var envTask = CreateEnvironmentAsync(ProfileFolder);
+                _ = envTask.ContinueWith(
+                    t => { _ = t.Exception; },
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted,
+                    TaskScheduler.Default);
+            }
+            catch { }
+        });
+    }
+
+    /// <summary>
+    /// Returns a shared, cached WebView2 environment configured with lightweight Chromium arguments,
+    /// on the installed Evergreen runtime or the bundled Fixed Version runtime when none is installed.
     /// </summary>
     public static Task<CoreWebView2Environment> CreateEnvironmentAsync(string userDataFolder)
     {
-        return CoreWebView2Environment.CreateAsync(GetBrowserExecutableFolder(), userDataFolder);
+        var normalizedFolder = Path.GetFullPath(userDataFolder);
+        Directory.CreateDirectory(normalizedFolder);
+
+        return EnvironmentCache.GetOrAdd(normalizedFolder, folder =>
+        {
+            var options = new CoreWebView2EnvironmentOptions
+            {
+                AdditionalBrowserArguments = LightweightChromiumArgs
+            };
+
+            var task = CoreWebView2Environment.CreateAsync(GetBrowserExecutableFolder(), folder, options);
+            _ = task.ContinueWith(
+                t =>
+                {
+                    if (t.IsFaulted || t.IsCanceled)
+                    {
+                        EnvironmentCache.TryRemove(new KeyValuePair<string, Task<CoreWebView2Environment>>(folder, t));
+                    }
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            return task;
+        });
+    }
+
+    /// <summary>
+    /// Applies consistent lightweight settings and native ad/tracker request filtering to a <see cref="CoreWebView2"/> instance.
+    /// </summary>
+    public static void ConfigureLightweightBrowser(CoreWebView2 core, bool blockTrackers = true)
+    {
+        if (core == null) return;
+
+        var settings = core.Settings;
+        settings.AreDefaultContextMenusEnabled = false;
+        settings.IsStatusBarEnabled = false;
+        settings.IsGeneralAutofillEnabled = false;
+        settings.IsSwipeNavigationEnabled = false;
+        settings.IsPinchZoomEnabled = false;
+
+        if (!blockTrackers) return;
+        if (!ConfiguredCores.TryAdd(core, new object())) return;
+
+        try
+        {
+            foreach (var pattern in TrackerFilterPatterns)
+            {
+                core.AddWebResourceRequestedFilter(pattern, CoreWebView2WebResourceContext.All);
+            }
+
+            core.WebResourceRequested += (_, args) =>
+            {
+                try
+                {
+                    args.Response = core.Environment.CreateWebResourceResponse(null, 204, "Blocked", "");
+                }
+                catch { }
+            };
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Switches a hidden or idle WebView2 instance between low and normal memory usage targets.
+    /// </summary>
+    public static void SetLowMemoryMode(CoreWebView2? core, bool lowMemory)
+    {
+        if (core == null) return;
+        try
+        {
+            core.MemoryUsageTargetLevel = lowMemory
+                ? CoreWebView2MemoryUsageTargetLevel.Low
+                : CoreWebView2MemoryUsageTargetLevel.Normal;
+        }
+        catch { }
     }
 
     /// <summary>
@@ -60,13 +209,23 @@ public static class WebView2AvailabilityService
     /// </summary>
     private static string? GetBrowserExecutableFolder()
     {
-        if (IsEvergreenInstalled()) return null;
+        if (_hasResolvedExecutableFolder)
+            return _cachedExecutableFolder;
 
-        var bundled = Path.Combine(AppContext.BaseDirectory, BundledRuntimeFolderName);
-        if (!File.Exists(Path.Combine(bundled, "msedgewebview2.exe"))) return null;
+        string? resolved = null;
+        if (!IsEvergreenInstalled())
+        {
+            var bundled = Path.Combine(AppContext.BaseDirectory, BundledRuntimeFolderName);
+            if (File.Exists(Path.Combine(bundled, "msedgewebview2.exe")))
+            {
+                GrantSandboxAccess(bundled);
+                resolved = bundled;
+            }
+        }
 
-        GrantSandboxAccess(bundled);
-        return bundled;
+        _cachedExecutableFolder = resolved;
+        _hasResolvedExecutableFolder = true;
+        return resolved;
     }
 
     private static bool IsEvergreenInstalled()

@@ -182,6 +182,7 @@ public partial class BrowseView : UserControl
             {
                 _pendingStoreUrl = null;
                 StorePageView.CoreWebView2.Navigate("about:blank");
+                BlueStar.App.Services.WebView2AvailabilityService.SetLowMemoryMode(StorePageView.CoreWebView2, lowMemory: true);
             }
             return;
         }
@@ -208,6 +209,7 @@ public partial class BrowseView : UserControl
 
             if (StorePageView.CoreWebView2 != null)
             {
+                BlueStar.App.Services.WebView2AvailabilityService.SetLowMemoryMode(StorePageView.CoreWebView2, lowMemory: false);
                 if (string.Equals(StorePageView.CoreWebView2.Source?.TrimEnd('/'), url.TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
                 {
                     return;
@@ -258,14 +260,8 @@ public partial class BrowseView : UserControl
     {
         if (_webViewReady) return;
 
-        var profileFolder = System.IO.Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "BlueStar", "webview");
-
-        Directory.CreateDirectory(profileFolder);
-
         var environment = await BlueStar.App.Services.WebView2AvailabilityService
-            .CreateEnvironmentAsync(profileFolder)
+            .CreateEnvironmentAsync(BlueStar.App.Services.WebView2AvailabilityService.ProfileFolder)
             .ConfigureAwait(true);
 
         await StorePageView.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
@@ -273,8 +269,7 @@ public partial class BrowseView : UserControl
         StorePageView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 27, 40, 56);
         if (StorePageView.CoreWebView2 != null)
         {
-            StorePageView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
-            StorePageView.CoreWebView2.Settings.IsStatusBarEnabled = false;
+            BlueStar.App.Services.WebView2AvailabilityService.ConfigureLightweightBrowser(StorePageView.CoreWebView2);
             StorePageView.CoreWebView2.NewWindowRequested += (s, args) =>
             {
                 args.Handled = true;

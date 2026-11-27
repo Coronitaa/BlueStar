@@ -227,12 +227,12 @@ uninstall() {
     done < <({ dirs_with EOSSDK_original.dll; dirs_with RedboneEOS.dll; } | sort -u)
     while IFS= read -r d; do restore_one "$d" winmm_o.dll winmm.dll; done < <(dirs_with winmm_o.dll)
     while IFS= read -r d; do restore_one "$d" winhttp_original.dll winhttp.dll; done < <(dirs_with winhttp_original.dll)
-    # ReFix loader proxies with no original behind them: the game would still load ReFix after uninstalling.
+    # ReFix loader proxies and dropped steam_api/EOS DLLs with no original behind them.
     while IFS= read -r f; do
         is_refix "$f" && rm -f "$f" && ok "Removed ReFix $(basename "$f") from $(dirname "$f")"
-    done < <(find "$GAME_DIR" -type f \( -iname winmm.dll -o -iname winhttp.dll \) 2>/dev/null)
-    find "$GAME_DIR" -type f \( -name "steam_appid.txt" -o -name "ReFix.ini" -o -name "ReFix.log" -o -name "local_save.txt" -o -name "refix_steamlink64.dll" -o -name "refix_steamlink.dll" -o -name "refix_steamhost64.exe" -o -name "refix_steamhost.exe" -o -name "refixmod.exe" -o -name "ReFixFusionShared.log" -o -name ".refix_launch_options.txt" \) -delete 2>/dev/null || true
-    find "$GAME_DIR" -type d -name "refix_mods" -exec rm -rf {} + 2>/dev/null || true
+    done < <(find "$GAME_DIR" -type f \( -iname winmm.dll -o -iname winhttp.dll -o -iname steam_api64.dll -o -iname steam_api.dll -o -iname EOSSDK-Win64-Shipping.dll \) 2>/dev/null)
+    find "$GAME_DIR" -type f \( -name "steam_appid.txt" -o -name "ReFix.ini" -o -name "ReFix.log" -o -name "local_save.txt" -o -name "steam_interfaces.txt" -o -name "refix_steamlink64.dll" -o -name "refix_steamlink.dll" -o -name "refix_steamhost64.exe" -o -name "refix_steamhost.exe" -o -name "refixmod.exe" -o -name "ReFixFusionShared.log" -o -name ".refix_launch_options.txt" \) -delete 2>/dev/null || true
+    find "$GAME_DIR" -type d \( -name "refix_mods" -o -name "steam_settings" -o -name "saves" \) -exec rm -rf {} + 2>/dev/null || true
     # ReFix support tools (Photon Fusion Shared server): only the folder holding ReFix's own server, then its
     # ReFix parent if nothing else is left in it.
     while IFS= read -r f; do
@@ -313,20 +313,33 @@ deploy_eos() {
     done < <({ dirs_with EOSSDK-Win64-Shipping.dll; dirs_with EOSSDK_original.dll; } | sort -u)
 }
 
-deploy_eac() {
+deploy_winhttp_loader() {
     local src="$PRODUCT_BIN/winhttp.dll"
     [ -f "$src" ] || src="$BIN/lan/winhttp.dll"
+    [ -f "$src" ] || src="$BIN/winhttp.dll"
     [ -f "$src" ] || return 0
-    local eac
-    eac="$(find "$GAME_DIR" -type f \( -iname '*easyanticheat*' -o -iname '*start_protected_game*' \) -print -quit 2>/dev/null)"
-    [ -n "$eac" ] || return 0
     local d="$EXE_DIR"
     if [ -f "$d/winhttp.dll" ] && [ ! -f "$d/winhttp_original.dll" ] && ! is_refix "$d/winhttp.dll"; then
         mv -f "$d/winhttp.dll" "$d/winhttp_original.dll"
         ok "Backed up original winhttp.dll -> winhttp_original.dll in $d"
     fi
     cp -f "$src" "$d/winhttp.dll"
-    ok "Deployed ReFix winhttp.dll Anti-Cheat bypass proxy to $d"
+    ok "Deployed ReFix winhttp.dll bootstrapper to $d"
+}
+
+deploy_eac() {
+    local eac eos_present=0
+    eac="$(find "$GAME_DIR" -type f \( -iname '*easyanticheat*' -o -iname '*start_protected_game*' \) -print -quit 2>/dev/null)"
+    [ -n "$(dirs_with EOSSDK-Win64-Shipping.dll; dirs_with EOSSDK_original.dll)" ] && eos_present=1
+    if [ -n "$eac" ]; then
+        if [ "$HAS_NATIVE_STEAM" = 1 ] || [ "$eos_present" = 1 ]; then
+            return 0
+        fi
+        deploy_winhttp_loader
+    elif [ "$HAS_NATIVE_STEAM" = 0 ] || [ "$STORE_TYPE" = epic ] || [ "$STORE_TYPE" = msstore ]; then
+        # Pure Epic / MS Store / non-Steam games do not import steam_api64.dll natively.
+        deploy_winhttp_loader
+    fi
 }
 
 # ReFix LAN has no winmm loader: drop a ReFix Online winmm.dll left by an earlier Online deploy.
@@ -379,6 +392,7 @@ ini_set() {   # ini_set <file> <section> <key> <value>
     local tmp; tmp="$(mktemp)"
     awk -v sec="[$2]" -v key="$3" -v val="$4" '
         function flush() { if (insec && !done) { print key " = " val; done = 1 } }
+        { sub(/\r$/, "") }
         /^\[.*\][[:space:]]*$/ { flush(); insec = ($0 == sec); print; next }
         insec && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" { print key " = " val; done = 1; next }
         { print }
@@ -456,6 +470,10 @@ WindowHeight = 1080
 
 [EOS]
 Mode = $eos
+UnlockDLCs = true
+
+[Paths]
+AutoLoadSteamApi = $AUTO_LOAD_STEAM
 
 [Debug]
 EnableLog = false
@@ -473,6 +491,7 @@ EOF
         if [ "$PRODUCT_DIR" = lan_offline ]; then
             ini_set "$ini" SteamLink Enabled 0
         fi
+        ini_set "$ini" Paths AutoLoadSteamApi "$AUTO_LOAD_STEAM"
         ok "Updated ReFix.ini in $EXE_DIR for ReFix $MODE"
     fi
     if [ "$PRODUCT_DIR" = lan_offline ]; then
@@ -509,6 +528,40 @@ else
 fi
 GAME_NAME="$(basename "$GAME_DIR")"
 
+# Detect Store Platform (msstore | epic | steam) and refine EXE_DIR / GAME_NAME
+STORE_TYPE="steam"
+MS_CFG="$(find "$GAME_DIR" -maxdepth 3 -type f -iname "MicrosoftGame.Config" -print -quit 2>/dev/null || true)"
+APPX_CFG="$(find "$GAME_DIR" -maxdepth 3 -type f -iname "appxmanifest.xml" -print -quit 2>/dev/null || true)"
+EG_DIR="$(find "$GAME_DIR" -maxdepth 2 -type d -name ".egstore" -print -quit 2>/dev/null || true)"
+EOS_BOOT="$(find "$GAME_DIR" -maxdepth 2 -type f -iname "EOSBootstrapper.*" -print -quit 2>/dev/null || true)"
+
+if [ -n "$MS_CFG" ] || [ -n "$APPX_CFG" ]; then
+    STORE_TYPE="msstore"
+    [ -n "$MS_CFG" ] && EXE_DIR="$(dirname "$MS_CFG")"
+    [ -z "$MS_CFG" ] && [ -n "$APPX_CFG" ] && EXE_DIR="$(dirname "$APPX_CFG")"
+    if [ -n "$MS_CFG" ]; then
+        disp="$(sed -n 's/.*DefaultDisplayName="\([^"]*\)".*/\1/p' "$MS_CFG" | head -n 1)"
+        [ -n "$disp" ] && case "$disp" in ms-resource:*) ;; *) GAME_NAME="$disp" ;; esac
+    fi
+elif [ -n "$EG_DIR" ] || [ -n "$EOS_BOOT" ]; then
+    STORE_TYPE="epic"
+    if [ -n "$EG_DIR" ]; then
+        item_file="$(find "$EG_DIR" -maxdepth 1 -type f -name '*.item' -print -quit 2>/dev/null || true)"
+        if [ -n "$item_file" ]; then
+            disp="$(sed -n 's/.*"DisplayName"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$item_file" | head -n 1)"
+            [ -n "$disp" ] && GAME_NAME="$disp"
+            lexe="$(sed -n 's/.*"LaunchExecutable"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$item_file" | head -n 1)"
+            if [ -n "$lexe" ] && [ -f "$GAME_DIR/$lexe" ]; then
+                EXE_DIR="$(dirname "$GAME_DIR/$lexe")"
+            fi
+        fi
+    fi
+fi
+if [ "$EXE_DIR" = "$GAME_DIR" ]; then
+    ue_ship="$(find "$GAME_DIR" -maxdepth 4 -type f -iname '*-Win64-Shipping.exe' -print -quit 2>/dev/null || true)"
+    [ -n "$ue_ship" ] && EXE_DIR="$(dirname "$ue_ship")"
+fi
+
 if [ "$UNINSTALL" = 1 ]; then uninstall; exit 0; fi
 
 MODE="${2:-}"
@@ -532,6 +585,18 @@ if [ -z "$APP_ID" ]; then
     existing="$(find "$GAME_DIR" -maxdepth 3 -type f -name steam_appid.txt -print -quit 2>/dev/null)"
     [ -n "$existing" ] && APP_ID="$(tr -dc '0-9' < "$existing")"
 fi
+if [ -z "$APP_ID" ] && [ -n "$GAME_NAME" ]; then
+    store_tmp="$(mktemp)"
+    encoded_name="$(printf '%s' "$GAME_NAME" | sed 's/ /%20/g; s/&/%26/g')"
+    if fetch "https://store.steampowered.com/api/storesearch/?term=$encoded_name&l=english&cc=US" "$store_tmp"; then
+        found_id="$(sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p' "$store_tmp" | head -n 1)"
+        if [ -n "$found_id" ]; then
+            APP_ID="$found_id"
+            info "Resolved Steam AppID from store search for '$GAME_NAME': $APP_ID"
+        fi
+    fi
+    rm -f "$store_tmp"
+fi
 if [ -z "$APP_ID" ]; then
     read -r -p "Steam AppID of the game (Enter = 480): " APP_ID
 fi
@@ -552,16 +617,54 @@ case "${OVERLAY,,}" in 2|steam) OVERLAY=steam ;; 3|none|off) OVERLAY=none ;; *) 
 if [ "$OVERLAY" = refix ]; then OV_ENABLED=true; else OV_ENABLED=false; fi
 if [ "$OVERLAY" = steam ]; then OV_BLOCK=false; else OV_BLOCK=true; fi
 
-if [ -z "$(dirs_with steam_api64.dll; dirs_with steam_api.dll; dirs_with steam_api64_original.dll; dirs_with steam_api_original.dll)" ]; then
-    die "No steam_api64.dll or steam_api.dll found under $GAME_DIR"
+HAS_NATIVE_STEAM=0
+AUTO_LOAD_STEAM=true
+while IFS= read -r d; do
+    if [ -f "$d/steam_api64_original.dll" ] || [ -f "$d/steam_api_original.dll" ]; then
+        HAS_NATIVE_STEAM=1; break
+    fi
+    if [ -f "$d/steam_api64.dll" ] && ! is_refix "$d/steam_api64.dll"; then
+        HAS_NATIVE_STEAM=1; break
+    fi
+    if [ -f "$d/steam_api.dll" ] && ! is_refix "$d/steam_api.dll"; then
+        HAS_NATIVE_STEAM=1; break
+    fi
+done < <({ dirs_with steam_api64.dll; dirs_with steam_api.dll; dirs_with steam_api64_original.dll; dirs_with steam_api_original.dll; } | sort -u)
+[ "$HAS_NATIVE_STEAM" = 1 ] && [ "$STORE_TYPE" != epic ] && [ "$STORE_TYPE" != msstore ] && AUTO_LOAD_STEAM=false
+
+if [ "$HAS_NATIVE_STEAM" = 0 ]; then
+    has_any_target="$(find "$GAME_DIR" -maxdepth 4 -type f \( -iname '*.exe' -o -iname '*EOSSDK*' -o -iname 'MicrosoftGame.Config' -o -iname 'appxmanifest.xml' \) -print -quit 2>/dev/null || true)"
+    [ -n "$has_any_target" ] || die "No game executable, steam_api*.dll, EOSSDK, or Store manifest found under $GAME_DIR"
 fi
 
+info "Store:  $STORE_TYPE"
 info "Game:   $GAME_DIR"
 info "Mode:   ReFix $MODE (binaries from $PRODUCT_BIN)"
 info "AppID:  $APP_ID"
 [ "$MODE" = lan ] && info "Overlay: $OVERLAY"
-deploy_steam_x64
-deploy_steam_x86
+if [ "$HAS_NATIVE_STEAM" = 1 ]; then
+    deploy_steam_x64
+    deploy_steam_x86
+else
+    # Pure Epic / MS Store game without native steam_api*.dll: drop ReFix steam_api64.dll into EXE_DIR
+    # so winhttp.dll can bootstrap it (providing LanCore, SteamLink, PhotonP2P, and the overlay).
+    if find "$GAME_DIR" -maxdepth 4 -type d -path '*/Plugins/x86' -print -quit 2>/dev/null | grep -q . &&
+       ! find "$GAME_DIR" -maxdepth 4 -type d -path '*/Plugins/x86_64' -print -quit 2>/dev/null | grep -q .; then
+        cp -f "$PRODUCT_BIN/x86/steam_api.dll" "$EXE_DIR/steam_api.dll"
+        ok "Deployed ReFix $MODE x86 steam_api.dll to $EXE_DIR"
+        if [ "$MODE" = lan ] && [ -f "$PRODUCT_BIN/x86/refix_steamhost.exe" ]; then
+            cp -f "$PRODUCT_BIN/x86/refix_steamhost.exe" "$EXE_DIR/refix_steamhost.exe"
+            [ -f "$BIN/valve/steam_api.dll" ] && cp -f "$BIN/valve/steam_api.dll" "$EXE_DIR/refix_steamlink.dll"
+        fi
+    else
+        cp -f "$PRODUCT_BIN/steam_api64.dll" "$EXE_DIR/steam_api64.dll"
+        ok "Deployed ReFix $MODE steam_api64.dll to $EXE_DIR"
+        if [ "$MODE" = lan ] && [ -f "$PRODUCT_BIN/refix_steamhost64.exe" ] && [ -f "$BIN/valve/steam_api64.dll" ]; then
+            cp -f "$BIN/valve/steam_api64.dll" "$EXE_DIR/refix_steamlink64.dll"
+            cp -f "$PRODUCT_BIN/refix_steamhost64.exe" "$EXE_DIR/refix_steamhost64.exe"
+        fi
+    fi
+fi
 deploy_eos
 deploy_eac
 clean_online_winmm

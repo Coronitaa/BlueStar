@@ -62,6 +62,9 @@ public partial class MainWindow : Window
         {
             DataContext = App.Services.GetRequiredService<ViewModels.MainViewModel>();
         }
+        Loaded += (_, _) => Dispatcher.InvokeAsync(
+            BlueStar.App.Services.WebView2AvailabilityService.PrewarmInBackground,
+            System.Windows.Threading.DispatcherPriority.Background);
     }
 
 

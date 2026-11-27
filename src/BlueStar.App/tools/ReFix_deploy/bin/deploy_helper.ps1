@@ -3,7 +3,7 @@ param(
     [string]$BinDir = "",
     [string]$ExeDir = "",
     [string]$EngineType = "Unity",
-    [string]$OnlineMode = "valve",
+    [string]$OnlineMode = "goldberg",
     [string]$PhotonAppId = "",
     [string]$PhotonRegion = "",
     [string]$GameName = "",
@@ -46,6 +46,45 @@ if (-not $PhotonRegion -and $env:REFIX_PHOTON_REGION) { $PhotonRegion = $env:REF
 if (-not $OverlayMode -and $env:REFIX_OVERLAY_MODE) { $OverlayMode = $env:REFIX_OVERLAY_MODE }
 if (-not $PortableRuntime -and $env:REFIX_PORTABLE_RUNTIME) { $PortableRuntime = $env:REFIX_PORTABLE_RUNTIME }
 
+# Normalize all directory parameters to robust absolute paths
+if ($BinDir -and (Test-Path -LiteralPath $BinDir)) { $BinDir = (Resolve-Path -LiteralPath $BinDir).Path }
+if ($TargetDir -and (Test-Path -LiteralPath $TargetDir)) { $TargetDir = (Resolve-Path -LiteralPath $TargetDir).Path }
+if ($ExeDir -and (Test-Path -LiteralPath $ExeDir)) { $ExeDir = (Resolve-Path -LiteralPath $ExeDir).Path }
+
+# Smart game detection fallback: if EngineType, RealAppId, ExeDir or GameName were omitted or default, detect them dynamically
+if ($TargetDir -and (Test-Path -LiteralPath $TargetDir)) {
+    $detectorScript = Join-Path $BinDir "detect_game.ps1"
+    if (-not (Test-Path -LiteralPath $detectorScript)) {
+        $detectorScript = Join-Path $PSScriptRoot "detect_game.ps1"
+    }
+    if (Test-Path -LiteralPath $detectorScript) {
+        $detectionOutput = & powershell -NoProfile -ExecutionPolicy Bypass -File $detectorScript -TargetDir $TargetDir
+        $detectedProps = @{}
+        foreach ($dLine in $detectionOutput) {
+            if ($dLine -match "^([^=]+)=(.*)$") {
+                $detectedProps[$Matches[1].Trim()] = $Matches[2].Trim()
+            }
+        }
+        $script:storeType = if ($detectedProps.ContainsKey("STORE_TYPE")) { $detectedProps["STORE_TYPE"] } else { "steam" }
+        if ((-not $EngineType -or $EngineType -eq "Unity") -and $detectedProps["ENGINE_TYPE"]) {
+            $EngineType = $detectedProps["ENGINE_TYPE"]
+            Write-Host "[AutoDetect] Engine Type: $EngineType"
+        }
+        if ((-not $ExeDir -or $ExeDir -eq $TargetDir) -and $detectedProps["EXE_DIR"]) {
+            $ExeDir = $detectedProps["EXE_DIR"]
+            Write-Host "[AutoDetect] Exe Directory: $ExeDir"
+        }
+        if ((-not $GameName) -and $detectedProps["GAME_NAME"]) {
+            $GameName = $detectedProps["GAME_NAME"]
+            Write-Host "[AutoDetect] Game Name: $GameName"
+        }
+        if ((-not $RealAppId -or $RealAppId -eq "480") -and $detectedProps["DETECTED_APPID"] -and $detectedProps["DETECTED_APPID"] -ne "0" -and $detectedProps["DETECTED_APPID"] -ne "480") {
+            $RealAppId = $detectedProps["DETECTED_APPID"]
+            Write-Host "[AutoDetect] Real AppID: $RealAppId"
+        }
+    }
+}
+
 # Free-to-play games (Brawlhalla) are in every Steam library and their own backend checks a Steam ticket for the
 # real AppID, so ReFix Online keeps the real AppID instead of masking it as 480. Offline lookup keeps 480.
 if ($OnlineMode -eq "valve" -and $MaskAppId -eq "480" -and $RealAppId -match '^\d+$' -and $RealAppId -ne "480") {
@@ -80,7 +119,7 @@ if (-not $ExeDir) { $ExeDir  = $TargetDir }
 # Offline LAN deploys exactly like ReFix LAN from here on (same files, same ReFix.ini), only from its own folder.
 $lanProduct = "lan"
 if ($OnlineMode -eq "lanoffline") { $lanProduct = "lan_offline"; $OnlineMode = "goldberg" }
-$productName = if ($OnlineMode -in @("goldberg", "offline", "lan")) { $lanProduct } else { "online" }
+$productName = if ($OnlineMode -in @("goldberg", "offline", "lan", "mixed")) { $lanProduct } else { "online" }
 $ProductBinDir = Join-Path $BinDir $productName
 if (-not (Test-Path -LiteralPath (Join-Path $ProductBinDir "steam_api64.dll"))) {
     $buildHint = if ($productName -eq "lan") { "build.bat" } elseif ($productName -eq "lan_offline") { "copy bin\lan from the previous release" } else { "build_online.bat" }
@@ -274,13 +313,14 @@ function Detect-UNAE-Topology {
             UsesPhoton = $usesPhoton
         }
     } else {
+        $defaultP2PPort = if ($EngineType -eq "Source") { "27015" } else { "7777" }
         return @{
             Topology = "TopologyA"
             Name = "Topology A: direct sockets (P2P / LAN / Steam relay)"
             Transport = "Tier 1 LAN Autonoma / Tier 2 WAN Steam SDR P2P"
             Color = "Green"
             DirectP2PAllowed = $true
-            P2PPort = "7777"
+            P2PPort = $defaultP2PPort
             UsesPhoton = $usesPhoton
         }
     }
@@ -326,13 +366,13 @@ function Generate-UNAE-ReFixIni {
     $defRegion     = & $Pick "Photon" "DefaultRegion" $regionCandidate
     $bypassVal     = if ($P.DLCMode -eq "none") { "false" } else { "true" }
     $hasEosOrig    = (Get-ChildItem -LiteralPath $TargetDir -Filter "EOSSDK_original.dll" -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0
-    $eosModeDefault = if ($hasEosOrig) { "passthrough" } elseif ($P.OnlineMode -in @("goldberg", "offline", "lan")) { "emulated" } else { "passthrough" }
+    $eosModeDefault = if ($hasEosOrig) { "passthrough" } elseif ($P.OnlineMode -in @("goldberg", "offline", "lan", "mixed")) { "emulated" } else { "passthrough" }
     $eosMode       = & $Pick "EOS" "Mode" $eosModeDefault
-    $eosAuthDefault = if ($eosMode -eq "passthrough") { "true" } elseif ($P.OnlineMode -in @("goldberg", "offline", "lan")) { "false" } else { "true" }
+    $eosAuthDefault = if ($eosMode -eq "passthrough") { "true" } elseif ($P.OnlineMode -in @("goldberg", "offline", "lan", "mixed")) { "false" } else { "true" }
     $eosAuth       = & $Pick "EOS" "DeviceIdAuth" $eosAuthDefault
     # ReFix decides the Photon backend: a detected Photon stack (PUN2/Realtime/Voice/Fusion) in a
     # no-third-party mode uses the local emulator (ReFixCloud over Steam P2P); otherwise real Photon.
-    $photonDefault = if ($P.UsesPhoton -and ($P.OnlineMode -in @("valve","goldberg","offline","lan"))) { "ReFixCloud" } else { "OfficialPhoton" }
+    $photonDefault = if ($P.UsesPhoton -and ($P.OnlineMode -in @("valve","goldberg","offline","lan","mixed"))) { "ReFixCloud" } else { "OfficialPhoton" }
     $photonBackend = & $Pick "Photon" "Backend" $photonDefault
     # OfficialPhoton is what older ReFix versions wrote for every game, so an existing value is not a user
     # choice: re-decide it. Without this a redeploy keeps the emulator off on one PC while the other uses it,
@@ -349,7 +389,7 @@ function Generate-UNAE-ReFixIni {
     if (-not $serverListAppId -or $serverListAppId -eq "480") { $serverListAppId = if ($realId -and $realId -ne "0") { $realId } else { "480" } }
     # Fast-failing cloud TCP (443/80) only helps when there is no internet backend to reach; online it would
     # block EOS sign-in, PlayFab and other official services.
-    $fastCloudFailDefault = if ($P.OnlineMode -in @("goldberg", "offline", "lan")) { "true" } else { "false" }
+    $fastCloudFailDefault = if ($P.OnlineMode -in @("goldberg", "offline", "lan", "mixed")) { "true" } else { "false" }
     $fastCloudFail = & $Pick "P2P" "FastCloudFail" $fastCloudFailDefault
 
     $existingDiscoveryPort = if ($existing.ContainsKey("Network/DiscoveryPort") -and $existing["Network/DiscoveryPort"] -ne "") {
@@ -367,6 +407,13 @@ function Generate-UNAE-ReFixIni {
     }
 
     $customBroadcasts = & $Pick "Network" "CustomBroadcasts" $P.CustomBroadcasts
+
+    $modsEnabled = & $Pick "Mods" "Enabled" "true"
+    $modsDevMode = & $Pick "Mods" "DevMode" "false"
+    $needsSteamBootstrap = ($script:hasRealSteamDll -eq $false) -or ($script:storeType -in @("epic", "msstore"))
+    $autoLoadDefault = if ($P.ContainsKey("AutoLoadSteamApi") -and $P.AutoLoadSteamApi) { $P.AutoLoadSteamApi } elseif ($needsSteamBootstrap) { "true" } else { "false" }
+    $autoLoadSteamApi = if ($needsSteamBootstrap) { "true" } else { & $Pick "Paths" "AutoLoadSteamApi" $autoLoadDefault }
+    $extraDlls = & $Pick "Paths" "ExtraDLLs" ""
 
     $iniContent = @"
 ; =============================================================================
@@ -520,8 +567,16 @@ BlockSteamOverlay = $(if ($OverlayMode -eq "steam") { "false" } else { "true" })
 Sounds = true
 ; Each profile keeps its own Steam Cloud files and the game's known save folder (Unreal SaveGames, Unity LocalLow).
 IsolateSaves = true
-; FirstRunDialog: false = the game starts straight away, without the first-run dialog
-FirstRunDialog = false
+; FirstRunDialog: true = show the first-run profile creation dialog on first game launch
+FirstRunDialog = true
+; OpenBehavior: 0 = Keep active, 1 = Mute audio while overlay is open, 2 = Pause game while overlay is open
+OpenBehavior = $(& $Pick "Overlay" "OpenBehavior" "0")
+; Shortcut: 0 = Shift+Tab, 1 = Ctrl+Tab, 2 = Shift+F1, 3 = Shift+F2, 4 = F11, 5 = F12, 6 = Home, 7 = Insert
+Shortcut = $(& $Pick "Overlay" "Shortcut" "0")
+; DisplayMode: 0 = Fullscreen, 1 = Windowed, 2 = Fullscreen Windowed (default)
+DisplayMode = $(& $Pick "Overlay" "DisplayMode" "2")
+WindowWidth = $(& $Pick "Overlay" "WindowWidth" "1920")
+WindowHeight = $(& $Pick "Overlay" "WindowHeight" "1080")
 
 [Matchmaking]
 EnableLobbyFilter = false
@@ -543,6 +598,15 @@ LocalSave = saves
 [EOS]
 Mode = $eosMode
 DeviceIdAuth = $eosAuth
+UnlockDLCs = $bypassVal
+
+[Mods]
+Enabled = $modsEnabled
+DevMode = $modsDevMode
+
+[Paths]
+AutoLoadSteamApi = $autoLoadSteamApi
+ExtraDLLs = $extraDlls
 
 [Debug]
 EnableLog = false
@@ -679,14 +743,27 @@ if ($unityPluginDirs.Count -gt 0) {
 }
 
 # For Unreal Engine, also ensure ExeDir is in pluginDirs so steam_api64.dll is deployed beside the shipping executable
-if ($EngineType -eq "Unreal" -and ($pluginDirs -notcontains $ExeDir)) {
-    $pluginDirs += $ExeDir
+# Track native Steam DLL presence before adding ExeDir fallbacks, ignoring ReFix's own dropped DLLs on re-deploys.
+function Test-HasNativeSteamInDir {
+    param([string]$Dir, [string]$LiveName, [string]$OrigName)
+    if (Test-Path -LiteralPath (Join-Path $Dir $OrigName)) { return $true }
+    $live = Join-Path $Dir $LiveName
+    if (-not (Test-Path -LiteralPath $live)) { return $false }
+    try {
+        $bytes = [System.IO.File]::ReadAllBytes($live)
+        $marker = [System.Text.Encoding]::ASCII.GetBytes("ReFix")
+        for ($i = 0; $i -le ($bytes.Length - $marker.Length); $i++) {
+            $match = $true
+            for ($j = 0; $j -lt $marker.Length; $j++) {
+                if ($bytes[$i + $j] -ne $marker[$j]) { $match = $false; break }
+            }
+            if ($match) { return $false }
+        }
+        return $true
+    } catch { return $true }
 }
 
-# -------------------------------------------------------
 # x86 discovery: detect steam_api.dll (32-bit) locations
-# Handles Unity IL2CPP x86 games (e.g. *_Data\Plugins\x86 or game root)
-# -------------------------------------------------------
 $pluginDirs32 = @()
 
 # Unity x86 plugin subfolder: *_Data\Plugins\x86
@@ -714,34 +791,57 @@ if ($pluginDirs32.Count -gt 0) {
     Write-Host "  [x86] Detected 32-bit steam_api.dll location(s): $($pluginDirs32 -join ', ')" -ForegroundColor Yellow
 }
 
-# No steam_api64.dll anywhere: fall back to the exe folder, unless the game is 32-bit only (it never loads it).
-if ($pluginDirs.Count -eq 0 -and $pluginDirs32.Count -eq 0) { $pluginDirs += $ExeDir }
-
-# Detect if game is 32-bit (x86) to prevent fatal 64-bit DLL injection into 32-bit processes
-$isX86Game = ($pluginDirs32.Count -gt 0)
-if (-not $isX86Game) {
-    $gameExesInDir = Get-ChildItem -LiteralPath $ExeDir -Filter "*.exe" -File -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -notlike "*UnityCrashHandler*" -and $_.Name -notlike "*crashpad*" }
-    
-    $candidateExes = @()
-    $mainExe = $gameExesInDir | Where-Object { $_.Name -like "*$GameName*" } | Select-Object -First 1
-    if ($mainExe) { $candidateExes += $mainExe }
-    $candidateExes += ($gameExesInDir | Where-Object { $_.Name -notlike "*Launcher*" -and ($mainExe -eq $null -or $_.FullName -ne $mainExe.FullName) })
-    $candidateExes += ($gameExesInDir | Where-Object { $_.Name -like "*Launcher*" })
-
-    foreach ($ge in $candidateExes) {
-        try {
-            $peBytes = [System.IO.File]::ReadAllBytes($ge.FullName)
-            if ($peBytes.Length -ge 0x40) {
-                $peOffset = [System.BitConverter]::ToInt32($peBytes, 0x3C)
-                if ($peOffset + 6 -le $peBytes.Length) {
-                    $mach = [System.BitConverter]::ToUInt16($peBytes, $peOffset + 4)
-                    if ($mach -eq 0x014c) { $isX86Game = $true; break }
-                    elseif ($mach -eq 0x8664) { $isX86Game = $false; break }
-                }
-            }
-        } catch {}
+$script:hasRealSteamDll = $false
+foreach ($d in $pluginDirs) {
+    if (Test-HasNativeSteamInDir $d "steam_api64.dll" "steam_api64_original.dll") { $script:hasRealSteamDll = $true; break }
+}
+if (-not $script:hasRealSteamDll) {
+    foreach ($d in $pluginDirs32) {
+        if (Test-HasNativeSteamInDir $d "steam_api.dll" "steam_api_original.dll") { $script:hasRealSteamDll = $true; break }
     }
+}
+
+# Detect if game is 32-bit (x86) before adding ExeDir fallback.
+$isX86Game = $null
+$gameExesInDir = Get-ChildItem -LiteralPath $ExeDir -Filter "*.exe" -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -notlike "*UnityCrashHandler*" -and $_.Name -notlike "*crashpad*" -and $_.Name -notlike "*EOSBootstrapper*" -and $_.Name -notlike "*gamelaunchhelper*" }
+
+$candidateExes = @()
+$mainExe = $gameExesInDir | Where-Object { $_.Name -like "*$GameName*" } | Select-Object -First 1
+if ($mainExe) { $candidateExes += $mainExe }
+$candidateExes += ($gameExesInDir | Where-Object { $_.Name -notlike "*Launcher*" -and ($mainExe -eq $null -or $_.FullName -ne $mainExe.FullName) })
+$candidateExes += ($gameExesInDir | Where-Object { $_.Name -like "*Launcher*" })
+
+foreach ($ge in $candidateExes) {
+    try {
+        $fs = [System.IO.File]::OpenRead($ge.FullName)
+        $peBytes = New-Object byte[] 1024
+        $read = $fs.Read($peBytes, 0, 1024)
+        $fs.Close()
+        if ($read -ge 0x40) {
+            $peOffset = [System.BitConverter]::ToInt32($peBytes, 0x3C)
+            if ($peOffset + 6 -le $read) {
+                $mach = [System.BitConverter]::ToUInt16($peBytes, $peOffset + 4)
+                if ($mach -eq 0x014c) { $isX86Game = $true; break }
+                elseif ($mach -eq 0x8664) { $isX86Game = $false; break }
+            }
+        }
+    } catch {}
+}
+
+if ($isX86Game -eq $null -and $detectedProps -and $detectedProps.ContainsKey("IS_X86")) {
+    if ($detectedProps["IS_X86"] -eq "True") { $isX86Game = $true }
+    elseif ($detectedProps["IS_X86"] -eq "False") { $isX86Game = $false }
+}
+if ($isX86Game -eq $null) {
+    $isX86Game = ($pluginDirs32.Count -gt 0 -and $pluginDirs.Count -eq 0)
+}
+
+if ($EngineType -eq "Unreal" -and (-not $isX86Game) -and ($pluginDirs -notcontains $ExeDir)) {
+    $pluginDirs += $ExeDir
+}
+if ($pluginDirs.Count -eq 0 -and $pluginDirs32.Count -eq 0) {
+    if ($isX86Game) { $pluginDirs32 += $ExeDir } else { $pluginDirs += $ExeDir }
 }
 
 switch ($OnlineMode) {
@@ -1011,7 +1111,7 @@ switch ($OnlineMode) {
         Write-Host "  [OK] Configured unified ReFix.ini in $ExeDir" -ForegroundColor Green
     }
 
-    { $_ -in @("goldberg", "offline", "lan") } {
+    { $_ -in @("goldberg", "offline", "lan", "mixed") } {
         # --- Mode 2: Re:Goldberg LAN sin Steam ---
         # Deploys Goldberg Steam Emulator backend with complete local settings synchronization,
         # persistent identity, LAN matchmaking discovery, and portable saves.
@@ -1218,7 +1318,7 @@ switch ($OnlineMode) {
 # ============================================================
 # Step 3: Engine-specific patches + Mode-specific deployment
 # ============================================================
-if ($OnlineMode -in @("goldberg", "offline", "lan")) {
+if ($OnlineMode -in @("goldberg", "offline", "lan", "mixed")) {
     # ------------------------------------------------------------
     # Mode 2: ReFix LAN sin Steam - Full Configuration Sync
     # ------------------------------------------------------------
@@ -1228,11 +1328,17 @@ if ($OnlineMode -in @("goldberg", "offline", "lan")) {
     $identity = Get-Or-Generate-Identity -ConfigPath $reFixIniPath -InputName $UserName -BasePath $TargetDir -InputSteamId $SteamId
 
     $finalRealAppId = $RealAppId
-    if (-not $finalRealAppId -or $finalRealAppId -eq "0") {
+    if (-not $finalRealAppId -or $finalRealAppId -eq "0" -or $finalRealAppId -eq "480") {
         if (Test-Path $reFixIniPath) {
             $iniContent = Get-Content $reFixIniPath -ErrorAction SilentlyContinue
             foreach ($line in $iniContent) {
-                if ($line -match "^\s*RealAppId\s*=\s*([0-9]+)") { $finalRealAppId = $Matches[1].Trim() }
+                if ($line -match "^\s*RealAppId\s*=\s*([0-9]+)") {
+                    $existingId = $Matches[1].Trim()
+                    if ($existingId -and $existingId -ne "0" -and $existingId -ne "480") {
+                        $finalRealAppId = $existingId
+                        break
+                    }
+                }
             }
         }
     }
@@ -1450,7 +1556,11 @@ unlock_all_dlc=$unlockAllDlcStr
         '    if /i not "%%~nxF"=="UnityCrashHandler64.exe" (',
         '        if /i not "%%~nxF"=="crashpad_handler.exe" (',
         '            if /i not "%%~nxF"=="F10.exe" (',
-        '                if "!GAME_EXE!"=="" set "GAME_EXE=%%~dpnxF"',
+        '                if /i not "%%~nxF"=="EOSBootstrapper.exe" (',
+        '                    if /i not "%%~nxF"=="gamelaunchhelper.exe" (',
+        '                        if "!GAME_EXE!"=="" set "GAME_EXE=%%~dpnxF"',
+        '                    )',
+        '                )',
         '            )',
         '        )',
         '    )',
@@ -1458,7 +1568,7 @@ unlock_all_dlc=$unlockAllDlcStr
         '',
         "set `"LAN_PORT=$finalListenPort`"",
         'if exist "!SCRIPT_DIR!\ReFix.ini" (',
-        '    for /f "tokens=1,* delims==" %%A in (''type "!SCRIPT_DIR!\ReFix.ini"'') do (',
+        '    for /f "tokens=1,* delims== " %%A in (''type "!SCRIPT_DIR!\ReFix.ini"'') do (',
         '        if /i "%%A"=="DiscoveryPort" set "LAN_PORT=%%B"',
         '        if /i "%%A"=="ListenPort" set "LAN_PORT=%%B"',
         '    )',
@@ -1608,8 +1718,8 @@ if ($EngineType -eq "Unity") {
                     }
                     
                     $patchVoiceId = $AppIdVoice
-                    if (-not $patchVoiceId -and (Test-Path $targetIni)) {
-                        $iniContent = Get-Content $targetIni
+                    if (-not $patchVoiceId -and (Test-Path $reFixIni)) {
+                        $iniContent = Get-Content $reFixIni
                         foreach ($l in $iniContent) {
                             if ($l -match "^\s*AppIdVoice\s*=\s*([a-f0-9\-]{36})") { $patchVoiceId = $Matches[1].Trim() }
                             if ($l -match "^\s*PhotonVoiceAppId\s*=\s*([a-f0-9\-]{36})") { $patchVoiceId = $Matches[1].Trim() }
@@ -2190,6 +2300,59 @@ FixedRegion=$effectiveRegion
             exit 1
         }
     }
+} elseif ($EngineType -eq "Source") {
+    Write-Host "[4/6] Processing Source Engine deployment (mode: $OnlineMode)..." -ForegroundColor Cyan
+    
+    $reFixIni = Join-Path $ExeDir "ReFix.ini"
+    $targetAppId = "480"
+    if (Test-Path -LiteralPath $reFixIni) {
+        $iniLines = Get-Content -LiteralPath $reFixIni -ErrorAction SilentlyContinue
+        foreach ($line in $iniLines) {
+            if ($OnlineMode -eq "valve") {
+                if ($line -match "^\s*MaskAppId\s*=\s*(.+)") { $targetAppId = $Matches[1].Trim() }
+            } else {
+                if ($line -match "^\s*RealAppId\s*=\s*(.+)") { $targetAppId = $Matches[1].Trim() }
+            }
+        }
+    }
+    if (-not $targetAppId -or $targetAppId -eq "0") { $targetAppId = "480" }
+
+    # Place steam_appid.txt in game root ($ExeDir) and bin\ directory
+    try {
+        $exeAppIdPath = Join-Path $ExeDir "steam_appid.txt"
+        [System.IO.File]::WriteAllText($exeAppIdPath, "$targetAppId`r`n")
+        Write-Host "  [OK] Placed steam_appid.txt ($targetAppId) in Source root $ExeDir" -ForegroundColor Green
+        
+        $binDir = Join-Path $TargetDir "bin"
+        if (Test-Path -LiteralPath $binDir) {
+            $binAppIdPath = Join-Path $binDir "steam_appid.txt"
+            [System.IO.File]::WriteAllText($binAppIdPath, "$targetAppId`r`n")
+            $binIniPath = Join-Path $binDir "ReFix.ini"
+            if ((Test-Path -LiteralPath $reFixIni) -and (-not (Test-Path -LiteralPath $binIniPath))) {
+                Copy-Item -LiteralPath $reFixIni -Destination $binIniPath -Force -ErrorAction SilentlyContinue
+            }
+        }
+    } catch {
+        Write-Host "  [ERROR] Failed to write Source steam_appid.txt: $_" -ForegroundColor Red
+        exit 1
+    }
+} elseif ($EngineType -eq "Mono" -or $EngineType -eq "DotNet") {
+    Write-Host "[4/6] Processing Mono/.NET deployment (mode: $OnlineMode)..." -ForegroundColor Cyan
+    $exeAppIdPath = Join-Path $ExeDir "steam_appid.txt"
+    $targetAppId = if ($OnlineMode -eq "valve") { $MaskAppId } else { $finalRealAppId }
+    if (-not $targetAppId -or $targetAppId -eq "0") { $targetAppId = "480" }
+    try {
+        [System.IO.File]::WriteAllText($exeAppIdPath, "$targetAppId`r`n")
+        Write-Host "  [OK] Placed steam_appid.txt ($targetAppId) in $ExeDir" -ForegroundColor Green
+
+        $rootAppIdPath = Join-Path $TargetDir "steam_appid.txt"
+        if ($rootAppIdPath -ne $exeAppIdPath) {
+            [System.IO.File]::WriteAllText($rootAppIdPath, "$targetAppId`r`n")
+        }
+    } catch {
+        Write-Host "  [ERROR] Failed to write steam_appid.txt: $_" -ForegroundColor Red
+        exit 1
+    }
 } else {
     Write-Host "[4/6] Processing Native/Custom deployment (mode: $OnlineMode)..." -ForegroundColor Cyan
     $exeAppIdPath = Join-Path $ExeDir "steam_appid.txt"
@@ -2207,18 +2370,6 @@ FixedRegion=$effectiveRegion
     } catch {
         Write-Host "  [ERROR] Failed to write steam_appid.txt: $_" -ForegroundColor Red
         exit 1
-    }
-}
-
-# Deploy shortcut helper scripts for Valve mode
-if ($OnlineMode -eq "valve") {
-    $srcPs1 = Join-Path $BinDir "add_steam_shortcut.ps1"
-    $srcBat = Join-Path $BinDir "Install_ReFix_Steam_Shortcut.bat"
-    if (Test-Path -LiteralPath $srcPs1) {
-        Copy-Item -LiteralPath $srcPs1 -Destination (Join-Path $ExeDir "add_steam_shortcut.ps1") -Force -ErrorAction SilentlyContinue
-    }
-    if (Test-Path -LiteralPath $srcBat) {
-        Copy-Item -LiteralPath $srcBat -Destination (Join-Path $ExeDir "Install_ReFix_Steam_Shortcut.bat") -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -2315,8 +2466,8 @@ if ($isEacPresent) {
         $proxyWinhttpSize = (Get-Item -LiteralPath $winhttpProxy).Length
     }
 
-    # Check if ReFix is already hooked through Steam or EOS SDK
-    $hasNativeHook = ($pluginDirs.Count -gt 0 -or $pluginDirs32.Count -gt 0 -or $eosDirs.Count -gt 0)
+    # Check if ReFix is already hooked through a native Steam or EOS SDK import
+    $hasNativeHook = ($script:hasRealSteamDll -or $eosDirs.Count -gt 0)
     if ($hasNativeHook) {
         Write-Host "  [INFO] ReFix is already hooked via Steam / EOS SDK. winhttp.dll proxy is omitted to avoid EAC 0xc000007b conflict." -ForegroundColor Gray
         # Purge any previously deployed winhttp.dll proxy in ExeDir to prevent EAC from blocking it with 0xc000007b
@@ -2359,6 +2510,21 @@ if ($isEacPresent) {
             Write-Host "  [OK] Deployed ReFix winhttp.dll Anti-Cheat bypass proxy to $d" -ForegroundColor Green
         }
     }
+} elseif ((-not $script:hasRealSteamDll -or $script:storeType -in @("epic", "msstore")) -and (Test-Path -LiteralPath $winhttpProxy)) {
+    # Pure Epic / MS Store / non-Steam games do not import steam_api64.dll natively;
+    # deploy winhttp.dll so ReFix bootstraps steam_api64.dll, LanCore, SteamLink, and the overlay.
+    $targetWinhttp = Join-Path $ExeDir "winhttp.dll"
+    $targetWinhttpOrig = Join-Path $ExeDir "winhttp_original.dll"
+    $proxyWinhttpSize = (Get-Item -LiteralPath $winhttpProxy).Length
+    if (Test-Path -LiteralPath $targetWinhttp) {
+        $curWSize = (Get-Item -LiteralPath $targetWinhttp).Length
+        if ($curWSize -ne $proxyWinhttpSize -and (-not (Test-Path -LiteralPath $targetWinhttpOrig))) {
+            Rename-Item -LiteralPath $targetWinhttp -NewName "winhttp_original.dll" -Force
+            Write-Host "  [OK] Preserved original winhttp.dll -> winhttp_original.dll in $ExeDir" -ForegroundColor Green
+        }
+    }
+    Copy-Item -LiteralPath $winhttpProxy -Destination $targetWinhttp -Force -ErrorAction Stop
+    Write-Host "  [OK] Deployed ReFix winhttp.dll bootstrapper to $ExeDir (AutoLoadSteamApi=true)" -ForegroundColor Green
 } else {
     Write-Host "  [INFO] No EasyAntiCheat (EAC) detected. winhttp proxy not required." -ForegroundColor Gray
 }
@@ -2507,7 +2673,7 @@ function Verify-ReFixDeployment {
     }
 
     # 5b. Anti-Cheat winhttp.dll verification (only when no native Steam/EOS SDK hook exists)
-    $hasNativeHook = ($pluginDirs.Count -gt 0 -or $pluginDirs32.Count -gt 0 -or $eosDirs.Count -gt 0)
+    $hasNativeHook = ($script:hasRealSteamDll -or $eosDirs.Count -gt 0)
     $eacCheck = Get-ChildItem -LiteralPath $TargetDir -Filter "*EasyAntiCheat*" -Recurse -File -ErrorAction SilentlyContinue
     $eacExes = Get-ChildItem -LiteralPath $TargetDir -Filter "*start_protected_game*" -Recurse -File -ErrorAction SilentlyContinue
     if (($eacCheck.Count -gt 0 -or $eacExes.Count -gt 0) -and (-not $IsX86) -and (-not $hasNativeHook)) {
@@ -2530,7 +2696,7 @@ function Verify-ReFixDeployment {
     }
 
     # 6. Goldberg mode specific verification
-    if ($OnlineMode -in @("goldberg", "offline", "lan")) {
+    if ($OnlineMode -in @("goldberg", "offline", "lan", "mixed")) {
         $settingsDir = Join-Path $ExeDir "steam_settings"
         if (-not (Test-Path -LiteralPath $settingsDir)) {
             $errors += "steam_settings directory missing in $ExeDir"
@@ -2574,7 +2740,8 @@ function Install-GameMods {
         $only = @($env:REFIX_GAME_MODS -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     }
     $modsUrl = if ($env:REFIX_MODS_URL) { $env:REFIX_MODS_URL } else { "https://raw.githubusercontent.com/Coronitaa/ReFix/main/refix_mods" }
-    $localMods = Join-Path (Split-Path -Parent $BinDir) "refix_mods"
+    $repoRoot = if (Test-Path $BinDir) { (Resolve-Path (Join-Path $BinDir "..")).Path } else { $PSScriptRoot }
+    $localMods = Join-Path $repoRoot "refix_mods"
     $catalogPath = Join-Path $localMods "catalog.tsv"
     try {
         $lines = if (Test-Path -LiteralPath $catalogPath) { Get-Content -LiteralPath $catalogPath }

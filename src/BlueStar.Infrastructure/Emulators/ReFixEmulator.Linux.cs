@@ -76,7 +76,14 @@ public sealed partial class ReFixEmulator
 
         try
         {
-            MoveScriptConfig(exeDir, gameDir);
+            // AutoDeploy.sh 2.6.5 writes directly into Binaries/Win64 when a *-Win64-Shipping.exe is present;
+            // only move existing config to gameDir when AutoDeploy.sh will target gameDir.
+            bool scriptTargetsExeDir = Directory.Exists(exeDir) &&
+                Directory.EnumerateFiles(exeDir, "*-Win64-Shipping.exe").Any();
+            if (!scriptTargetsExeDir)
+            {
+                MoveScriptConfig(exeDir, gameDir);
+            }
             var (exitCode, _, error) = await RunProcessAsync(
                 "bash",
                 $"\"{script}\" \"{gameDir}\" {mode} {appId}",

@@ -1466,7 +1466,7 @@
                                 </Grid.ColumnDefinitions>
                                 <Border Grid.Column="0" Background="{StaticResource AccentTranslucentBrush}"
                                         CornerRadius="{StaticResource RadiusMd}" Width="40" Height="40">
-                                    <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource AccentBrush}"
+                                    <Path Data="{StaticResource IconSteam}" Fill="#66C0F4"
                                           Stretch="Uniform" Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <StackPanel Grid.Column="2" VerticalAlignment="Center">

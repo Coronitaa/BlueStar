@@ -55,6 +55,7 @@ public partial class WorkshopBrowserPanel : UserControl
         if (WorkshopView?.CoreWebView2 != null)
         {
             try { WorkshopView.CoreWebView2.Navigate("about:blank"); } catch { }
+            BlueStar.App.Services.WebView2AvailabilityService.SetLowMemoryMode(WorkshopView.CoreWebView2, lowMemory: true);
         }
     }
 
@@ -79,6 +80,10 @@ public partial class WorkshopBrowserPanel : UserControl
         {
             _ = NavigateAsync(_viewModel?.StartUrl);
         }
+        else if (WorkshopView?.CoreWebView2 != null)
+        {
+            BlueStar.App.Services.WebView2AvailabilityService.SetLowMemoryMode(WorkshopView.CoreWebView2, lowMemory: true);
+        }
     }
 
     private async Task NavigateAsync(string? url)
@@ -96,10 +101,13 @@ public partial class WorkshopBrowserPanel : UserControl
             _webViewInit ??= InitializeWebViewAsync();
             await _webViewInit.ConfigureAwait(true);
 
-            if (WorkshopView.CoreWebView2 != null &&
-                !string.Equals(WorkshopView.CoreWebView2.Source, url, StringComparison.OrdinalIgnoreCase))
+            if (WorkshopView.CoreWebView2 != null)
             {
-                WorkshopView.CoreWebView2.Navigate(url);
+                BlueStar.App.Services.WebView2AvailabilityService.SetLowMemoryMode(WorkshopView.CoreWebView2, lowMemory: false);
+                if (!string.Equals(WorkshopView.CoreWebView2.Source, url, StringComparison.OrdinalIgnoreCase))
+                {
+                    WorkshopView.CoreWebView2.Navigate(url);
+                }
             }
         }
         catch (Exception)
@@ -111,20 +119,14 @@ public partial class WorkshopBrowserPanel : UserControl
 
     private async Task InitializeWebViewAsync()
     {
-        var profileFolder = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "BlueStar", "webview");
-        Directory.CreateDirectory(profileFolder);
-
         var environment = await BlueStar.App.Services.WebView2AvailabilityService
-            .CreateEnvironmentAsync(profileFolder)
+            .CreateEnvironmentAsync(BlueStar.App.Services.WebView2AvailabilityService.ProfileFolder)
             .ConfigureAwait(true);
         await WorkshopView.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
 
         WorkshopView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 27, 40, 56);
         var core = WorkshopView.CoreWebView2;
-        core.Settings.AreDefaultContextMenusEnabled = false;
-        core.Settings.IsStatusBarEnabled = false;
+        BlueStar.App.Services.WebView2AvailabilityService.ConfigureLightweightBrowser(core);
         core.NewWindowRequested += (_, args) =>
         {
             // Workshop links that open a new tab stay in this panel.

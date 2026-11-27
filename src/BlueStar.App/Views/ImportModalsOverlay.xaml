@@ -46,7 +46,7 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0">
                             <StackPanel Orientation="Horizontal">
-                                <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource AccentBrush}" Stretch="Uniform" Width="20" Height="20" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                <Path Data="{StaticResource IconSteam}" Fill="#66C0F4" Stretch="Uniform" Width="20" Height="20" Margin="0,0,10,0" VerticalAlignment="Center"/>
                                 <TextBlock Text="{DynamicResource String_ModalImportSteamTitle}" Style="{StaticResource H2}" Foreground="{StaticResource WhiteBrush}" VerticalAlignment="Center"/>
                             </StackPanel>
                             <TextBlock Text="{DynamicResource String_ModalImportSteamSubtitle}"
@@ -86,7 +86,7 @@
                         <!-- Loading State -->
                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Visibility="{Binding IsScanningSteam, Converter={StaticResource BoolToVisibilityConverter}}">
-                            <Path Data="{StaticResource IconGamepad}" Fill="{StaticResource AccentBrush}" Stretch="Uniform" Width="36" Height="36" Margin="0,0,0,12" HorizontalAlignment="Center"/>
+                            <Path Data="{StaticResource IconSteam}" Fill="#66C0F4" Stretch="Uniform" Width="36" Height="36" Margin="0,0,0,12" HorizontalAlignment="Center"/>
                             <TextBlock Text="{DynamicResource String_ScanningSteam}" Style="{StaticResource CaptionBold}" Foreground="{StaticResource PrimaryTextBrush}" HorizontalAlignment="Center"/>
                         </StackPanel>
 

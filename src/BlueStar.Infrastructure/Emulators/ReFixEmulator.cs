@@ -1072,10 +1072,26 @@ public sealed partial class ReFixEmulator : IEmulator
         catch { }
 
         // 7. Remove ReFix proxies, DLC unlocker files, and artifacts
+        // ReFix loader proxies and dropped steam_api/EOS DLLs only when they carry ReFix's marker (never delete the game's own DLLs).
+        foreach (var proxyPattern in new[] { "winmm.dll", "winhttp.dll", "steam_api64.dll", "steam_api.dll", "EOSSDK-Win64-Shipping.dll" })
+        {
+            try
+            {
+                foreach (var f in Directory.GetFiles(targetDir, proxyPattern, SafeEnumOptions))
+                {
+                    if (ContainsReFixMarker(f))
+                    {
+                        try { File.Delete(f); } catch { }
+                    }
+                }
+            }
+            catch { }
+        }
+
         var artifactPatterns = new[]
         {
-            "winmm.dll", "winhttp.dll", "doorstop_config.ini", "Kirigiri.ini", "ReFix.ini", "ReFix.log",
-            "ReFixFusionShared.log", "refix_steamlink64.dll", "refix_steamlink.dll", "refix_steamhost64.exe", "refix_steamhost.exe",
+            "doorstop_config.ini", "Kirigiri.ini", "ReFix.ini", "ReFix.log",
+            "ReFixFusionShared.log", "refix_steamlink64.dll", "refix_steamlink.dll", "refix_steamhost64.exe", "refix_steamhost.exe", "refixmod.exe",
             "steam_appid.txt", "local_save.txt", "steam_interfaces.txt",
             "add_steam_shortcut.ps1", "add_steam_shortcut.py", "Install_ReFix_Steam_Shortcut.bat",
             "Configure_LAN_Firewall.bat", "Configurar_Firewall_LAN.bat",
@@ -1117,6 +1133,11 @@ public sealed partial class ReFixEmulator : IEmulator
                             }
                         }
                         File.Delete(marker);
+                        if (string.Equals(Path.GetFileName(markerDir), "refix_mods", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var catalog = Path.Combine(markerDir, "catalog.tsv");
+                            try { if (File.Exists(catalog)) File.Delete(catalog); } catch { }
+                        }
                         try { Directory.Delete(markerDir, recursive: false); } catch { }
                     }
                 }
@@ -1187,6 +1208,18 @@ public sealed partial class ReFixEmulator : IEmulator
             }
         }
         catch { }
+    }
+
+    private static bool ContainsReFixMarker(string filePath)
+    {
+        try
+        {
+            return File.ReadAllBytes(filePath).AsSpan().IndexOf("ReFix"u8) >= 0;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static void AppendReFixLog(string exeDir, string message)

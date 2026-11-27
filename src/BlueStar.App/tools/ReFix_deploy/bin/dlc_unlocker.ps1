@@ -48,14 +48,25 @@ if ($targetDirs.Count -eq 0) {
 # --- Action: STATUS ---
 if ($Action -eq "status") {
     Write-Host "`n=== DLC Unlocker Status for $target ===" -ForegroundColor Cyan
+    $reFixIni = Get-ChildItem -Path $target -Filter "ReFix.ini" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($reFixIni) {
+        $iniContent = Get-Content -LiteralPath $reFixIni.FullName -Raw -ErrorAction SilentlyContinue
+        $bypass = ($iniContent -match "(?m)^\s*BypassLicenseCheck\s*=\s*true")
+        $eosUnlock = ($iniContent -match "(?m)^\s*UnlockDLCs\s*=\s*true")
+        $dlcsLine = if ($iniContent -match "(?m)^\s*DLCs\s*=\s*([^\r\n]+)") { $Matches[1].Trim() } else { "all" }
+        Write-Host "ReFix.ini: $($reFixIni.FullName)" -ForegroundColor White
+        Write-Host "  - Installed: True (ReFix Built-in Unlocker)" -ForegroundColor Green
+        Write-Host "  - Steam BypassLicenseCheck: $bypass | DLCs: $dlcsLine" -ForegroundColor Yellow
+        Write-Host "  - EOS UnlockDLCs: $eosUnlock" -ForegroundColor Yellow
+    }
     foreach ($dir in $targetDirs) {
-        $has64Bak = Test-Path (Join-Path $dir "steam_api64_o.dll")
-        $has32Bak = Test-Path (Join-Path $dir "steam_api_o.dll")
+        $has64Bak = (Test-Path (Join-Path $dir "steam_api64_o.dll")) -or (Test-Path (Join-Path $dir "steam_api64_original.dll"))
+        $has32Bak = (Test-Path (Join-Path $dir "steam_api_o.dll")) -or (Test-Path (Join-Path $dir "steam_api_original.dll"))
         $hasCreamIni = Test-Path (Join-Path $dir "cream_api.ini")
         $hasSmokeJson = Test-Path (Join-Path $dir "SmokeAPI.config.json")
-        $isInstalled = ($has64Bak -or $has32Bak) -and ($hasCreamIni -or $hasSmokeJson)
+        $isInstalled = [bool]$reFixIni -or (($has64Bak -or $has32Bak) -and ($hasCreamIni -or $hasSmokeJson))
         
-        $unlockMode = "Unknown"
+        $unlockMode = if ($reFixIni) { "ReFix Native (Steam / XStore / EOS)" } else { "Unknown" }
         if ($hasCreamIni) {
             $iniContent = Get-Content (Join-Path $dir "cream_api.ini") -ErrorAction SilentlyContinue
             if ($iniContent -match "unlockall\s*=\s*true") { $unlockMode = "Unlock All (unlock_all=true)" }
@@ -114,8 +125,66 @@ if ($Action -eq "uninstall") {
 # --- Action: INSTALL ---
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host " [ReFix DLC Unlocker] Target: $target" -ForegroundColor Cyan
-Write-Host " [ReFix DLC Unlocker] Engine: BLUESTAR SmokeAPI Backend" -ForegroundColor Cyan
+Write-Host " [ReFix DLC Unlocker] Engine: ReFix + BLUESTAR SmokeAPI" -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
+
+# Check if ReFix is already deployed in this game (Steam, Epic, or MS Store).
+$existingReFixIni = Get-ChildItem -Path $target -Filter "ReFix.ini" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($existingReFixIni) {
+    $iniText = Get-Content -LiteralPath $existingReFixIni.FullName -Raw -ErrorAction SilentlyContinue
+    $effMode = $DLCMode.ToLower()
+    $unlockVal = if ($effMode -eq "none" -or $DLCs -eq "none") { "false" } else { "true" }
+    $dlcsVal = if ($unlockVal -eq "false") { "none" } elseif ($DLCs -and $DLCs -ne "all" -and $DLCs -ne "custom") { $DLCs } else { "all" }
+
+    $setIniKey = {
+        param([string]$text, [string]$sec, [string]$key, [string]$val)
+        if ($text -match "(?ms)^\[$sec\].*?(?=^\[|\z)") {
+            $block = $Matches[0]
+            if ($block -match "(?m)^\s*$key\s*=.*$") {
+                $newBlock = [regex]::Replace($block, "(?m)^\s*$key\s*=.*$", "$key = $val")
+            } else {
+                $newBlock = $block.TrimEnd() + "`r`n$key = $val`r`n"
+            }
+            return $text.Replace($block, $newBlock)
+        }
+        return $text.TrimEnd() + "`r`n`r`n[$sec]`r`n$key = $val`r`n"
+    }
+
+    $iniText = & $setIniKey $iniText "Steam" "BypassLicenseCheck" $unlockVal
+    $iniText = & $setIniKey $iniText "Steam" "DLCs" $dlcsVal
+    $iniText = & $setIniKey $iniText "EOS" "UnlockDLCs" $unlockVal
+    [System.IO.File]::WriteAllText($existingReFixIni.FullName, $iniText, (New-Object System.Text.UTF8Encoding $false))
+
+    Write-Host "  [OK] Updated ReFix.ini ($($existingReFixIni.FullName)) -> BypassLicenseCheck=$unlockVal, DLCs=$dlcsVal, EOS.UnlockDLCs=$unlockVal" -ForegroundColor Green
+    Write-Host "`n[SUCCESS] ReFix DLC Unlocker configured without overwriting ReFix emulator DLLs." -ForegroundColor Green
+    exit 0
+}
+
+# Pure Epic Games Store game (EOSSDK-Win64-Shipping.dll without ReFix or native steam_api*.dll)
+$eosDlls = @(Get-ChildItem -Path $target -Filter "EOSSDK-Win64-Shipping.dll" -Recurse -File -ErrorAction SilentlyContinue)
+$hasNativeSteam = @(Get-ChildItem -Path $target -Filter "steam_api*.dll" -Recurse -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -notlike "*_o.dll*" -and $_.Name -notlike "*_original.dll*" -and $_.Name -notlike "*_valve.dll*" }).Count -gt 0
+if ($eosDlls.Count -gt 0 -and (-not $hasNativeSteam)) {
+    $refixEos = Join-Path $BinDir "lan\EOSSDK-Win64-Shipping.dll"
+    if (-not (Test-Path $refixEos)) { $refixEos = Join-Path $BinDir "EOSSDK-Win64-Shipping.dll" }
+    if (Test-Path $refixEos) {
+        $unlockVal = if ($DLCMode.ToLower() -eq "none" -or $DLCs -eq "none") { "false" } else { "true" }
+        foreach ($ed in $eosDlls) {
+            $bak = Join-Path $ed.DirectoryName "EOSSDK_original.dll"
+            if (-not (Test-Path $bak)) {
+                Copy-Item -LiteralPath $ed.FullName -Destination $bak -Force
+                Write-Host "  [OK] Backed up original EOSSDK -> EOSSDK_original.dll in $($ed.DirectoryName)" -ForegroundColor Green
+            }
+            Copy-Item -LiteralPath $refixEos -Destination $ed.FullName -Force
+            Write-Host "  [OK] Deployed ReFix EOS DLC Unlocker -> $($ed.FullName)" -ForegroundColor Green
+        }
+        $iniOut = Join-Path $target "ReFix.ini"
+        $eosIni = "[Online]`r`nMode = goldberg`r`n`r`n[EOS]`r`nMode = emulated`r`nUnlockDLCs = $unlockVal`r`n"
+        [System.IO.File]::WriteAllText($iniOut, $eosIni, (New-Object System.Text.UTF8Encoding $false))
+        Write-Host "  [OK] Written $iniOut (UnlockDLCs = $unlockVal)" -ForegroundColor Green
+        exit 0
+    }
+}
 
 # 1. Resolve AppId if missing
 $finalAppId = $AppId

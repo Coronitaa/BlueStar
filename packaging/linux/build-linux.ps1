@@ -1,5 +1,5 @@
 ﻿param(
-    [string]$Version = "1.6.5",
+    [string]$Version = "1.6.6",
     [string]$ApiKey = "",
     [ValidateSet("linux-x64", "linux-arm64")]
     [string]$Rid = "linux-x64"
@@ -167,7 +167,7 @@ Write-Host "[3/4] Empaquetando tar.gz y AppImage con WSL..." -ForegroundColor Ye
 $wslRoot = "/mnt/c" + ($rootDir.Substring(2) -replace '\\', '/')
 $packWslPath = "$wslRoot/packaging/linux/pack_wsl.sh"
 $arch = if ($Rid -eq "linux-arm64") { "arm64" } else { "x86_64" }
-& wsl bash -c "ROOT_DIR='$wslRoot' RID='$Rid' ARCH='$arch' VERSION='$Version' tr -d '\r' < '$packWslPath' | bash"
+& wsl bash -c "tr -d '\r' < '$packWslPath' | ROOT_DIR='$wslRoot' RID='$Rid' ARCH='$arch' VERSION='$Version' bash"
 
 Write-Host "[4/4] Verificando artefactos Linux generados..." -ForegroundColor Green
 Get-ChildItem -Path $linuxOutDir -File | Where-Object { $_.Extension -in @(".gz", ".AppImage", ".asc") -or $_.Name -eq "SHA256SUMS" } | ForEach-Object {

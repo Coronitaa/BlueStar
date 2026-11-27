@@ -16,7 +16,7 @@ $timestampServer = "http://timestamp.digicert.com"
 # ============================================================================
 # 0. Interaccion con el usuario (si se ejecuta en modo interactivo o sin parametros)
 # ============================================================================
-$currentVer = "1.6.5"
+$currentVer = "1.6.6"
 $propsPath = Join-Path $rootDir "Directory.Build.props"
 if (Test-Path $propsPath) {
     $propsContent = [System.IO.File]::ReadAllText($propsPath)
@@ -491,11 +491,11 @@ Write-Host "  [Claves] Verificado: descifrado correcto de bluestar.dat y coincid
 # 4. Firma de codigo de los binarios
 # ============================================================================
 Write-Host "[4/7] Firmando binarios con certificado de publicador..." -ForegroundColor Yellow
-$certSubject = "CN=16138BAA-C137-4D82-9EB1-FA186856FF82"
-$cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -eq $certSubject } | Select-Object -First 1
+$certSubject = "CN=BlueStar Devs"
+$cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.HasPrivateKey -and ($_.Subject -eq $certSubject -or $_.Subject -like "*BlueStar*Devs*") } | Select-Object -First 1
 if (-not $cert) {
-    $certSubject = "CN=BlueStar Devs"
-    $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -eq $certSubject -or $_.Subject -like "*BlueStar*Devs*" } | Select-Object -First 1
+    $certSubject = "CN=16138BAA-C137-4D82-9EB1-FA186856FF82"
+    $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.HasPrivateKey -and $_.Subject -eq $certSubject } | Select-Object -First 1
 }
 
 if (-not $cert) {

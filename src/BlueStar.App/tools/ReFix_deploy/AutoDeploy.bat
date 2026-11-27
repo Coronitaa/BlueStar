@@ -81,6 +81,7 @@ echo:
 
 :: Run smart game detector to find exact EXE_DIR, GAME_EXE_PATH, ENGINE_TYPE, GAME_NAME, and DETECTED_APPID
 set "ENGINE_TYPE=Native"
+set "STORE_TYPE=steam"
 set "EXE_DIR=%TARGET_DIR%"
 set "GAME_EXE_PATH="
 set "DEFAULT_GAME_NAME="
@@ -93,6 +94,7 @@ set "REFIX_BIN_DIR=%BIN_DIR%"
 if exist "%BIN_DIR%\detect_game.ps1" (
     for /f "usebackq tokens=1,* delims==" %%A in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%BIN_DIR%\detect_game.ps1" -TargetDir "%TARGET_DIR%" ^<nul`) do (
         if /i "%%A"=="ENGINE_TYPE" set "ENGINE_TYPE=%%B"
+        if /i "%%A"=="STORE_TYPE" set "STORE_TYPE=%%B"
         if /i "%%A"=="EXE_DIR" set "EXE_DIR=%%B"
         if /i "%%A"=="GAME_EXE_PATH" set "GAME_EXE_PATH=%%B"
         if /i "%%A"=="GAME_NAME" set "DEFAULT_GAME_NAME=%%B"
@@ -106,6 +108,15 @@ if "%DEFAULT_GAME_NAME%"=="" (
     for %%I in ("%TARGET_DIR%") do set "DEFAULT_GAME_NAME=%%~nxI"
 )
 
+if "%DETECTED_APPID%"=="" if not "%DEFAULT_GAME_NAME%"=="" (
+    set "REFIX_SEARCH_NAME=%DEFAULT_GAME_NAME%"
+    for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "try { $q = [uri]::EscapeDataString($env:REFIX_SEARCH_NAME); $r = Invoke-RestMethod -TimeoutSec 4 -Uri ('https://store.steampowered.com/api/storesearch/?term=' + $q + '&l=english&cc=US'); if ($r.items -and $r.items.Count -gt 0) { $r.items[0].id } } catch {}" ^<nul`) do (
+        if not "%%A"=="" set "DETECTED_APPID=%%A"
+    )
+    set "REFIX_SEARCH_NAME="
+)
+
+echo [DETECTION] Detected Store Platform: %STORE_TYPE%
 echo [DETECTION] Detected Engine Type: %ENGINE_TYPE%
 echo [DETECTION] Executable Location: "%EXE_DIR%"
 if not "%GAME_EXE_PATH%"=="" echo [DETECTION] Game Executable: "%GAME_EXE_PATH%"
@@ -181,7 +192,7 @@ set "EXISTING_USERNAME="
 set "EXISTING_STEAMID="
 set "EXISTING_LAN_PORT=47584"
 if exist "%EXE_DIR%\ReFix.ini" (
-    for /f "usebackq tokens=1,* delims==" %%A in ("%EXE_DIR%\ReFix.ini") do (
+    for /f "usebackq tokens=1,* delims== " %%A in ("%EXE_DIR%\ReFix.ini") do (
         if /i "%%A"=="RealAppId" (
             if not "%%B"=="" if not "%%B"=="0" if not "%%B"=="480" set "EXISTING_REAL_APPID=%%B"
         )
@@ -488,7 +499,7 @@ if not exist "%EXE_DIR%\steam_appid.txt" (
     echo [ERROR] Verification failed: Mandatory steam_appid.txt missing in "%EXE_DIR%"
     goto ERROR_EXIT
 )
-if "%ONLINE_MODE_NAME%"=="valve" (
+if "%ONLINE_MODE_NAME%"=="valve" if not "%REFIX_SKIP_WINMM%"=="1" if /i not "%GAME_NAME%"=="Phasmophobia" (
     if not exist "%EXE_DIR%\winmm.dll" (
         if exist "%EXE_DIR%\steam_api64.dll" (
             echo [ERROR] Verification failed: Mandatory winmm.dll proxy missing in "%EXE_DIR%"
@@ -501,7 +512,7 @@ echo [VERIFICATION OK] Critical deployment files verified in "%EXE_DIR%".
 echo:
 echo ====================================================================
 echo  DEPLOY COMPLETE
-echo  Game: %GAME_NAME%  ^|  Engine: %ENGINE_TYPE%
+echo  Game: "%GAME_NAME%"  ^|  Engine: %ENGINE_TYPE%
 if "%ONLINE_MODE_NAME%"=="goldberg" goto SUMMARY_GOLDBERG
 
 :SUMMARY_VALVE

@@ -51,6 +51,8 @@ public static class SteamWebSessionHelper
         return false;
     }
 
+    private static bool _syncedOnce;
+
     /// <summary>
     /// Attempts to discover and import Steam login cookies from the local Steam client CEF cache or browsers,
     /// injecting them into the WebView2 CookieManager if available.
@@ -59,9 +61,15 @@ public static class SteamWebSessionHelper
     {
         if (webView == null) return false;
 
+        if (!force && _syncedOnce)
+        {
+            return true;
+        }
+
         // If already authenticated and not forced, nothing to sync
         if (!force && await HasActiveSteamSessionAsync(webView).ConfigureAwait(false))
         {
+            _syncedOnce = true;
             return true;
         }
 
@@ -123,10 +131,12 @@ public static class SteamWebSessionHelper
 
             if (await HasActiveSteamSessionAsync(webView).ConfigureAwait(true))
             {
+                _syncedOnce = true;
                 return true;
             }
         }
 
+        _syncedOnce = true;
         return importedAny;
     }
 

@@ -104,4 +104,35 @@ public class ReFixDeployScriptTests : IDisposable
         result.Should().NotContain("rd /s /q \"%%~dpL\"");
         result.Should().Contain("rd \"%%~dpL\" 2>nul");
     }
+
+    [Fact]
+    public void Bundled_ReFix_Suite_Is_2_6_5_Without_Shortcuts_Or_UAC_Elevation()
+    {
+        var bundledRoot = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "BlueStar.App", "tools", "ReFix_deploy"));
+        if (!Directory.Exists(bundledRoot)) return;
+
+        ReFixEmulator.GetCurrentVersionInternal(bundledRoot).Should().Be("2.6.5");
+
+        var bin = Path.Combine(bundledRoot, "bin");
+        File.Exists(Path.Combine(bin, "add_steam_shortcut.ps1")).Should().BeFalse();
+        File.Exists(Path.Combine(bin, "Install_ReFix_Steam_Shortcut.bat")).Should().BeFalse();
+        File.Exists(Path.Combine(bundledRoot, "AutoDeploy.sh")).Should().BeTrue();
+        File.Exists(Path.Combine(bundledRoot, "Uninstall_ReFix.sh")).Should().BeTrue();
+
+        foreach (var script in new[]
+        {
+            Path.Combine(bundledRoot, "AutoDeploy.bat"),
+            Path.Combine(bundledRoot, "DLC_Unlocker.bat"),
+            Path.Combine(bin, "deploy_helper.ps1"),
+            Path.Combine(bin, "apply_firewall.ps1"),
+            Path.Combine(bin, "dlc_unlocker.ps1")
+        })
+        {
+            var text = File.ReadAllText(script);
+            text.Should().NotContain("-Verb RunAs", $"script {Path.GetFileName(script)} must not prompt for UAC");
+            text.Should().NotContain("Install_ReFix_Steam_Shortcut", $"script {Path.GetFileName(script)} must not deploy shortcut helpers");
+            text.Should().NotContain("add_steam_shortcut", $"script {Path.GetFileName(script)} must not deploy shortcut helpers");
+        }
+    }
 }
